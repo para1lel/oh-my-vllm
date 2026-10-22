@@ -1,6 +1,6 @@
 # DeepSeek V4.1 分阶段实施计划
 
-> 代理执行者: 维护者批准后, 使用 `superpowers:executing-plans` 或 `superpowers:subagent-driven-development`. 每次完成一个经过审查的阶段.
+> 代理执行者: 使用 `superpowers:executing-plans` 或 `superpowers:subagent-driven-development`. 每次完成一个经过审查的阶段, 不再等待维护者逐阶段批准.
 
 **目标:** 增加四 GPU DeepSeek 推理, 不损失现有 Qwen 功能.
 
@@ -8,7 +8,7 @@
 
 **技术栈:** Rust, Python, ZMQ DEALER, msgpack, CUDA C++ 或 CuTe DSL, 以及原生 NCCL.
 
-**规格:** [架构提案](design.zh.md). 本计划为提案, 尚未执行.
+**规格:** [已批准架构](design.zh.md). 从阶段 0 开始执行.
 
 ## 全局约束
 
@@ -55,13 +55,13 @@
 **输入:** 本地 checkpoint 和固定上游源码.
 **输出:** 带版本的身份 manifest, 以及经过批准的数学, 精度, 状态和测量契约.
 
-- [ ] 不加载全部张量, 验证全部 48 个分片, 张量名称, offsets, shapes, scales 和文件身份.
+- [x] 不加载全部张量, 验证全部 48 个分片, 张量名称, offsets, shapes, scales 和文件身份.
 - [ ] 对比本地权重与固定 DeepInfer revision 及其不同的默认 checkpoint.
 - [ ] 明确 CED, CSA2, FP4, Engram 哈希, 提示编码, 媒体编码和 DSpark 概率规则.
 - [ ] Kernel 调优前冻结独立参考输入, 完整词表输出, 数值门槛和算子性能门槛.
 - [ ] 规划逐层流式参考计算, 而非完整的 FP64 权重副本.
-- [ ] 取得并行定义的批准.
-- [ ] 解决验证计划中的 HTTP 策略假设.
+- [x] 取得并行定义的批准.
+- [x] 解决验证计划中的 HTTP 策略假设.
 - [ ] 为组合容量目标计算逐 rank 及主机预算.
 
 **门槛:** 不得有影响阶段 3 算子的未解决权重映射或验收规则.

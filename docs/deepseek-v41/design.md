@@ -2,10 +2,10 @@
 
 ## Scope and status
 
-This proposal extends the service on `nightly` from base `b99701a`.
+This approved design extends the service on `nightly` from base `b99701a`.
 It does not declare DeepSeek support in the current executable.
-Get approval of this proposal and the [phase plan](plan.md) before implementation.
-The [validation plan](validation.md) gives the proposed measurement matrix.
+Execute the [phase plan](plan.md) without additional phase approval.
+The [validation plan](validation.md) gives the approved measurement matrix.
 
 Keep Qwen3.8-27B-FP8 on one B200, with its current functions and numerical limits.
 Add DeepSeek-V4.1-Flash on four B200 GPUs.
@@ -104,7 +104,7 @@ Keep Qwen state semantics unchanged during this move.
 
 ## Parallel strategies
 
-These are project definitions for review. They are not claims about DeepInfer command names.
+These are approved project definitions. They are not claims about DeepInfer command names.
 All strategies use one group of four ranks, not sixteen GPUs.
 
 | Strategy | Attention and dense projections | Routed experts | Requests |

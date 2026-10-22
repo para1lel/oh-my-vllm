@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This is the acceptance proposal for the [architecture](design.md) and [phase plan](plan.md).
+This is the approved acceptance scope for the [architecture](design.md) and [phase plan](plan.md).
 It does not report completed tests.
 Document-only changes use applicable document and whitespace hooks.
 They do not trigger GPU measurements or changes to old performance values.
@@ -20,12 +20,9 @@ All configurations use four B200 GPUs and total context capacity 1048576.
 | DSpark, maximum five drafts | DEP4 | 4, 16, 64 | 400000, 800000 | 64, 8192 | 12 |
 | Ordinary decode | TP4 | 4 | 400000 | 64, 8192 | 2 |
 
-The proposed total is 38 HTTP cases.
-The user specified the batch/length products but did not assign HTTP parallel strategies.
-The full DSpark product across strategies and the TP4 ordinary baseline are planning assumptions for approval.
-
-Do not silently treat them as approved scope.
-If HTTP uses the AgentX batch-to-strategy mapping, the total becomes 14 HTTP cases.
+The approved total is 38 HTTP cases.
+Each parallel strategy runs all 12 DSpark cases.
+The ordinary baseline uses TP4.
 Do not add ordinary-decode performance cases beyond the two approved cases.
 Small correctness checks are separate from performance cases.
 

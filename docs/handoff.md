@@ -4,8 +4,13 @@ Use `nightly` for the planned DeepSeek extension from base `b99701a`.
 Read the [architecture proposal](deepseek-v41/design.md), [phase plan](deepseek-v41/plan.md), and [validation plan](deepseek-v41/validation.md).
 The implementation is still Qwen-only. No DeepSeek runtime changes are present.
 
-Get maintainer approval of the architecture and HTTP strategy assumptions.
-Start Phase 0 after approval.
+The architecture and measurement matrix have approval.
+Execute all phases without additional phase approval.
+Phase 0 is active: freeze checkpoint identities, tensor layouts, model mathematics, and independent numerical references.
+
+The [checkpoint tools](deepseek-v41/checkpoint.md) provide full byte identities and a lazy CPU FP64 weight reader.
+The [model contract](deepseek-v41/model.md) and [state contract](deepseek-v41/state.md) give the local mathematical sources and subsequent reference gates.
+Full-model reference outputs and per-rank memory budgets are still prerequisites.
 Keep DeepSeek and new nightly regression measurements in separate documents, not README.
 
 The following state applies to the Qwen implementation.

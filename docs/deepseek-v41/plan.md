@@ -1,6 +1,6 @@
 # DeepSeek V4.1 phased implementation plan
 
-> Agent workers: use `superpowers:executing-plans` or `superpowers:subagent-driven-development` after maintainer approval. Complete one reviewed phase at a time.
+> Agent workers: use `superpowers:executing-plans` or `superpowers:subagent-driven-development`. Complete one reviewed phase at a time without additional maintainer approval.
 
 **Goal:** Add four-GPU DeepSeek inference without loss of existing Qwen functions.
 
@@ -8,7 +8,7 @@
 
 **Tech stack:** Rust, Python, ZMQ DEALER, msgpack, CUDA C++ or CuTe DSL, and native NCCL.
 
-**Spec:** [Architecture proposal](design.md). This plan is proposed, not executed.
+**Spec:** [Approved architecture](design.md). Execution starts with Phase 0.
 
 ## Global constraints
 
@@ -56,13 +56,13 @@ Stop all processes started for the phase.
 **Inputs:** Local checkpoint and fixed upstream sources.
 **Output:** A versioned identity manifest and approved mathematical, precision, state, and measurement contracts.
 
-- [ ] Validate all 48 shards, tensor names, offsets, shapes, scales, and file identities without loading all tensors.
+- [x] Validate all 48 shards, tensor names, offsets, shapes, scales, and file identities without loading all tensors.
 - [ ] Compare local weights with the fixed DeepInfer revision and its different default checkpoint.
 - [ ] Specify CED, CSA2, FP4, Engram hashing, prompt encoding, media encoding, and DSpark probability rules.
 - [ ] Freeze independent reference inputs, full vocabulary outputs, numerical limits, and operator performance limits before kernel tuning.
 - [ ] Plan layer-streamed reference computation instead of a full FP64 weight copy.
-- [ ] Get approval of the parallel definitions.
-- [ ] Resolve the HTTP strategy assumption in the validation plan.
+- [x] Get approval of the parallel definitions.
+- [x] Resolve the HTTP strategy assumption in the validation plan.
 - [ ] Calculate per-rank and host budgets for the combined capacity target.
 
 **Gate:** No unresolved weight mapping or acceptance rule can affect Phase 3 operators.

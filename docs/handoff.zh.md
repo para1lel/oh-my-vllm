@@ -4,8 +4,13 @@
 阅读[架构提案](deepseek-v41/design.zh.md), [阶段计划](deepseek-v41/plan.zh.md)和[验证计划](deepseek-v41/validation.zh.md).
 实现仍然只支持 Qwen. 尚无 DeepSeek 运行时改动.
 
-取得维护者对架构和 HTTP 策略假设的批准.
-批准后开始阶段 0.
+架构和测量矩阵已获批准.
+执行全部阶段, 不再逐阶段等待批准.
+阶段 0 正在进行: 冻结 checkpoint 身份, 张量布局, 模型数学行为和独立数值参考.
+
+[checkpoint 工具](deepseek-v41/checkpoint.zh.md)提供完整字节身份和惰性 CPU FP64 权重读取器.
+[模型契约](deepseek-v41/model.zh.md)和[状态契约](deepseek-v41/state.zh.md)给出本地数学来源和后续参考门槛.
+全模型参考输出和逐 rank 内存预算仍是前置条件.
 DeepSeek 和新的 nightly 回归测量放入独立文档, 不放进 README.
 
 以下状态描述 Qwen 实现.
