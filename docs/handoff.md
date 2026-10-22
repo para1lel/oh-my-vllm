@@ -16,7 +16,7 @@ The checkpoint tools also supply independent CPU Engram hashes and continuation 
 The [reference construction guide](deepseek-v41/reference.md) specifies streamed weights and the separate PyTorch FP64 mathematical checks.
 The [fixed fixtures](deepseek-v41/fixtures.md) bind short-text endpoints and prompt-codec cases.
 Their upstream comparison rejects checkpoint substitution without proof of equal weight identities.
-Its DSpark predictor supplies FP64 block mathematics, not service execution.
+Its DSpark restoration generator and vision reference supply CPU FP64 mathematics, not service execution.
 The [sampling contract](deepseek-v41/sampling.md) defines pending-token alignment, exact correction, and request-local RNG addresses.
 
 DSpark, media, and long-context reference outputs and complete runtime allocation bounds are still prerequisites.

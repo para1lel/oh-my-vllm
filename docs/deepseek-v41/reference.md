@@ -66,6 +66,7 @@ Add reviewed endpoint fixtures only after the generator and identities pass inde
 The [generator](../../development/model/deepseek_v41/reference.py) binds the fixed 16-token prompt to the local tokenizer.
 It calculates the full checkpoint identity again before computation.
 It checks checkpoint file states and reference source identities after computation.
+Configuration parsing and tokenizer construction consume verified byte buffers, not new pathname reads.
 Changed input files or source files cause an error instead of an output artifact.
 
 The output contains two full FP64 vocabulary vectors and their metadata.
@@ -96,7 +97,8 @@ scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
   development.model.deepseek_v41.test_reference_math \
   development.model.deepseek_v41.test_reference_attention \
   development.model.deepseek_v41.test_reference_model \
-  development.model.deepseek_v41.test_reference_dspark
+  development.model.deepseek_v41.test_reference_dspark \
+  development.model.deepseek_v41.test_reference_vision
 ```
 
 The checks use hand-calculated values for mixing direction, normalization, rotary pairs, attention sinks, and routing bias.
@@ -117,3 +119,51 @@ Predictor attention positions and output sample positions differ by one.
 Use the [sampling contract](sampling.md) for pending tokens, verification, accepted feature updates, RNG, and exact correction.
 Its NumPy oracle does not use model weights or native operators.
 These small CPU checks are not local-checkpoint DSpark endpoint fixtures.
+
+## DSpark restoration generation
+
+The [case generator](../../development/model/deepseek_v41/reference_cases.py) repeats the fixed short-prompt token IDs.
+The prefix has 129 tokens.
+This prefix crosses the 128-token window boundary and leaves a ratio-2 compressor group that is not full.
+The target computes the prefix, then supplies features for a five-row DSpark proposal.
+Verification consumes the pending token and all five proposals.
+
+The reference separately computes the first two verification inputs from the original prefix state.
+It checks their features and logits against the corresponding full verification rows.
+Their target argmax supplies a fixed correction input.
+This is a forced state-selection case, not a stochastic rejection event.
+The [sampling oracle](sampling.md) checks rejection probabilities separately.
+
+Only accepted target features update the predictor main windows before the next proposal.
+The next boundary feature is appended once.
+The target then computes the correction input from the selected state.
+The artifact contains 18 full vocabulary rows across prefill, two proposal blocks, verification, and restored decode.
+It also contains five raw confidence values for each proposal block.
+
+The generator records checkpoint identity, source identity, dependency versions, all input IDs, and all output-array hashes.
+Before publication, it checks consumed control bytes and input states.
+An exclusive link publishes the complete external NPZ file without replacement.
+There is no fixed restoration artifact at this time.
+
+Set `CASE_OUTPUT` to a new external NPZ path.
+Use the pinned reference environment:
+
+```bash
+scripts/with-env.sh "$REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.reference_cases \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$CASE_OUTPUT"
+```
+
+## Vision mathematics
+
+The [vision reference](../../development/model/deepseek_v41/reference_vision.py) accepts normalized FP64 patches or normalized FP64 RGB pixels with an explicit patch grid.
+It calculates vision-layer outputs with split-half 2D RoPE and full bidirectional attention.
+The aligner uses zero-padded 3-by-3 groups, channel-first gather order, and exact-erf GELU.
+Learned start, newline, and end embeddings form the complete language-model image span.
+
+Query tiles limit score storage without dropping keys.
+Projection-row limits bound weight reads.
+The reference uses CPU FP64 arithmetic without source BF16/FP32 rounding.
+It does not include image loading, resizing, normalization, video frame selection, or language-model image insertion.
+Small mathematical checks do not supply a fixed local-checkpoint media endpoint.

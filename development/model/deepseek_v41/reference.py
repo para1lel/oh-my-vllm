@@ -2,12 +2,21 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 import time
 from pathlib import Path
 
 import numpy as np
 
-from .identity import file_state, inspect_checkpoint, local_file, parse_json
+from .identity import (
+    MAX_HEADER_BYTES,
+    file_state,
+    inspect_checkpoint,
+    local_file,
+    open_file,
+    parse_json,
+    unchanged,
+)
 from .layout import tensor_layout
 from .weights import Weights
 
@@ -44,7 +53,11 @@ REFERENCE_FILES = (
 
 
 def output_path(output, checkpoint_root):
-    output = Path(output).resolve()
+    output = Path(output)
+    if output.is_symlink():
+        raise FileExistsError("reference output already exists as a link")
+    # Keep the final component unresolved so exclusive creation rejects a racing link.
+    output = output.parent.resolve() / output.name
     repository = Path(__file__).resolve().parents[3]
     if output.is_relative_to(repository) or output.is_relative_to(
         Path(checkpoint_root).resolve()
@@ -54,7 +67,7 @@ def output_path(output, checkpoint_root):
         )
     if output.suffix != ".npz":
         raise ValueError("reference output must use the .npz suffix")
-    if output.exists():
+    if output.exists() or output.is_symlink():
         raise FileExistsError("reference output already exists")
     return output
 
@@ -105,6 +118,18 @@ def file_snapshot(root, files):
     }
 
 
+def control_bytes(root, name, manifest):
+    path = local_file(root, name)
+    with open_file(path) as source:
+        initial = file_state(os.fstat(source.fileno()))
+        data = source.read(MAX_HEADER_BYTES + 1)
+        unchanged(path, source, initial)
+    actual = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+    if len(data) > MAX_HEADER_BYTES or actual != manifest["files"].get(name):
+        raise ValueError(f"reference control file identity differs: {name}")
+    return data
+
+
 def generate(
     model_root, manifest_path, output, *, threads=8, row_limit=2048, hash_workers=4
 ):
@@ -145,9 +170,9 @@ def generate(
         raise ValueError("current checkpoint differs from the supplied full identity")
     if file_snapshot(root, manifest["files"]) != snapshot:
         raise ValueError("checkpoint changed during reference startup")
-    config = parse_json((root / "config.json").read_bytes())
+    config = parse_json(control_bytes(root, "config.json", manifest))
     reader = Weights(root, manifest, tensor_layout(config))
-    tokenizer = Tokenizer.from_file(str(root / "tokenizer.json"))
+    tokenizer = Tokenizer.from_buffer(control_bytes(root, "tokenizer.json", manifest))
     tokens = tokenizer.encode(PROMPT, add_special_tokens=False).ids
     if tuple(tokens) != PROMPT_IDS:
         raise ValueError("reference prompt tokens differ from the fixed case")

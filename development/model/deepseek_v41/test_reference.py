@@ -1,3 +1,4 @@
+import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -5,10 +6,34 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
+from . import reference
 from .reference import write_reference
 
 
 class ReferenceArtifact(unittest.TestCase):
+    def test_control_bytes_are_verified_before_parser_or_tokenizer_consumption(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "tokenizer.json"
+            data = b'{"vocab":"original"}'
+            path.write_bytes(data)
+            manifest = {
+                "files": {
+                    "tokenizer.json": {
+                        "size": len(data),
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                    }
+                }
+            }
+            verified = reference.control_bytes(root, "tokenizer.json", manifest)
+            self.assertEqual(verified, data)
+            path.write_bytes(b'{"vocab":"replaced"}')
+            self.assertEqual(verified, data)
+            with self.assertRaisesRegex(ValueError, "control.*identity"):
+                reference.control_bytes(root, "tokenizer.json", manifest)
+            with self.assertRaises(ValueError):
+                reference.control_bytes(root, "../tokenizer.json", manifest)
+
     def test_full_vectors_are_external_finite_and_never_overwritten(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -29,6 +54,12 @@ class ReferenceArtifact(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 write_reference(output, checkpoint, metadata, vectors)
             self.assertEqual(output.read_bytes(), original)
+            dangling = root / "dangling.npz"
+            destination = root / "missing.npz"
+            dangling.symlink_to(destination)
+            with self.assertRaises(FileExistsError):
+                write_reference(dangling, checkpoint, metadata, vectors)
+            self.assertFalse(destination.exists())
             with self.assertRaisesRegex(ValueError, "external"):
                 write_reference(
                     checkpoint / "reference.npz", checkpoint, metadata, vectors

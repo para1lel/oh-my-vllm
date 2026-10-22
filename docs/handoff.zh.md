@@ -16,7 +16,7 @@ checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
 [参考构建指南](deepseek-v41/reference.zh.md)规定流式权重和独立的 PyTorch FP64 数学检查.
 [固定夹具](deepseek-v41/fixtures.zh.md) 绑定短文本端点和提示词编码用例.
 其中的上游比较在没有相同权重身份凭据时拒绝检查点替换.
-其中的 DSpark 预测器提供 FP64 块数学实现, 而不是服务执行.
+其中的 DSpark 恢复生成器和视觉参考提供 CPU FP64 数学实现, 而不是服务执行.
 [采样约定](deepseek-v41/sampling.zh.md) 定义待处理 token 对齐, 精确修正和请求内 RNG 地址.
 
 DSpark, 媒体和长上下文参考输出及完整的运行时分配上界仍是前置条件.

@@ -66,6 +66,7 @@ Correction bias 用于选择专家.
 [生成器](../../development/model/deepseek_v41/reference.py)将固定的 16-token 提示绑定到本地分词器.
 它在计算之前重新计算完整 checkpoint 身份.
 它在计算之后检查 checkpoint 文件状态和参考源码身份.
+配置解析和分词器构建使用经过验证的字节缓冲区, 而不是重新读取路径.
 输入文件或源文件变化会导致错误, 而不是输出 artifact.
 
 输出包含两个完整的 FP64 词表向量及其 metadata.
@@ -96,7 +97,8 @@ scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
   development.model.deepseek_v41.test_reference_math \
   development.model.deepseek_v41.test_reference_attention \
   development.model.deepseek_v41.test_reference_model \
-  development.model.deepseek_v41.test_reference_dspark
+  development.model.deepseek_v41.test_reference_dspark \
+  development.model.deepseek_v41.test_reference_vision
 ```
 
 这些检查对混合方向, 归一化, 旋转元素对, attention sinks 和 routing bias 使用手算数值.
@@ -117,3 +119,51 @@ scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
 待处理 tokens, 验证, 已接受特征更新, RNG 和精确修正遵循[采样约定](sampling.zh.md).
 其 NumPy 参考不使用模型权重或 native 算子.
 这些小型 CPU 检查不是本地 checkpoint 的 DSpark 端点 fixtures.
+
+## DSpark 恢复生成
+
+[用例生成器](../../development/model/deepseek_v41/reference_cases.py) 重复固定短提示词的 token IDs.
+此前缀具有 129 个 tokens.
+此前缀跨越 128-token 窗口边界, 并留下一个未满的 ratio-2 压缩器组.
+目标模型计算此前缀, 然后为五行 DSpark 提案提供特征.
+验证消费待处理 token 和全部五个提案.
+
+参考从原始前缀状态单独计算前两个验证输入.
+它对照完整验证中对应行检查特征和 logits.
+其目标 argmax 提供固定修正输入.
+这是强制状态选择用例, 而不是随机拒绝事件.
+[采样参考](sampling.zh.md) 单独检查拒绝概率.
+
+下一次提案前, 仅已接受的目标特征更新预测器主窗口.
+下一个边界特征仅追加一次.
+目标模型随后从所选状态计算修正输入.
+产物包含 prefill, 两个提案块, 验证和恢复解码的共 18 个完整词表行.
+它还包含每个提案块的五个原始置信度值.
+
+生成器记录检查点身份, 源码身份, 依赖版本, 全部输入 IDs 和全部输出数组哈希.
+发布前, 它检查所用控制字节和输入状态.
+排他链接发布完整的外部 NPZ 文件, 不替换已有文件.
+目前尚无固定的恢复产物.
+
+将 `CASE_OUTPUT` 设为新的外部 NPZ 路径.
+使用固定参考环境:
+
+```bash
+scripts/with-env.sh "$REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.reference_cases \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$CASE_OUTPUT"
+```
+
+## 视觉数学
+
+[视觉参考](../../development/model/deepseek_v41/reference_vision.py) 接受带显式 patch 网格的已归一化 FP64 patches 或已归一化 FP64 RGB pixels.
+它计算视觉层输出, 使用分半 2D RoPE 和完整双向注意力.
+合并器使用零填充的 3-by-3 分组, 通道优先的收集顺序和精确 erf GELU.
+学习得到的起始, 换行和结束 embeddings 构成完整的语言模型图像跨度.
+
+Query 分块限制分数存储, 不丢弃 keys.
+权重读取按 projection 行设置上界.
+参考使用 CPU FP64 算术, 不进行源实现的 BF16/FP32 舍入.
+它不包含图像加载, resize, 归一化, 视频帧选择或语言模型图像插入.
+小型数学检查不提供固定的本地检查点媒体端点.
