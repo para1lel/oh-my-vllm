@@ -1,3 +1,4 @@
+pub use oh_my_vllm_scheduler::cache::{CacheCompletion, CacheOperation};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -11,6 +12,10 @@ pub enum RustMessage {
         request: serde_json::Value,
     },
     Execute(ExecuteMsg),
+    Cache {
+        rpc_id: u64,
+        operations: Vec<CacheOperation>,
+    },
     Abort(AbortMsg),
     Stats {
         rpc_id: u64,
@@ -23,6 +28,7 @@ pub struct InitMsg {
     pub model_path: String,
     pub num_gpu_blocks: Option<u32>,
     pub mamba_blocks: Option<u32>,
+    pub host_cache_bytes: Option<u64>,
     pub block_size: u32,
     pub tensor_parallel_size: u32,
     pub max_model_len: u32,
@@ -87,10 +93,17 @@ pub enum WorkerMessage {
     Ready {
         logical_num_blocks: u32,
         mamba_blocks: u32,
+        #[serde(default)]
+        host_cache_bytes: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cache_memory: Option<serde_json::Value>,
     },
     ExecuteResult(ExecuteResultMsg),
+    CacheResult {
+        rpc_id: u64,
+        completed: Vec<CacheCompletion>,
+        host_cache_bytes: u64,
+    },
     Prepared {
         rpc_id: u64,
         prompt_token_ids: Vec<u32>,

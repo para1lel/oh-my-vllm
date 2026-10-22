@@ -6,6 +6,8 @@ from .cache_budget import cache_budget
 from .media import MediaProcessor
 from .memory import workspace_budget
 from .model import Model
+from .offload import Offload
+from .offload_budget import host_budget
 from .request import Request
 from .sampling import Sampling
 from .speculation import Speculation
@@ -66,6 +68,15 @@ class Worker:
             if config["num_speculative_tokens"]
             else None
         )
+        self.offload = Offload(
+            self.device,
+            self.cache,
+            self.requests,
+            host_budget(
+                config.get("host_cache_bytes"),
+                self.cache_memory["fa_bytes"] + self.cache_memory["gdn_bytes"],
+            ),
+        )
 
     def ready(self):
         return {
@@ -73,10 +84,13 @@ class Worker:
             "logical_num_blocks": self.cache.blocks,
             "mamba_blocks": self.cache.mamba_blocks,
             "cache_memory": self.cache_memory,
+            "host_cache_bytes": self.offload.limit,
         }
 
     def release(self, request_id):
-        self.cache.release(request_id)
+        offload = getattr(self, "offload", None)
+        if offload is None or not offload.cancel(request_id):
+            self.cache.release(request_id)
         self.requests.pop(request_id, None)
 
     def sampler(self, rows):
@@ -190,6 +204,12 @@ class Worker:
         return outputs
 
     def execute(self, message):
+        offload = getattr(self, "offload", None)
+        if offload is not None:
+            offload.check_execute(
+                [row["request_id"] for row in message["scheduled"]]
+                + message["preempted_request_ids"]
+            )
         for request_id in message["finished_request_ids"]:
             self.release(request_id)
         for request_id in message["preempted_request_ids"]:
@@ -226,6 +246,7 @@ class Worker:
     def handle(self, message):
         match message["type"]:
             case "prepare":
+                self.offload.check_register(message["request_id"])
                 options = message["request"]
                 tokens, media, positions, delta = self.media.prepare(options)
                 if len(tokens) + options["max_tokens"] > self.config["max_model_len"]:
@@ -245,6 +266,7 @@ class Worker:
                     "prompt_token_ids": tokens,
                 }
             case "register":
+                self.offload.check_register(message["request_id"])
                 options = {
                     "max_tokens": message.get("max_tokens", 64),
                     "effort": "off",
@@ -261,6 +283,8 @@ class Worker:
                 )
             case "execute":
                 return self.execute(message)
+            case "cache":
+                return self.offload.handle(message)
             case "abort":
                 self.release(message["request_id"])
             case "stats":
@@ -274,6 +298,7 @@ class Worker:
                         "gpu_free_bytes": self.device.module.free_bytes(),
                         "gpu_allocated_bytes": self.device.module.allocated_bytes(),
                         "gpu_reserved_bytes": self.device.module.reserved_bytes(),
+                        **self.offload.stats(),
                     },
                 }
             case _:
@@ -281,6 +306,10 @@ class Worker:
 
     def close(self):
         self.trace.close()
+        offload = getattr(self, "offload", None)
+        if offload is not None:
+            self.device.synchronize()
+            offload.close()
         if self.speculation is not None:
             self.speculation.close()
         self.model.close()

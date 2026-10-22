@@ -28,6 +28,7 @@ pub struct WorkerConfig {
     pub socket_path: PathBuf,
     pub num_gpu_blocks: Option<u32>,
     pub mamba_blocks: Option<u32>,
+    pub host_cache_bytes: Option<u64>,
     pub block_size: u32,
     pub tensor_parallel_size: u32,
     pub max_model_len: u32,
@@ -49,6 +50,7 @@ impl Default for WorkerConfig {
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: None,
             mamba_blocks: Some(128),
+            host_cache_bytes: None,
             block_size: 784,
             tensor_parallel_size: 1,
             max_model_len: 262144,
@@ -80,6 +82,7 @@ pub struct WorkerClient {
     serving_enabled: bool,
     pub logical_num_blocks: u32,
     pub mamba_blocks: u32,
+    pub host_cache_bytes: u64,
     pub serving_outputs: std::collections::BTreeMap<u64, (String, Option<String>, usize)>,
     pub serving_errors: std::collections::BTreeMap<u64, String>,
     binding: Binding,
@@ -347,6 +350,7 @@ impl WorkerClient {
             model_path: config.model_path.to_string_lossy().into_owned(),
             num_gpu_blocks: config.num_gpu_blocks,
             mamba_blocks: config.mamba_blocks,
+            host_cache_bytes: config.host_cache_bytes,
             block_size: config.block_size,
             tensor_parallel_size: config.tensor_parallel_size,
             max_model_len: config.max_model_len,
@@ -391,19 +395,21 @@ impl WorkerClient {
         .await
         .map_err(|_| Error::Timeout)??;
 
-        let (logical_num_blocks, mamba_blocks) = match ready_reply {
+        let (logical_num_blocks, mamba_blocks, host_cache_bytes) = match ready_reply {
             crate::protocol::WorkerMessage::Ready {
                 logical_num_blocks,
                 mamba_blocks,
+                host_cache_bytes,
                 cache_memory,
             } => {
                 info!(
                     logical_num_blocks,
                     mamba_blocks,
+                    host_cache_bytes,
                     ?cache_memory,
                     "Worker is ready"
                 );
-                (logical_num_blocks, mamba_blocks)
+                (logical_num_blocks, mamba_blocks, host_cache_bytes)
             }
             crate::protocol::WorkerMessage::Error(e) => {
                 return Err(Error::WorkerError(e.message));
@@ -427,6 +433,16 @@ impl WorkerClient {
         }
         config.num_gpu_blocks = Some(logical_num_blocks);
         config.mamba_blocks = Some(mamba_blocks);
+        if config
+            .host_cache_bytes
+            .is_some_and(|limit| host_cache_bytes > limit)
+            || (config.host_cache_bytes.is_some_and(|limit| limit > 0) && host_cache_bytes == 0)
+        {
+            return Err(Error::UnexpectedMessageType(
+                "host cache exceeds requested limit".into(),
+            ));
+        }
+        config.host_cache_bytes = Some(host_cache_bytes);
 
         let (send, mut receive) = sock.split();
         let (inbox_tx, inbox) = mpsc::channel(16);
@@ -454,6 +470,7 @@ impl WorkerClient {
             serving_enabled: false,
             logical_num_blocks,
             mamba_blocks,
+            host_cache_bytes,
             serving_outputs: Default::default(),
             serving_errors: Default::default(),
             binding,
@@ -749,6 +766,37 @@ impl WorkerClient {
         self.config.clone()
     }
 
+    pub async fn cache_step(
+        &mut self,
+        scheduler: &mut oh_my_vllm_scheduler::Scheduler,
+    ) -> Result<()> {
+        if !scheduler.cache_pending() {
+            return Ok(());
+        }
+        self.rpc_id += 1;
+        let rpc_id = self.rpc_id;
+        let operations = scheduler.cache_operations();
+        Self::send_raw(&mut self.sock, &RustMessage::Cache { rpc_id, operations }).await?;
+        match self.recv_for(rpc_id).await? {
+            crate::protocol::WorkerMessage::CacheResult {
+                completed,
+                host_cache_bytes,
+                ..
+            } => {
+                if host_cache_bytes != self.host_cache_bytes {
+                    return Err(Error::UnexpectedMessageType(
+                        "host cache capacity changed".into(),
+                    ));
+                }
+                scheduler
+                    .complete_cache(&completed)
+                    .map_err(|error| Error::UnexpectedMessageType(error.to_string()))
+            }
+            crate::protocol::WorkerMessage::Error(error) => Err(Error::WorkerError(error.message)),
+            reply => Err(Error::UnexpectedMessageType(format!("{reply:?}"))),
+        }
+    }
+
     pub fn process_id(&mut self) -> u32 {
         self._child.child().id()
     }
@@ -829,6 +877,7 @@ impl WorkerClient {
                 crate::protocol::WorkerMessage::ExecuteResult(result) => result.rpc_id,
                 crate::protocol::WorkerMessage::Error(error) => error.rpc_id,
                 crate::protocol::WorkerMessage::StatsResult { rpc_id, .. } => *rpc_id,
+                crate::protocol::WorkerMessage::CacheResult { rpc_id, .. } => *rpc_id,
                 other => {
                     return Err(Error::UnexpectedMessageType(format!("{other:?}")));
                 }
@@ -843,6 +892,7 @@ impl WorkerClient {
                     }
                     crate::protocol::WorkerMessage::Error(_) => true,
                     crate::protocol::WorkerMessage::StatsResult { .. } => true,
+                    crate::protocol::WorkerMessage::CacheResult { .. } => true,
                     _ => false,
                 };
                 if !valid {

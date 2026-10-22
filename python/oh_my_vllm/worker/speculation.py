@@ -1,7 +1,6 @@
 from contextlib import ExitStack
 
 import numpy as np
-import tvm_ffi
 
 from ..operators.fa import api as fa
 from ..operators.mtp import api as mtp
@@ -16,6 +15,8 @@ class GraphOperation:
     def __init__(self, device):
         self.device = device
         self.resources = ExitStack()
+        self.host_uploads = device.uploads()
+        self.resources.callback(self.host_uploads.close)
         self.replay = None
 
     def close(self):
@@ -23,15 +24,16 @@ class GraphOperation:
 
     def copy(self, destination, source):
         if isinstance(source, np.ndarray):
-            source = tvm_ffi.from_dlpack(np.require(source, requirements=["C", "W"]))
-        self.device.module.copy_bytes(destination, source)
+            self.host_uploads.copy(destination, source)
+        else:
+            self.device.module.copy_bytes(destination, source)
 
     def execute(self, graph):
         if not graph:
             return self.run()
         if self.replay is None:
             self.run()
-            self.device.synchronize()
+            self.device.synchronize_compute()
             self.replay = self.resources.enter_context(self.device.graph(self.run))
         self.replay()
 
@@ -476,7 +478,7 @@ class Speculation:
             request.drafts = []
             request.drafts_greedy = request.parameters()[0] == 0
             if not request.drafts_greedy and request.proposals is None:
-                request.proposals = d.empty((4, 248320), "float32")
+                request.proposals = d.scratch((4, 248320), "float32")
                 request.proposal_rows = tuple(
                     d.view(request.proposals, (1, 248320), index * 248320)
                     for index in range(4)

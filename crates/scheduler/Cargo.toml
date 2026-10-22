@@ -9,3 +9,4 @@ oh-my-vllm-kv-cache.workspace = true
 rustc-hash.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+serde.workspace = true

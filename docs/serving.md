@@ -51,9 +51,13 @@ The workspace allowance includes prefill, decode workspaces, sampling, MTP, and 
 The other 15% is available for CUDA Graph and runtime allocations.
 The tensor budget does not set a strict limit on total process memory.
 
-Preempted requests keep encoded media in host memory.
-Before execution continues, the worker copies the same BF16 data back to the GPU.
-Preemption also releases the proposal buffers for discarded drafts.
+The [host cache](kv-offload.md) keeps interrupted requests and reusable prefixes in pinned memory.
+Request restoration keeps recurrent state, media, pending drafts, and sampling offsets.
+Other resident requests can execute during cache transfers.
+
+Use `--host-cache-bytes` to set a host storage limit in bytes.
+The default limit is calculated at runtime. Physical host storage grows only at safe idle points.
+Use a zero limit to disable host offload for comparisons.
 
 The default logical GDN capacity is `128` slots.
 Private request states and temporary checkpoints use additional physical slots.

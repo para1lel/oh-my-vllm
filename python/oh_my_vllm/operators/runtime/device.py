@@ -15,6 +15,8 @@ FUNCTIONS = (
     "allocate_scratch",
     "reserve_scratch",
     "copy_bytes",
+    "copy_batch",
+    "upload_bytes",
     "synchronize",
     "view",
     "zero",
@@ -53,6 +55,7 @@ class Device:
             "cudaStreamIsCapturing": [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)],
             "cudaEventCreate": [ctypes.POINTER(ctypes.c_void_p)],
             "cudaEventDestroy": [ctypes.c_void_p],
+            "cudaEventQuery": [ctypes.c_void_p],
             "cudaEventRecord": [ctypes.c_void_p, ctypes.c_void_p],
             "cudaEventSynchronize": [ctypes.c_void_p],
             "cudaEventElapsedTime": [
@@ -65,6 +68,9 @@ class Device:
                 ctypes.c_uint,
             ],
             "cudaStreamDestroy": [ctypes.c_void_p],
+            "cudaStreamQuery": [ctypes.c_void_p],
+            "cudaStreamSynchronize": [ctypes.c_void_p],
+            "cudaStreamWaitEvent": [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint],
             "cudaStreamBeginCapture": [ctypes.c_void_p, ctypes.c_int],
             "cudaStreamEndCapture": [
                 ctypes.c_void_p,
@@ -86,6 +92,7 @@ class Device:
             function.restype = ctypes.c_int
         self.runtime.cudaGetErrorString.argtypes = [ctypes.c_int]
         self.runtime.cudaGetErrorString.restype = ctypes.c_char_p
+        self.transfer_engines = set()
         self.upload_pool = UploadPool(self)
 
     def close(self):
@@ -128,6 +135,24 @@ class Device:
 
     def synchronize(self):
         self.module.synchronize(0)
+
+    def synchronize_compute(self):
+        stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+        self.checked(self.runtime.cudaStreamSynchronize(stream))
+
+    def pinned_quiescent(self):
+        stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+        status = self.runtime.cudaStreamQuery(stream)
+        if status == 600:
+            return False
+        self.checked(status)
+        return all(engine.quiescent() for engine in self.transfer_engines)
+
+    def wait_pinned_safe(self):
+        self.synchronize_compute()
+        for engine in self.transfer_engines:
+            for stream in engine.streams.values():
+                self.checked(self.runtime.cudaStreamSynchronize(stream))
 
     def destroy_handles(self, handles, *, suppress=False):
         error = None

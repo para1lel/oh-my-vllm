@@ -1,7 +1,6 @@
 from contextlib import ExitStack
 
 import numpy as np
-import tvm_ffi
 
 from ..operators.output import api as output
 from ..operators.output.plan import make_plan
@@ -211,9 +210,7 @@ class Sampling:
     ):
         d = self.device
         if self.last_indices != indices:
-            d.module.copy_bytes(
-                self.indices, tvm_ffi.from_dlpack(np.asarray(indices, np.int32))
-            )
+            self.uploads.copy(self.indices, np.asarray(indices, np.int32))
             self.last_indices = list(indices)
         d.module.gather_rows(self.value, value, self.indices)
         d.module.gather_rows(self.residual, residual, self.indices)

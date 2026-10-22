@@ -3,6 +3,73 @@ use std::process::Command;
 
 use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
 
+#[tokio::test]
+async fn request_swaps_with_the_python_placeholder_preserve_all_output() {
+    use oh_my_vllm_kv_cache::HybridCoordinator;
+    use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
+
+    let config = WorkerConfig {
+        model_path: "stub".into(),
+        socket_path: std::env::temp_dir().join(format!("omv-swap-{}.ipc", std::process::id())),
+        num_gpu_blocks: Some(5),
+        mamba_blocks: Some(16),
+        host_cache_bytes: Some(4 << 30),
+        max_num_seqs: 2,
+        max_num_batched_tokens: 4096,
+        init_timeout: std::time::Duration::from_secs(3),
+        ..Default::default()
+    };
+    let mut client = WorkerClient::launch(config).await.unwrap();
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig {
+            max_num_seqs: 2,
+            max_num_batched_tokens: 4096,
+            ..Default::default()
+        },
+        HybridCoordinator::new(5, 784, true, 0).with_mamba_capacity(16),
+    );
+    scheduler.enable_host_cache(client.host_cache_bytes);
+    for id in 1..=2 {
+        let tokens = (0..1567)
+            .map(|token| token + id as u32 * 100)
+            .collect::<Vec<_>>();
+        let mut request = Request::new(id, tokens.clone(), 8, vec![]);
+        request.record_partial_prefix = false;
+        assert!(scheduler.add_request(request));
+        client.register_request_with_limit(id, tokens, 8).await;
+    }
+    let mut counts = [0; 2];
+    for _ in 0..100 {
+        client.cache_step(&mut scheduler).await.unwrap();
+        let step = scheduler.schedule();
+        client.cache_step(&mut scheduler).await.unwrap();
+        assert!(scheduler.take_cache_failures().is_empty());
+        let result = client
+            .execute_one_step(
+                &step.scheduled,
+                &step.finished_request_ids,
+                &step.preempted_request_ids,
+                step.num_batched_tokens,
+            )
+            .await
+            .unwrap();
+        if !step.scheduled.is_empty() {
+            let result = scheduler.update(result).unwrap();
+            for output in result.outputs {
+                counts[output.request_id as usize - 1] += output.token_ids.len();
+            }
+        }
+        if scheduler.num_running() + scheduler.num_waiting() == 0 && !scheduler.cache_pending() {
+            break;
+        }
+    }
+    assert_eq!(counts, [8, 8]);
+    let stats = client.query_stats().await.unwrap();
+    assert!(stats["host_cache_store_bytes"].as_u64().unwrap() > 0);
+    assert!(stats["host_cache_load_bytes"].as_u64().unwrap() > 0);
+    client.shutdown().await.unwrap();
+}
+
 #[test]
 fn service_contracts_with_the_python_placeholder() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))

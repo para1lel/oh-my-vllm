@@ -51,9 +51,13 @@ Workspace 预留量包含 prefill, decode workspace, 采样, MTP 和媒体张量
 剩余 15% 可供 CUDA Graph 和 runtime 分配使用.
 张量预算不为进程总内存设置严格上限.
 
-被抢占的请求将已编码媒体保留在主机内存中.
-恢复执行前, worker 将同一份 BF16 数据复制回 GPU.
-抢占也会释放已丢弃草稿的 proposal 缓冲区.
+[Host 缓存](kv-offload.zh.md)在 pinned 内存中保留被中断的请求和可复用前缀.
+请求恢复保留递推状态, 媒体, 待验证 draft 和采样 offset.
+其他已驻留请求可以在缓存传输期间执行.
+
+使用 `--host-cache-bytes` 设置以字节为单位的 host 存储上限.
+默认上限在运行时计算. 物理 host 存储仅在安全空闲点扩容.
+使用零上限关闭 host 卸载以进行比较.
 
 默认逻辑 GDN 容量为 `128` 个槽位.
 请求私有状态和临时 checkpoint 使用额外的物理槽位.

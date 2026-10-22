@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod output;
 pub mod request;
 
@@ -44,11 +45,14 @@ pub struct Scheduler {
     kv: HybridCoordinator,
     finished_ids: Vec<u64>,
     prefill_cursor: Option<RequestId>,
+    host: cache::HostCache,
 }
 
 impl Scheduler {
     pub fn empty_like(&self) -> Self {
-        Self::new(self.config.clone(), self.kv.empty_like())
+        let mut scheduler = Self::new(self.config.clone(), self.kv.empty_like());
+        scheduler.enable_host_cache(self.host.capacity);
+        scheduler
     }
 
     pub fn cache_resource_counts(&self) -> (usize, usize, usize, usize, usize, usize) {
@@ -56,7 +60,11 @@ impl Scheduler {
     }
 
     pub fn reset_prefix_cache(&mut self) -> bool {
-        self.running.is_empty() && self.waiting.is_empty() && self.kv.reset_prefix_cache()
+        if self.num_running() + self.num_waiting() != 0 || !self.host.pending.is_empty() {
+            return false;
+        }
+        self.clear_host_prefixes();
+        self.kv.reset_prefix_cache()
     }
 
     fn aligned_prefill(&self, request: &Request, start: usize, count: usize) -> usize {
@@ -186,6 +194,7 @@ impl Scheduler {
             kv,
             finished_ids: Vec::new(),
             prefill_cursor: None,
+            host: cache::HostCache::default(),
         }
     }
 
@@ -219,6 +228,7 @@ impl Scheduler {
             ) == req.prompt_len;
         let gdn_slots_needed = 1
             + usize::from(!one_forward)
+            + usize::from(self.host.capacity > 0)
             + if self.config.enable_mtp {
                 self.config.mtp_draft_len
             } else {
@@ -250,7 +260,7 @@ impl Scheduler {
     }
 
     pub fn num_waiting(&self) -> usize {
-        self.waiting.len()
+        self.waiting.len() + self.host.requests.len() + self.host.request_transfers()
     }
 
     pub fn num_running(&self) -> usize {
@@ -258,11 +268,7 @@ impl Scheduler {
     }
 
     pub fn pause(&mut self, request_id: RequestId) {
-        if self.running.iter().any(|req| req.id == request_id)
-            || self.waiting.iter().any(|req| req.id == request_id)
-        {
-            self.paused.insert(request_id);
-        }
+        self.paused.insert(request_id);
     }
 
     pub fn resume(&mut self, request_id: RequestId) {
@@ -283,6 +289,7 @@ impl Scheduler {
     pub fn schedule(&mut self) -> SchedulerOutput {
         let started = std::time::Instant::now();
         self.kv.new_step_starts();
+        self.retry_cache_stores();
 
         let mut output = SchedulerOutput {
             finished_request_ids: std::mem::take(&mut self.finished_ids),
@@ -294,6 +301,7 @@ impl Scheduler {
             .make_contiguous()
             .sort_by_key(|request| usize::from(Self::decode_tokens(request) == 0));
         let mut still_running: VecDeque<Request> = VecDeque::new();
+        let mut resident_allocation_failed = false;
         while let Some(mut req) = self.running.pop_front() {
             if self.paused.contains(&req.id) {
                 still_running.push_back(req);
@@ -313,6 +321,22 @@ impl Scheduler {
                 continue;
             }
 
+            if self.host.capacity > 0
+                && self.host.has_prefix_candidates()
+                && self.kv.prefix_eviction_needed(
+                    &req,
+                    &(vec![], vec![]),
+                    0,
+                    to_schedule,
+                    self.lookahead(&req, req.num_computed_tokens, to_schedule),
+                )
+                && self.writeback_host_prefix()
+            {
+                resident_allocation_failed = true;
+                still_running.push_back(req);
+                continue;
+            }
+
             let alloc = loop {
                 let result = self.kv.allocate_slots(
                     &req,
@@ -325,14 +349,28 @@ impl Scheduler {
                 if result.is_some() {
                     break result;
                 }
+                if self.host.capacity > 0
+                    && (self.host.has_request_store() || self.host.has_prefix_store())
+                {
+                    break None;
+                }
                 let Some(victim) = self.running.pop_back() else {
                     break None;
                 };
+                if self.host.capacity > 0 {
+                    if self.host.blocked.contains(&victim.id) {
+                        still_running.push_back(victim);
+                        break None;
+                    }
+                    self.begin_swap(victim);
+                    break None;
+                }
                 self.preempt_request(victim, &mut output);
             };
 
             match alloc {
                 Some(_) => {
+                    output.cache_hit_tokens += self.host.prefix_hits.remove(&req.id).unwrap_or(0);
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
                     let scheduled_tokens = req
@@ -359,11 +397,19 @@ impl Scheduler {
                     still_running.push_back(req);
                 }
                 None => {
-                    self.preempt_request(req, &mut output);
+                    resident_allocation_failed = true;
+                    if self.host.capacity > 0 {
+                        still_running.push_back(req);
+                    } else {
+                        self.preempt_request(req, &mut output);
+                    }
                 }
             }
         }
         self.running = still_running;
+        if !resident_allocation_failed {
+            self.restore_host_requests(token_budget);
+        }
 
         let mut deferred_waiting = VecDeque::new();
         while let Some(mut req) = self.waiting.pop_front() {
@@ -371,12 +417,27 @@ impl Scheduler {
                 deferred_waiting.push_back(req);
                 continue;
             }
-            if self.running.len() >= self.config.max_num_seqs {
+            if self.resident_count() >= self.config.max_num_seqs {
                 self.waiting.push_front(req);
                 break;
             }
 
             let (fa_hit, mb_hit, mut hit_len) = self.kv.get_computed_blocks(&req);
+
+            if let Some(started) = self.begin_prefix_load(
+                &req,
+                hit_len,
+                if resident_allocation_failed {
+                    0
+                } else {
+                    token_budget
+                },
+            ) {
+                if !started {
+                    deferred_waiting.push_back(req);
+                }
+                continue;
+            }
 
             let total_tokens = req.num_tokens_with_spec();
             let remaining = total_tokens - hit_len;
@@ -390,6 +451,20 @@ impl Scheduler {
             }
 
             let has_running = !self.running.is_empty();
+            if self.host.capacity > 0
+                && self.host.has_prefix_candidates()
+                && self.kv.prefix_eviction_needed(
+                    &req,
+                    &(fa_hit.clone(), mb_hit.clone()),
+                    hit_len,
+                    to_schedule,
+                    self.lookahead(&req, hit_len, to_schedule),
+                )
+                && self.writeback_host_prefix()
+            {
+                deferred_waiting.push_back(req);
+                continue;
+            }
             let mut alloc = self.kv.allocate_slots(
                 &req,
                 (fa_hit, mb_hit),
@@ -443,13 +518,31 @@ impl Scheduler {
                     self.running.push_back(req);
                 }
                 None => {
-                    self.waiting.push_front(req);
-                    break;
+                    deferred_waiting.push_back(req);
                 }
             }
         }
         deferred_waiting.append(&mut self.waiting);
         self.waiting = deferred_waiting;
+
+        if self.host.capacity > 0
+            && resident_allocation_failed
+            && output.scheduled.is_empty()
+            && !self.host.has_request_store()
+            && !self.host.has_prefix_store()
+            && self.host.requests.is_empty()
+            && let Some(id) = self
+                .running
+                .iter()
+                .rev()
+                .find(|req| !self.host.blocked.contains(&req.id))
+                .map(|req| req.id)
+        {
+            self.swap_out(id);
+        }
+        if resident_allocation_failed && output.scheduled.is_empty() {
+            self.fail_cache_deadlock();
+        }
 
         output.num_batched_tokens = output.scheduled.iter().map(|s| s.token_ids.len()).sum();
         tracing::debug!(
@@ -542,6 +635,9 @@ impl Scheduler {
 
     pub fn update(&mut self, mut worker: WorkerOutput) -> Result<WorkerOutput, UpdateError> {
         self.validate_output(&worker)?;
+        if !worker.outputs.is_empty() {
+            self.cache_progress();
+        }
         let mut finished_ids = Vec::new();
 
         for result in &mut worker.outputs {
@@ -600,6 +696,9 @@ impl Scheduler {
         self.finished_ids.extend_from_slice(&finished_ids);
 
         for id in &finished_ids {
+            if let Some(request) = self.running.iter().find(|r| r.id == *id).cloned() {
+                self.remember_host_prefix(&request);
+            }
             self.running.retain(|r| r.id != *id);
             self.paused.remove(id);
             self.kv.free(*id);
@@ -609,6 +708,10 @@ impl Scheduler {
 
     pub fn abort(&mut self, request_id: RequestId) {
         self.paused.remove(&request_id);
+        self.host.prefix_hits.remove(&request_id);
+        if self.abort_host_request(request_id) {
+            return;
+        }
         if self.running.iter().any(|r| r.id == request_id) {
             self.running.retain(|r| r.id != request_id);
             self.kv.free(request_id);

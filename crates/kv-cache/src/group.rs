@@ -106,6 +106,33 @@ impl GroupManager {
             .map_or(&[][..], Vec::as_slice)
     }
 
+    pub fn last_state_index(&self, request_id: RequestId) -> Option<usize> {
+        self.last_state_block_idx.get(&request_id).copied()
+    }
+
+    pub fn restore_blocks(
+        &mut self,
+        request_id: RequestId,
+        blocks: Vec<u32>,
+        allocated: bool,
+        last_state: Option<usize>,
+        read_source: Option<u32>,
+    ) {
+        assert!(self.blocks(request_id).is_empty());
+        // The reservation owns one reference per unique slot, also for a detached read source.
+        if let Some(source) = read_source.filter(|source| !blocks.contains(source)) {
+            self.held_sources.insert(request_id, vec![source]);
+        }
+        self.req_to_blocks.insert(request_id, blocks);
+        self.num_cached_block.insert(request_id, 0);
+        if allocated {
+            self.allocated_block_reqs.insert(request_id);
+        }
+        if let Some(index) = last_state {
+            self.last_state_block_idx.insert(request_id, index);
+        }
+    }
+
     #[inline]
     fn num_skipped_tokens(&self, num_computed_tokens: usize) -> usize {
         match self.kind {

@@ -231,3 +231,99 @@ fn partial_prefixes_keep_private_continuations_and_transactional_ownership() {
     assert_eq!(kv.resource_counts(), before);
     assert_eq!(kv.get_computed_blocks(&request).2, 316);
 }
+
+#[test]
+fn restored_partial_checkpoint_keeps_read_lease_until_commit_or_cancel() {
+    use crate::snapshot::BlockTables;
+
+    for (speculative, separate) in [(0, false), (4, true)] {
+        for commit in [false, true] {
+            let mut kv = HybridCoordinator::new(32, 784, true, 0);
+            if separate {
+                kv = kv.with_mamba_capacity(16);
+            }
+            kv.set_speculative_blocks(speculative);
+            let baseline = kv.resource_counts();
+            let mut request = Req::new(1, 2000).with_computed(1566);
+            request.block_hashes = kv.compute_block_hashes(&request.token_ids);
+            let tables = kv
+                .reserve_tables(&BlockTables {
+                    fa: vec![1, 2],
+                    mamba: vec![0, 7],
+                    mamba_last_state: None,
+                    mamba_read_source: None,
+                })
+                .unwrap();
+            let mut read = tables.mamba[1];
+            kv.pin_tables(&tables);
+            kv.install_tables(1, tables.clone(), true, 1566);
+            kv.allocate_slots(&request, (vec![], vec![]), 0, 2, speculative, true)
+                .unwrap();
+            assert_eq!(kv.prefix_state_slot(1), Some(read));
+            assert_ne!(kv.mamba_blocks(1)[1], read);
+            kv.release_tables(&tables);
+            for _ in 0..2 {
+                let stored = kv.request_tables(1);
+                assert_eq!(stored.mamba_read_source, Some(read));
+                let read_index = stored
+                    .mamba_sources()
+                    .iter()
+                    .position(|&slot| slot == read)
+                    .unwrap();
+                kv.free(1);
+                let loaded = kv.reserve_tables(&stored).unwrap();
+                read = loaded.mamba_read_source.unwrap();
+                assert_eq!(loaded.mamba_sources()[read_index], read);
+                assert_ne!(loaded.mamba[1], read);
+                kv.pin_tables(&loaded);
+                kv.install_tables(1, loaded.clone(), false, 1566);
+                kv.allocate_slots(&request, (vec![], vec![]), 0, 2, speculative, true)
+                    .unwrap();
+                kv.release_tables(&loaded);
+                assert_eq!(kv.prefix_state_slot(1), Some(read));
+            }
+            let leased = kv.resource_counts();
+            if !separate {
+                assert_eq!(kv.pool().block(read).ref_cnt, 1);
+            }
+            if commit {
+                request.num_computed_tokens = 1568;
+                kv.commit_cache(&request);
+                assert_eq!(kv.resource_counts().4, leased.4 + 1);
+                assert_eq!(kv.prefix_state_slot(1), None);
+            }
+            kv.free(1);
+            assert_eq!(kv.resource_counts().1, baseline.1);
+            assert_eq!(kv.resource_counts().4, baseline.4);
+        }
+    }
+
+    let mut kv = HybridCoordinator::new(4, 784, true, 0).with_mamba_capacity(2);
+    let tables = kv
+        .reserve_tables(&BlockTables {
+            fa: vec![1, 2],
+            mamba: vec![0, 7],
+            mamba_last_state: None,
+            mamba_read_source: None,
+        })
+        .unwrap();
+    kv.pin_tables(&tables);
+    kv.install_tables(1, tables.clone(), true, 1566);
+    let reserved = kv.resource_counts();
+    assert!(
+        kv.allocate_slots(
+            &Req::new(1, 2000).with_computed(1566),
+            (vec![], vec![]),
+            0,
+            2,
+            0,
+            true,
+        )
+        .is_none()
+    );
+    assert_eq!(kv.resource_counts(), reserved);
+    kv.free(1);
+    kv.release_tables(&tables);
+    assert_eq!(kv.resource_counts().1, 3);
+    assert_eq!(kv.resource_counts().4, 1);
+}

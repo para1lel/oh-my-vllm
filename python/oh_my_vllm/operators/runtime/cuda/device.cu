@@ -1,6 +1,7 @@
 #include "contracts.cuh"
 #include "../../primitives/cuda/gather.cuh"
 #include "scratch_allocator.cuh"
+#include "transfers.cuh"
 #include <algorithm>
 #include <atomic>
 #include <vector>

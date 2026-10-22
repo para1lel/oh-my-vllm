@@ -167,7 +167,7 @@ class Workspace:
         if self.replay is None:
             for warmup in self.warmups:
                 warmup()
-            self.device.synchronize()
+            self.device.synchronize_compute()
             with ExitStack() as recording:
                 for operator in (self.ffn, self.gdn, self.fa, self.hidden_operation):
                     if operator is not None:

@@ -20,6 +20,8 @@ struct Cli {
     num_gpu_blocks: Option<u32>,
     #[arg(long, default_value = "128")]
     mamba_blocks: Option<u32>,
+    #[arg(long)]
+    host_cache_bytes: Option<u64>,
     #[arg(long, default_value_t = 32768, value_parser = clap::value_parser!(u32).range(1..))]
     max_num_batched_tokens: u32,
     #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(1..))]
@@ -241,6 +243,7 @@ async fn run() -> Result<()> {
         socket_path: cli.socket,
         num_gpu_blocks: cli.num_gpu_blocks,
         mamba_blocks: cli.mamba_blocks,
+        host_cache_bytes: cli.host_cache_bytes,
         block_size: cli.block_size,
         tensor_parallel_size: cli.tp,
         max_model_len: cli.max_model_len,
@@ -281,6 +284,7 @@ async fn run() -> Result<()> {
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,
         gdn_pool_blocks = mamba_blocks,
+        host_cache_bytes = client.host_cache_bytes,
         rust_sources_sha256 = env!("OH_MY_VLLM_RUST_SOURCES_SHA256"),
         "BENCH_CONFIG"
     );
@@ -293,6 +297,7 @@ async fn run() -> Result<()> {
         },
         kv,
     );
+    scheduler.enable_host_cache(client.host_cache_bytes);
     if let Cmd::Serve(args) = cli.cmd {
         return oh_my_vllm_zmq_worker::serving::serve(client, scheduler, args).await;
     }
@@ -466,6 +471,10 @@ async fn execute_batch(
     let mut verified_draft_tokens = 0;
     let mut prompt_lengths = BTreeMap::new();
     loop {
+        client.cache_step(scheduler).await?;
+        if let Some((id, message)) = scheduler.take_cache_failures().into_iter().next() {
+            anyhow::bail!("request {id}: {message}");
+        }
         let idle = scheduler.num_running() + scheduler.num_waiting() == 0;
         if arrival_interval == 0 || idle || steps.is_multiple_of(arrival_interval) {
             for prompt in pending.by_ref() {
@@ -495,6 +504,10 @@ async fn execute_batch(
             }
         }
         let step = scheduler.schedule();
+        client.cache_step(scheduler).await?;
+        if let Some((id, message)) = scheduler.take_cache_failures().into_iter().next() {
+            anyhow::bail!("request {id}: {message}");
+        }
         for request in &step.scheduled {
             let known = prompt_lengths[&request.request_id] + outputs[&request.request_id].len();
             verified_draft_tokens +=
@@ -509,7 +522,7 @@ async fn execute_batch(
             }
         }
         preemptions += step.preempted_request_ids.len();
-        if step.scheduled.is_empty() {
+        if step.scheduled.is_empty() && !scheduler.cache_pending() && client.host_cache_bytes == 0 {
             ensure!(
                 scheduler.num_running() + scheduler.num_waiting() == 0,
                 "scheduler stalled with unfinished requests"
@@ -544,7 +557,13 @@ async fn execute_batch(
                     .extend(output.token_ids);
             }
         }
-        if scheduler.num_running() + scheduler.num_waiting() == 0 && pending.peek().is_none() {
+        if step.scheduled.is_empty() && client.host_cache_bytes > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+        if scheduler.num_running() + scheduler.num_waiting() == 0
+            && pending.peek().is_none()
+            && !scheduler.cache_pending()
+        {
             let cleanup = scheduler.schedule();
             let cleanup_started = Instant::now();
             client

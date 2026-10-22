@@ -1003,7 +1003,12 @@ async fn engine(
 ) {
     let health = &context.health;
     let configuration = client.configuration();
-    let expected_capacities = (client.logical_num_blocks, client.mamba_blocks);
+    scheduler.enable_host_cache(client.host_cache_bytes);
+    let expected_capacities = (
+        client.logical_num_blocks,
+        client.mamba_blocks,
+        client.host_cache_bytes,
+    );
     let template = scheduler.empty_like();
     let mut client = Some(client);
     let mut epoch = 1u64;
@@ -1093,7 +1098,12 @@ async fn engine(
             };
             match launched {
                 Ok(mut worker) => {
-                    if (worker.logical_num_blocks, worker.mamba_blocks) != expected_capacities {
+                    if (
+                        worker.logical_num_blocks,
+                        worker.mamba_blocks,
+                        worker.host_cache_bytes,
+                    ) != expected_capacities
+                    {
                         let _ = worker.terminate().await;
                         warn!("replacement worker reported changed cache capacities");
                         continue;
@@ -1161,6 +1171,7 @@ async fn run_engine(
     let max_running = (client.configuration().max_num_seqs as usize).min(64);
     let mut next_diagnostics = Instant::now();
     loop {
+        tokio::time::timeout(context.step_timeout, client.cache_step(scheduler)).await??;
         let was_idle = active.is_empty();
         if was_idle {
             execute(client, &scheduler.schedule(), context.step_timeout).await?;
@@ -1192,6 +1203,9 @@ async fn run_engine(
                     None => break,
                 },
                 _ = tokio::time::sleep_until(diagnostics_at) => {
+                    continue;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(1)), if scheduler.cache_pending() => {
                     continue;
                 }
             };
@@ -1257,6 +1271,16 @@ async fn run_engine(
             *pending = begin_admit(client, active.len(), submission, epoch).await?;
         }
         let batch = scheduler.schedule();
+        tokio::time::timeout(context.step_timeout, client.cache_step(scheduler)).await??;
+        for (id, message) in scheduler.take_cache_failures() {
+            if let Some(request) = active.remove(&id) {
+                request.fail(message);
+            }
+            warn!(
+                request_id = id,
+                message, "host cache capacity rejected request"
+            );
+        }
         if batch.cache_hit_tokens > 0 {
             let mut status = health.lock().unwrap();
             status["prefix_hit_tokens"] = json!(

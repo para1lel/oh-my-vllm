@@ -53,7 +53,12 @@ Report the measured performance.
 Run the applicable [test scope](testing.md) before delivery.
 Also run all 24 [HTTP configurations](performance.md).
 
-The [AgentX entry](agentx.md) measures MTP4 with six session trees.
+The [host KV cache](kv-offload.md) supports interrupted requests and pressure-driven prefix storage.
+Keep transfer leases until completion, also for cancelled requests.
+Keep partial GDN read checkpoints separate from continuation write slots until validated commit.
+Pinned storage grows at idle windows. Metadata uploads use GPU kernels instead of the bulk copy queue.
+
+The [AgentX entry](agentx.md) measures MTP4 with four session trees.
 It uses streaming usage and full response IDs to join service metrics.
 Keep its approved CSV and figure in `docs/assets`.
 Keep raw measurement artifacts external to the repository.

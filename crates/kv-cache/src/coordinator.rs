@@ -7,14 +7,14 @@ use rustc_hash::FxHashMap;
 pub const DEFAULT_WATERMARK_BLOCKS: usize = 0;
 
 pub struct HybridCoordinator {
-    full_attn: GroupManager,
-    mamba: GroupManager,
-    pool: BlockPool,
-    mamba_pool: Option<BlockPool>,
+    pub(crate) full_attn: GroupManager,
+    pub(crate) mamba: GroupManager,
+    pub(crate) pool: BlockPool,
+    pub(crate) mamba_pool: Option<BlockPool>,
     block_size: usize,
     watermark_blocks: usize,
     copies: FxHashMap<RequestId, Vec<(u32, u32, u32)>>,
-    restores: FxHashMap<RequestId, u32>,
+    pub(crate) restores: FxHashMap<RequestId, u32>,
     checkpoints: FxHashMap<RequestId, (usize, u32)>,
 }
 
@@ -159,6 +159,69 @@ impl HybridCoordinator {
         (fa_out, mb_blocks, hit_length)
     }
 
+    pub fn prefix_eviction_needed(
+        &self,
+        request: &impl CacheRequest,
+        hits: &(Vec<u32>, Vec<u32>),
+        computed_hit: usize,
+        count: usize,
+        lookahead: usize,
+    ) -> bool {
+        let computed = request.num_computed_tokens() + computed_hit;
+        let main = computed + count;
+        let mamba_pool = self.mamba_pool.as_ref().unwrap_or(&self.pool);
+        let fa = self.full_attn.get_num_blocks_to_allocate(
+            request.request_id(),
+            main + lookahead,
+            &hits.0,
+            computed,
+            main,
+            &self.pool,
+        );
+        let mb = self.mamba.get_num_blocks_to_allocate(
+            request.request_id(),
+            main + lookahead,
+            &hits.1,
+            computed,
+            main,
+            mamba_pool,
+        );
+        let (BlocksNeeded::Blocks(mut fa), BlocksNeeded::Blocks(mut mb)) = (fa, mb) else {
+            return false;
+        };
+        fa += usize::from(
+            self.full_attn
+                .partial_source(request.request_id(), &hits.0, computed, &self.pool)
+                .is_some(),
+        );
+        mb += usize::from(
+            self.mamba
+                .partial_source(request.request_id(), &hits.1, computed, mamba_pool)
+                .is_some(),
+        );
+        let fa_new = fa.saturating_sub(
+            hits.0
+                .iter()
+                .filter(|&&id| id != 0 && self.pool.block(id).ref_cnt == 0)
+                .count(),
+        );
+        let mb_new = mb.saturating_sub(
+            hits.1
+                .iter()
+                .filter(|&&id| id != 0 && mamba_pool.block(id).ref_cnt == 0)
+                .count(),
+        );
+        if self.mamba_pool.is_some() {
+            fa <= self.pool.num_free_blocks()
+                && mb <= mamba_pool.num_free_blocks()
+                && (fa_new > self.pool.num_uncached_free_blocks()
+                    || mb_new > mamba_pool.num_uncached_free_blocks())
+        } else {
+            fa + mb <= self.pool.num_free_blocks()
+                && fa_new + mb_new > self.pool.num_uncached_free_blocks()
+        }
+    }
+
     pub fn allocate_slots(
         &mut self,
         request: &impl CacheRequest,
@@ -209,12 +272,20 @@ impl HybridCoordinator {
         let fa_partial =
             self.full_attn
                 .partial_source(rid, &new_computed_blocks.0, total_computed, &self.pool);
-        let mb_partial = self.mamba.partial_source(
-            rid,
-            &new_computed_blocks.1,
-            total_computed,
-            self.mamba_pool.as_ref().unwrap_or(&self.pool),
-        );
+        // Host restores have no committed cache hash until their first validated result.
+        let restored_partial = self.restores.get(&rid).copied().filter(|source| {
+            !total_computed.is_multiple_of(self.block_size)
+                && self.mamba.blocks(rid).get(total_computed / self.block_size) == Some(source)
+        });
+        let mb_partial = self
+            .mamba
+            .partial_source(
+                rid,
+                &new_computed_blocks.1,
+                total_computed,
+                self.mamba_pool.as_ref().unwrap_or(&self.pool),
+            )
+            .or(restored_partial);
         let fa_count = match fa_needed {
             BlocksNeeded::DeferToNextStep => return None,
             BlocksNeeded::Blocks(n) => n + usize::from(fa_partial.is_some()),
@@ -406,6 +477,15 @@ impl HybridCoordinator {
             }
         }
         (fa, mb, hit_len)
+    }
+
+    pub fn prefix_hash(&self, request: &impl CacheRequest, end: usize) -> BlockHash {
+        assert!(end > 0 && end <= request.num_tokens());
+        if end.is_multiple_of(self.block_size) {
+            request.block_hashes()[end / self.block_size - 1]
+        } else {
+            partial_hash(request, end, self.block_size)
+        }
     }
 }
 

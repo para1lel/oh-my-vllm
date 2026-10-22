@@ -53,7 +53,12 @@ HTTP efficiency 不设最低交付门槛.
 交付前执行适用的[测试范围](testing.zh.md).
 同时执行全部 24 组 [HTTP 配置](performance.zh.md).
 
-[AgentX 入口](agentx.zh.md)使用六个会话树测量 MTP4.
+[Host KV cache](kv-offload.zh.md) 支持被中断请求及由容量压力触发的前缀存储.
+保持传输引用直到完成, 包括已取消请求.
+部分 GDN 读取 checkpoint 与续算写入 slot 必须分开, 直到经过验证的提交.
+Pinned 存储在空闲窗口扩容. Metadata 上传使用 GPU kernel, 不进入 bulk copy 队列.
+
+[AgentX 入口](agentx.zh.md)使用四个会话树测量 MTP4.
 它通过流式 usage 和完整响应 ID 关联服务指标.
 将其获准保存的 CSV 和图片保存在 `docs/assets`.
 将原始测量产物保存在仓库外.

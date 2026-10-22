@@ -8,6 +8,481 @@ use crate::{
 
 const BS: usize = 4;
 
+#[test]
+fn host_swap_keeps_source_until_completion_and_cancel_drains_once() {
+    use crate::cache::{CacheCompletion, CacheStatus};
+
+    let mut scheduler = make_scheduler(64, 16);
+    scheduler.enable_host_cache(1 << 30);
+    assert!(scheduler.add_request(make_req(1, 8, 8)));
+    scheduler.schedule();
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    let before = scheduler.cache_resource_counts();
+    assert!(scheduler.swap_out(1));
+    let operations = scheduler.cache_operations();
+    assert_eq!(operations.len(), 1);
+    assert_eq!(scheduler.cache_resource_counts(), before);
+    assert!(scheduler.schedule().scheduled.is_empty());
+    scheduler.abort(1);
+    assert_eq!(scheduler.cache_resource_counts(), before);
+    let done = CacheCompletion {
+        transfer_id: operations[0].transfer_id,
+        status: CacheStatus::Complete,
+        bytes: 1024,
+    };
+    scheduler
+        .complete_cache(std::slice::from_ref(&done))
+        .unwrap();
+    assert!(scheduler.cache_resource_counts().1 > before.1);
+    assert!(scheduler.complete_cache(&[done]).is_err());
+    assert_eq!(
+        scheduler.cache_operations()[0].kind,
+        crate::cache::CacheKind::Drop
+    );
+    assert_eq!(scheduler.num_running() + scheduler.num_waiting(), 0);
+}
+
+#[test]
+fn host_swap_restores_progress_and_drafts_without_recompute() {
+    use crate::cache::{CacheCompletion, CacheKind, CacheStatus};
+
+    let mut scheduler = make_scheduler(64, 16);
+    scheduler.enable_host_cache(1 << 30);
+    assert!(scheduler.add_request(make_req(1, 8, 8)));
+    scheduler.schedule();
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    scheduler.running[0].set_drafts(vec![7, 8]);
+    assert!(scheduler.swap_out(1));
+    let store = scheduler.cache_operations().remove(0);
+    scheduler
+        .complete_cache(&[CacheCompletion {
+            transfer_id: store.transfer_id,
+            status: CacheStatus::Complete,
+            bytes: 1024,
+        }])
+        .unwrap();
+    assert!(scheduler.schedule().scheduled.is_empty());
+    let load = scheduler.cache_operations().remove(0);
+    assert_eq!(load.kind, CacheKind::Load);
+    assert_eq!(load.snapshot_id, store.snapshot_id);
+    assert!(scheduler.schedule().scheduled.is_empty());
+    scheduler
+        .complete_cache(&[CacheCompletion {
+            transfer_id: load.transfer_id,
+            status: CacheStatus::Complete,
+            bytes: 1024,
+        }])
+        .unwrap();
+    assert_eq!(scheduler.running[0].num_computed_tokens, 8);
+    assert_eq!(scheduler.running[0].draft_token_ids, vec![7, 8]);
+    assert_eq!(scheduler.schedule().scheduled[0].num_computed_tokens, 8);
+}
+
+#[test]
+fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
+    use crate::cache::{CacheCompletion, CacheKind, CacheStatus};
+
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 4096,
+            max_num_seqs: 2,
+            ..Default::default()
+        },
+        HybridCoordinator::new(5, 784, true, 0).with_mamba_capacity(128),
+    );
+    scheduler.enable_host_cache(1 << 30);
+    assert!(scheduler.add_request(make_req(1, 1567, 1)));
+    while scheduler.num_running() + scheduler.num_waiting() > 0 {
+        let batch = scheduler.schedule();
+        let row = &batch.scheduled[0];
+        let mut result = dummy_output(1);
+        if row.num_computed_tokens + row.token_ids.len() < 1567 {
+            result.token_ids.clear();
+        }
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![result],
+            },
+        );
+    }
+    assert!(scheduler.cache_operations().is_empty());
+    let mut pressure = make_req(99, 2351, 1);
+    pressure
+        .token_ids
+        .iter_mut()
+        .for_each(|token| *token += 1000);
+    assert!(scheduler.add_request(pressure));
+    let first = scheduler.schedule();
+    assert_eq!(first.scheduled[0].request_id, 99);
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 99,
+                token_ids: vec![],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![],
+            }],
+        },
+    );
+    assert!(scheduler.schedule().scheduled.is_empty());
+    let store = scheduler.cache_operations().remove(0);
+    assert_eq!(store.kind, CacheKind::Store);
+    assert_eq!(store.request_id, None);
+    scheduler
+        .complete_cache(&[CacheCompletion {
+            transfer_id: store.transfer_id,
+            status: CacheStatus::Complete,
+            bytes: 1024,
+        }])
+        .unwrap();
+    scheduler.abort(99);
+    assert!(scheduler.kv.reset_prefix_cache());
+    let mut resident = make_req(6, 1567, 8);
+    resident.record_partial_prefix = false;
+    resident
+        .token_ids
+        .iter_mut()
+        .for_each(|token| *token += 10000);
+    assert!(scheduler.add_request(resident));
+    while scheduler
+        .running
+        .front()
+        .is_none_or(|r| r.num_computed_tokens < 1567)
+    {
+        let batch = scheduler.schedule();
+        let row = &batch.scheduled[0];
+        let mut result = dummy_output(6);
+        if row.num_computed_tokens + row.token_ids.len() < 1567 {
+            result.token_ids.clear();
+        }
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![result],
+            },
+        );
+    }
+    assert!(scheduler.add_request(make_req(2, 2000, 1)));
+    let turn = scheduler.schedule();
+    assert_eq!(turn.scheduled.len(), 1);
+    assert_eq!(turn.scheduled[0].request_id, 6);
+    assert_eq!(turn.scheduled[0].num_computed_tokens, 1567);
+    let load = scheduler.cache_operations().remove(0);
+    assert_eq!(load.kind, CacheKind::Load);
+    assert_eq!(load.request_id, None);
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![dummy_output(6)],
+        },
+    );
+    scheduler
+        .complete_cache(&[CacheCompletion {
+            transfer_id: load.transfer_id,
+            status: CacheStatus::Complete,
+            bytes: 1024,
+        }])
+        .unwrap();
+    let read = scheduler.kv.prefix_state_slot(2).unwrap();
+    assert!(scheduler.schedule().scheduled.is_empty());
+    let store = scheduler.cache_operations().remove(0);
+    assert_eq!(store.kind, CacheKind::Store);
+    assert_eq!(store.request_id, Some(2));
+    assert!(store.mamba_blocks.contains(&read));
+    finish_transfer(&mut scheduler, store.transfer_id);
+    while scheduler.running.iter().any(|r| r.id == 6) {
+        let batch = scheduler.schedule();
+        assert_eq!(batch.scheduled.len(), 1);
+        assert_eq!(batch.scheduled[0].request_id, 6);
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![dummy_output(6)],
+            },
+        );
+    }
+    assert!(scheduler.finished_ids.contains(&6));
+    assert!(scheduler.schedule().scheduled.is_empty());
+    let load = scheduler.cache_operations().remove(0);
+    assert_eq!(load.kind, CacheKind::Load);
+    assert_eq!(load.request_id, Some(2));
+    finish_transfer(&mut scheduler, load.transfer_id);
+    for drop in scheduler.cache_operations() {
+        assert_eq!(drop.kind, CacheKind::Drop);
+        finish_transfer(&mut scheduler, drop.transfer_id);
+    }
+    for _ in 0..2 {
+        let read = scheduler.kv.prefix_state_slot(2).unwrap();
+        assert!(scheduler.swap_out(2));
+        let store = scheduler.cache_operations().remove(0);
+        assert_eq!(store.kind, CacheKind::Store);
+        assert_eq!(store.request_id, Some(2));
+        assert!(store.mamba_blocks.contains(&read));
+        scheduler
+            .complete_cache(&[CacheCompletion {
+                transfer_id: store.transfer_id,
+                status: CacheStatus::Complete,
+                bytes: 1024,
+            }])
+            .unwrap();
+        assert_eq!(scheduler.cache_resource_counts().4, 127);
+        assert!(scheduler.schedule().scheduled.is_empty());
+        let load = scheduler.cache_operations().remove(0);
+        assert_eq!(load.kind, CacheKind::Load);
+        assert_eq!(load.mamba_blocks.len(), store.mamba_blocks.len());
+        scheduler
+            .complete_cache(&[CacheCompletion {
+                transfer_id: load.transfer_id,
+                status: CacheStatus::Complete,
+                bytes: 1024,
+            }])
+            .unwrap();
+        assert_eq!(scheduler.running[0].num_computed_tokens, 1566);
+        for drop in scheduler.cache_operations() {
+            assert_eq!(drop.kind, CacheKind::Drop);
+            scheduler
+                .complete_cache(&[CacheCompletion {
+                    transfer_id: drop.transfer_id,
+                    status: CacheStatus::Complete,
+                    bytes: 1024,
+                }])
+                .unwrap();
+        }
+    }
+    let batch = scheduler.schedule();
+    assert_eq!(batch.scheduled[0].num_computed_tokens, 1566);
+    assert_eq!(batch.scheduled[0].token_ids.len(), 2);
+    let read = batch.scheduled[0].prefix_state_slot.unwrap();
+    assert_ne!(batch.scheduled[0].mamba_block_table[1], read);
+    let before_commit = scheduler.cache_resource_counts().4;
+    assert!(
+        scheduler
+            .update(WorkerOutput {
+                outputs: vec![dummy_output(2)],
+            })
+            .is_err()
+    );
+    assert_eq!(scheduler.cache_resource_counts().4, before_commit);
+    assert_eq!(scheduler.kv.prefix_state_slot(2), Some(read));
+    let mut result = dummy_output(2);
+    result.token_ids.clear();
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![result],
+        },
+    );
+    assert_eq!(scheduler.cache_resource_counts().4, before_commit + 1);
+    assert_eq!(scheduler.kv.prefix_state_slot(2), None);
+    scheduler.abort(2);
+    assert_eq!(scheduler.cache_resource_counts().4, 127);
+
+    for (id, cancel_pending, status) in [
+        (3, true, CacheStatus::Complete),
+        (4, false, CacheStatus::Deferred),
+        (5, false, CacheStatus::Complete),
+    ] {
+        assert!(scheduler.kv.reset_prefix_cache());
+        assert!(scheduler.add_request(make_req(id, 2000, 1)));
+        assert!(scheduler.schedule().scheduled.is_empty());
+        let load = scheduler.cache_operations().remove(0);
+        assert_eq!(load.kind, CacheKind::Load);
+        let loading = scheduler.cache_resource_counts();
+        if cancel_pending {
+            scheduler.abort(id);
+            assert_eq!(scheduler.cache_resource_counts(), loading);
+        }
+        scheduler
+            .complete_cache(&[CacheCompletion {
+                transfer_id: load.transfer_id,
+                status,
+                bytes: 1024,
+            }])
+            .unwrap();
+        if !cancel_pending {
+            scheduler.abort(id);
+        }
+        assert_eq!(scheduler.kv.prefix_state_slot(id), None);
+        assert_eq!(scheduler.cache_resource_counts().1, 4);
+        assert_eq!(scheduler.cache_resource_counts().4, 127);
+    }
+}
+
+#[test]
+fn declined_store_preserves_progress_and_does_not_block_other_waiters() {
+    use crate::cache::{CacheCompletion, CacheStatus};
+
+    let mut scheduler = make_scheduler(64, 16);
+    scheduler.enable_host_cache(1 << 30);
+    assert!(scheduler.add_request(make_req(1, 8, 8)));
+    scheduler.schedule();
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    assert!(scheduler.swap_out(1));
+    let store = scheduler.cache_operations().remove(0);
+    scheduler
+        .complete_cache(&[CacheCompletion {
+            transfer_id: store.transfer_id,
+            status: CacheStatus::Capacity,
+            bytes: 0,
+        }])
+        .unwrap();
+    assert_eq!(scheduler.running[0].num_computed_tokens, 8);
+    assert!(!scheduler.swap_out(1));
+    assert!(scheduler.add_request(make_req(2, 2, 1)));
+    let batch = scheduler.schedule();
+    assert!(
+        batch
+            .scheduled
+            .iter()
+            .any(|r| r.request_id == 1 && r.num_computed_tokens == 8)
+    );
+    assert!(batch.scheduled.iter().any(|r| r.request_id == 2));
+}
+
+#[test]
+fn resident_forward_wins_before_restore_and_restore_needs_next_step_capacity() {
+    use crate::cache::{CacheCompletion, CacheKind, CacheStatus};
+
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 16,
+            max_num_seqs: 2,
+            ..Default::default()
+        },
+        HybridCoordinator::new(6, BS, true, 0).with_mamba_capacity(16),
+    );
+    scheduler.enable_host_cache(1 << 30);
+    let mut second = make_req(2, 7, 8);
+    second.token_ids.iter_mut().for_each(|token| *token += 100);
+    assert!(scheduler.add_request(make_req(1, 7, 8)));
+    assert!(scheduler.add_request(second));
+    while scheduler.running.len() < 2 || scheduler.running.iter().any(|r| r.num_computed_tokens < 8)
+    {
+        let batch = scheduler.schedule();
+        let outputs = batch
+            .scheduled
+            .iter()
+            .map(|row| {
+                let mut result = dummy_output(row.request_id);
+                if row.num_computed_tokens + row.token_ids.len() < 7 {
+                    result.token_ids.clear();
+                }
+                result
+            })
+            .collect();
+        apply(&mut scheduler, WorkerOutput { outputs });
+    }
+    assert!(scheduler.swap_out(1));
+    let store = scheduler.cache_operations().remove(0);
+    scheduler
+        .complete_cache(&[CacheCompletion {
+            transfer_id: store.transfer_id,
+            status: CacheStatus::Complete,
+            bytes: 1024,
+        }])
+        .unwrap();
+    let batch = scheduler.schedule();
+    assert!(
+        batch
+            .scheduled
+            .iter()
+            .any(|r| r.request_id == 2 && r.num_computed_tokens == 8)
+    );
+    assert!(
+        !scheduler
+            .cache_operations()
+            .iter()
+            .any(|op| op.kind == CacheKind::Load)
+    );
+    scheduler.abort(1);
+    assert_eq!(scheduler.num_waiting(), 0);
+}
+
+#[test]
+fn insufficient_host_capacity_fails_one_request_instead_of_deadlocking() {
+    use crate::cache::{CacheCompletion, CacheStatus};
+
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 16,
+            max_num_seqs: 2,
+            ..Default::default()
+        },
+        HybridCoordinator::new(5, BS, true, 0).with_mamba_capacity(16),
+    );
+    scheduler.enable_host_cache(1);
+    let mut first = make_req(1, 7, 8);
+    first.record_partial_prefix = false;
+    let mut second = make_req(2, 7, 8);
+    second.record_partial_prefix = false;
+    second.token_ids.iter_mut().for_each(|token| *token += 100);
+    assert!(scheduler.add_request(first));
+    assert!(scheduler.add_request(second));
+    for _ in 0..8 {
+        if scheduler.running.len() == 2
+            && scheduler.running.iter().all(|r| r.num_computed_tokens == 8)
+        {
+            break;
+        }
+        let batch = scheduler.schedule();
+        let outputs = batch
+            .scheduled
+            .iter()
+            .map(|row| {
+                let mut result = dummy_output(row.request_id);
+                if row.num_computed_tokens + row.token_ids.len() < 7 {
+                    result.token_ids.clear();
+                }
+                result
+            })
+            .collect();
+        apply(&mut scheduler, WorkerOutput { outputs });
+    }
+    assert_eq!(scheduler.running.len(), 2);
+    assert!(scheduler.running.iter().all(|r| r.num_computed_tokens == 8));
+    let mut failed = vec![];
+    for _ in 0..4 {
+        let batch = scheduler.schedule();
+        assert!(batch.scheduled.is_empty());
+        let results = scheduler
+            .cache_operations()
+            .iter()
+            .map(|op| CacheCompletion {
+                transfer_id: op.transfer_id,
+                status: CacheStatus::Capacity,
+                bytes: 0,
+            })
+            .collect::<Vec<_>>();
+        scheduler.complete_cache(&results).unwrap();
+        failed.extend(scheduler.take_cache_failures());
+        if !failed.is_empty() {
+            break;
+        }
+    }
+    assert_eq!(failed.len(), 1);
+    assert!(failed[0].1.contains("--host-cache-bytes"));
+    let next = scheduler.schedule();
+    assert_eq!(next.scheduled.len(), 1);
+    assert_eq!(next.scheduled[0].num_computed_tokens, 8);
+}
+
 fn make_coord(num_blocks: u32) -> HybridCoordinator {
     HybridCoordinator::new(num_blocks, BS, true, 0)
 }
@@ -34,6 +509,16 @@ fn dummy_output(rid: u64) -> RequestOutput {
         num_accepted_draft_tokens: 0,
         new_draft_token_ids: Vec::new(),
     }
+}
+
+fn finish_transfer(scheduler: &mut Scheduler, transfer_id: u64) {
+    scheduler
+        .complete_cache(&[crate::cache::CacheCompletion {
+            transfer_id,
+            status: crate::cache::CacheStatus::Complete,
+            bytes: 1024,
+        }])
+        .unwrap();
 }
 
 fn apply(scheduler: &mut Scheduler, output: WorkerOutput) -> WorkerOutput {

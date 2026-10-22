@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 import av
 import numpy as np
+import tvm_ffi
 from PIL import Image, ImageOps
 
 from ..operators.vision import api as vision
@@ -202,14 +203,18 @@ class MediaProcessor:
 
     def encode(self, item):
         if isinstance(item.embedding, np.ndarray):
-            item.embedding = self.device.upload(item.embedding, "bfloat16")
+            source = np.require(item.embedding, requirements=["C", "W"])
+            value = self.device.scratch(source.shape, "bfloat16")
+            self.device.module.copy_bytes(value, tvm_ffi.from_dlpack(source))
+            self.device.synchronize_compute()
+            item.embedding = value
         if item.embedding is not None:
             return item.embedding
         d, weights = self.device, self.weights.vision()
         frames, height, width, _ = item.pixels.shape
         tokens = math.prod(item.grid)
         groups = (frames + 1) // 2
-        result = d.empty((groups * tokens // 4, 5120), "bfloat16")
+        result = d.scratch((groups * tokens // 4, 5120), "bfloat16")
         group_limit = max(1, 65536 // tokens)
         for first in range(0, groups, group_limit):
             count = min(group_limit, groups - first)
@@ -240,7 +245,7 @@ class MediaProcessor:
                 value = operations[3].run(bindings[26], vision.Inputs(value)).hidden
                 destination = d.view(result, value.shape, first * tokens // 4 * 5120)
                 d.module.copy_bytes(destination, value)
-                d.synchronize()
+                d.synchronize_compute()
         item.embedding, item.pixels = result, None
         return result
 

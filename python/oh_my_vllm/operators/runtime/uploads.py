@@ -27,41 +27,81 @@ class UploadPool:
     def __init__(self, device, limit=16 << 20):
         self.device, self.limit = device, limit
         self.available = {}
-        self.cached_bytes = 0
+        self.retired = {}
+        self.cached_bytes = self.retired_bytes = 0
         self.closed = False
 
     def acquire(self, size):
         if self.closed:
             raise RuntimeError("host upload pool is closed")
         capacity = 1 << (max(size, 1) - 1).bit_length()
-        available = self.available.get(capacity)
-        if available:
-            self.cached_bytes -= capacity
-            return available.pop()
+        candidates = [
+            (stored, inventory)
+            for inventory in (self.available, self.retired)
+            for stored, buffers in inventory.items()
+            if stored >= capacity and buffers
+        ]
+        if candidates:
+            stored, inventory = min(candidates, key=lambda item: item[0])
+            if inventory is self.available:
+                self.cached_bytes -= stored
+            else:
+                self.retired_bytes -= stored
+            return inventory[stored].pop()
+        self.device.wait_pinned_safe()
+        self._reclaim()
         return HostStorage(self.device, capacity)
 
     def release(self, storage):
         if not self.closed and self.cached_bytes + storage.size <= self.limit:
             self.available.setdefault(storage.size, []).append(storage)
             self.cached_bytes += storage.size
+        elif (
+            not self.closed
+            and self.retired_bytes + storage.size <= self.limit
+            and not self.device.pinned_quiescent()
+        ):
+            self.retired.setdefault(storage.size, []).append(storage)
+            self.retired_bytes += storage.size
         else:
+            self.device.wait_pinned_safe()
+            self._reclaim()
             storage.close()
 
-    def close(self):
-        self.closed = True
-        error = None
-        for size, available in self.available.items():
+    def _drain(self, inventory):
+        released, error = 0, None
+        for size, available in inventory.items():
             pending = []
             for storage in available:
                 try:
                     storage.close()
-                    self.cached_bytes -= size
+                    released += size
                 except BaseException as failure:
                     pending.append(storage)
                     error = error or failure
-            self.available[size] = pending
+            inventory[size] = pending
+        return released, error
+
+    def _reclaim(self):
+        released, error = self._drain(self.retired)
+        self.retired_bytes -= released
         if error is not None:
             raise error
+        self.retired.clear()
+
+    def close(self):
+        self.closed = True
+        if not self.cached_bytes and not self.retired_bytes:
+            return
+        self.device.wait_pinned_safe()
+        released, error = self._drain(self.retired)
+        self.retired_bytes -= released
+        released, failure = self._drain(self.available)
+        self.cached_bytes -= released
+        error = error or failure
+        if error is not None:
+            raise error
+        self.retired.clear()
         self.available.clear()
 
     def __del__(self):
@@ -106,7 +146,7 @@ class UploadBuffer:
         np.copyto(self.array, source, casting="no")
         self.pending = self.untracked = True
         try:
-            self.device.module.copy_bytes(self.destination, self.tensor)
+            self.device.module.upload_bytes(self.destination, self.tensor)
             self.device.checked(self.device.runtime.cudaEventRecord(self.event, stream))
             self.untracked = False
         except BaseException:

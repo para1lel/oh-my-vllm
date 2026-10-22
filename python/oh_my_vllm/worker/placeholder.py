@@ -5,6 +5,8 @@ import random
 import string
 from dataclasses import dataclass
 
+from .offload import StubOffload
+
 
 def token_id(character):
     return ord(character) % 248319 + 1
@@ -214,6 +216,7 @@ class Worker:
         if self.config["num_gpu_blocks"] is None:
             self.config["num_gpu_blocks"] = 1024
         self.requests = {}
+        self.offload = StubOffload(self.config, self.requests)
 
     def ready(self):
         return {
@@ -221,11 +224,13 @@ class Worker:
             "logical_num_blocks": self.config["num_gpu_blocks"],
             "mamba_blocks": self.config["mamba_blocks"]
             or self.config["num_gpu_blocks"],
+            "host_cache_bytes": self.offload.limit,
         }
 
     def handle(self, message):
         match message["type"]:
             case "prepare":
+                self.offload.check_register(message["request_id"])
                 request = Request.prepare(
                     message["request"], self.config["max_model_len"]
                 )
@@ -236,12 +241,17 @@ class Worker:
                     "prompt_token_ids": request.history,
                 }
             case "register":
+                self.offload.check_register(message["request_id"])
                 self.requests[message["request_id"]] = Request.offline(
                     message["prompt_token_ids"], message.get("max_tokens", 64)
                 )
             case "execute":
                 for request_id in message["finished_request_ids"]:
+                    self.offload.cancel(request_id)
                     self.requests.pop(request_id, None)
+                self.offload.check_execute(
+                    row["request_id"] for row in message["scheduled"]
+                )
                 outputs = [
                     self.requests[row["request_id"]].execute(
                         row, self.config["num_speculative_tokens"]
@@ -254,7 +264,10 @@ class Worker:
                     "outputs": outputs,
                 }
             case "abort":
+                self.offload.cancel(message["request_id"])
                 self.requests.pop(message["request_id"], None)
+            case "cache":
+                return self.offload.handle(message)
             case "stats":
                 return {
                     "type": "stats_result",
@@ -265,6 +278,7 @@ class Worker:
                         "process_id": os.getpid(),
                         "gpu_allocated_bytes": 0,
                         "gpu_reserved_bytes": 0,
+                        **self.offload.stats(),
                     },
                 }
             case _:

@@ -675,6 +675,7 @@ version = "0.1.0"
 dependencies = [
  "oh-my-vllm-kv-cache",
  "rustc-hash",
+ "serde",
  "thiserror 2.0.20",
  "tracing",
 ]

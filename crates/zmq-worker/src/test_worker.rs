@@ -36,6 +36,7 @@ impl TestWorker {
             &crate::protocol::WorkerMessage::Ready {
                 logical_num_blocks,
                 mamba_blocks: config.mamba_blocks.unwrap(),
+                host_cache_bytes: config.host_cache_bytes.unwrap_or(0),
                 cache_memory: None,
             },
         )?))
@@ -62,6 +63,7 @@ impl TestWorker {
         let client = WorkerClient {
             logical_num_blocks,
             mamba_blocks: config.mamba_blocks.unwrap(),
+            host_cache_bytes: config.host_cache_bytes.unwrap_or(0),
             config,
             sock: send,
             inbox,

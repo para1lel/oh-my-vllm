@@ -143,6 +143,13 @@ impl BlockPool {
         Some(ids)
     }
 
+    pub fn num_uncached_free_blocks(&self) -> usize {
+        self.free_queue
+            .iter_free()
+            .filter(|&id| !self.block(id).cache_is_committed())
+            .count()
+    }
+
     fn maybe_evict_cached_block(&mut self, block_id: u32) {
         let Some(hash) = self.free_queue.block(block_id).block_hash() else {
             return;

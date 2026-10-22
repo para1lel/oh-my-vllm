@@ -40,7 +40,7 @@ def profile_command(python, model, artifacts, port, duration, seed):
         "--max-context-length",
         "262144",
         "--concurrency",
-        "6",
+        "4",
         "--benchmark-duration",
         str(duration),
         "--benchmark-grace-period",

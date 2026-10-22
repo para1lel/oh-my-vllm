@@ -66,8 +66,14 @@ class Execution(unittest.TestCase):
         from oh_my_vllm.operators.runtime.uploads import UploadPool, Uploads
 
         events, allocations, pending = [], {}, []
+        idle, safe_waits = [False], []
+
+        def wait_safe():
+            safe_waits.append(True)
+            idle[0] = True
 
         def allocate(pointer, size, flags):
+            self.assertTrue(idle[0], "pinning requires an idle window")
             storage = ctypes.create_string_buffer(size)
             address = ctypes.addressof(storage)
             allocations[address] = storage
@@ -87,6 +93,7 @@ class Execution(unittest.TestCase):
 
         def release(pointer):
             self.assertFalse(pending)
+            self.assertTrue(idle[0], "unpinning requires an idle window")
             events.append("free")
             del allocations[pointer.value]
             return 0
@@ -106,10 +113,12 @@ class Execution(unittest.TestCase):
                 cudaStreamIsCapturing=capture,
             ),
             module=SimpleNamespace(
-                copy_bytes=lambda dst, src: pending.append((dst, src))
+                upload_bytes=lambda dst, src: pending.append((dst, src))
             ),
             checked=lambda status: self.assertEqual(status, 0),
             synchronize=lambda: wait(None),
+            pinned_quiescent=lambda: idle[0],
+            wait_pinned_safe=wait_safe,
         )
         source, destination = np.array([1, 2], np.int32), np.zeros(2, np.int32)
         device.upload_pool = UploadPool(device)
@@ -119,6 +128,7 @@ class Execution(unittest.TestCase):
         ):
             uploads = Uploads(device)
             uploads.copy(destination, source)
+            self.assertEqual(len(safe_waits), 1)
             source[:] = 3
             self.assertEqual(destination.tolist(), [0, 0])
             uploads.copy(destination, source)
@@ -135,10 +145,66 @@ class Execution(unittest.TestCase):
             uploads.close()
             self.assertEqual(destination.tolist(), [4, 4])
             self.assertEqual(events, ["wait", "wait", "wait"])
+            idle[0] = False
+            smaller = device.upload_pool.acquire(4)
+            self.assertEqual(smaller.size, 8)
+            self.assertEqual(len(allocations), 1)
+            self.assertEqual(len(safe_waits), 1)
+            device.upload_pool.release(smaller)
             device.upload_pool.close()
             self.assertEqual(events, ["wait", "wait", "wait", "free"])
             self.assertFalse(allocations)
             uploads.close()
+
+            device.upload_pool = UploadPool(device, limit=16)
+            large = device.upload_pool.acquire(16)
+            small = [device.upload_pool.acquire(8) for _ in range(3)]
+            idle[0] = False
+            waits_before = len(safe_waits)
+            frees_before = events.count("free")
+            device.upload_pool.release(large)
+            device.upload_pool.release(small[0])
+            device.upload_pool.release(small[1])
+            self.assertEqual(device.upload_pool.cached_bytes, 16)
+            self.assertEqual(device.upload_pool.retired_bytes, 16)
+            reused = device.upload_pool.acquire(4)
+            self.assertEqual(reused.size, 8)
+            self.assertEqual(device.upload_pool.retired_bytes, 8)
+            device.upload_pool.release(reused)
+            self.assertEqual(len(safe_waits), waits_before)
+            self.assertEqual(events.count("free"), frees_before)
+            device.upload_pool.release(small[2])
+            self.assertEqual(len(safe_waits), waits_before + 1)
+            self.assertEqual(device.upload_pool.retired_bytes, 0)
+            self.assertEqual(len(allocations), 1)
+            oversized = device.upload_pool.acquire(64)
+            idle[0] = False
+            waits_before = len(safe_waits)
+            device.upload_pool.release(oversized)
+            self.assertEqual(len(safe_waits), waits_before + 1)
+            self.assertEqual(device.upload_pool.retired_bytes, 0)
+            self.assertEqual(len(allocations), 1)
+            device.upload_pool.close()
+            self.assertFalse(allocations)
+
+            device.upload_pool = UploadPool(device, limit=8)
+            cached = device.upload_pool.acquire(8)
+            retired = device.upload_pool.acquire(8)
+            idle[0] = False
+            device.upload_pool.release(cached)
+            device.upload_pool.release(retired)
+            failed_address = retired.pointer.value
+            device.runtime.cudaFreeHost = lambda pointer: (
+                1 if pointer.value == failed_address else release(pointer)
+            )
+            with self.assertRaises(AssertionError):
+                device.upload_pool.close()
+            self.assertEqual(device.upload_pool.retired_bytes, 8)
+            self.assertEqual(list(allocations), [failed_address])
+            device.runtime.cudaFreeHost = release
+            device.upload_pool.close()
+            self.assertEqual(device.upload_pool.retired_bytes, 0)
+            self.assertFalse(allocations)
 
             device.upload_pool = UploadPool(device, limit=0)
             device.runtime.cudaStreamIsCapturing = capture

@@ -1,5 +1,6 @@
 from collections import deque
 from dataclasses import dataclass
+from math import prod
 
 import numpy as np
 
@@ -67,6 +68,32 @@ class Cache:
             self.indices[request_id] = self.free_indices.popleft()
         first = self.private_start + self.indices[request_id] * 6
         return [slot for slot in range(first, first + 6) if slot != read]
+
+    def state_views(self, slot):
+        if type(slot) is not int or not 0 < slot < self.slots:
+            raise ValueError("invalid GDN transfer slot")
+        return tuple(
+            self.device.view(value, value.shape[1:], slot * prod(value.shape[1:]))
+            for value in (*self.state, *self.convolution, self.hidden)
+        )
+
+    def transfer_views(self, fa_blocks, mamba_blocks):
+        for blocks, limit in (
+            (fa_blocks, self.blocks),
+            (mamba_blocks, self.mamba_blocks),
+        ):
+            if any(type(block) is not int or not 0 < block < limit for block in blocks):
+                raise ValueError("invalid cache transfer block")
+            if len(blocks) != len(set(blocks)):
+                raise ValueError("cache transfer blocks must be unique")
+        attention = tuple(
+            self.device.view(value, value.shape[1:], block * prod(value.shape[1:]))
+            for (value,) in self.fa
+            for block in fa_blocks
+        )
+        return attention + tuple(
+            value for block in mamba_blocks for value in self.state_views(block)
+        )
 
     def copy_prefix(self, copies):
         for source, destination, length in copies:

@@ -52,8 +52,20 @@ An event on the caller's stream protects that copy until the transfer completes.
 Wait for that event before storage reuse or release.
 Do not update these inputs during Graph recording.
 
-The device keeps completed host upload buffers in a bounded pool.
-New buffers use capacity classes. Workspace changes can reuse these buffers after their events complete.
+Metadata uploads always use GPU copy kernels that read the pinned buffers.
+These uploads do not enter the bulk H2D copy queue.
+
+The device reuses the smallest available host upload buffer that has sufficient capacity.
+New buffers use capacity classes.
+The default pool keeps at most 16 MiB of cached buffers and 16 MiB awaiting release.
+Buffers awaiting release are also available for reuse.
+These limits do not include live upload buffers owned by workspaces.
+
+New pinned allocations wait for the current compute stream and registered transfer streams to become idle.
+Pinned storage release uses the same idle condition.
+Release can be deferred while its bounded queue has capacity.
+Cold growth, release pressure, oversized releases, and closure can wait for unrelated transfers.
+These cold paths do not have a guarantee of execution without stalls.
 Device metadata uses the stream-ordered temporary storage pool.
 
 MTP context graphs own fixed hidden-state input buffers.

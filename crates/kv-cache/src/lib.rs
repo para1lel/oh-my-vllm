@@ -3,6 +3,7 @@ pub mod coordinator;
 pub mod group;
 pub mod hash;
 pub mod pool;
+pub mod snapshot;
 
 pub use block::{FreeKVCacheBlockQueue, KVCacheBlock};
 pub use coordinator::HybridCoordinator;
