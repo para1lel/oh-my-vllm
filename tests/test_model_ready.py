@@ -28,10 +28,11 @@ def stub_config():
 
 class ModelReady(unittest.TestCase):
     def test_qwen_ready_returns_a_private_descriptor_with_actual_capacities(self):
-        from oh_my_vllm.worker.inference import Worker as QwenWorker
+        from oh_my_vllm.models.qwen38.inference import Worker as QwenWorker
 
         from .test_model_descriptor import sample_descriptor
 
+        self.assertEqual(QwenWorker.__module__, "oh_my_vllm.models.qwen38.inference")
         worker = QwenWorker.__new__(QwenWorker)
         worker.descriptor = sample_descriptor(
             fa_capacity_blocks=11, gdn_capacity_blocks=9

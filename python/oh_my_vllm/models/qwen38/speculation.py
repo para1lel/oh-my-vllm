@@ -2,12 +2,12 @@ from contextlib import ExitStack
 
 import numpy as np
 
-from ..operators.fa import api as fa
-from ..operators.mtp import api as mtp
-from ..operators.mtp.plan import accept_plan, context_plan, draft_plan
-from ..operators.mtp.workspace import prepare_accept, prepare_context, prepare_draft
+from ...operators.fa import api as fa
+from ...operators.mtp import api as mtp
+from ...operators.mtp.plan import accept_plan, context_plan, draft_plan
+from ...operators.mtp.workspace import prepare_accept, prepare_context, prepare_draft
+from ...worker.metadata import Metadata
 from .draft_chain import DraftChain, can_chain
-from .metadata import Metadata
 from .sampling import Sampling
 
 

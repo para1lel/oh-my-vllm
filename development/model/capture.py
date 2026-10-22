@@ -53,14 +53,14 @@ def runtime_identity():
 
 
 def run(model_path, *, decode_token=None, mode="decode"):
+    from oh_my_vllm.models.qwen38.cache import Cache
+    from oh_my_vllm.models.qwen38.model import Model
+    from oh_my_vllm.models.qwen38.weights import Weights
     from oh_my_vllm.operators.output import api as output
     from oh_my_vllm.operators.output.plan import make_plan
     from oh_my_vllm.operators.output.workspace import prepare
     from oh_my_vllm.operators.runtime.device import Device
-    from oh_my_vllm.worker.cache import Cache
     from oh_my_vllm.worker.execution import execution_policy
-    from oh_my_vllm.worker.model import Model
-    from oh_my_vllm.worker.weights import Weights
 
     identity = runtime_identity()
     device = Device()

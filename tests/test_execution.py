@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
+from oh_my_vllm.models.qwen38.inference import Worker
 from oh_my_vllm.operators.runtime.device import Device
-from oh_my_vllm.worker.inference import Worker
 
 
 class GraphOwner:
@@ -63,7 +63,7 @@ def graph_device(events, failure=None):
 
 class Execution(unittest.TestCase):
     def test_cache_capacity_is_fixed_and_never_silently_reduced(self):
-        from oh_my_vllm.worker.cache_budget import cache_budget
+        from oh_my_vllm.models.qwen38.cache_budget import cache_budget
 
         config = dict(
             num_gpu_blocks=None,
@@ -292,7 +292,7 @@ class Execution(unittest.TestCase):
             uploads.close()
 
     def test_partial_prefix_copies_both_planes_and_restores_exact_state(self):
-        from oh_my_vllm.worker.cache import Cache
+        from oh_my_vllm.models.qwen38.cache import Cache
 
         copies = []
         cache = Cache.__new__(Cache)
@@ -382,7 +382,7 @@ class Execution(unittest.TestCase):
             )
 
     def test_stop_truncation_controls_accepted_slot(self):
-        from oh_my_vllm.worker.cache import Cache
+        from oh_my_vllm.models.qwen38.cache import Cache
 
         for emitted, expected_slot, expected_position in ((1, 10, 101), (0, 99, 100)):
             worker = Worker.__new__(Worker)

@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 import llguidance
 import numpy as np
+from oh_my_vllm.models.qwen38.request import Request
+from oh_my_vllm.models.qwen38.tool_grammar import tool_grammar
 from oh_my_vllm.worker.constraints import Constraint
-from oh_my_vllm.worker.request import Request
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 
 
@@ -96,7 +97,7 @@ class ChainSample:
 
 class ChainDraft:
     def __init__(self, device, weights, batch, first):
-        from oh_my_vllm.worker.sampling import Sampling
+        from oh_my_vllm.models.qwen38.sampling import Sampling
 
         self.device, self.first = device, first
         self.hidden = device.zeros((batch, 5120), "bfloat16")
@@ -142,8 +143,58 @@ class ChainDraft:
 
 
 class Constraints(unittest.TestCase):
+    def test_tool_constraints_require_a_model_grammar(self):
+        vocabulary = {
+            value: index
+            for index, value in enumerate(sorted(pre_tokenizers.ByteLevel.alphabet()))
+        }
+        vocabulary["<eos>"] = 256
+        vocabulary["<tool_call>"] = 257
+        vocabulary["</tool_call>"] = 258
+        tokenizer = Tokenizer(models.BPE(vocabulary, []))
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
+            add_prefix_space=False, use_regex=False
+        )
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.add_special_tokens(["<eos>", "<tool_call>", "</tool_call>"])
+        grammar_tokenizer = llguidance.LLTokenizer(tokenizer.to_str(), eos_token=256)
+        tools = [{"function": {"name": "choose", "parameters": {"type": "object"}}}]
+        for choice in ("auto", "required", {"function": {"name": "choose"}}):
+            with self.subTest(choice=choice):
+                options = {"tools": tools, "tool_choice": choice}
+                with self.assertRaisesRegex(ValueError, "model tool grammar"):
+                    Constraint.for_request(grammar_tokenizer, options)
+                constraint = Constraint.for_request(
+                    grammar_tokenizer,
+                    options,
+                    tool_grammar=lambda request: (
+                        'start: "selected_'
+                        + request["tools"][0]["function"]["name"]
+                        + '"'
+                    ),
+                )
+                self.assertFalse(constraint.accepting)
+                constraint.accept(tokenizer.encode("selected_choose").ids)
+                self.assertTrue(constraint.accepting)
+        for options in ({}, {"tools": tools, "tool_choice": "none"}):
+            self.assertTrue(
+                Constraint.for_request(grammar_tokenizer, options).accepting
+            )
+        request = Request(
+            SimpleNamespace(grammar=grammar_tokenizer),
+            [],
+            {"max_tokens": 8, "tools": tools, "tool_choice": "required"},
+        )
+        self.assertFalse(request.constraint.accepting)
+        request.constraint.accept(
+            tokenizer.encode(
+                '<tool_call>{"name":"choose","arguments":{}}</tool_call>'
+            ).ids
+        )
+        self.assertTrue(request.constraint.accepting)
+
     def test_ignore_eos_keeps_sampling_masks_stop_strings_and_output_bounds(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={256, 258},
@@ -195,7 +246,7 @@ class Constraints(unittest.TestCase):
         self.assertFalse(request.mask()[256])
 
     def test_verification_distribution_does_not_reuse_sampling_graph(self):
-        from oh_my_vllm.worker.sampling import Sampling
+        from oh_my_vllm.models.qwen38.sampling import Sampling
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -217,7 +268,7 @@ class Constraints(unittest.TestCase):
                 self.outputs.probabilities[:] = 0.5
                 return self.outputs
 
-        with patch("oh_my_vllm.worker.sampling.prepare", Sample):
+        with patch("oh_my_vllm.models.qwen38.sampling.prepare", Sample):
             sample = Sampling(ChainDevice(), None, 1)
             sample.operation.outputs.hidden[:] = 3
             sample.rng[:] = 91
@@ -243,7 +294,7 @@ class Constraints(unittest.TestCase):
             sample.close()
 
     def test_repetition_mask_requires_complete_cycles(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={248319},
@@ -281,7 +332,7 @@ class Constraints(unittest.TestCase):
                 self.assertFalse(np.any(sampling_mask(inputs) == 0))
 
     def test_sampling_inputs_do_not_retain_speculative_history(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -331,7 +382,7 @@ class Constraints(unittest.TestCase):
         self.assertEqual((request.random_offset, request.proposal_offset), (13, 17))
 
     def test_sampling_mask_cache_tracks_output_and_thinking_boundaries(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -383,8 +434,8 @@ class Constraints(unittest.TestCase):
     def test_draft_chain_keeps_stage_order_private_probabilities_and_fallback(
         self,
     ):
-        from oh_my_vllm.worker.draft_chain import can_chain
-        from oh_my_vllm.worker.speculation import Speculation
+        from oh_my_vllm.models.qwen38.draft_chain import can_chain
+        from oh_my_vllm.models.qwen38.speculation import Speculation
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -417,8 +468,8 @@ class Constraints(unittest.TestCase):
         )
         speculation = Speculation(d, None, cache, None, trace)
         with (
-            patch("oh_my_vllm.worker.speculation.Draft", ChainDraft),
-            patch("oh_my_vllm.worker.sampling.prepare", ChainSample),
+            patch("oh_my_vllm.models.qwen38.speculation.Draft", ChainDraft),
+            patch("oh_my_vllm.models.qwen38.sampling.prepare", ChainSample),
         ):
             first = request()
             batch = SimpleNamespace(
@@ -510,7 +561,7 @@ class Constraints(unittest.TestCase):
             speculation.close()
 
     def test_stochastic_chain_requires_prefix_independent_masks(self):
-        from oh_my_vllm.worker.draft_chain import can_chain
+        from oh_my_vllm.models.qwen38.draft_chain import can_chain
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -643,7 +694,7 @@ class Constraints(unittest.TestCase):
         )
         constraint.accept(tokenizer.encode('{"x":').ids)
         self.assertFalse(constraint.mask()[tokenizer.encode("3").ids[0]])
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         request = Request(
             SimpleNamespace(
@@ -742,7 +793,9 @@ class Constraints(unittest.TestCase):
             "tool_choice": "required",
             "parallel_tool_calls": False,
         }
-        tool = Constraint.for_request(grammar_tokenizer, tool_request)
+        tool = Constraint.for_request(
+            grammar_tokenizer, tool_request, tool_grammar=tool_grammar
+        )
         tool.accept(
             tokenizer.encode('<tool_call>{"name":"choose","arguments":{"x":').ids
         )

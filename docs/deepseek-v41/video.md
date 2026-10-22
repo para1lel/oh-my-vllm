@@ -12,7 +12,7 @@ It supplies no video frame sampler or timestamp protocol.
 The rules below are an explicit service design decision for the planned DeepSeek extension.
 They do not claim a local model source video contract.
 
-The selection rule follows `video_media` in [the Qwen media source](../../python/oh_my_vllm/worker/media.py).
+The selection rule follows `video_media` in [the Qwen media source](../../python/oh_my_vllm/models/qwen38/media.py).
 DeepSeek uses each selected frame as one image.
 It does not pair frames, repeat an odd final frame, or use a temporal vision encoder.
 It does not use Qwen vision markers or three-axis language-model positions.

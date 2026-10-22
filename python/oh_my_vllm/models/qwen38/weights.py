@@ -3,12 +3,12 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from ..operators.fa.api import Weights as FAWeights
-from ..operators.ffn.api import Weights as FFNWeights
-from ..operators.gdn.api import Weights as GDNWeights
-from ..operators.mtp.api import InputWeights
-from ..operators.output.api import Weights as SampleWeights
-from ..operators.vision.api import Weights as VisionWeights
+from ...operators.fa.api import Weights as FAWeights
+from ...operators.ffn.api import Weights as FFNWeights
+from ...operators.gdn.api import Weights as GDNWeights
+from ...operators.mtp.api import InputWeights
+from ...operators.output.api import Weights as SampleWeights
+from ...operators.vision.api import Weights as VisionWeights
 from .checkpoint import Checkpoint
 
 

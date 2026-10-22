@@ -19,8 +19,10 @@
 ## Python
 
 [bridge](../python/oh_my_vllm/worker/zmq_bridge.py) 负责 DEALER socket 和 msgpack 帧.
-[推理 worker](../python/oh_my_vllm/worker/inference.py) 负责 token 准备和模型计算.
+[注册表](../python/oh_my_vllm/models/registry.py)在导入 GPU 后端前选择已实现的模型适配器.
+[Qwen worker](../python/oh_my_vllm/models/qwen38/inference.py) 负责 token 准备和模型计算.
 [占位实现](../python/oh_my_vllm/worker/placeholder.py) 仅用于 `--model stub`.
+[适配器指南](deepseek-v41/adapters.zh.md)规定模型系列所有权和共享机制.
 
 Rust 保持逻辑 cache 所有权. Python 存储张量及私有 recurrent state.
 Worker 选择已接受的 state slot, 不为接受 token 而复制整个 recurrent state.
@@ -52,7 +54,7 @@ FA 与 GDN state pool 具有独立容量.
 | Native 算子 | 按模型的精度和私有状态规则计算数值 |
 | Device 资源 | 管理 stream, CUDA Graph 录制, 重放和释放 |
 
-[模型](../python/oh_my_vllm/worker/model.py)在全部语言层调用[算子阶段](operators/fusion.zh.md).
+[模型](../python/oh_my_vllm/models/qwen38/model.py)在全部语言层调用[算子阶段](operators/fusion.zh.md).
 Eager 执行和 CUDA Graph 录制使用相同的 native 算子.
 [Device wrapper](../python/oh_my_vllm/operators/runtime/device.py) 提供 graph 资源.
 每个 workspace 保留其权重, cache, tensor 和资源 lease, 直到 graph 关闭.

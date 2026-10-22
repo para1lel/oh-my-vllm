@@ -2,8 +2,8 @@ from contextlib import ExitStack, contextmanager
 
 import numpy as np
 
-from .metadata import Metadata
-from .repetition import HISTORY_WINDOW, may_repeat
+from ...worker.metadata import Metadata
+from ...worker.repetition import HISTORY_WINDOW, may_repeat
 
 
 def can_chain(batch, active, graph, blocks):

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from ..operators.runtime.storage import storage_bytes
+from ...operators.runtime.storage import storage_bytes
 
 
 @dataclass(frozen=True)

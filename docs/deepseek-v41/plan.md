@@ -75,13 +75,13 @@ Stop all processes started for the phase.
 ## Phase 1: Extract model contracts and keep Qwen behavior
 
 **Files:** Add `crates/model-contract/src/lib.rs`, its Cargo manifest, and `python/oh_my_vllm/models/{api,registry}.py`.
-Modify `Cargo.toml`, `crates/zmq-worker/src/{main,protocol}.rs`, and `python/oh_my_vllm/worker/inference.py`.
+Modify `Cargo.toml`, `crates/zmq-worker/src/{main,protocol}.rs`, and `python/oh_my_vllm/models/qwen38/inference.py`.
 Move model-specific code into `python/oh_my_vllm/models/qwen38/` in small steps.
 **Interfaces:** Define `ModelDescriptor`, `CacheSchema`, `ParallelPlan`, `SpeculationSpec`, and `ModelAdapter`.
 The descriptor binds identity, context limit, capabilities, formats, and schema version.
 The adapter supplies preparation, execution, result validation, state selection, and resource closure.
 
-- [ ] Add registry rejection checks for unknown architectures, unsupported formats, and capability mismatches.
+- [x] Add registry rejection checks for unknown architectures, unsupported formats, and capability mismatches.
 - [ ] Move fixed Qwen dimensions, tokenizer rules, media positions, and MTP4 selection out of shared control.
 - [ ] Keep current API validation and defaults for Qwen.
 - [ ] Run existing Rust, service, constraints, execution, and frozen Qwen numerical checks.

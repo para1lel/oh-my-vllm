@@ -1,5 +1,4 @@
 import copy
-import json
 from contextlib import ExitStack, contextmanager
 from functools import cache
 
@@ -120,41 +119,6 @@ def tool_schema(tools):
     return {"oneOf": alternatives, "$defs": definitions}
 
 
-def tool_grammar(request):
-    choice = request.get("tool_choice", "auto")
-    tools = request["tools"]
-    if isinstance(choice, dict):
-        tools = [
-            tool
-            for tool in tools
-            if tool["function"]["name"] == choice["function"]["name"]
-        ]
-    schema = tool_schema(tools)
-    parallel = request.get("parallel_tool_calls", True)
-    if choice == "auto":
-        grammar = llguidance.StructTag.to_grammar(
-            [
-                llguidance.StructTag(
-                    trigger="<tool_call>",
-                    begin="<tool_call>",
-                    grammar=schema,
-                    end="</tool_call>",
-                )
-            ],
-            assume_special=True,
-        )
-        grammar = grammar.replace('"</tool_call>"', "</tool_call>")
-        return grammar if parallel else grammar.replace("(tag_0)*", "tag_0?")
-    count = "+" if parallel else ""
-    return (
-        "%llguidance {}\nstart: call"
-        + count
-        + "\ncall: <tool_call> %json "
-        + json.dumps(schema)
-        + " </tool_call> /[ \\t\\r\\n]*/\n"
-    )
-
-
 class Constraint:
     def __init__(self, tokenizer, grammar=None):
         self.tokenizer = tokenizer
@@ -168,13 +132,15 @@ class Constraint:
         self.check()
 
     @classmethod
-    def for_request(cls, tokenizer, request):
+    def for_request(cls, tokenizer, request, *, tool_grammar=None):
         output = request.get("format", {"type": "text"})
         if output["type"] in {"json_object", "json_schema"}:
             schema = output.get("schema", {"type": "object"})
             grammar = llguidance.LLMatcher.grammar_from_json_schema(schema)
             return cls(tokenizer, grammar)
         if request.get("tools") and request.get("tool_choice") != "none":
+            if tool_grammar is None:
+                raise ValueError("tool constraints require a model tool grammar")
             return cls(tokenizer, tool_grammar(request))
         return cls(tokenizer)
 

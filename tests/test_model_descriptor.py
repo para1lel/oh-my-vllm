@@ -311,6 +311,8 @@ class ModelDescriptor(unittest.TestCase):
                 "from tests.test_model_descriptor import sample_descriptor; "
                 "sample_descriptor(); "
                 "assert not any(n.startswith(('torch', 'cupy', 'oh_my_vllm.worker', "
+                "'oh_my_vllm.models.qwen38.inference', "
+                "'oh_my_vllm.models.qwen38.weights', "
                 "'oh_my_vllm.operators.runtime.device')) for n in sys.modules)",
             ],
             capture_output=True,

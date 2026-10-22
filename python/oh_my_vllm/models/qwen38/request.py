@@ -3,8 +3,9 @@ import secrets
 
 import numpy as np
 
-from .constraints import Constraint
-from .repetition import HISTORY_WINDOW, cycle_continuations
+from ...worker.constraints import Constraint
+from ...worker.repetition import HISTORY_WINDOW, cycle_continuations
+from .tool_grammar import tool_grammar
 
 
 class Request:
@@ -24,7 +25,9 @@ class Request:
         self.accept_offset = 0
         self.state_slot = None
         self.state_position = 0
-        self.constraint = Constraint.for_request(tokenizer.grammar, options)
+        self.constraint = Constraint.for_request(
+            tokenizer.grammar, options, tool_grammar=tool_grammar
+        )
         self.thinking = options.get("effort", "off") != "off"
         self.thinking_count = 0
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")

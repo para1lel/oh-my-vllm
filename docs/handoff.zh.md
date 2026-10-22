@@ -12,7 +12,10 @@
 Python 注册表在导入 GPU 后端前选择 Qwen.
 Init 协商描述符版本 1, Ready 提供描述符, 在构建调度器前进行验证.
 Python Qwen 描述符构建器绑定已加载身份和已分配缓存容量, 不导入 GPU 模块.
-阶段 1 仍需提取 Qwen 特定控制, 并完成 GPU 回归检查.
+
+Qwen Python 控制现在位于模型系列目录.
+共享工具约束必须使用模型提供的语法.
+阶段 1 还需完成 Rust 模型特定控制, 共享状态契约和完整的 Qwen HTTP 回归矩阵.
 
 Qwen 计算和已接受状态语义保持不变.
 DeepSeek 执行未启用.
@@ -48,7 +51,7 @@ worker 使用显式层权重, 命名输出和算子计划键.
 Rust 和 worker 控制持久状态选择.
 算子只写入调用方提供的状态位置.
 
-仅含 decode 的[草稿链](../python/oh_my_vllm/worker/draft_chain.py)可以将随机采样和私有 presence 历史保留在 GPU 上.
+仅含 decode 的[草稿链](../python/oh_my_vllm/models/qwen38/draft_chain.py)可以将随机采样和私有 presence 历史保留在 GPU 上.
 仅第一个草稿步骤从主机元数据获取输入 token.
 后续草稿步骤使用上一步的 GPU token 输出.
 依赖前缀的 mask 和不支持的停止条件使用逐步路径.

@@ -75,13 +75,13 @@
 ## 阶段 1: 抽取模型契约并保持 Qwen 行为
 
 **文件:** 新增 `crates/model-contract/src/lib.rs`, 对应 Cargo manifest 和 `python/oh_my_vllm/models/{api,registry}.py`.
-修改 `Cargo.toml`, `crates/zmq-worker/src/{main,protocol}.rs` 和 `python/oh_my_vllm/worker/inference.py`.
+修改 `Cargo.toml`, `crates/zmq-worker/src/{main,protocol}.rs` 和 `python/oh_my_vllm/models/qwen38/inference.py`.
 分小步将模型专属代码移入 `python/oh_my_vllm/models/qwen38/`.
 **接口:** 定义 `ModelDescriptor`, `CacheSchema`, `ParallelPlan`, `SpeculationSpec` 和 `ModelAdapter`.
 Descriptor 绑定身份, 上下文上限, 能力, 格式和 schema 版本.
 Adapter 提供准备, 执行, 结果验证, 状态选择和资源关闭.
 
-- [ ] 为未知架构, 不支持格式和能力不匹配增加 registry 拒绝检查.
+- [x] 为未知架构, 不支持格式和能力不匹配增加 registry 拒绝检查.
 - [ ] 将固定 Qwen 维度, tokenizer 规则, 媒体位置和 MTP4 选择移出共享控制代码.
 - [ ] 保持 Qwen 当前的 API 校验和默认值.
 - [ ] 执行现有 Rust, 服务, 约束, 执行和冻结的 Qwen 数值检查.

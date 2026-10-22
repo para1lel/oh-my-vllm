@@ -12,7 +12,7 @@
 下述规则是计划中的 DeepSeek 扩展的一项明确服务设计决策.
 它们不声称本地模型源代码具有视频契约.
 
-选择规则沿用 [Qwen 媒体源代码](../../python/oh_my_vllm/worker/media.py) 中的 `video_media`.
+选择规则沿用 [Qwen 媒体源代码](../../python/oh_my_vllm/models/qwen38/media.py) 中的 `video_media`.
 DeepSeek 将每个选中帧作为一张图像.
 它不配对帧, 不重复奇数帧视频的最后一帧, 也不使用时序视觉编码器.
 它不使用 Qwen 视觉标记或三轴语言模型位置.

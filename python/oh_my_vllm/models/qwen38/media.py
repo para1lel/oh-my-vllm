@@ -11,9 +11,9 @@ import numpy as np
 import tvm_ffi
 from PIL import Image, ImageOps
 
-from ..operators.vision import api as vision
-from ..operators.vision.plan import make_plan
-from ..operators.vision.workspace import prepare
+from ...operators.vision import api as vision
+from ...operators.vision.plan import make_plan
+from ...operators.vision.workspace import prepare
 
 
 @dataclass

@@ -4,7 +4,7 @@ from math import prod
 
 import numpy as np
 
-from ..operators.gdn.api import Schedule
+from ...operators.gdn.api import Schedule
 from .cache_budget import cache_layout
 
 

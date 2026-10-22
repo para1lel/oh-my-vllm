@@ -12,7 +12,10 @@ Phase 1 [adapter extraction](deepseek-v41/adapters.md) is also active during ref
 The Python registry selects Qwen before GPU backend imports.
 Init negotiates descriptor version 1, and Ready supplies the descriptor for validation before scheduler construction.
 The Python Qwen descriptor builder binds loaded identities and allocated cache capacities without GPU imports.
-Qwen-specific control extraction and GPU regression checks are necessary for Phase 1.
+
+Qwen Python control is now in the model family directory.
+Shared tool constraints must use model-supplied grammar.
+Rust model-specific control, shared state contracts, and the full Qwen HTTP regression matrix are also necessary for Phase 1.
 
 Qwen computation and accepted-state semantics stay unchanged.
 DeepSeek execution is not enabled.
@@ -48,7 +51,7 @@ Use the [execution rules](execution.md) for Eager execution, CUDA Graph replay, 
 Rust and the worker control persistent state selection.
 Operators write only to the state locations supplied by their callers.
 
-Decode-only [draft chains](../python/oh_my_vllm/worker/draft_chain.py) can keep stochastic sampling and private presence history on the GPU.
+Decode-only [draft chains](../python/oh_my_vllm/models/qwen38/draft_chain.py) can keep stochastic sampling and private presence history on the GPU.
 Only the first draft step gets its input token from host metadata.
 Subsequent draft steps use the GPU token output from the last step.
 Prefix-dependent masks and unsupported stopping conditions use the per-step path.

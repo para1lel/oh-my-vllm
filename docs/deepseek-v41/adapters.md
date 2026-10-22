@@ -13,11 +13,31 @@ The bridge owns ZMQ DEALER and msgpack transport.
 The adapter does not own transport.
 The `stub` path still selects the test placeholder directly.
 All other paths use the registry.
-The old Qwen execution, cache, sampling, and media implementations are unchanged.
+The Qwen computation and accepted-state rules are unchanged.
 
-This entry is not the full Phase 1 extraction.
-Shared state contracts and the move of Qwen-specific control are subsequent steps.
+This is not the full Phase 1 extraction.
+Shared state contracts, Rust model-specific control, and the full Qwen HTTP regression matrix are necessary subsequent steps.
 These interfaces do not enable distributed execution or DeepSeek capabilities.
+
+## Python ownership
+
+The [Qwen directory](../../python/oh_my_vllm/models/qwen38) owns weights, cache layouts, model computation, sampling, MTP4, request state, tokenizer, and media processing.
+Its [offload implementation](../../python/oh_my_vllm/models/qwen38/offload.py) owns neural snapshots and restoration.
+The [stub module](../../python/oh_my_vllm/models/stub.py) owns simulated offload for the explicit test backend.
+
+The shared worker keeps transport, execution policy, metadata uploads, repetition checks, trace records, host-memory budgets, and constraint machinery.
+Its transfer helpers still validate the existing paired-cache wire format.
+These helpers do not supply model-independent state transactions.
+
+The [Qwen tool grammar](../../python/oh_my_vllm/models/qwen38/tool_grammar.py) supplies model-specific token syntax to shared constraints.
+Enabled tools must have an explicit grammar callback.
+Missing callbacks cause an error, not selection of Qwen syntax.
+A tool grammar callback is not necessary for JSON object and JSON schema constraints.
+
+The old `worker.checkpoint` module only imports the Qwen checkpoint class.
+This compatibility path keeps the frozen Qwen reference generator unchanged.
+Other model modules use the new family paths.
+The numerical fixtures and acceptance limits are unchanged.
 
 ## Selection and startup
 

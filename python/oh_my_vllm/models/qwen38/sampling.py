@@ -2,10 +2,10 @@ from contextlib import ExitStack
 
 import numpy as np
 
-from ..operators.output import api as output
-from ..operators.output.plan import make_plan
-from ..operators.output.workspace import prepare
-from .constraints import batch_masks
+from ...operators.output import api as output
+from ...operators.output.plan import make_plan
+from ...operators.output.workspace import prepare
+from ...worker.constraints import batch_masks
 
 
 class SamplingInputs:

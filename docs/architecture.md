@@ -19,8 +19,10 @@ A preempted request keeps its accepted history. Preemption removes its new draft
 ## Python
 
 The [bridge](../python/oh_my_vllm/worker/zmq_bridge.py) controls the DEALER socket and msgpack frames.
-The [inference worker](../python/oh_my_vllm/worker/inference.py) supplies token preparation and model computation.
+The [registry](../python/oh_my_vllm/models/registry.py) selects the implemented model adapter before GPU backend imports.
+The [Qwen worker](../python/oh_my_vllm/models/qwen38/inference.py) supplies token preparation and model computation.
 The [placeholder](../python/oh_my_vllm/worker/placeholder.py) is used only for `--model stub`.
+The [adapter guide](deepseek-v41/adapters.md) specifies family ownership and shared mechanisms.
 
 Rust keeps logical cache ownership. Python stores tensors and private recurrent states.
 The worker selects an accepted state slot. It does not copy the full recurrent state for acceptance.
@@ -52,7 +54,7 @@ The accepted history does not contain new drafts.
 | Native operators | Compute values with the model's precision and private state rules |
 | Device resources | Manage streams, CUDA Graph recording, replay, and release |
 
-The [model](../python/oh_my_vllm/worker/model.py) calls the [operator stages](operators/fusion.md) through all language layers.
+The [model](../python/oh_my_vllm/models/qwen38/model.py) calls the [operator stages](operators/fusion.md) through all language layers.
 Eager execution and CUDA Graph recording use the same native operators.
 The [device wrapper](../python/oh_my_vllm/operators/runtime/device.py) supplies graph resources.
 Each workspace keeps its weights, cache, tensors, and resource leases until graph closure.

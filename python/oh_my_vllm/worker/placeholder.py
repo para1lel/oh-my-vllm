@@ -5,8 +5,7 @@ import random
 import string
 from dataclasses import dataclass
 
-from ..models.stub import build_descriptor
-from .offload import StubOffload
+from ..models.stub import StubOffload, build_descriptor
 
 
 def token_id(character):

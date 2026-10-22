@@ -3,19 +3,19 @@ from functools import partial
 
 import numpy as np
 
-from ..operators.fa import api as fa
-from ..operators.fa.plan import make_plan as fa_plan
-from ..operators.fa.workspace import prepare as prepare_fa
-from ..operators.ffn import api as ffn
-from ..operators.ffn.plan import make_plan as ffn_plan
-from ..operators.ffn.workspace import prepare as prepare_ffn
-from ..operators.gdn import api as gdn
-from ..operators.gdn.plan import make_plan as gdn_plan
-from ..operators.gdn.workspace import prepare as prepare_gdn
-from ..operators.output import api as output
-from ..operators.output.plan import make_plan as output_plan
-from ..operators.output.workspace import prepare as prepare_output
-from .metadata import Metadata
+from ...operators.fa import api as fa
+from ...operators.fa.plan import make_plan as fa_plan
+from ...operators.fa.workspace import prepare as prepare_fa
+from ...operators.ffn import api as ffn
+from ...operators.ffn.plan import make_plan as ffn_plan
+from ...operators.ffn.workspace import prepare as prepare_ffn
+from ...operators.gdn import api as gdn
+from ...operators.gdn.plan import make_plan as gdn_plan
+from ...operators.gdn.workspace import prepare as prepare_gdn
+from ...operators.output import api as output
+from ...operators.output.plan import make_plan as output_plan
+from ...operators.output.workspace import prepare as prepare_output
+from ...worker.metadata import Metadata
 
 
 def metadata_arrays(batch):

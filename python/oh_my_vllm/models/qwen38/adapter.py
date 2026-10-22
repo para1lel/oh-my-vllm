@@ -21,7 +21,7 @@ def validate_config(config):
 def build(config, raw_config):
     if hashlib.sha256(raw_config).hexdigest() != MODEL["config_sha256"]:
         raise ValueError("checkpoint configuration differs from the model contract")
-    from ...worker.inference import Worker
+    from .inference import Worker
 
     return Worker(config, raw_config=raw_config)
 

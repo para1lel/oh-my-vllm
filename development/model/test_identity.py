@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import json
 import struct
@@ -9,9 +10,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
+from oh_my_vllm.models.qwen38.checkpoint import Checkpoint
 from oh_my_vllm.operators.runtime.native import source_digest
 from oh_my_vllm.operators.specification import MODEL
-from oh_my_vllm.worker.checkpoint import Checkpoint
 
 from .capture import PROMPT
 from .compare import REFERENCE_PATH, load_reference
@@ -106,6 +107,47 @@ class Identity(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 source_digest(source, root)
 
+    def test_reference_identity_binds_checkpoint_import_chain(self):
+        root = Path(__file__).resolve().parents[2]
+        read_bytes = Path.read_bytes
+        for module in (
+            "development/model/reference_cases.py",
+            "development/operators/reference/__main__.py",
+        ):
+            path = root / module
+            tree = ast.parse(path.read_text())
+            function = next(
+                node
+                for node in tree.body
+                if isinstance(node, ast.FunctionDef) and node.name == "source_identity"
+            )
+            # Exercise provenance without importing the separate Torch environment.
+            namespace = {"__file__": str(path), "Path": Path, "hashlib": hashlib}
+            exec(
+                compile(
+                    ast.Module(body=[function], type_ignores=[]), str(path), "exec"
+                ),
+                namespace,
+            )
+            identity = namespace["source_identity"]
+            original = identity()
+            for relative in (
+                "python/oh_my_vllm/worker/checkpoint.py",
+                "python/oh_my_vllm/models/qwen38/checkpoint.py",
+            ):
+                target = root / relative
+
+                def changed_bytes(path, target=target):
+                    return read_bytes(path) + (
+                        b"\n# changed\n" if path == target else b""
+                    )
+
+                with (
+                    self.subTest(module=module, dependency=relative),
+                    patch.object(Path, "read_bytes", changed_bytes),
+                ):
+                    self.assertNotEqual(identity(), original)
+
     def test_ready_identity_includes_shards_before_lazy_media_loading(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -142,7 +184,7 @@ class Identity(unittest.TestCase):
                     loaded.complete_identity()
 
     def test_lazy_vision_publishes_only_after_final_identity_verification(self):
-        from oh_my_vllm.worker.weights import Weights
+        from oh_my_vllm.models.qwen38.weights import Weights
 
         for changed in (False, True):
             with self.subTest(changed=changed), TemporaryDirectory() as directory:
