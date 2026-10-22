@@ -31,9 +31,16 @@ This excludes windows, partial groups, speculative state, and workspaces.
 KV and index-key source ranges are 2-7, 8-13, 14-19, and 20-39.
 Top-k source ranges split the last range at 24, 28, 32, and 36.
 The source runs before its consumers for the same query rows.
-The reference passes shared tensors through `SharedAttentionRuntime`.
+The local source passes shared tensors through `SharedAttentionRuntime`.
 Those process-global references are not persistent request identities.
 The service must bind source identities, query-row layout, positions, and request ownership explicitly.
+
+Local `Indexer.forward` publishes its owner index cache only with a new latent.
+When a ratio-2 group is not full, that shared reference can select another owner's keys.
+The FP64 reference republishes the current owner's cache with or without a new row.
+This corrects source-state selection.
+It does not change compression arithmetic.
+Do not use stale-owner results for numerical validation.
 
 The local prefill path starts at position 0.
 Its nonzero-position path accepts one token per sequence.

@@ -3,12 +3,15 @@
 ## 范围
 
 [阶段计划](plan.zh.md)控制 native 算子调优之前的参考构建.
-当前工具提供 checkpoint 身份, 解码后的权重, Engram 哈希和小型 FP64 数学函数.
-它们尚不提供全模型端点向量或数值验收.
+当前工具提供 checkpoint 身份, 解码后的权重, Engram 哈希, FP64 数学函数和 CPU 文本参考生成器.
+目前尚未固定全模型参考 artifacts.
+未声明运行时数值验收.
 [checkpoint 指南](checkpoint.zh.md)规定身份和行加载检查.
 
 将参考与推理代码和 native 算子分开.
-使用 `requirements/model-reference.lock` 指定的固定 PyTorch 环境.
+使用 `requirements/deepseek-reference.lock` 指定的固定环境.
+其 PyTorch 和 NumPy 版本与 `requirements/model-reference.lock` 一致.
+它还提供用于 Engram 归一化的固定分词器库.
 推理运行时不得导入 PyTorch 或这些开发模块.
 
 ## 算术
@@ -57,6 +60,31 @@ Correction bias 用于选择专家.
 将原始生成记录保存在仓库之外.
 仅在生成器和身份通过独立审查后, 添加已审查的端点 fixtures.
 
+## 短文本生成
+
+[生成器](../../development/model/deepseek_v41/reference.py)将固定的 16-token 提示绑定到本地分词器.
+它在计算之前重新计算完整 checkpoint 身份.
+它在计算之后检查 checkpoint 文件状态和参考源码身份.
+输入文件或源文件变化会导致错误, 而不是输出 artifact.
+
+输出包含两个完整的 FP64 词表向量及其 metadata.
+Metadata 绑定依赖, 参考源码, checkpoint 身份, 提示 tokens, 选定 decode token 和数组 digests.
+该命令仅使用 CPU 执行.
+它不生成 DSpark, 媒体或长上下文 fixtures.
+
+将 `REFERENCE_ENV` 设为仓库之外的新环境目录.
+将 `MODEL_ROOT`, `CHECKPOINT_MANIFEST` 和 `REFERENCE_OUTPUT` 分别设为 checkpoint, 完整 manifest 和新的外部 NPZ 路径.
+
+```bash
+scripts/with-env.sh uv venv "$REFERENCE_ENV"
+scripts/with-env.sh uv pip sync --python "$REFERENCE_ENV/bin/python" \
+  requirements/deepseek-reference.lock
+scripts/with-env.sh "$REFERENCE_ENV/bin/python" \
+  -m development.model.deepseek_v41.reference \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$REFERENCE_OUTPUT"
+```
+
 ## 数学检查
 
 将 `REFERENCE_PYTHON` 设为固定参考环境中的 Python 可执行文件.
@@ -64,7 +92,9 @@ Correction bias 用于选择专家.
 
 ```bash
 scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
-  development.model.deepseek_v41.test_reference_math
+  development.model.deepseek_v41.test_reference_math \
+  development.model.deepseek_v41.test_reference_attention \
+  development.model.deepseek_v41.test_reference_model
 ```
 
 这些检查对混合方向, 归一化, 旋转元素对, attention sinks 和 routing bias 使用手算数值.
