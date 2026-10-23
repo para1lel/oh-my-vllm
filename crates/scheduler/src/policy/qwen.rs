@@ -121,6 +121,10 @@ impl CachePolicy for HybridCoordinator {
         }
     }
 
+    fn prefill_block_size(&self) -> usize {
+        self.block_size()
+    }
+
     fn align_prefill(&self, request: &Request, start: usize, count: usize, budget: usize) -> usize {
         let prefill_end = request
             .prompt_len

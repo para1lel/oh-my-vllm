@@ -66,7 +66,7 @@ Request restoration keeps recurrent state, media, pending drafts, and sampling o
 Other resident requests can execute during cache transfers.
 
 Use `--host-cache-bytes` to set a host storage limit in bytes.
-The default limit is calculated at runtime. Physical host storage grows only at safe idle points.
+The default limit is calculated at startup. The worker reserves usable pinned capacity before Ready.
 Use a zero limit to disable host offload for comparisons.
 
 The default logical GDN capacity is `128` slots.

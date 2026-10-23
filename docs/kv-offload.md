@@ -24,12 +24,16 @@ The compute stream does not wait for unrelated loads.
 
 ## Storage
 
-The host pool allocates pinned slabs on demand and reuses free storage.
+The host pool reserves its usable pinned capacity before Ready and reuses free storage.
 Its byte limit includes allocated slabs, reservations, and transfers.
 The automatic limit respects available host memory and process memory limits.
 An explicit byte limit can restrict this capacity.
-The pool grows only when compute and transfer streams are idle.
-It does not allocate or release pinned storage for each copy.
+The reservation waits for idle compute and transfer streams.
+Request processing does not allocate or release pinned cache storage for each copy.
+
+The reservation increases startup time and uses host memory before the first transfer.
+The byte limit and prefix retention policy do not change.
+Worker startup fails if the pinned reservation cannot be allocated.
 
 Capacity pressure first removes unused host prefixes.
 Request snapshots stay protected until restoration or cancellation.

@@ -80,8 +80,18 @@ class Offload:
             engine = TransferEngine(device)
             try:
                 pool = PinnedPool(device, limit, engine.quiescent)
+                if capacity := limit // 256 * 256:
+                    device.wait_pinned_safe()
+                    reservation = pool.acquire(capacity)
+                    if reservation is None:
+                        raise RuntimeError(
+                            "cannot reserve the host cache startup budget"
+                        )
+                    reservation.close()
             except BaseException:
                 engine.close()
+                if pool is not None:
+                    pool.close()
                 raise
         self.engine, self.pool = engine, pool
         self.snapshots, self.pending, self.suspended = {}, {}, {}

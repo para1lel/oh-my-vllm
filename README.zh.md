@@ -1,73 +1,25 @@
 # oh-my-vllm
 
-本项目提供在单张 NVIDIA B200 上运行 Qwen3.8-27B-FP8 的 Rust 服务.
+本程序提供在单张 NVIDIA B200 上运行 Qwen3.8-27B-FP8 的 Rust 服务.
 Python worker 加载模型, 执行文本, 图片和视频推理.
 支持普通解码或 MTP4, 并提供约束解码.
 
 安装, 命令和 HTTP 请求见[服务指南](docs/serving.zh.md).
-[Host KV cache](docs/kv-offload.zh.md) 使用动态 pinned 内存, 支持请求换出和前缀复用.
+服务提供 Chat 和 Responses API, 流式输出, 工具和结构化输出.
+[Host KV cache](docs/kv-offload.zh.md) 使用预留的 pinned 内存, 支持请求换出和前缀复用.
 
-[English](README.md) · [贡献流程](CONTRIBUTING.zh.md)
+[English](README.md) | [贡献流程](CONTRIBUTING.zh.md)
 
-## GPU 执行
+## 执行和检查
 
-Worker 使用[算子调度](docs/execution.zh.md).
-包含 prefill 的 Execute 对其全部分片使用 Eager 执行.
-仅含 decode 的 Execute 使用相同 native 算子的 CUDA Graph 录制和重放.
-[全模型数值检查](docs/operators/evaluation.zh.md)将固定的短输入, MTP 恢复, 媒体和长上下文端点与直接 PyTorch FP64 计算进行比较.
-[算子检查](docs/operators/microbench.zh.md)使用仓库内的 PyTorch fixture 和固定的理论延迟倍率门槛.
+Worker 使用 [GPU 执行规则](docs/execution.zh.md)管理算子调度和资源所有权.
+[全模型数值检查](docs/operators/evaluation.zh.md)将固定端点与直接 PyTorch FP64 计算进行比较.
+[算子检查](docs/operators/microbench.zh.md)使用仓库内的 fixture 和固定的理论延迟倍率门槛.
 
-## AgentX trace 性能
+## 测量和计划扩展
 
-此次 [AgentX 测量](docs/agentx.zh.md)在单张 B200 上使用 MTP4, 四个会话树和 900 秒正式采样.
-正式采样后的排空时间上限为 120 秒.
-每个点表示一个完成的请求. 颜色表示该请求实测的前缀缓存命中率.
-服务端处理时间包含准备和后续调度等待, 不包含此前的接入排队和完整网络传输.
+[Qwen 结果](docs/deepseek-v41/qwen-results.zh.md)包含最新完成的 HTTP 矩阵及其测量身份.
+测量命令和定义见 [HTTP 流程](docs/performance.zh.md)和 [AgentX 流程](docs/agentx.zh.md).
 
-![AgentX MTP4 请求输出速率与前缀缓存命中率](docs/assets/agentx-mtp4.png)
-
-[请求 CSV](docs/assets/agentx-mtp4.csv) 包含图中数据和客户端计时.
-字段定义和排除项见[测量流程](docs/agentx.zh.md#请求数据).
-
-## 端到端 HTTP 性能
-
-性能测量使用 24 种配置, HGX B200 标称速率及 [HTTP 测量流程](docs/performance.zh.md)中的参考计算.
-完整计时覆盖提交, 服务准备, 推理, 采样, 传输及响应解析.
-请求使用服务默认采样参数, auto 工具约束和客户端序号 seed.
-请求不命中前缀缓存, token 预算为 32768, 最多同时运行 4 个请求.
-
-Benchmark 使用 `http-reference-v4` 及[文档规定的假设](docs/performance.zh.md#内存).
-源码 `7f8d6872c91a17c0` 已测量全部 24 种配置.
-表格记录一次完整测量运行.
-
-本次运行使用固定 FA 容量: 普通解码 1824 个 block, MTP4 1608 个 block.
-本次运行使用 128 个 GDN slot 和 workload `serving-tools-v1`.
-使用[服务显存设置](docs/serving.zh.md#cache-内存)覆盖默认值.
-Prompt seed 为 `d32f3d5d2c4b4174a1bc2e7c155f0c03`.
-
-| 模式 | Batch | 每请求输入 token 数 | 每请求输出 token 数 | HTTP 时间 (s) | 参考时间 (s) | 效率 |
-|---|---:|---:|---:|---:|---:|---:|
-| 普通解码 | 1 | 32768 | 64 | 1.850 | 0.697 | 37.69% |
-| 普通解码 | 1 | 32768 | 8192 | 64.086 | 32.001 | 49.93% |
-| 普通解码 | 2 | 32768 | 64 | 3.214 | 1.178 | 36.64% |
-| 普通解码 | 2 | 32768 | 8192 | 75.359 | 35.359 | 46.92% |
-| 普通解码 | 4 | 32768 | 64 | 5.820 | 2.131 | 36.61% |
-| 普通解码 | 4 | 32768 | 8192 | 85.257 | 42.067 | 49.34% |
-| MTP4 | 1 | 32768 | 64 | 1.579 | 0.572 | 36.25% |
-| MTP4 | 1 | 32768 | 8192 | 21.120 | 10.384 | 49.17% |
-| MTP4 | 1 | 65536 | 64 | 3.286 | 1.230 | 37.43% |
-| MTP4 | 1 | 65536 | 8192 | 23.193 | 11.378 | 49.06% |
-| MTP4 | 1 | 131072 | 64 | 7.728 | 3.107 | 40.21% |
-| MTP4 | 1 | 131072 | 8192 | 29.468 | 14.558 | 49.40% |
-| MTP4 | 2 | 32768 | 64 | 2.919 | 1.037 | 35.52% |
-| MTP4 | 2 | 32768 | 8192 | 29.847 | 12.299 | 41.21% |
-| MTP4 | 2 | 65536 | 64 | 6.330 | 2.362 | 37.30% |
-| MTP4 | 2 | 65536 | 8192 | 34.662 | 15.550 | 44.86% |
-| MTP4 | 2 | 131072 | 64 | 15.370 | 6.062 | 39.44% |
-| MTP4 | 2 | 131072 | 8192 | 46.579 | 21.853 | 46.92% |
-| MTP4 | 4 | 32768 | 64 | 8.759 | 1.972 | 22.52% |
-| MTP4 | 4 | 32768 | 8192 | 36.662 | 13.782 | 37.59% |
-| MTP4 | 4 | 65536 | 64 | 14.419 | 4.583 | 31.78% |
-| MTP4 | 4 | 65536 | 8192 | 63.690 | 24.615 | 38.65% |
-| MTP4 | 4 | 131072 | 64 | 32.236 | 12.075 | 37.46% |
-| MTP4 | 4 | 131072 | 8192 | 83.305 | 34.128 | 40.97% |
+[DeepSeek 架构](docs/deepseek-v41/design.zh.md)给出 `nightly` 上计划中的四 GPU 扩展.
+DeepSeek 推理尚未启用.

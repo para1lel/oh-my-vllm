@@ -111,18 +111,33 @@ class Worker:
             self.samplers[rows] = Sampling(self.device, self.weights.sample, rows)
         return self.samplers[rows]
 
-    def fragments(self, rows, limit, batch_limit):
-        pending, size = [], 0
+    def fragments(self, rows, limit, batch_limit, *, block_size=1):
+        pending, size, partial = [], 0, False
         for row in rows:
             offset = 0
             while offset < len(row["token_ids"]):
+                start = row["num_computed_tokens"] + offset
                 count = min(len(row["token_ids"]) - offset, limit - size)
+                if offset + count < len(row["token_ids"]):
+                    aligned = (start + count) // block_size * block_size - start
+                    if aligned > 0:
+                        count = aligned
+                    elif pending:
+                        yield pending
+                        pending, size, partial = [], 0, False
+                        continue
+                non_block = bool(start % block_size or count % block_size)
+                if partial and non_block:
+                    yield pending
+                    pending, size, partial = [], 0, False
+                    continue
                 fragment = dict(
                     row,
                     token_ids=row["token_ids"][offset : offset + count],
-                    num_computed_tokens=row["num_computed_tokens"] + offset,
+                    num_computed_tokens=start,
                 )
                 pending.append(fragment)
+                partial |= non_block
                 offset += count
                 size += count
                 if (
@@ -131,7 +146,7 @@ class Worker:
                     or offset < len(row["token_ids"])
                 ):
                     yield pending
-                    pending, size = [], 0
+                    pending, size, partial = [], 0, False
         if pending:
             yield pending
 
@@ -247,7 +262,9 @@ class Worker:
         for verify in (True, False):
             batch_limit = 4 if self.speculation is not None else 20
             limit = 32764 if self.speculation is not None else 32768
-            for rows in self.fragments(groups[verify], limit, batch_limit):
+            for rows in self.fragments(
+                groups[verify], limit, batch_limit, block_size=1 if verify else 784
+            ):
                 for output in self.execute_batch(rows, verify, graph):
                     outputs[output["request_id"]] = output
         return {

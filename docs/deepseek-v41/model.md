@@ -182,7 +182,11 @@ The local forward accepts full image spans only in the first prefill chunk.
 The local encoding source supports ordered images, not a video frame sampler or timestamp protocol.
 Video must first produce ordered frame images and timestamp text through a separately specified codec.
 No temporal vision encoder is present.
-Frame selection, timestamp spelling, token positions, and numerical reference outputs are unresolved video prerequisites.
+
+The [video contract](video.md) gives frame selection and timestamp text.
+The [video prompt fixtures](video-fixtures.md) give token positions and image order.
+The [media fixture](media-reference.md) supplies full FP64 endpoints for synthetic decoded frames.
+Video decoding and service integration are subsequent work.
 
 ## Compatibility gate
 

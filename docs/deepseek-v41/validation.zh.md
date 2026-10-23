@@ -120,10 +120,17 @@ DeepSeek 独立参考基于原始量化权重值, 不使用推理输出作为参
 
 ## 结果与交付
 
-将获批的 DeepSeek HTTP 和 AgentX 测量写入独立[性能文档](performance.zh.md)及其完整中文翻译.
-不把这些测量放进 README.
+将获批的 DeepSeek HTTP 和 AgentX 测量写入[性能文档](performance.zh.md)及其完整中文翻译.
+将 Qwen HTTP 测量写入 [Qwen 结果](qwen-results.zh.md)及其完整中文翻译.
+这些结果文档只保留最新完成的测量.
+完整测量完成后替换对应结果.
+新测量完成前保留上次完成的结果.
+不要为每次变更创建结果文档.
+
+从 README 链接这些文档.
+不要在 README 中放置测量表格.
 原始日志, traces, responses, profiler reports 和无关测试结果保存在仓库外.
-英文文件超过 2000 words 前, 将长结果文档拆分为相互链接的双语部分.
+每个英文结果文档不得超过 2000 words.
 每张表附结果来源: 源码, 可执行程序, native modules, checkpoint, tokenizer, rank 拓扑和配置身份.
 报告延迟, 吞吐, 草稿接受率, 失败数量和内存, 附单位与定义.
 DeepSeek 不复用 Qwen 的 `http-reference-v4` efficiency 计算.
@@ -131,8 +138,6 @@ DeepSeek 不复用 Qwen 的 `http-reference-v4` efficiency 计算.
 实测吞吐不设置虚构的最低验收门槛.
 
 共享运行时变更在实现交付前仍执行适用的 Qwen 回归范围及其 24 组 HTTP 用例.
-现有 README 结果保留为历史测量, 不修改.
-新的 nightly Qwen 回归测量也放入独立双语结果文档.
 
 每次交付前执行独立代码和文档审查.
 修正问题.

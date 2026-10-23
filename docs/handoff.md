@@ -1,135 +1,29 @@
 # Work state
 
-Use `nightly` for the planned DeepSeek extension from base `b99701a`.
-Read the [architecture proposal](deepseek-v41/design.md), [phase plan](deepseek-v41/plan.md), and [validation plan](deepseek-v41/validation.md).
-The implementation is still Qwen-only. No DeepSeek runtime changes are present.
-
+Use `nightly` for the planned [DeepSeek extension](deepseek-v41/design.md).
+The service runs Qwen on one B200. DeepSeek inference is not enabled.
 The architecture and measurement matrix have approval.
-Execute all phases without additional phase approval.
-Phase 0 is active: freeze checkpoint identities, tensor layouts, model mathematics, and independent numerical references.
+Execute the [phase plan](deepseek-v41/plan.md) without additional phase approval.
 
-Phase 1 [adapter extraction](deepseek-v41/adapters.md) is complete.
-The Python registry selects Qwen before GPU backend imports.
-Init negotiates descriptor version 1, and Ready supplies the descriptor for validation before scheduler construction.
-The Python Qwen descriptor builder binds loaded identities and allocated cache capacities without GPU imports.
+## Current state
 
-Qwen Python control is in the model family directory.
-Shared tool constraints must use model-supplied grammar.
-Rust output parsing uses the model family accepted at Ready.
-Rust model policies own defaults, option validation, and family-specific readiness rules.
-CPU model selection occurs before socket binding or worker startup.
+Phase 0 reference and acceptance work is active.
+The [checkpoint tools](deepseek-v41/checkpoint.md) supply weight identities and a lazy CPU FP64 reader.
+The [reference guide](deepseek-v41/reference.md) gives independent mathematical checks.
+[Fixed fixtures](deepseek-v41/fixtures.md), [media references](deepseek-v41/media-reference.md), and [long-context references](deepseek-v41/long-reference.md) give endpoint construction.
 
-The [adapter](deepseek-v41/qwen-regression.md), [lifecycle](deepseek-v41/qwen-foundations.md), [runtime](deepseek-v41/qwen-collectives.md), and [cache-policy](deepseek-v41/qwen-cache-policy.md) reports record the Qwen HTTP matrices.
-The [typed-execution report](deepseek-v41/qwen-typed-execution.md) records the subsequent Qwen HTTP matrix.
-Phase 2 infrastructure is complete.
-Phase 0 numerical limits and complete allocation bounds are prerequisites for Phase 3 operators.
-
-The [state arena](deepseek-v41/state-arena.md) supplies typed logical storage reservations and read leases.
-Storage selections keep only blocks already held by their source owners.
-It does not replace the Qwen coordinator or publish accepted prefixes.
-
-The [GPU lease wrapper](deepseek-v41/gpu-groups.md) supplies one-device and four-device selection with cooperative locks.
-The [rank gate](deepseek-v41/rank-control.md) validates readiness and all-rank completion metadata.
-The [process supervisor](deepseek-v41/rank-supervisor.md) keeps transactions until completion or owned-process termination.
-It supplies one visible device per rank and controls the NCCL bootstrap ID exchange.
-The [collective plan](deepseek-v41/collective-plan.md) binds operation order, data types, counts, and topology across Rust and Python.
-The optional [native collective owner](deepseek-v41/native-collectives.md) supplies NCCL submission, private aligned storage, and graph resource ownership.
-
-These mechanisms do not publish accepted prefixes.
-The [cache policy](deepseek-v41/cache-policy.md) supplies model types for state assignments and host transfer ownership in shared scheduling.
-Qwen keeps its existing coordinator and wire format.
-The [typed execution interface](deepseek-v41/typed-execution.md) transfers scheduler transactions to the group client.
-It validates model outputs and all-rank completion before accepted-state publication.
+Phase 1 [model adapters](deepseek-v41/adapters.md) and Phase 2 infrastructure are completed.
+The [typed execution interface](deepseek-v41/typed-execution.md) validates group completion before accepted-state publication.
+Qwen keeps its single-worker path and cache coordinator.
 DeepSeek state selection and physical model execution are subsequent work.
 
-Qwen computation and accepted-state semantics stay unchanged.
-DeepSeek execution is not enabled.
+Qwen prefill dispatch, block scheduling, and host-cache startup changes are implemented.
 
-The [checkpoint tools](deepseek-v41/checkpoint.md) provide full byte identities and a lazy CPU FP64 weight reader.
-The [model contract](deepseek-v41/model.md) and [state contract](deepseek-v41/state.md) give the local mathematical sources and subsequent reference gates.
-The [memory planner](deepseek-v41/memory.md) specifies tensor placement and storage budgets for all three four-rank strategies.
-The checkpoint tools also supply independent CPU Engram hashes and continuation history.
+## Next actions
 
-The [reference construction guide](deepseek-v41/reference.md) specifies streamed weights and the separate PyTorch FP64 mathematical checks.
-The [fixed fixtures](deepseek-v41/fixtures.md) bind short-text endpoints, DSpark restoration endpoints, and prompt-codec cases.
-Their upstream comparison rejects checkpoint substitution without proof of equal weight identities.
-Its DSpark restoration generator and vision reference supply CPU FP64 mathematics, not service execution.
-
-The image reference supplies source-compatible pixels and patch order without runtime imports.
-Use the separate media reference environment for combined image and vision checks.
-The [video reference](deepseek-v41/video.md) supplies frame selection and per-frame timestamp blocks.
-The [media generator](deepseek-v41/media-reference.md) supplies full target endpoints for a still image and synthetic decoded video frames.
-Its fixed artifact binds full prefill and decode vectors.
-Video decoding is not present.
-
-The [sampling contract](deepseek-v41/sampling.md) defines pending-token alignment, exact correction, and request-local RNG addresses.
-
-The [long-context generator](deepseek-v41/long-reference.md) supplies construction at the candidate-pool and original rotary-context boundaries.
-Its fixed outputs, numerical limits, and full runtime allocation bounds are still prerequisites.
-Keep DeepSeek and new nightly regression measurements in separate documents, not README.
-
-The following state applies to the Qwen implementation.
-The [operator packages](../python/oh_my_vllm/operators) keep each family's interface, plan, workspace, and CUDA code together.
-The [structure design](operators/design.md) defines their dependencies and ownership.
-Keep shared resource mechanisms in `runtime` and shared computation in `primitives`.
-
-The native builder is `development.native_build`. Its default selection builds seven Qwen native modules.
-Use `--module collectives` to build the optional module.
-
-The worker uses explicit layer weights, named outputs, and operator plan keys.
-Use the [execution rules](execution.md) for Eager execution, CUDA Graph replay, and resource release.
-Rust and the worker control persistent state selection.
-Operators write only to the state locations supplied by their callers.
-
-Decode-only [draft chains](../python/oh_my_vllm/models/qwen38/draft_chain.py) can keep stochastic sampling and private presence history on the GPU.
-Only the first draft step gets its input token from host metadata.
-Subsequent draft steps use the GPU token output from the last step.
-Prefix-dependent masks and unsupported stopping conditions use the per-step path.
-Keep each draft's proposal probabilities and RNG offsets the same as the per-step path.
-
-GDN prefill stores chunk workspaces in sequence order, with a capacity calculated for each sequence.
-Keep the packed offsets consistent with the current schedule and the plan capacity.
-The [service cache budget](serving.md) uses static FA defaults and checks runtime memory and text workspace allowances.
-Rust uses the capacities returned by the worker.
-
-Small FFN and GDN operations use dependent launches at the boundaries in the execution rules.
-FFN prefill uses these dependencies for 65 to 1024 rows.
-The [prefix cache](serving.md#prefix-cache) can use a checkpoint from a block that is not full.
-Keep source blocks available until continuation results have no validation errors.
-
-Use the [operator validation framework](../development/operators) before kernel changes.
-It supplies fixed numerical fixtures, direct PyTorch references, and theoretical-latency ratio limits.
-Usual numerical tests load repository fixtures without executing PyTorch.
-Keep the [precision policy](operators/precision.md) and [full-model limits](operators/evaluation.md).
-Do not automatically change limits after implementation changes.
-
-Operator performance sampling keeps timing events and its measurement graph across uncertain-result extensions.
-The timing migration keeps the approved latency limits.
-
-FA uses BF16 attention operands and cache state. GDN keeps recurrent state in FP32.
-FP8 projections use checkpoint E4M3 weights and FP32 block scales.
-The [model contract](operators/model.md#intermediate-precision) defines the intermediate precision.
-
-HTTP accounting uses serial kernel groups and the current precision rules.
-Use the [performance calculation](performance.md#lower-bound-calculation) when fusion or execution boundaries change.
-Operator ratio limits keep the approved maximum latency across accounting changes.
-
-The shared FP8 prefill projection kernel selects its tile group size from the input width.
-The FFN and projection kernels keep TMEM addresses in registers during accumulation.
-HTTP efficiency has no minimum delivery limit.
-Keep the numerical limits and operator ratio limits.
-Report the measured performance.
-
-Run the applicable [test scope](testing.md) before delivery.
-For implementation deliveries, use the nightly validation plan to select the 24 Qwen [HTTP configurations](performance.md).
-
-The [host KV cache](kv-offload.md) supports interrupted requests and pressure-driven prefix storage.
-Keep transfer leases until completion, also for cancelled requests.
-Keep partial GDN read checkpoints separate from continuation write slots until validated commit.
-Pinned storage grows at idle windows. Metadata uploads use GPU kernels instead of the bulk copy queue.
-
-The [AgentX entry](agentx.md) measures MTP4 with four session trees.
-It uses streaming usage and full response IDs to join service metrics.
-Keep its approved CSV and figure in `docs/assets`.
-Keep raw measurement artifacts external to the repository.
-Put host settings in ignored `LOCAL.md`.
+- Generate the [long-context fixture](deepseek-v41/long-reference.md).
+- Complete Phase 0 numerical limits and [allocation bounds](deepseek-v41/memory.md) before Phase 3 operators.
+- Keep the approved [model](deepseek-v41/model.md), [state](deepseek-v41/state.md), and [sampling](deepseek-v41/sampling.md) contracts.
+- Use the [test scope](testing.md) and [execution rules](execution.md) for the current Qwen checks.
+- Replace the [Qwen results](deepseek-v41/qwen-results.md) after the next full HTTP measurement.
+- Obey the [delivery procedure](../CONTRIBUTING.md#delivery). Keep host settings and raw artifacts external to tracked documents.

@@ -38,6 +38,10 @@ pub trait CachePolicy: Sized {
 
     fn prefill_quantum(&self, budget: usize) -> usize;
 
+    fn prefill_block_size(&self) -> usize {
+        1
+    }
+
     fn align_prefill(&self, request: &Request, start: usize, count: usize, budget: usize) -> usize;
 
     fn find_prefix(&self, request: &Request) -> PrefixHit<Self::Hit>;

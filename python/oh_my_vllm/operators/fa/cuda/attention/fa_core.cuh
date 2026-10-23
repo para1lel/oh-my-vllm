@@ -17,8 +17,7 @@ inline int fa_attention_core_launch(TensorView query, TensorView cache, TensorVi
     splits = tables.size(1) == 1 ? 16 : 32;
   if (rows > 32) {
     splits = splits >= 4 && tables.size(1) >= 64 ? 4 : 1;
-    if ((max_queries >= 512 && max_queries < 1024 && batch == 1) ||
-        (max_queries >= 1024 && rows > 4096)) {
+    if (max_queries >= 512) {
       splits = 1;
       const auto &maps = fa_ring_pipeline_tensor_maps(cache);
       int tiles = (max_queries * 6 + 127) / 128;

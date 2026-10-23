@@ -302,43 +302,57 @@ async fn idle_cohort_is_finite_and_active_decode_does_not_wait_for_prepare() {
                 }
             };
             assert_eq!(cohort.len(), initial.min(4));
-            assert_eq!(
-                first
-                    .scheduled
-                    .iter()
-                    .map(|row| row.request_id)
-                    .collect::<Vec<_>>(),
-                cohort,
-            );
+            assert!(!first.scheduled.is_empty());
             assert!(
                 first
                     .scheduled
                     .iter()
                     .all(|row| { row.num_computed_tokens == 0 && row.prefill_token_ids.is_some() })
             );
-            executed(&mut worker.socket, &first).await;
+            let mut positions: BTreeMap<_, _> = cohort.iter().map(|id| (*id, 0)).collect();
+            let mut decoded = Vec::new();
             let mut withheld = None;
+            let mut batch = first;
             loop {
-                match next_message(&mut running, &mut worker.socket).await {
-                    RustMessage::Prepare {
-                        rpc_id, request_id, ..
-                    } => {
-                        assert!(withheld.replace((rpc_id, request_id)).is_none());
-                    }
-                    RustMessage::Execute(message) => {
-                        assert!(withheld.is_some());
-                        let decode = message
-                            .scheduled
-                            .iter()
-                            .all(|row| row.num_computed_tokens >= 8 && row.token_ids.len() == 1);
-                        executed(&mut worker.socket, &message).await;
-                        if decode {
-                            assert_eq!(message.scheduled.len(), cohort.len());
-                            break;
+                for row in &batch.scheduled {
+                    let position = positions
+                        .get_mut(&row.request_id)
+                        .expect("only the finite cohort can execute before Prepare completes");
+                    assert_eq!(row.num_computed_tokens, *position);
+                    assert!(!row.token_ids.is_empty());
+                    *position += row.token_ids.len() as u32;
+                    if row.num_computed_tokens >= 8 {
+                        assert!(
+                            withheld.is_some(),
+                            "decode must run with Prepare unanswered"
+                        );
+                        assert_eq!(row.token_ids.len(), 1);
+                        if !decoded.contains(&row.request_id) {
+                            decoded.push(row.request_id);
                         }
+                    } else {
+                        assert!(*position <= 8, "prefill must stop at the prompt endpoint");
                     }
-                    other => panic!("unexpected active message: {other:?}"),
                 }
+                executed(&mut worker.socket, &batch).await;
+                if decoded.len() == cohort.len() {
+                    break;
+                }
+                batch = loop {
+                    match next_message(&mut running, &mut worker.socket).await {
+                        RustMessage::Prepare {
+                            rpc_id, request_id, ..
+                        } => {
+                            assert!(!cohort.contains(&request_id));
+                            assert!(withheld.replace((rpc_id, request_id)).is_none());
+                        }
+                        RustMessage::Execute(message) => {
+                            assert!(withheld.is_some());
+                            break message;
+                        }
+                        other => panic!("unexpected active message: {other:?}"),
+                    }
+                };
             }
             for response in responses.iter_mut().take(cohort.len()) {
                 response.ready.take().unwrap().await.unwrap().unwrap();

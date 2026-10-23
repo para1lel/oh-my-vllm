@@ -126,11 +126,18 @@ Include graph pools, expert buffers, incomplete compressor state, rollback stora
 
 ## Results and delivery
 
-Put approved DeepSeek HTTP and AgentX measurements in the separate [performance document](performance.md) and its full Chinese translation.
-Do not put these measurements in README.
+Put approved DeepSeek HTTP and AgentX measurements in the [performance document](performance.md) and its full Chinese translation.
+Put Qwen HTTP measurements in the [Qwen results](qwen-results.md) and its full Chinese translation.
+Keep only the last completed measurements in these result documents.
+Replace the applicable results after a full measurement.
+Keep the previous completed results until the new measurement is completed.
+Do not create a result document for each change.
+
+Use links to these documents from README.
+Do not put measurement tables in README.
 Keep raw logs, traces, responses, profiler reports, and unrelated test results external to the repository.
 
-Split long result documents into linked bilingual parts before an English file exceeds 2000 words.
+Keep each English result document at most 2000 words.
 Keep result provenance with each table: source, executable, native modules, checkpoint, tokenizer, rank topology, and configuration identities.
 Report latency, throughput, draft acceptance, failure counts, and memory with their units and definitions.
 Do not reuse Qwen's `http-reference-v4` efficiency calculation for DeepSeek.
@@ -138,8 +145,6 @@ Any new efficiency model must count native formats, communication, replicated wo
 Measured throughput has no invented minimum acceptance threshold.
 
 Shared runtime changes still use the applicable Qwen regression scope and its 24 HTTP cases before implementation delivery.
-Keep existing README results unchanged as historical measurements.
-Put new nightly Qwen regression measurements in separate bilingual result documents as well.
 
 Get independent code and document review before each delivery.
 Correct findings.

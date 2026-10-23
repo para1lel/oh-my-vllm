@@ -62,7 +62,7 @@
 
 - [x] 不加载全部张量, 验证全部 48 个分片, 张量名称, offsets, shapes, scales 和文件身份.
 - [x] 对比本地权重与固定 DeepInfer revision 及其不同的默认 checkpoint.
-- [ ] 明确 CED, CSA2, FP4, Engram 哈希, 提示编码, 媒体编码和 DSpark 概率规则.
+- [x] 明确 [CED 和 FP4](model.zh.md), [CSA2 和 Engram](state.zh.md), [提示编码](fixtures.zh.md), [媒体编码](video.zh.md)及 [DSpark 概率规则](sampling.zh.md).
 - [ ] Kernel 调优前冻结独立参考输入, 完整词表输出, 数值门槛和算子性能门槛.
 - [x] 规划逐层流式参考计算, 而非完整的 FP64 权重副本.
 - [x] 取得并行定义的批准.

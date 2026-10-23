@@ -62,7 +62,7 @@ Stop all processes started for the phase.
 
 - [x] Validate all 48 shards, tensor names, offsets, shapes, scales, and file identities without loading all tensors.
 - [x] Compare local weights with the fixed DeepInfer revision and its different default checkpoint.
-- [ ] Specify CED, CSA2, FP4, Engram hashing, prompt encoding, media encoding, and DSpark probability rules.
+- [x] Specify [CED and FP4](model.md), [CSA2 and Engram](state.md), [prompt encoding](fixtures.md), [media encoding](video.md), and [DSpark probability rules](sampling.md).
 - [ ] Freeze independent reference inputs, full vocabulary outputs, numerical limits, and operator performance limits before kernel tuning.
 - [x] Plan layer-streamed reference computation instead of a full FP64 weight copy.
 - [x] Get approval of the parallel definitions.

@@ -9,6 +9,9 @@ Do not use general words as new technical terms.
 Put each fact in one location. Use links from other locations.
 README gives user information. CONTRIBUTING gives the contribution procedure.
 
+Keep implementation information that applies and the last completed results for each approved workload.
+Remove instructions, results, and files that no longer apply. Update their links in the same change.
+
 The root AGENTS gives rules for all directories. A child AGENTS gives rules for its directory tree.
 Add a child guide only when a directory has local rules.
 

@@ -16,7 +16,7 @@ All other paths use the registry.
 The Qwen computation and accepted-state rules are unchanged.
 
 Phase 1 extraction is complete.
-The [nightly Qwen report](qwen-regression.md) records the full HTTP regression matrix.
+The [Qwen results](qwen-results.md) record the last full HTTP regression matrix.
 Phase 2 supplies general cache transactions and four-rank control.
 These interfaces do not enable distributed execution or DeepSeek capabilities.
 

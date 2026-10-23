@@ -363,6 +363,11 @@ class Execution(unittest.TestCase):
 
             def batch(items, verify, graph, calls=calls):
                 calls.append((verify, graph))
+                if not verify:
+                    for item in items:
+                        end = item["num_computed_tokens"] + len(item["token_ids"])
+                        if end < 40000:
+                            self.assertEqual(end % 784, 0)
                 return [dict(request_id=item["request_id"]) for item in items]
 
             worker.execute_batch = batch
@@ -380,6 +385,58 @@ class Execution(unittest.TestCase):
                 {row["request_id"] for row in result["outputs"]},
                 {row["request_id"] for row in rows},
             )
+
+    def test_prefill_fragments_preserve_blocks_and_token_intervals(self):
+        worker = Worker.__new__(Worker)
+        for limit in (32764, 32768, 783):
+            rows = [
+                dict(
+                    request_id=index,
+                    num_computed_tokens=start,
+                    token_ids=list(range(count)),
+                )
+                for index, (start, count) in enumerate(
+                    (
+                        (0, 40000),
+                        (32144, 623),
+                        (317, 467),
+                        (0, 1568),
+                        (32767, 1),
+                        (317, 40000),
+                        *((0, 784),) * 4,
+                    )
+                )
+            ]
+            with self.subTest(limit=limit):
+                fragments = list(worker.fragments(rows, limit, 4, block_size=784))
+                restored = {row["request_id"]: [] for row in rows}
+                positions = {
+                    row["request_id"]: row["num_computed_tokens"] for row in rows
+                }
+                for batch in fragments:
+                    self.assertLessEqual(
+                        sum(len(row["token_ids"]) for row in batch), limit
+                    )
+                    self.assertLessEqual(len(batch), 4)
+                    self.assertLessEqual(
+                        sum(
+                            bool(
+                                row["num_computed_tokens"] % 784
+                                or len(row["token_ids"]) % 784
+                            )
+                            for row in batch
+                        ),
+                        1,
+                    )
+                    for row in batch:
+                        request = row["request_id"]
+                        self.assertEqual(row["num_computed_tokens"], positions[request])
+                        restored[request].extend(row["token_ids"])
+                        positions[request] += len(row["token_ids"])
+                for row in rows:
+                    self.assertEqual(restored[row["request_id"]], row["token_ids"])
+                if limit >= 784:
+                    self.assertEqual(len(fragments[0][0]["token_ids"]), 32144)
 
     def test_stop_truncation_controls_accepted_slot(self):
         from oh_my_vllm.models.qwen38.cache import Cache

@@ -13,6 +13,12 @@ import msgpack
 import zmq
 
 
+def write_record(path, value):
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(value))
+    temporary.replace(path)
+
+
 def ready(init, args):
     header = init["header"].copy()
     if args.rank == 2 and args.failure == "bad_ready":
@@ -95,16 +101,15 @@ def model_result(message, init, args, child):
     payload = msgpack.unpackb(data, raw=False)
     dispatch = message["dispatch"]
     local_work = dispatch["ranks"][args.rank]["requests"]
-    args.records.joinpath(f"model-{args.rank}-{dispatch['step_id']}.json").write_text(
-        json.dumps(
-            {
-                "pid": os.getpid(),
-                "child": child.pid,
-                "payload": payload,
-                "local_request_ids": [work["request_id"] for work in local_work],
-                "payload_sha256": digest,
-            }
-        )
+    write_record(
+        args.records / f"model-{args.rank}-{dispatch['step_id']}.json",
+        {
+            "pid": os.getpid(),
+            "child": child.pid,
+            "payload": payload,
+            "local_request_ids": [work["request_id"] for work in local_work],
+            "payload_sha256": digest,
+        },
     )
     requests = {request["request_id"]: request for request in payload["requests"]}
     vocabulary_size = init["descriptor"]["vocabulary_size"]
@@ -150,14 +155,13 @@ def main():
     parser.add_argument("--failure", default="none")
     args = parser.parse_args()
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-    args.records.joinpath(f"rank-{args.rank}.json").write_text(
-        json.dumps(
-            {
-                "pid": os.getpid(),
-                "child": child.pid,
-                "visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
-            }
-        )
+    write_record(
+        args.records / f"rank-{args.rank}.json",
+        {
+            "pid": os.getpid(),
+            "child": child.pid,
+            "visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        },
     )
     if args.rank == 2 and args.failure == "startup_exit":
         return

@@ -16,7 +16,7 @@ DeepSeek 配置仍会导致启动错误, 不会通过 Qwen 后端执行.
 Qwen 计算和已接受状态规则保持不变.
 
 阶段 1 抽取已完成.
-[Nightly Qwen 报告](qwen-regression.zh.md) 记录完整 HTTP 回归矩阵.
+[Qwen 结果](qwen-results.zh.md)记录最新的完整 HTTP 回归矩阵.
 阶段 2 提供通用缓存事务和四 rank 控制.
 这些接口不启用分布式执行或 DeepSeek 功能.
 

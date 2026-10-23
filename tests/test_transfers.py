@@ -1,6 +1,7 @@
 import ctypes
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 
 class PinnedTransfers(unittest.TestCase):
@@ -22,10 +23,12 @@ class PinnedTransfers(unittest.TestCase):
         from oh_my_vllm.operators.runtime.transfers import PinnedPool
 
         allocations = {}
+        pin_calls = []
         idle = [False]
 
         def allocate(pointer, size, flags):
             self.assertTrue(idle[0], "pinning overlapped active CUDA work")
+            pin_calls.append(size)
             memory = ctypes.create_string_buffer(size)
             address = ctypes.addressof(memory)
             allocations[address] = memory
@@ -86,7 +89,32 @@ class PinnedTransfers(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "closed"):
             pool.acquire(1)
 
+        from oh_my_vllm.models.qwen38.offload import Offload
+
+        engine = SimpleNamespace(quiescent=lambda: idle[0], close=lambda: None)
+        device.wait_pinned_safe = lambda: idle.__setitem__(0, True)
+        idle[0] = False
+        with patch(
+            "oh_my_vllm.operators.runtime.transfers.TransferEngine", return_value=engine
+        ):
+            offload = Offload(device, None, {}, 1025)
+        self.assertEqual(offload.pool.allocated_bytes, 1025)
+        self.assertEqual(offload.pool.used_bytes, 0)
+        addresses = set(allocations)
+        pin_count = len(pin_calls)
+        idle[0] = False
+        slices = [offload.pool.acquire(size) for size in (256, 512, 256)]
+        self.assertTrue(all(value is not None for value in slices))
+        self.assertEqual(set(allocations), addresses)
+        self.assertEqual(len(pin_calls), pin_count)
+        for value in slices:
+            value.close()
+        idle[0] = True
+        offload.close()
+        self.assertFalse(allocations)
+
     def test_pool_rejects_invalid_sizes_and_live_close(self):
+        from oh_my_vllm.models.qwen38.offload import Offload
         from oh_my_vllm.operators.runtime.transfers import PinnedPool
 
         device = SimpleNamespace()
@@ -96,6 +124,27 @@ class PinnedTransfers(unittest.TestCase):
             with self.assertRaises(ValueError):
                 pool.acquire(size)
         pool.close()
+
+        closed = []
+        engine = SimpleNamespace(
+            quiescent=lambda: True, close=lambda: closed.append(True)
+        )
+        device.wait_pinned_safe = lambda: None
+        with patch(
+            "oh_my_vllm.operators.runtime.transfers.TransferEngine", return_value=engine
+        ):
+            tiny = Offload(device, None, {}, 255)
+            self.assertEqual(tiny.pool.allocated_bytes, 0)
+            tiny.close()
+            with (
+                patch(
+                    "oh_my_vllm.operators.runtime.transfers.HostStorage",
+                    side_effect=MemoryError("pinned reservation"),
+                ),
+                self.assertRaisesRegex(MemoryError, "pinned reservation"),
+            ):
+                Offload(device, None, {}, 1024)
+        self.assertEqual(closed, [True, True])
 
 
 if __name__ == "__main__":
