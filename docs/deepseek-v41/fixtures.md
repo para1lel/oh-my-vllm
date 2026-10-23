@@ -20,6 +20,7 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [Hyper-connection index](../../development/model/deepseek_v41/hyperconnection/index.json) | Five cases with complete FP64 outputs and fixed field limits | `933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47` |
 | [Routing index](../../development/model/deepseek_v41/routing/index.json) | Five post-logit cases with exact expert IDs and FP64 coefficients | `bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28` |
 | [Projection index](../../development/model/deepseek_v41/projection/index.json) | Five A8W8 and five A8W4 cases with complete FP64 outputs | `db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6` |
+| [Startup conversion](../../development/model/deepseek_v41/startup-promotion.npz) | Exact FP8-to-BF16 and BF16-to-F32 conversions | `0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51` |
 
 The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 Full-model artifacts contain the manifest, generator identities, fixed inputs, array shapes, and digests.
@@ -108,6 +109,12 @@ Each request uses normalized L2 `2^-7` and maximum absolute error `max(1e-7, 2^-
 `P` is that request's FP64 peak. The RMS floor and near-zero absolute limit are `1e-6`.
 Constructed zero endpoints also have a `1e-6` absolute limit.
 These engineering limits exclude activation quantization error, promoted weight formats, collectives, latency, and full-model accuracy.
+
+`load_startup_promotion()` covers all 64770 finite FP8/UE8M0 input pairs and rejects 560 overflow cases.
+It supplies exact output bits for the 64210 accepted pairs and all 65280 finite BF16 words.
+It also supplies invalid BF16 words and original and synthetic dense32 scale cases.
+Conversion uses ties-to-even rounding, keeps signed zero, and rejects nonfinite outputs.
+External generation metadata has SHA256 `b341dd5dcf26691c104757b29b7cd6d1ea1eecf0f5429f3f7638e5f29d7e0dcb`.
 
 ## Short text
 

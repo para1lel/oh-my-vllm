@@ -3,9 +3,10 @@ import hashlib
 import json
 import os
 import unittest
+import weakref
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -79,6 +80,56 @@ def shared_fixture(root):
     }
     _, manifest = reference_fixture(root, extra, config)
     return manifest["files"]
+
+
+class DeferredWeightDevice:
+    def __init__(self):
+        self.allocations, self.pending = [], []
+        self.fail_copy = self.fail_sync = False
+        self.copies = 0
+        self.runtime = SimpleNamespace(cudaStreamIsCapturing=lambda stream, status: 0)
+        self.module = SimpleNamespace(copy_bytes=self.copy_bytes)
+
+    def checked(self, status):
+        if status:
+            raise RuntimeError("device status")
+
+    def empty(self, shape, dtype):
+        value = np.empty(shape, np.uint16 if dtype == "bfloat16" else dtype)
+        self.allocations.append(weakref.ref(value))
+        return value
+
+    def view(self, value, shape, offset=0):
+        return value.reshape(-1)[offset : offset + int(np.prod(shape))].reshape(shape)
+
+    def copy_bytes(self, destination, source):
+        self.copies += 1
+        self.pending.append(
+            (weakref.ref(destination), weakref.ref(source), source.tobytes())
+        )
+        if self.fail_copy:
+            raise RuntimeError("original upload failure")
+
+    def synchronize_compute(self):
+        if self.fail_sync:
+            raise RuntimeError("completion failure")
+        for destination, source, expected in self.pending:
+            if source() is None or destination() is None:
+                raise AssertionError("upload owner released before completion")
+            if source().tobytes() != expected:
+                raise AssertionError("host tile reused before completion")
+            destination().view(np.uint8).reshape(-1)[:] = np.frombuffer(
+                expected, np.uint8
+            )
+        self.pending.clear()
+
+    @property
+    def live_bytes(self):
+        return sum(
+            reference().nbytes
+            for reference in self.allocations
+            if reference() is not None
+        )
 
 
 class SharedEngramWeights(unittest.TestCase):
@@ -191,6 +242,290 @@ class SharedEngramWeights(unittest.TestCase):
 
 
 class EncodedCheckpointWeights(unittest.TestCase):
+    def test_rank_assembly_keeps_async_tiles_and_exact_promotions(self):
+        from oh_my_vllm.models.deepseek_v41 import weights as runtime
+        from oh_my_vllm.models.deepseek_v41.checkpoint import TensorSlice
+        from oh_my_vllm.models.deepseek_v41.placement import RankPlan
+
+        self.assertTrue(callable(getattr(runtime, "_load_plan", None)))
+        with TemporaryDirectory() as directory:
+            root, device = Path(directory), DeferredWeightDevice()
+            raw = np.full((35, 32), 0x38, np.uint8)
+            raw[::2] = 0xB8
+            extra = {
+                "head.weight": (
+                    "BF16",
+                    np.array([[0, 0xC000], [0, 0x3F00], [0, 0x4040]], "<u2"),
+                ),
+                "norm.weight": ("BF16", np.array([0x3F80, 0x8000, 0, 0x3F00], "<u2")),
+                "float": ("F32", np.array([0.0, -0.0, 1.25], "<f4")),
+                "layers.0.attn.wo_a.weight": ("F8_E4M3", raw),
+                "layers.0.attn.wo_a.scale": (
+                    "F8_E8M0",
+                    np.array([[127], [128]], np.uint8),
+                ),
+            }
+            _, manifest = reference_fixture(root, extra)
+            selections = {
+                name: TensorSlice(kind, value.shape, (0,) * value.ndim, value.shape)
+                for name, (kind, value) in extra.items()
+            }
+            selections["head.weight"] = TensorSlice("BF16", (3, 2), (0, 1), (3, 2))
+            selections["layers.0.attn.wo_a.weight"] = TensorSlice(
+                "F8_E4M3", (35, 32), (31, 0), (35, 32)
+            )
+            plan = RankPlan(
+                MappingProxyType(selections),
+                MappingProxyType(
+                    {"head.weight": "F32", "layers.0.attn.wo_a.weight": "BF16"}
+                ),
+                288,
+                156,
+                "TP4",
+                3,
+            )
+            with (
+                patch("tvm_ffi.from_dlpack", new=lambda value: value),
+                runtime._load_plan(
+                    root, manifest["files"], device, plan, limit=288, tile_bytes=2048
+                ) as loaded,
+            ):
+                np.testing.assert_array_equal(
+                    loaded.tensors["head.weight"], [[-2.0], [0.5], [3.0]]
+                )
+                np.testing.assert_array_equal(
+                    loaded.tensors["norm.weight"], extra["norm.weight"][1]
+                )
+                self.assertEqual(
+                    loaded.tensors["float"].tobytes(), extra["float"][1].tobytes()
+                )
+                expected = np.repeat(
+                    np.array([0x3F80, 0xC000, 0x4000, 0xC000], np.uint16)[:, None],
+                    32,
+                    axis=1,
+                )
+                np.testing.assert_array_equal(
+                    loaded.tensors["layers.0.attn.wo_a.weight"], expected
+                )
+                self.assertEqual(
+                    set(loaded.tensors), set(extra) - {"layers.0.attn.wo_a.scale"}
+                )
+                self.assertFalse(loaded.packed)
+                self.assertEqual(
+                    (loaded.persistent_bytes, loaded.peak_bytes), (288, 288)
+                )
+                self.assertEqual(
+                    loaded.identity["model.safetensors"],
+                    manifest["files"]["model.safetensors"]["sha256"],
+                )
+                self.assertGreaterEqual(device.copies, 5)
+            self.assertEqual(device.live_bytes, 0)
+            self.assertFalse(device.pending)
+            count = len(device.allocations)
+            with self.assertRaises(ValueError):
+                runtime.load_rank(
+                    root, manifest["files"], device, strategy="TP4", rank=3, limit=288
+                )
+            self.assertEqual(len(device.allocations), count)
+
+    def test_rank_assembly_charges_packing_overlap_and_retains_failed_transfers(self):
+        from oh_my_vllm.models.deepseek_v41 import weights as runtime
+        from oh_my_vllm.models.deepseek_v41.checkpoint import TensorSlice
+        from oh_my_vllm.models.deepseek_v41.placement import RankPlan
+        from oh_my_vllm.operators.projection import workspace
+
+        self.assertTrue(callable(getattr(runtime, "_load_plan", None)))
+
+        def pack(device, weights, *, bits, allocate):
+            self.assertEqual(weights.encoded.dtype, np.uint8)
+            np.testing.assert_array_equal(
+                weights.encoded.view(np.int8), np.full((32, 32), -98, np.int8)
+            )
+            encoded = allocate((32, 64), "uint8")
+            scales = allocate((512,), "uint8")
+            device.synchronize_compute()
+            if mode == "finish":
+                path = root / "config.json"
+                path.write_bytes(path.read_bytes() + b" ")
+            return workspace.PackedWeights(encoded, scales, 64, bits, 32)
+
+        for mode in (
+            "success",
+            "body",
+            "overlap",
+            "final",
+            "copy",
+            "completion",
+            "sync",
+            "finish",
+            "nonfinite",
+        ):
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
+                root, device, retained = Path(directory), DeferredWeightDevice(), []
+                extra = {
+                    "packed.weight": ("I8", np.full((32, 32), -98, np.int8)),
+                    "packed.scale": ("F8_E8M0", np.full((32, 2), 127, np.uint8)),
+                }
+                if mode == "nonfinite":
+                    extra = {"head.weight": ("BF16", np.array([0x7F80], "<u2"))}
+                _, manifest = reference_fixture(root, extra)
+                selections = {
+                    name: TensorSlice(kind, value.shape, (0,) * value.ndim, value.shape)
+                    for name, (kind, value) in extra.items()
+                }
+                plan = RankPlan(
+                    selections,
+                    {"head.weight": "F32"} if mode == "nonfinite" else {},
+                    4 if mode == "nonfinite" else 1088,
+                    2 if mode == "nonfinite" else 1088,
+                    "TP4",
+                    0,
+                )
+                device.fail_copy = mode in ("copy", "completion")
+                device.fail_sync = mode in ("completion", "sync")
+                limit = 3647 if mode == "overlap" else 2559 if mode == "final" else 3648
+                with (
+                    patch("tvm_ffi.from_dlpack", new=lambda value: value),
+                    patch.object(workspace, "prepare_weights", new=pack),
+                    patch.object(runtime, "_FAILED_LOADS", retained),
+                ):
+                    if mode == "success":
+                        with runtime._load_plan(
+                            root,
+                            manifest["files"],
+                            device,
+                            plan,
+                            limit=limit,
+                            tile_bytes=2048,
+                        ) as loaded:
+                            self.assertEqual(set(loaded.packed), {"packed.weight"})
+                            self.assertEqual(
+                                (loaded.persistent_bytes, loaded.peak_bytes),
+                                (2560, 3648),
+                            )
+                            self.assertEqual(device.live_bytes, 2560)
+                    elif mode == "body":
+                        with (
+                            self.assertRaisesRegex(ValueError, "body failure"),
+                            runtime._load_plan(
+                                root,
+                                manifest["files"],
+                                device,
+                                plan,
+                                limit=limit,
+                                tile_bytes=2048,
+                            ),
+                        ):
+                            device.fail_sync = True
+                            raise ValueError("body failure")
+                    else:
+                        expected = (
+                            "original upload failure"
+                            if device.fail_copy
+                            else "finite"
+                            if mode == "nonfinite"
+                            else "completion failure"
+                            if mode == "sync"
+                            else "changed"
+                            if mode == "finish"
+                            else "budget"
+                        )
+                        with self.assertRaisesRegex(
+                            (ValueError, RuntimeError), expected
+                        ):
+                            runtime._load_plan(
+                                root,
+                                manifest["files"],
+                                device,
+                                plan,
+                                limit=limit,
+                                tile_bytes=2048,
+                            )
+                    if mode in ("completion", "sync", "body"):
+                        self.assertEqual(len(retained), 1)
+                        self.assertGreater(device.live_bytes, 0)
+                        self.assertTrue(
+                            all(
+                                destination() is not None and source() is not None
+                                for destination, source, _ in device.pending
+                            )
+                        )
+                    else:
+                        self.assertFalse(retained)
+                        self.assertFalse(device.pending)
+                        self.assertEqual(device.live_bytes, 0)
+
+    def test_startup_promotions_preserve_exact_bits_and_reject_nonfinite_values(self):
+        import importlib.util
+
+        from .fixtures import load_startup_promotion
+
+        module = "oh_my_vllm.models.deepseek_v41.weights"
+        self.assertIsNotNone(importlib.util.find_spec(module))
+        from oh_my_vllm.models.deepseek_v41.weights import promote_bf16, promote_fp8
+
+        fixture = load_startup_promotion()
+        widened = promote_bf16(fixture["bf16_words"])
+        self.assertEqual(widened.dtype, np.float32)
+        np.testing.assert_array_equal(
+            widened.view(np.uint32), fixture["bf16_expected_f32_bits"]
+        )
+        for word in fixture["bf16_invalid_words"]:
+            with self.assertRaises(ValueError):
+                promote_bf16(np.array([word], np.uint16))
+
+        codes = fixture["fp8_codes"]
+        overflow = fixture["fp8_overflow_mask"].astype(bool)
+        raw = np.repeat(np.broadcast_to(codes[:, None], overflow.shape), 32, axis=1)
+        raw[np.repeat(overflow, 32, axis=1)] = 0
+        scales = np.tile(fixture["scale_codes"], (8, 1))
+        expected = fixture["fp8_expected_bf16_bits"].copy()
+        expected[overflow] = 0
+        np.testing.assert_array_equal(
+            promote_fp8(raw, scales), np.repeat(expected, 32, axis=1)
+        )
+        for row, column in np.argwhere(overflow):
+            with self.assertRaises(ValueError):
+                promote_fp8(
+                    np.array([[codes[row]]], np.uint8),
+                    np.array([[fixture["scale_codes"][column]]], np.uint8),
+                )
+        for code, scale in ((127, 127), (255, 127), (0, 255), (128, 255)):
+            with self.assertRaises(ValueError):
+                promote_fp8(np.array([[code]], np.uint8), np.array([[scale]], np.uint8))
+        for prefix in ("original", "synthetic"):
+            raw, scales = fixture[prefix + "_weight"], fixture[prefix + "_scale"]
+            expected = fixture[prefix + "_expected_bf16_bits"]
+            np.testing.assert_array_equal(promote_fp8(raw, scales), expected)
+            np.testing.assert_array_equal(
+                promote_fp8(raw[31:], scales, row_offset=31), expected[31:]
+            )
+
+    def test_startup_inventory_checks_complete_layout_before_rank_selection(self):
+        from oh_my_vllm.models.deepseek_v41 import checkpoint
+
+        self.assertTrue(callable(getattr(checkpoint, "read_layout", None)))
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected, manifest = reference_fixture(root, config={"name": "fixture"})
+            config, actual = checkpoint.read_layout(
+                root,
+                manifest["files"],
+                layout_sha256=manifest["layout_sha256"],
+            )
+            self.assertEqual(config, {"name": "fixture"})
+            self.assertEqual(actual, expected)
+            with self.assertRaisesRegex(ValueError, "layout"):
+                checkpoint.read_layout(root, manifest["files"], layout_sha256="0" * 64)
+            path = root / "config.json"
+            path.write_text('{"name": "changed"}')
+            with self.assertRaises(ValueError):
+                checkpoint.read_layout(
+                    root,
+                    manifest["files"],
+                    layout_sha256=manifest["layout_sha256"],
+                )
+
     def test_column_slices_and_vectors_keep_raw_bits_with_bounded_reads(self):
         from oh_my_vllm.models.deepseek_v41.checkpoint import EncodedReader, TensorSlice
 
@@ -220,7 +555,7 @@ class EncodedCheckpointWeights(unittest.TestCase):
                 "scale": TensorSlice("F8_E8M0", (3,), (0,), (3,)),
             }
             with EncodedReader(
-                root, manifest["files"], selections, read_bytes=17
+                root, manifest["files"], MappingProxyType(selections), read_bytes=17
             ) as reader:
                 output = np.full((4, 2), 90, np.uint8)
                 self.assertEqual(reader.read_into("columns", 0, output), 3)

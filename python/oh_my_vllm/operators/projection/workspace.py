@@ -8,6 +8,8 @@ from ..runtime.native import load
 from .api import FUNCTIONS, Outputs
 from .plan import make_plan, scale_bytes
 
+_FAILED_PREPARATIONS = []
+
 
 @dataclass(frozen=True)
 class PackedWeights:
@@ -50,8 +52,18 @@ def prepare_weights(device, weights, *, bits, allocate=None):
     # Both uploads remain owned until packing on the caller stream completes.
     try:
         module.pack_weights(*weights, encoded, scales, bits)
-    finally:
+    except BaseException as error:
+        try:
+            device.synchronize_compute()
+        except BaseException as completion:
+            _FAILED_PREPARATIONS.append((device, weights, encoded, scales, module))
+            error.add_note(f"projection completion also failed: {completion}")
+        raise
+    try:
         device.synchronize_compute()
+    except BaseException:
+        _FAILED_PREPARATIONS.append((device, weights, encoded, scales, module))
+        raise
     return PackedWeights(encoded, scales, plan.width, bits, outputs)
 
 

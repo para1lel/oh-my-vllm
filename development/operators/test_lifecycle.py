@@ -1,5 +1,8 @@
 import unittest
+import weakref
 from contextlib import contextmanager
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 
@@ -61,6 +64,57 @@ class Operation:
 
 
 class Lifecycle(unittest.TestCase):
+    def test_projection_preparation_keeps_owners_and_original_failure(self):
+        from oh_my_vllm.operators.projection import workspace
+        from oh_my_vllm.operators.projection.api import Weights
+
+        for mode in ("pack", "sync", "both"):
+            with self.subTest(mode=mode):
+                allocations, retained = [], []
+
+                def allocate(shape, dtype, allocations=allocations):
+                    value = np.empty(shape, dtype)
+                    allocations.append(weakref.ref(value))
+                    return value
+
+                def pack(*args, mode=mode):
+                    if mode != "sync":
+                        raise RuntimeError("packing failed")
+
+                def synchronize(allocations=allocations, mode=mode):
+                    self.assertTrue(all(value() is not None for value in allocations))
+                    if mode != "pack":
+                        raise RuntimeError("completion failed")
+
+                device = SimpleNamespace(
+                    empty=allocate,
+                    synchronize_compute=synchronize,
+                    runtime=SimpleNamespace(cudaStreamIsCapturing=lambda *args: 0),
+                    checked=lambda status: None,
+                )
+                weights = Weights(
+                    np.zeros((32, 32), np.uint8), np.zeros((32, 2), np.uint8)
+                )
+                with (
+                    patch.object(
+                        workspace,
+                        "load",
+                        return_value=(SimpleNamespace(pack_weights=pack), None, None),
+                    ),
+                    patch.object(
+                        workspace, "_FAILED_PREPARATIONS", retained, create=True
+                    ),
+                    self.assertRaisesRegex(
+                        RuntimeError, "completion" if mode == "sync" else "packing"
+                    ),
+                ):
+                    workspace.prepare_weights(device, weights, bits=4)
+                self.assertEqual(len(retained), int(mode != "pack"))
+                self.assertEqual(
+                    [value() is not None for value in allocations],
+                    [mode != "pack"] * 2,
+                )
+
     def test_reset_keeps_addresses_and_recording_failure_releases_owners(self):
         self.assertFalse(equal_bits(np.array([0.0]), np.array([-0.0])))
         self.assertTrue(equal_bits(np.array([np.nan]), np.array([np.nan])))

@@ -1,12 +1,13 @@
 """Checked allocation design over one existing memory plan, without a runtime."""
 
+from oh_my_vllm.models.deepseek_v41.placement import _tensor_placement
+
 from .memory import (
     DEFAULT_LIMITS,
     _keys,
     _rank_bytes,
     _size,
     _sum,
-    _tensor_placement,
     _uint,
 )
 

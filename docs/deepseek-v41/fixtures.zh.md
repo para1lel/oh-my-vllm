@@ -20,6 +20,7 @@
 | [Hyper-connection 索引](../../development/model/deepseek_v41/hyperconnection/index.json) | 五个包含完整 FP64 输出和固定字段限值的用例 | `933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47` |
 | [路由索引](../../development/model/deepseek_v41/routing/index.json) | 五个从 logits 开始, 包含精确专家 ID 和 FP64 系数的用例 | `bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28` |
 | [投影索引](../../development/model/deepseek_v41/projection/index.json) | 五个 A8W8 和五个 A8W4 用例, 包含完整 FP64 输出 | `db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6` |
+| [启动转换](../../development/model/deepseek_v41/startup-promotion.npz) | 精确的 FP8 到 BF16 及 BF16 到 F32 转换 | `0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51` |
 
 产物绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 完整模型产物包含清单, 生成器身份, 固定输入, 数组形状和摘要.
@@ -108,6 +109,12 @@ RMS 下限和近零绝对限值与 hyper-connections 相同.
 `P` 是该请求的 FP64 峰值. RMS 下限和近零绝对限值为 `1e-6`.
 构造的零值端点也有 `1e-6` 的绝对限值.
 这些工程限值不包含激活量化误差, 提升精度后的权重格式, collectives, 延迟和完整模型精度.
+
+`load_startup_promotion()` 覆盖全部 64770 个有限 FP8/UE8M0 输入组合, 其中包含 560 个被拒绝的溢出组合.
+它提供其余 64210 个组合及全部 65280 个有限 BF16 位模式的精确输出位.
+它还提供非法 BF16 位模式, 以及原始和合成 dense32 scale 用例.
+转换使用 ties-to-even 舍入, 保留有符号零, 并拒绝非有限输出.
+外部生成元数据的 SHA256 为 `b341dd5dcf26691c104757b29b7cd6d1ea1eecf0f5429f3f7638e5f29d7e0dcb`.
 
 ## 短文本
 

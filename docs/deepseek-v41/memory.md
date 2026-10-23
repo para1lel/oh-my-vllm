@@ -110,6 +110,15 @@ The [encoded reader](../../python/oh_my_vllm/models/deepseek_v41/checkpoint.py) 
 Its source buffer and each destination have separate 64 MiB caps.
 Tensor placement and precision conversions are separate operations.
 
+The [rank loader](../../python/oh_my_vllm/models/deepseek_v41/weights.py) uses the same placement rules as this planner.
+It checks configuration and layout identities before device allocation.
+It converts only the specified weights and prepares native projection layouts.
+Its supplied GPU byte limit includes temporary packing overlap.
+
+The caller must reserve separate space for allocator overhead, CUDA contexts, and other storage.
+Each upload completes before its host tile is reused.
+If the completion check fails, preparation keeps its storage until process termination.
+
 These are class-derived byte counts, not allocation measurements:
 
 | Strategy | Rank 0 weights | Each rank 1-3 weights |

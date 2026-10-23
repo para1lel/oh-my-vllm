@@ -15,8 +15,16 @@ from .reference import write_reference
 class ReferenceArtifact(unittest.TestCase):
     def test_source_arguments_reject_unbound_or_unsupported_config(self):
         from .layout import _SUPPORTED_CONFIG
-        from .source_capture import cuda_uuid, model_arguments
+        from .source_capture import cuda_uuid, local_identity, model_arguments
 
+        identities = local_identity()
+        repository = Path(__file__).resolve().parents[3]
+        for name in ("placement.py", "checkpoint.py"):
+            path = f"python/oh_my_vllm/models/deepseek_v41/{name}"
+            self.assertEqual(
+                identities.get(path),
+                hashlib.sha256((repository / path).read_bytes()).hexdigest(),
+            )
         identity = SimpleNamespace(bytes=list(range(16)))
         self.assertEqual(
             cuda_uuid(identity), "GPU-" + "00010203-0405-0607-0809-0a0b0c0d0e0f"

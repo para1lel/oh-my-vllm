@@ -47,6 +47,10 @@ ROUTING_PATH = Path(__file__).with_name("routing")
 ROUTING_SHA256 = "bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28"
 PROJECTION_PATH = Path(__file__).with_name("projection")
 PROJECTION_SHA256 = "db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6"
+STARTUP_PROMOTION_PATH = Path(__file__).with_name("startup-promotion.npz")
+STARTUP_PROMOTION_SHA256 = (
+    "0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51"
+)
 CHECKPOINT_MANIFEST_SHA256 = (
     "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
 )
@@ -116,6 +120,17 @@ def load_routing(path=ROUTING_PATH):
 
 def load_projection(path=PROJECTION_PATH):
     return _load_operator_bundle(path, PROJECTION_SHA256)
+
+
+def load_startup_promotion(path=STARTUP_PROMOTION_PATH):
+    data = Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != STARTUP_PROMOTION_SHA256:
+        raise ValueError("startup promotion fixture identity differs")
+    with np.load(io.BytesIO(data), allow_pickle=False) as stored:
+        arrays = {name: stored[name].copy() for name in stored.files}
+    for value in arrays.values():
+        value.setflags(write=False)
+    return arrays
 
 
 def load_engram_lookup(path=ENGRAM_LOOKUP_PATH):

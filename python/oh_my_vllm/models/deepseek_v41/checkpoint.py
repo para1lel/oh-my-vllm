@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import struct
+from collections.abc import Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,6 +145,53 @@ def _header(source, index):
     return header, length + 8
 
 
+def _weight_index(source):
+    index = source.control().get("weight_map")
+    if type(index) is not dict or any(
+        type(name) is not str
+        or not name
+        or type(shard) is not str
+        or re.fullmatch(r"[A-Za-z0-9_.-]+\.safetensors", shard) is None
+        for name, shard in index.items()
+    ):
+        raise ValueError("invalid checkpoint weight index")
+    return index
+
+
+def read_layout(root, verified_files, *, layout_sha256):
+    """Check controls and complete metadata; EncodedReader authenticates payloads."""
+    if (
+        type(verified_files) is not dict
+        or type(layout_sha256) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", layout_sha256) is None
+    ):
+        raise ValueError("checkpoint layout requires trusted identities")
+    root, files = Path(root).resolve(strict=True), copy.deepcopy(verified_files)
+    with ExitStack() as resources:
+        sources = {}
+
+        def source(name):
+            if name not in sources:
+                sources[name] = _Source(root, name, files, resources)
+            return sources[name]
+
+        config = source("config.json").control()
+        index = _weight_index(source("model.safetensors.index.json"))
+        layout = {}
+        for filename in sorted(set(index.values())):
+            header, _ = _header(source(filename), index)
+            layout.update(
+                (name, {"dtype": value["dtype"], "shape": value["shape"]})
+                for name, value in header.items()
+            )
+        encoded = json.dumps(layout, sort_keys=True, separators=(",", ":")).encode()
+        if hashlib.sha256(encoded).hexdigest() != layout_sha256:
+            raise ValueError("checkpoint tensor layout differs from its identity")
+        for opened in sources.values():
+            opened.unchanged()
+        return config, layout
+
+
 @dataclass(frozen=True)
 class TensorSlice:
     """Coordinates and shape use stored elements, including packed FP4 bytes."""
@@ -188,7 +236,7 @@ class EncodedReader:
     def __init__(self, root, verified_files, selections, *, read_bytes=64 << 20):
         if type(read_bytes) is not int or not 1 <= read_bytes <= MAX_TILE_BYTES:
             raise ValueError("checkpoint stream buffer exceeds its byte limit")
-        if type(verified_files) is not dict or type(selections) is not dict:
+        if type(verified_files) is not dict or not isinstance(selections, Mapping):
             raise ValueError(
                 "checkpoint identities and selections must be file/tensor maps"
             )
@@ -209,17 +257,7 @@ class EncodedReader:
         self.resources, self.closed = ExitStack(), False
         try:
             self.config = self._source("config.json").control()
-            self.index = (
-                self._source("model.safetensors.index.json").control().get("weight_map")
-            )
-            if type(self.index) is not dict or any(
-                type(name) is not str
-                or not name
-                or type(shard) is not str
-                or re.fullmatch(r"[A-Za-z0-9_.-]+\.safetensors", shard) is None
-                for name, shard in self.index.items()
-            ):
-                raise ValueError("invalid checkpoint weight index")
+            self.index = _weight_index(self._source("model.safetensors.index.json"))
             if not self.selections.keys() <= self.index.keys():
                 raise ValueError("checkpoint index omits a selected tensor")
             self._unchanged()

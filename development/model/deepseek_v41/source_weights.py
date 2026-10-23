@@ -3,10 +3,11 @@
 import math
 
 import numpy as np
+from oh_my_vllm.models.deepseek_v41.checkpoint import DTYPE_BYTES
+from oh_my_vllm.models.deepseek_v41.placement import _placement_rules
 
 from .identity import local_file, open_file, unchanged
 from .layout import tensor_layout
-from .memory import DTYPE_BYTES, _placement_rules
 from .weights import RAW_DTYPES, Weights
 
 TORCH_DTYPES = {

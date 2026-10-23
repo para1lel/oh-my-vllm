@@ -25,7 +25,6 @@ from .reference import control_bytes, file_snapshot, output_path
 LOCAL_FILES = (
     "source_capture.py",
     "source_weights.py",
-    "memory.py",
     "layout.py",
     "weights.py",
     "identity.py",
@@ -150,7 +149,12 @@ def local_identity():
     )
     paths.extend(
         repository / name
-        for name in ("development/serving/gpu.py", "scripts/with-gpu.sh")
+        for name in (
+            "development/serving/gpu.py",
+            "scripts/with-gpu.sh",
+            "python/oh_my_vllm/models/deepseek_v41/placement.py",
+            "python/oh_my_vllm/models/deepseek_v41/checkpoint.py",
+        )
     )
     return {
         str(path.relative_to(repository)): digest(path.read_bytes()) for path in paths

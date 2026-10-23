@@ -13,7 +13,8 @@ Phase 0 reference and allocation work continues.
 Phase 3 has isolated exact quantization, Engram hash, and shared pinned-host lookup operators.
 Isolated hyper-connection, routing, and encoded projection operators use frozen field limits.
 Complete Engram tables load into one sealed shared store.
-An encoded reader supplies bounded raw slices. Full weight preparation and model integration are pending.
+Rank weights use bounded loading, exact startup conversions, and native projection layouts.
+Model integration is pending.
 Full-model computation and Phases 4-8 are pending.
 
 ## Constraints

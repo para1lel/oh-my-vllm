@@ -224,6 +224,10 @@ class MemoryPlanTests(unittest.TestCase):
             )
 
     def test_placements_count_bytes_not_blanket_quarters(self):
+        from oh_my_vllm.models.deepseek_v41.placement import rank_plan
+
+        model = checkpoint_config()
+        stored = layout.tensor_layout(model)
         plans = {
             strategy: memory.plan_memory(planner_config(), strategy)
             for strategy in ("TP4", "TEP4", "DEP4")
@@ -316,6 +320,65 @@ class MemoryPlanTests(unittest.TestCase):
                             for t in tensors.values()
                         ),
                     )
+                for rank in (0, 3):
+                    selected = rank_plan(model, stored, strategy, rank)
+                    self.assertEqual(
+                        (selected.strategy, selected.rank), (strategy, rank)
+                    )
+                    self.assertEqual(selected.resident_bytes, expected_weights[rank])
+                    self.assertEqual(
+                        selected.source_bytes,
+                        (85530033480 if rank == 0 else 84559496520)
+                        if strategy == "DEP4"
+                        else (78477964104 if rank == 0 else 77507427144),
+                    )
+                    slices = selected.selections
+                    self.assertNotIn("layers.1.engram.embed.weight", slices)
+                    self.assertNotIn("layers.1.engram.embed.scale", slices)
+                    self.assertEqual("vision.norm.weight" in slices, rank == 0)
+                    expert = f"layers.0.ffn.experts.{0 if rank == 0 else 383}.w2"
+                    self.assertIn(f"{expert}.weight", slices)
+                    other = f"layers.0.ffn.experts.{383 if rank == 0 else 0}.w2.weight"
+                    self.assertEqual(other in slices, strategy == "TP4")
+                    for suffix, width in (("weight", 1152), ("scale", 72)):
+                        raw = slices[f"{expert}.{suffix}"]
+                        self.assertEqual(
+                            raw.dtype, "I8" if suffix == "weight" else "F8_E8M0"
+                        )
+                        start = rank * width // 4 if strategy == "TP4" else 0
+                        stop = (rank + 1) * width // 4 if strategy == "TP4" else width
+                        self.assertEqual(raw.shape, (5120, width))
+                        self.assertEqual(raw.start, (0, start))
+                        self.assertEqual(raw.stop, (5120, stop))
+                    for suffix, rows in (("weight", 8192), ("scale", 256)):
+                        raw = slices[f"layers.0.attn.wo_a.{suffix}"]
+                        parts = 1 if strategy == "DEP4" else 4
+                        start = 0 if parts == 1 else rank * rows // 4
+                        self.assertEqual(raw.start, (start, 0))
+                        self.assertEqual(
+                            raw.stop,
+                            (
+                                start + rows // parts,
+                                4096 if suffix == "weight" else 128,
+                            ),
+                        )
+                    for suffix, width in (("weight", 8192), ("scale", 256)):
+                        raw = slices[f"layers.0.attn.wo_b.{suffix}"]
+                        start = rank * width // 4 if strategy != "DEP4" else 0
+                        stop = (rank + 1) * width // 4 if strategy != "DEP4" else width
+                        self.assertEqual(raw.start, (0, start))
+                        self.assertEqual(
+                            raw.stop, (5120 if suffix == "weight" else 160, stop)
+                        )
+                    draft = f"mtp.1.ffn.experts.{0 if rank == 0 else 127}.w1.weight"
+                    self.assertIn(draft, slices)
+                    self.assertEqual(
+                        selected.promotions["layers.0.attn.wo_a.weight"], "BF16"
+                    )
+                    self.assertEqual(selected.promotions["head.weight"], "F32")
+                    self.assertNotIn("layers.0.attn.wo_a.scale", selected.promotions)
+                    with self.assertRaises(TypeError):
+                        selected.selections["other"] = slices["norm.weight"]
 
     def test_combined_capacity_keeps_all_layers_and_speculative_state(self):
         for strategy, requests, global_bytes in (
@@ -401,6 +464,32 @@ class MemoryPlanTests(unittest.TestCase):
         )
 
     def test_rejects_invalid_topology_overflow_and_unmapped_storage(self):
+        from oh_my_vllm.models.deepseek_v41.placement import (
+            rank_plan,
+            weight_placements,
+        )
+
+        model = checkpoint_config()
+        stored = layout.tensor_layout(model)
+        for strategy, rank in (
+            ("TP8", 0),
+            ("TP4", -1),
+            ("TP4", 4),
+            ("TP4", True),
+            ("TP4", 1.0),
+        ):
+            with (
+                self.subTest(strategy=strategy, rank=rank),
+                self.assertRaises(ValueError),
+            ):
+                rank_plan(model, stored, strategy, rank)
+        changed_model = copy.deepcopy(model)
+        changed_model["text_config"]["hidden_size"] = 5121
+        changed_layout = dict(stored)
+        changed_layout["norm.weight"] = {"dtype": "F32", "shape": [5120]}
+        for config, tensors in ((changed_model, stored), (model, changed_layout)):
+            with self.assertRaises(ValueError):
+                weight_placements(config, tensors, "TP4")
         for field, value in (
             ("device_capacity_bytes", [1] * 3),
             ("device_unavailable_bytes", [-1] * 4),
