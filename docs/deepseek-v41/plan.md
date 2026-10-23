@@ -97,11 +97,11 @@ Extend `scripts/with-gpu.sh` and `development/serving/device.py`.
 **Interfaces:** Add `StateTransaction`, `RankReady`, `RankResult`, and group epoch fields to the Phase 1 contract.
 
 - [ ] Generalize related state reservations without changing Qwen copy-on-write behavior.
-- [ ] Add versioned rank readiness, capacity aggregation, completion validation, deadlines, and group shutdown.
-- [ ] Acquire all four GPU locks in stable order, or release all acquired locks before waiting.
-- [ ] Recheck all selected devices after locking. Do not change other users' clocks or processes.
-- [ ] Test empty ranks, uneven schedules, stale results, startup failure, and failure during a collective.
-- [ ] Validate fixed collective order and buffer lifetime for decode graph capture and replay.
+- [x] Add versioned rank readiness, capacity aggregation, completion validation, deadlines, and group shutdown.
+- [x] Acquire all four GPU locks in stable order, or release all acquired locks before waiting.
+- [x] Recheck all selected devices after locking. Do not change other users' clocks or processes.
+- [x] Test empty ranks, uneven schedules, stale results, startup failure, and failure during a collective.
+- [x] Validate fixed collective order and buffer lifetime for decode graph capture and replay.
 
 **Gate:** Four-rank synthetic execution cannot publish partial results or leak processes and locks.
 **Test reason:** Single-worker lifecycle checks cannot detect distributed commit or collective failures.

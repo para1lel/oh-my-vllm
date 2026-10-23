@@ -6,7 +6,7 @@ use oh_my_vllm_kv_cache::state::{AllocationRequest, StateArena, StateTransaction
 use oh_my_vllm_model_contract::ModelDescriptor;
 use oh_my_vllm_zmq_worker::group::GroupLimits;
 use oh_my_vllm_zmq_worker::group::protocol::{RequestWork, StepPlan};
-use oh_my_vllm_zmq_worker::rank_client::{GroupClient, GroupConfig};
+use oh_my_vllm_zmq_worker::rank_client::{GroupClient, GroupConfig, GroupTransport};
 use serde_json::json;
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
@@ -56,6 +56,22 @@ impl Directory {
             }
         }
     }
+
+    fn assert_devices(&self, expected: &[String]) {
+        for (rank, device) in expected.iter().enumerate() {
+            let record: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(self.0.join(format!("rank-{rank}.json"))).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(record["visible_devices"], *device);
+        }
+    }
+
+    fn assert_graceful(&self) {
+        for rank in 0..4 {
+            assert!(self.0.join(format!("closed-{rank}.sent")).exists());
+        }
+    }
 }
 
 impl Drop for Directory {
@@ -89,6 +105,7 @@ fn config(directory: &Directory, strategy: &str, failure: &str) -> GroupConfig {
         device_uuids: (0..4)
             .map(|rank| format!("GPU-{:08x}-{:04x}-{:04x}-{:04x}-{rank:012x}", 0, 0, 0, 0))
             .collect(),
+        transport: GroupTransport::None,
         limits: GroupLimits {
             max_slots: 16,
             max_requests: 64,
@@ -130,8 +147,14 @@ fn step(state: &StateArena) -> (StepPlan, Vec<StateTransaction>) {
         .unwrap();
     let plan = StepPlan {
         step_id: 1,
-        collective_plan_sha256: "d".repeat(64),
-        collective_count: 9,
+        collective_plan: serde_json::from_value(
+            serde_json::from_str::<serde_json::Value>(include_str!(
+                "../../../tests/fixtures/collectives.json"
+            ))
+            .unwrap()["plan"]
+                .clone(),
+        )
+        .unwrap(),
         requests: vec![RequestWork {
             request_id: 10,
             transaction_id: transaction.key().transaction_id,
@@ -150,6 +173,7 @@ async fn four_process_quorum_returns_storage_only_after_all_ranks_finish() {
         let mut client = GroupClient::launch(config(&directory, strategy, "none"))
             .await
             .unwrap();
+        directory.assert_devices(&config(&directory, strategy, "none").device_uuids);
         assert_eq!(client.capacities().unwrap().owned_slots, 16);
         let arena = state(strategy);
         let (plan, transactions) = step(&arena);
@@ -159,7 +183,91 @@ async fn four_process_quorum_returns_storage_only_after_all_ranks_finish() {
         assert_eq!(arena.free_blocks("state", 0).unwrap(), 0);
         drop(completed);
         assert_eq!(arena.free_blocks("state", 0).unwrap(), 3);
+        client.shutdown(Duration::from_secs(2)).await.unwrap();
+        directory.assert_graceful();
+        directory.assert_stopped();
+    }
+}
+
+#[tokio::test]
+async fn bootstrap_binds_one_rank_zero_id_before_any_final_readiness() {
+    for failure in [
+        "none",
+        "early_ready",
+        "premature_ready",
+        "wrong_nonce",
+        "missing_nonce",
+        "bootstrap_epoch",
+        "bootstrap_rank",
+        "bootstrap_version",
+        "bootstrap_device",
+        "bootstrap_missing_id",
+        "bootstrap_extra_id",
+        "bootstrap_short_id",
+        "bootstrap_duplicate",
+        "bootstrap_hang",
+    ] {
+        let directory = Directory::new();
+        let mut settings = config(&directory, "dep4", failure);
+        settings.transport = GroupTransport::Nccl;
+        settings.startup_timeout = Duration::from_secs(1);
+        let started = std::time::Instant::now();
+        let launched = GroupClient::launch(settings).await;
+        if failure == "none" {
+            let mut client = launched.unwrap();
+            let arena = state("dep4");
+            let (plan, transactions) = step(&arena);
+            drop(client.execute(plan, transactions).await.unwrap());
+            client.close().await.unwrap();
+        } else {
+            assert!(launched.is_err(), "{failure}");
+        }
+        assert!(started.elapsed() < Duration::from_secs(3), "{failure}");
+        directory.assert_stopped();
+    }
+}
+
+#[tokio::test]
+async fn graceful_shutdown_errors_and_cancel_poison_the_group_until_cleanup() {
+    for failure in [
+        "shutdown_stale",
+        "shutdown_nonzero",
+        "shutdown_hang",
+        "shutdown_duplicate",
+        "cancel",
+    ] {
+        let directory = Directory::new();
+        let mode = if failure == "cancel" {
+            "shutdown_hang"
+        } else {
+            failure
+        };
+        let mut client = GroupClient::launch(config(&directory, "dep4", mode))
+            .await
+            .unwrap();
+        let started = std::time::Instant::now();
+        if failure == "cancel" {
+            assert!(
+                tokio::time::timeout(
+                    Duration::from_millis(50),
+                    client.shutdown(Duration::from_secs(2))
+                )
+                .await
+                .is_err()
+            );
+            let arena = state("dep4");
+            let (plan, transactions) = step(&arena);
+            assert!(client.execute(plan, transactions).await.is_err());
+            assert_eq!(arena.free_blocks("state", 0).unwrap(), 3);
+            assert!(client.shutdown(Duration::from_secs(1)).await.is_err());
+        } else {
+            assert!(
+                client.shutdown(Duration::from_millis(300)).await.is_err(),
+                "{failure}"
+            );
+        }
         client.close().await.unwrap();
+        assert!(started.elapsed() < Duration::from_secs(3));
         directory.assert_stopped();
     }
 }
@@ -179,10 +287,11 @@ async fn group_failure_and_cancelled_wait_keep_leases_until_children_stop() {
         "step_hang",
         "stale_result",
         "cancel",
+        "empty_cancel",
         "drop",
     ] {
         let directory = Directory::new();
-        let mode = if matches!(failure, "cancel" | "drop") {
+        let mode = if matches!(failure, "cancel" | "empty_cancel" | "drop") {
             "step_hang"
         } else {
             failure
@@ -193,8 +302,15 @@ async fn group_failure_and_cancelled_wait_keep_leases_until_children_stop() {
         } else {
             let mut client = launched.unwrap();
             let arena = state("dep4");
-            let (plan, transactions) = step(&arena);
-            if matches!(failure, "cancel" | "drop") {
+            let (mut plan, mut transactions) = step(&arena);
+            let reserved_free = if failure == "empty_cancel" {
+                plan.requests.clear();
+                transactions.clear();
+                3
+            } else {
+                0
+            };
+            if matches!(failure, "cancel" | "empty_cancel" | "drop") {
                 assert!(
                     tokio::time::timeout(
                         Duration::from_millis(100),
@@ -203,8 +319,14 @@ async fn group_failure_and_cancelled_wait_keep_leases_until_children_stop() {
                     .await
                     .is_err()
                 );
-                assert_eq!(arena.free_blocks("state", 0).unwrap(), 0);
-                if failure == "cancel" {
+                assert_eq!(arena.free_blocks("state", 0).unwrap(), reserved_free);
+                assert!(client.shutdown(Duration::from_millis(100)).await.is_err());
+                assert!(
+                    client.capacities().is_some(),
+                    "shutdown changed a running group"
+                );
+                assert_eq!(arena.free_blocks("state", 0).unwrap(), reserved_free);
+                if matches!(failure, "cancel" | "empty_cancel") {
                     client.close().await.unwrap();
                 } else {
                     drop(client);

@@ -3,7 +3,7 @@
 ## Scope
 
 The [group gate](../../crates/zmq-worker/src/group.rs) validates rank readiness and completion metadata for Phase 2.
-Its [messages](../../crates/zmq-worker/src/group/protocol.rs) use group protocol version 1.
+Its [messages](../../crates/zmq-worker/src/group/protocol.rs) use group protocol version 2.
 The existing Qwen worker protocol and client do not use this gate at this time.
 This module does not start processes, execute collectives, validate model outputs, or publish accepted prefixes.
 Those integration steps in the [phase plan](plan.md) are still necessary.
@@ -35,7 +35,10 @@ DEP scheduling must also keep each request's owner rank.
 
 A step supplies an increasing step ID and unique request and transaction IDs.
 Transaction IDs must be greater than all transaction IDs from previous steps.
-The plan also supplies request owners, row counts, prefill flags, a collective-plan SHA256, and a collective count.
+The plan also supplies request owners, row counts, prefill flags, and a typed [collective plan](collective-plan.md).
+The gate validates that plan against the group topology and calculates its SHA256 and operation count.
+The dispatch supplies the plan and these calculated values to each rank.
+
 Configured request and row limits apply before dispatch.
 An invalid local plan does not start a step and does not fail a ready group.
 

@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -17,11 +18,20 @@ use crate::group::protocol::{GROUP_PROTOCOL_VERSION, RankHeader, StepPlan};
 use crate::group::{CompletedStep, GroupCapacities, GroupGate, GroupLimits};
 
 mod protocol;
+mod shutdown;
+
+#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupTransport {
+    None,
+    Nccl,
+}
 
 pub struct GroupConfig {
     pub epoch: u64,
     pub descriptor: ModelDescriptor,
     pub device_uuids: Vec<String>,
+    pub transport: GroupTransport,
     pub limits: GroupLimits,
     pub socket_directory: PathBuf,
     pub program: PathBuf,
@@ -185,6 +195,7 @@ impl GroupClient {
                 &config.socket_directory,
                 &config.descriptor,
                 &config.device_uuids,
+                config.transport,
                 sender,
                 startup_deadline,
             )
@@ -210,6 +221,7 @@ impl GroupClient {
         socket_directory: &std::path::Path,
         descriptor: &ModelDescriptor,
         device_uuids: &[String],
+        transport: GroupTransport,
         inbox: mpsc::Sender<(u32, Result<protocol::Reply>)>,
         startup_deadline: Instant,
     ) -> Result<()> {
@@ -252,7 +264,7 @@ impl GroupClient {
             command
                 .args(arguments)
                 .args(["--socket", &address, "--rank", &rank.to_string()])
-                .env("CUDA_VISIBLE_DEVICES", device_uuids.join(","));
+                .env("CUDA_VISIBLE_DEVICES", &device_uuids[rank as usize]);
             self.children.push(spawn(&mut command)?);
         }
         for rank in 0..descriptor.parallel_plan.world_size {
@@ -264,22 +276,97 @@ impl GroupClient {
                 },
                 descriptor,
                 device_uuids,
+                transport,
             };
             self.send(rank, &init, startup_deadline, true).await?;
         }
+        let bootstrap_nonce = if transport == GroupTransport::Nccl {
+            Some(self.bootstrap(device_uuids, startup_deadline).await?)
+        } else {
+            None
+        };
         while self.gate.capacities().is_none() {
             let (rank, reply) = self.receive().await?;
             match reply {
                 protocol::Reply::Ready(ready) => {
+                    ensure!(
+                        ready.bootstrap_nonce == bootstrap_nonce,
+                        "rank readiness does not acknowledge its connect exchange"
+                    );
                     self.gate.accept_ready(rank, ready, Instant::now())?;
                 }
                 protocol::Reply::Error { header, message } => {
                     bail!("rank {rank} ({header:?}): {message}")
                 }
                 protocol::Reply::Result(_) => bail!("rank result before group readiness"),
+                protocol::Reply::Closed { .. } => bail!("rank closed before group readiness"),
+                protocol::Reply::Bootstrap(_) => {
+                    bail!("unexpected rank bootstrap during readiness")
+                }
             }
         }
         Ok(())
+    }
+
+    async fn bootstrap(&mut self, devices: &[String], end: Instant) -> Result<String> {
+        let mut observed = vec![false; devices.len()];
+        let mut unique_id = None;
+        for _ in devices {
+            let (rank, reply) = self.receive().await?;
+            let bootstrap = match reply {
+                protocol::Reply::Bootstrap(bootstrap) => bootstrap,
+                protocol::Reply::Error { header, message } => {
+                    bail!("rank {rank} ({header:?}): {message}")
+                }
+                _ => bail!("rank must complete bootstrap before readiness"),
+            };
+            ensure!(
+                bootstrap.header == self.header(rank)
+                    && devices.get(rank as usize) == Some(&bootstrap.device_uuid),
+                "bootstrap identity differs from its bound connection"
+            );
+            ensure!(!observed[rank as usize], "duplicate rank bootstrap");
+            observed[rank as usize] = true;
+            if rank == 0 {
+                ensure!(
+                    bootstrap
+                        .unique_id
+                        .as_ref()
+                        .is_some_and(|id| id.len() == 128),
+                    "rank zero must supply a 128-byte NCCL unique ID"
+                );
+                unique_id = bootstrap.unique_id;
+            } else {
+                ensure!(
+                    bootstrap.unique_id.is_none(),
+                    "only rank zero can supply the NCCL unique ID"
+                );
+            }
+        }
+        let unique_id = unique_id.context("missing rank zero NCCL unique ID")?;
+        let mut nonce_bytes = [0_u8; 32];
+        std::fs::File::open("/dev/urandom")?.read_exact(&mut nonce_bytes)?;
+        let nonce: String = nonce_bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        for rank in 0..devices.len() as u32 {
+            let connect = protocol::Command::Connect {
+                header: self.header(rank),
+                unique_id: &unique_id,
+                bootstrap_nonce: &nonce,
+            };
+            self.send(rank, &connect, end, false).await?;
+        }
+        Ok(nonce)
+    }
+
+    fn header(&self, rank: u32) -> RankHeader {
+        RankHeader {
+            version: GROUP_PROTOCOL_VERSION,
+            epoch: self.epoch,
+            rank,
+        }
     }
 
     pub fn capacities(&self) -> Option<&GroupCapacities> {
@@ -405,6 +492,10 @@ impl GroupClient {
                     bail!("rank {rank} ({header:?}): {message}")
                 }
                 protocol::Reply::Ready(_) => bail!("unexpected rank readiness during execution"),
+                protocol::Reply::Closed { .. } => bail!("rank closed during execution"),
+                protocol::Reply::Bootstrap(_) => {
+                    bail!("unexpected rank bootstrap during execution")
+                }
             }
         }
     }

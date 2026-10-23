@@ -19,7 +19,7 @@ Rust output parsing uses the model family accepted at Ready.
 Rust model policies own defaults, option validation, and family-specific readiness rules.
 CPU model selection occurs before socket binding or worker startup.
 
-The [adapter report](deepseek-v41/qwen-regression.md) and [lifecycle report](deepseek-v41/qwen-foundations.md) record the Qwen HTTP matrices.
+The [adapter report](deepseek-v41/qwen-regression.md), [lifecycle report](deepseek-v41/qwen-foundations.md), and [runtime report](deepseek-v41/qwen-collectives.md) record the Qwen HTTP matrices.
 Phase 2 is active.
 
 The [state arena](deepseek-v41/state-arena.md) supplies typed logical storage reservations and read leases.
@@ -28,8 +28,12 @@ It does not replace the Qwen coordinator or publish accepted prefixes.
 The [GPU lease wrapper](deepseek-v41/gpu-groups.md) supplies one-device and four-device selection with cooperative locks.
 The [rank gate](deepseek-v41/rank-control.md) validates readiness and all-rank completion metadata.
 The [process supervisor](deepseek-v41/rank-supervisor.md) keeps transactions until completion or owned-process termination.
+It supplies one visible device per rank and controls the NCCL bootstrap ID exchange.
+The [collective plan](deepseek-v41/collective-plan.md) binds operation order, data types, counts, and topology across Rust and Python.
+The optional [native collective owner](deepseek-v41/native-collectives.md) supplies NCCL submission, private aligned storage, and graph resource ownership.
+
 These mechanisms do not publish accepted prefixes.
-Typed scheduler integration and native communication are subsequent work.
+Typed scheduler integration and model state selection are subsequent work.
 
 Qwen computation and accepted-state semantics stay unchanged.
 DeepSeek execution is not enabled.
@@ -61,7 +65,9 @@ The following state applies to the Qwen implementation.
 The [operator packages](../python/oh_my_vllm/operators) keep each family's interface, plan, workspace, and CUDA code together.
 The [structure design](operators/design.md) defines their dependencies and ownership.
 Keep shared resource mechanisms in `runtime` and shared computation in `primitives`.
-The native builder is `development.native_build`. It builds seven native modules.
+
+The native builder is `development.native_build`. Its default selection builds seven Qwen native modules.
+Use `--module collectives` to build the optional module.
 
 The worker uses explicit layer weights, named outputs, and operator plan keys.
 Use the [execution rules](execution.md) for Eager execution, CUDA Graph replay, and resource release.

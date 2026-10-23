@@ -19,7 +19,7 @@ Rust 输出解析使用 Ready 阶段接受的模型系列.
 Rust 模型策略拥有默认值, 选项验证和模型系列特定的就绪规则.
 CPU 模型选择发生在绑定 socket 或启动 worker 之前.
 
-[适配器报告](deepseek-v41/qwen-regression.zh.md) 和[生命周期报告](deepseek-v41/qwen-foundations.zh.md) 记录 Qwen HTTP 矩阵.
+[适配器报告](deepseek-v41/qwen-regression.zh.md), [生命周期报告](deepseek-v41/qwen-foundations.zh.md) 和[运行时报告](deepseek-v41/qwen-collectives.zh.md) 记录 Qwen HTTP 矩阵.
 阶段 2 正在进行.
 
 [状态 arena](deepseek-v41/state-arena.zh.md) 提供类型化逻辑存储预留和读 lease.
@@ -28,8 +28,12 @@ CPU 模型选择发生在绑定 socket 或启动 worker 之前.
 [GPU lease 包装器](deepseek-v41/gpu-groups.zh.md) 通过协作锁提供单设备和四设备选择.
 [rank 检查器](deepseek-v41/rank-control.zh.md) 验证就绪和全部 rank 的完成元数据.
 [进程监督器](deepseek-v41/rank-supervisor.zh.md) 保留事务, 直到完成或所拥有的进程终止.
+它为每个 rank 提供一个可见设备, 并控制 NCCL bootstrap ID 交换.
+[集合通信计划](deepseek-v41/collective-plan.zh.md) 在 Rust 与 Python 之间绑定操作顺序, 数据类型, 计数和拓扑.
+可选的 [native 集合通信所有者](deepseek-v41/native-collectives.zh.md) 提供 NCCL 提交, 私有对齐存储和图资源所有权.
+
 这些机制不发布已接受前缀.
-类型化调度器集成和原生通信是后续工作.
+类型化调度器集成和模型状态选择是后续工作.
 
 Qwen 计算和已接受状态语义保持不变.
 DeepSeek 执行未启用.
@@ -61,7 +65,9 @@ DeepSeek 和新的 nightly 回归测量放入独立文档, 不放进 README.
 [算子包](../python/oh_my_vllm/operators) 将各算子族的接口, 计划, 工作区和 CUDA 代码放在一起.
 [结构设计](operators/design.zh.md) 定义其依赖关系和所有权.
 将共享资源机制放入 `runtime`, 将共享计算放入 `primitives`.
-native 构建器为 `development.native_build`. 它构建七个 native 模块.
+
+native 构建器为 `development.native_build`. 其默认选择构建七个 Qwen native 模块.
+使用 `--module collectives` 构建可选模块.
 
 worker 使用显式层权重, 命名输出和算子计划键.
 按照[执行规则](execution.zh.md) 使用 Eager 执行, CUDA Graph 重放和资源释放.

@@ -5,6 +5,7 @@ use oh_my_vllm_model_contract::{
     CacheSchema, CacheSource, ContractError, ModelDescriptor, RequestPlacement,
 };
 
+pub mod collectives;
 pub mod protocol;
 
 use protocol::{
@@ -169,6 +170,10 @@ impl GroupGate {
         self.phase == Phase::Failed
     }
 
+    pub(crate) fn is_ready(&self) -> bool {
+        self.phase == Phase::Ready
+    }
+
     pub fn capacities(&self) -> Option<&GroupCapacities> {
         matches!(self.phase, Phase::Ready | Phase::Running).then_some(&self.capacities)
     }
@@ -316,14 +321,9 @@ impl GroupGate {
 
     fn dispatch(&self, plan: &StepPlan) -> Result<StepDispatch> {
         require(plan.step_id > self.last_step, "zero or stale step identity")?;
-        require(
-            plan.collective_plan_sha256.len() == 64
-                && plan
-                    .collective_plan_sha256
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-            "invalid collective plan digest",
-        )?;
+        let collective_plan_sha256 = plan
+            .collective_plan
+            .identity(self.expected.parallel_plan.world_size)?;
         require(
             plan.requests.len() <= self.limits.max_requests,
             "too many requests",
@@ -375,8 +375,9 @@ impl GroupGate {
             } else {
                 ExecutionMode::Graph
             },
-            collective_plan_sha256: plan.collective_plan_sha256.clone(),
-            collective_count: plan.collective_count,
+            collective_plan_sha256,
+            collective_count: plan.collective_plan.operations.len() as u32,
+            collective_plan: plan.collective_plan.clone(),
             ranks,
         })
     }

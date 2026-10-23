@@ -55,12 +55,13 @@ fn ready(strategy: &str, rank: u32) -> RankReady {
     }
     RankReady {
         header: RankHeader {
-            version: 1,
+            version: 2,
             epoch: 17,
             rank,
         },
         device_uuid: device(rank),
         descriptor,
+        bootstrap_nonce: None,
     }
 }
 
@@ -80,8 +81,14 @@ fn started(strategy: &str, now: Instant) -> GroupGate {
 fn plan() -> StepPlan {
     StepPlan {
         step_id: 1,
-        collective_plan_sha256: "d".repeat(64),
-        collective_count: 9,
+        collective_plan: serde_json::from_value(
+            serde_json::from_str::<serde_json::Value>(include_str!(
+                "../../../tests/fixtures/collectives.json"
+            ))
+            .unwrap()["plan"]
+                .clone(),
+        )
+        .unwrap(),
         requests: vec![
             RequestWork {
                 request_id: 10,
@@ -104,13 +111,14 @@ fn plan() -> StepPlan {
 fn result(rank: u32, transactions: &[u64]) -> RankResult {
     RankResult {
         header: RankHeader {
-            version: 1,
+            version: 2,
             epoch: 17,
             rank,
         },
         step_id: 1,
-        collective_plan_sha256: "d".repeat(64),
-        completed_collectives: 9,
+        collective_plan_sha256: "cba76cb2f21f6c8ea1c3025d9dbd7696d21cf1416fd72cd2dfd8cac17c954d13"
+            .into(),
+        completed_collectives: 4,
         transaction_ids: transactions.to_vec(),
         device_work_complete: true,
     }
@@ -139,7 +147,7 @@ fn readiness_binds_rank_identity_layout_and_the_full_capacity_budget() {
         let mut group = gate("dep4", now);
         let mut message = ready("dep4", 0);
         match case {
-            0 => message.header.version = 2,
+            0 => message.header.version = 1,
             1 => message.header.epoch = 18,
             2 => message.header.rank = 1,
             3 => message.device_uuid = device(3),
@@ -213,7 +221,7 @@ fn all_ranks_complete_one_plan_including_empty_partitions() {
                 4 => invalid.requests[0].owner_rank = 4,
                 5 => invalid.requests[0].rows = 0,
                 6 => invalid.requests[0].rows = u32::MAX,
-                7 => invalid.collective_plan_sha256 = "invalid".into(),
+                7 => invalid.collective_plan.world_size = 1,
                 _ => unreachable!(),
             }
             assert!(
@@ -227,6 +235,11 @@ fn all_ranks_complete_one_plan_including_empty_partitions() {
             .begin(step.clone(), now + Duration::from_secs(1), now)
             .unwrap();
         assert_eq!(dispatch.mode, ExecutionMode::Eager);
+        assert_eq!(dispatch.collective_count, 4);
+        assert_eq!(
+            dispatch.collective_plan_sha256,
+            "cba76cb2f21f6c8ea1c3025d9dbd7696d21cf1416fd72cd2dfd8cac17c954d13"
+        );
         let rows: Vec<_> = dispatch.ranks.iter().map(|rank| rank.rows).collect();
         assert_eq!(
             rows,
@@ -290,12 +303,12 @@ fn invalid_or_missing_completion_fails_without_partial_publication() {
         );
         let mut message = result(2, &[91]);
         match case {
-            0 => message.header.version = 2,
+            0 => message.header.version = 1,
             1 => message.header.epoch = 16,
             2 => message.header.rank = 3,
             3 => message.step_id = 2,
             4 => message.collective_plan_sha256 = "f".repeat(64),
-            5 => message.completed_collectives = 8,
+            5 => message.completed_collectives = 3,
             6 => message.transaction_ids.clear(),
             7 => message.transaction_ids = vec![91, 91],
             8 => message.transaction_ids = vec![90],

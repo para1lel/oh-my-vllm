@@ -1,7 +1,9 @@
 use oh_my_vllm_model_contract::ModelDescriptor;
 use serde::{Deserialize, Serialize};
 
-pub const GROUP_PROTOCOL_VERSION: u32 = 1;
+use super::collectives::CollectivePlan;
+
+pub const GROUP_PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,6 +19,7 @@ pub struct RankReady {
     pub header: RankHeader,
     pub device_uuid: String,
     pub descriptor: ModelDescriptor,
+    pub bootstrap_nonce: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,8 +46,7 @@ pub struct RequestWork {
 #[derive(Debug, Clone)]
 pub struct StepPlan {
     pub step_id: u64,
-    pub collective_plan_sha256: String,
-    pub collective_count: u32,
+    pub collective_plan: CollectivePlan,
     pub requests: Vec<RequestWork>,
 }
 
@@ -72,5 +74,6 @@ pub struct StepDispatch {
     pub mode: ExecutionMode,
     pub collective_plan_sha256: String,
     pub collective_count: u32,
+    pub collective_plan: CollectivePlan,
     pub ranks: Vec<RankSchedule>,
 }
