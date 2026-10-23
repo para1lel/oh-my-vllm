@@ -11,6 +11,7 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | Fixture | Content | SHA256 |
 |---|---|---|
 | [Short text](../../development/model/deepseek_v41/reference.npz) | Two full FP64 vocabulary vectors | `3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0` |
+| [Long text](../../development/model/deepseek_v41/long-context.npz) | Four full FP64 vectors at 16385 and 65537 tokens | `001cc434d3adb106fc490286d3a9625b18326b83d5fcca7deb83a553b11ea474` |
 | [Prompt codec](../../development/model/deepseek_v41/codec.json) | Twenty encoding cases with complete token IDs | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
 | [DSpark continuation](../../development/model/deepseek_v41/dspark.npz) | Eighteen full FP64 vocabulary rows and two confidence vectors | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 | [Media endpoints](../../development/model/deepseek_v41/media.npz) | Two full FP64 vocabulary vectors after still and video-frame images | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
@@ -115,6 +116,26 @@ It supplies exact output bits for the 64210 accepted pairs and all 65280 finite 
 It also supplies invalid BF16 words and original and synthetic dense32 scale cases.
 Conversion uses ties-to-even rounding, keeps signed zero, and rejects nonfinite outputs.
 External generation metadata has SHA256 `b341dd5dcf26691c104757b29b7cd6d1ea1eecf0f5429f3f7638e5f29d7e0dcb`.
+
+## Normalization, rotation, and activation
+
+`load_norm_rope()` supplies four RMS cases and three RoPE cases.
+RMS uses original BF16 weights without an offset, with text epsilon `1e-20` and vision epsilon `1e-6`.
+RoPE rotates adjacent pairs in the last 64 channels, with supplied FP32 cosine/sine coefficients and unchanged prefix bits.
+
+The normalized L2 limit is `2^-8 + 64*2^-24`.
+The absolute limit is `max(1e-7, (2^-8 + 64*2^-24)*P)`.
+Each request has its own peak `P`, RMS floor `1e-6`, and near-zero absolute limit `1e-6`.
+These cases exclude phase generation, two-dimensional vision positions, and full-model acceptance.
+
+`load_swiglu()` supplies four cases with BF16 gate/up inputs and complete FP64 outputs.
+Text gates have only an upper limit of 10. Text up values have limits of -10 and 10.
+Optional FP32 route weights multiply each row before the final BF16 conversion.
+Vision uses width 2816 without these limits or route weights.
+
+SwiGLU uses the same error limits as RMS and RoPE, separately for each request.
+The [checker](../../development/operators/check_deepseek_activation.py) covers the bounded inputs in the [API](../../python/oh_my_vllm/operators/activation/api.py).
+Projection, dispatch, quantization, and full-model acceptance are separate.
 
 ## Short text
 

@@ -13,6 +13,117 @@ from . import fixtures
 
 
 class FrozenFixtures(unittest.TestCase):
+    def test_long_reference_keeps_all_boundaries_and_fixed_prompt(self):
+        loader = getattr(fixtures, "load_long", None)
+        self.assertTrue(callable(loader), "long-reference fixture loader is missing")
+        metadata, arrays = loader()
+        self.assertEqual(metadata["case"], "long-context-boundaries")
+        self.assertEqual(
+            metadata["checkpoint_manifest_sha256"], fixtures.CHECKPOINT_MANIFEST_SHA256
+        )
+        self.assertEqual(metadata["inputs"]["checkpoints"], [16385, 65537])
+        self.assertEqual(
+            metadata["inputs"]["tokens"], list((fixtures.SHORT_TOKENS * 4097)[:65537])
+        )
+        self.assertEqual(
+            metadata["execution"],
+            dict(
+                device="cpu",
+                dtype="float64",
+                hash_workers=4,
+                prefill_chunk_size=4096,
+                projection_row_limit=2048,
+                threads=8,
+            ),
+        )
+        self.assertEqual(len(metadata["reference_sources"]), 15)
+        self.assertEqual(
+            set(arrays),
+            {
+                f"{stage}_{length}"
+                for stage in ("prefill", "decode")
+                for length in (16385, 65537)
+            },
+        )
+        for value in arrays.values():
+            self.assertEqual(value.shape, (129280,))
+            self.assertEqual(value.dtype, np.float64)
+            self.assertTrue(np.isfinite(value).all())
+            self.assertFalse(value.flags.writeable)
+        for length in (16385, 65537):
+            self.assertEqual(
+                int(arrays[f"prefill_{length}"].argmax()),
+                metadata["inputs"]["decode_tokens"][str(length)],
+            )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "long.npz"
+            data = fixtures.LONG_PATH.read_bytes()
+            for changed in (data[:-1], data + b"extra"):
+                path.write_bytes(changed)
+                with self.assertRaisesRegex(ValueError, "identity"):
+                    loader(path)
+
+    def test_swiglu_keeps_clipping_routes_and_separate_request_limits(self):
+        loader = getattr(fixtures, "load_swiglu", None)
+        self.assertTrue(callable(loader), "SwiGLU fixture loader is missing")
+        metadata, cases = loader()
+        self.assertEqual(
+            set(cases), {"shared_decode", "tp_routed", "routed_edges", "vision"}
+        )
+        for name, case in cases.items():
+            shape, options = (
+                case.manifest["case"][key] for key in ("shape", "options")
+            )
+            rows, width = shape["rows"], shape["width"]
+            self.assertEqual(rows, shape["batch"] * shape["queries"])
+            for field in ("gate", "up"):
+                self.assertEqual(case.inputs[field].shape, (rows, width))
+                self.assertEqual(case.inputs[field].dtype, np.uint16)
+            self.assertEqual(case.expected["value"].shape, (rows, width))
+            self.assertEqual(case.expected["value"].dtype, np.float64)
+            self.assertTrue(np.isfinite(case.expected["value"]).all())
+            self.assertFalse(case.expected["value"].flags.writeable)
+            self.assertEqual(options["limit"], 0 if name == "vision" else 10)
+            self.assertEqual("route" in case.inputs, options["route"])
+            if options["route"]:
+                self.assertEqual(case.inputs["route"].shape, (rows,))
+                self.assertEqual(case.inputs["route"].dtype, np.float32)
+            limits = metadata["cases"][name]["limits"]["fields"]["value"]
+            self.assertEqual(len(limits["max_abs"]), shape["batch"])
+            if shape["batch"] > 1:
+                self.assertEqual(limits["max_abs"][1], 1e-7)
+                self.assertLess(limits["max_abs"][3], 1e-6)
+
+    def test_norm_rope_keeps_weights_tail_and_request_limits(self):
+        loader = getattr(fixtures, "load_norm_rope", None)
+        self.assertTrue(callable(loader), "norm/RoPE fixture loader is missing")
+        metadata, cases = loader()
+        self.assertEqual(len(cases), 7)
+        for name, case in cases.items():
+            shape = case.manifest["case"]["shape"]
+            rows, width = shape["rows"], shape["width"]
+            self.assertEqual(rows, shape["batch"] * shape["queries"])
+            self.assertEqual(case.inputs["values"].shape, (rows, width))
+            self.assertEqual(case.inputs["values"].dtype, np.uint16)
+            rotation = "coefficients" in case.inputs
+            self.assertEqual(
+                set(case.expected), {"forward", "inverse"} if rotation else {"value"}
+            )
+            for field, expected in case.expected.items():
+                self.assertEqual(expected.shape, (rows, 64 if rotation else width))
+                self.assertEqual(expected.dtype, np.float64)
+                self.assertTrue(np.isfinite(expected).all())
+                self.assertFalse(expected.flags.writeable)
+                limit = metadata["cases"][name]["limits"]["fields"][field]
+                self.assertEqual(len(limit["max_abs"]), shape["batch"])
+            if rotation:
+                self.assertEqual(case.inputs["coefficients"].shape, (rows, 32, 2))
+                self.assertEqual(case.inputs["coefficients"].dtype, np.float32)
+                self.assertIn(1048575, case.inputs["positions"])
+            else:
+                self.assertEqual(case.inputs["weight"].shape, (width,))
+                self.assertEqual(case.inputs["weight"].dtype, np.uint16)
+
     def test_projections_keep_encoded_inputs_full_outputs_and_cancellation(self):
         loader = getattr(fixtures, "load_projection", None)
         self.assertTrue(callable(loader), "projection fixture loader is missing")

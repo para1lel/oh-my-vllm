@@ -26,6 +26,8 @@ OPTIONAL_MODULE_SOURCES = {
     "hyperconnection": SOURCES / "hyperconnection/cuda/hyperconnection.cu",
     "routing": SOURCES / "routing/cuda/routing.cu",
     "projection": SOURCES / "projection/cuda/projection.cu",
+    "transform": SOURCES / "transform/cuda/transform.cu",
+    "activation": SOURCES / "activation/cuda/activation.cu",
 }
 
 

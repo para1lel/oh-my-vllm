@@ -40,6 +40,7 @@ MODULES = {
 
 
 def optional_modules():
+    from oh_my_vllm.operators.activation.api import FUNCTIONS as ACTIVATION_FUNCTIONS
     from oh_my_vllm.operators.engram.api import FUNCTIONS as ENGRAM_FUNCTIONS
     from oh_my_vllm.operators.hyperconnection.api import FUNCTIONS as HC_FUNCTIONS
     from oh_my_vllm.operators.projection.api import FUNCTIONS as PROJECTION_FUNCTIONS
@@ -48,6 +49,7 @@ def optional_modules():
     )
     from oh_my_vllm.operators.routing.api import FUNCTIONS as ROUTING_FUNCTIONS
     from oh_my_vllm.operators.runtime.collectives import FUNCTIONS
+    from oh_my_vllm.operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
 
     return {
         "collectives": FUNCTIONS,
@@ -56,6 +58,8 @@ def optional_modules():
         "hyperconnection": HC_FUNCTIONS,
         "routing": ROUTING_FUNCTIONS,
         "projection": PROJECTION_FUNCTIONS,
+        "transform": TRANSFORM_FUNCTIONS,
+        "activation": ACTIVATION_FUNCTIONS,
     }
 
 

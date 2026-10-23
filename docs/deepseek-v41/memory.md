@@ -113,7 +113,11 @@ Tensor placement and precision conversions are separate operations.
 The [rank loader](../../python/oh_my_vllm/models/deepseek_v41/weights.py) uses the same placement rules as this planner.
 It checks configuration and layout identities before device allocation.
 It converts only the specified weights and prepares native projection layouts.
-Its supplied GPU byte limit includes temporary packing overlap.
+One contiguous allocation per data type holds the weights, with each tensor aligned to 256 bytes.
+A separate buffer supplies temporary packing storage.
+Its supplied GPU byte limit includes alignment and the complete temporary buffer.
+
+Temporary storage is reused only after packing completes and is released before the loaded weights are returned.
 
 The caller must reserve separate space for allocator overhead, CUDA contexts, and other storage.
 Each upload completes before its host tile is reused.

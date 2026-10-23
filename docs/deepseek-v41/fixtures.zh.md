@@ -11,6 +11,7 @@
 | 夹具 | 内容 | SHA256 |
 |---|---|---|
 | [短文本](../../development/model/deepseek_v41/reference.npz) | 两个完整 FP64 词表向量 | `3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0` |
+| [长文本](../../development/model/deepseek_v41/long-context.npz) | 16385 和 65537 tokens 处的四个完整 FP64 向量 | `001cc434d3adb106fc490286d3a9625b18326b83d5fcca7deb83a553b11ea474` |
 | [提示词编码](../../development/model/deepseek_v41/codec.json) | 二十个带完整 token IDs 的编码用例 | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
 | [DSpark 续算](../../development/model/deepseek_v41/dspark.npz) | 十八个完整 FP64 词表行和两个置信度向量 | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 | [媒体端点](../../development/model/deepseek_v41/media.npz) | 静态图片和视频帧图片之后的两个完整 FP64 词表向量 | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
@@ -115,6 +116,26 @@ RMS 下限和近零绝对限值与 hyper-connections 相同.
 它还提供非法 BF16 位模式, 以及原始和合成 dense32 scale 用例.
 转换使用 ties-to-even 舍入, 保留有符号零, 并拒绝非有限输出.
 外部生成元数据的 SHA256 为 `b341dd5dcf26691c104757b29b7cd6d1ea1eecf0f5429f3f7638e5f29d7e0dcb`.
+
+## 归一化, 旋转和激活
+
+`load_norm_rope()` 提供四组 RMS 样例和三组 RoPE 样例.
+RMS 使用无偏移的原始 BF16 权重, 文本 epsilon 为 `1e-20`, 视觉 epsilon 为 `1e-6`.
+RoPE 使用传入的 FP32 余弦/正弦系数, 旋转最后 64 个通道中的相邻通道对, 并保持前缀位不变.
+
+归一化 L2 限值为 `2^-8 + 64*2^-24`.
+绝对误差限值为 `max(1e-7, (2^-8 + 64*2^-24)*P)`.
+每个请求分别使用自身的峰值 `P`, RMS 下限 `1e-6` 和近零绝对误差限值 `1e-6`.
+这些样例不覆盖相位生成, 二维视觉位置和完整模型验收.
+
+`load_swiglu()` 提供四组带有 BF16 gate/up 输入和完整 FP64 输出的样例.
+文本 gate 仅有上限 10. 文本 up 的下限和上限为 -10 和 10.
+可选的 FP32 路由权重在最终 BF16 转换前乘到每一行.
+视觉使用宽度 2816, 没有这些限值或路由权重.
+
+SwiGLU 使用与 RMS 和 RoPE 相同的误差限值, 每个请求分别计算.
+[检查器](../../development/operators/check_deepseek_activation.py)覆盖 [API](../../python/oh_my_vllm/operators/activation/api.py) 中规定范围内的输入.
+投影, 分发, 量化和完整模型验收另行处理.
 
 ## 短文本
 

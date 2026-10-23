@@ -1,0 +1,162 @@
+{
+  "case": {
+    "boundary": "deepseek.rms",
+    "id": "deepseek.rms.numerics.text5120",
+    "mode": "graph",
+    "options": {
+      "eps": 1e-20,
+      "weight_offset": 0,
+      "weight_slice": [
+        0,
+        5120
+      ]
+    },
+    "outputs": [
+      "value"
+    ],
+    "purpose": "numerics",
+    "shape": {
+      "batch": 1,
+      "queries": 1,
+      "rows": 1,
+      "width": 5120
+    },
+    "weights": [
+      "layers.0.attn_norm.weight"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "chat_template.jinja": {
+        "sha256": "d959d804d5101b79a49b6ff1bf3c54cd5affa9a5a78c503d925f3090040b31c3",
+        "size": 15348
+      },
+      "config.json": {
+        "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879",
+        "size": 3311
+      },
+      "encoding/encoding.py": {
+        "sha256": "502bdaec8a3fd88ebc24c4721a7038fbe42f2063c664638127056107920035c1",
+        "size": 37316
+      },
+      "inference/convert.py": {
+        "sha256": "035028340479145594a81d6084a8424e57363adf83c0d5983914783d95614d76",
+        "size": 9458
+      },
+      "inference/engram.py": {
+        "sha256": "11f35ecbead8150c35aa002b3d180ef290b05a25afe883a11884f94d476d3897",
+        "size": 8138
+      },
+      "inference/image_processor.py": {
+        "sha256": "482759e3bcc4e9bb5ee582b244cc563f5d0e163d8b48dda91ebb7106e62f9272",
+        "size": 7699
+      },
+      "inference/kernel.py": {
+        "sha256": "1236c3507019ed176f5dba5e04bcea58867cf654818c6cf138ed4845398c2455",
+        "size": 23790
+      },
+      "inference/model.py": {
+        "sha256": "4e9ae23620edc8028ccc5d5fef552ab7fdc7dcd6f79608754fe9f67644056f65",
+        "size": 61549
+      },
+      "inference/vision.py": {
+        "sha256": "5d49edc196a4ef22384abe76d35a40098cbe1e74b586c8f66a2edff4f076b26c",
+        "size": 4457
+      },
+      "model-00003-of-00048.safetensors": {
+        "sha256": "e1281f85d0ce4a3dfb63d41926fc4a47fa71f36ba20992e3597e702ead49d4c9",
+        "size": 7389759032
+      },
+      "model.safetensors.index.json": {
+        "sha256": "74b0686a3d2891980d5e303251b075a3bccae2c2ff650747db2620a649b98fa8",
+        "size": 7470294
+      },
+      "tokenizer.json": {
+        "sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+        "size": 6367257
+      },
+      "tokenizer_config.json": {
+        "sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+        "size": 801
+      }
+    },
+    "manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
+  },
+  "files": {
+    "expected.value.0000.npz": "b823eb46dbf09539d4010f7ed5ce214e2839356f7260c935bd98fb3213eddfd4",
+    "inputs.values.0000.npz": "d70ee50644af63adb55c15a88443a7c9a1506181ad1d6fe39b9bdaf1343a9cb5",
+    "inputs.weight.0000.npz": "39cb5e2a894563435a2f88c84c416db8faf983df14ec0b6fd8fe4b8dcd588fc1"
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "scope": "RMS output or adjacent-pair rotated tail; prefix must remain bit exact.",
+    "source": {
+      "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+      "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+      "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+      "development/model/deepseek_v41/reference_attention.py": "6fdb87eed47dde8dc7ae7d6cd9edfb35b35b506b9aa093da18f06afa944b71bd",
+      "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+      "development/model/deepseek_v41/reference_vision.py": "03b56dd92673cbeff28eb7f0e0b0145f2d950f7e4f6a330fbeb1b9efc031e0e8",
+      "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+      "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+      "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+      "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+      "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+      "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+      "external/generate-norm-rope-v1.py": "423bf02715b887682eca4ffe2d8ba7be32c56612113c23b217b17ffe1dd0edfd",
+      "external/norm-rope-policy-proposal-v1.json": "e3d075eddf779c18d0f3e859c8618d25f8a4753019f2dd0b5bb0106b7c0b3730"
+    },
+    "torch": "2.12.0+cu130"
+  },
+  "tensors": {
+    "expected.value": {
+      "dtype": "float64",
+      "parts": [
+        {
+          "count": 5120,
+          "file": "expected.value.0000.npz",
+          "key": "value",
+          "offset": 0
+        }
+      ],
+      "shape": [
+        1,
+        5120
+      ],
+      "tensor_dtype": "float64"
+    },
+    "inputs.values": {
+      "dtype": "uint16",
+      "parts": [
+        {
+          "count": 5120,
+          "file": "inputs.values.0000.npz",
+          "key": "value",
+          "offset": 0
+        }
+      ],
+      "shape": [
+        1,
+        5120
+      ],
+      "tensor_dtype": "bfloat16"
+    },
+    "inputs.weight": {
+      "dtype": "uint16",
+      "parts": [
+        {
+          "count": 5120,
+          "file": "inputs.weight.0000.npz",
+          "key": "value",
+          "offset": 0
+        }
+      ],
+      "shape": [
+        5120
+      ],
+      "tensor_dtype": "bfloat16"
+    }
+  },
+  "version": "operator-fixture-v1",
+  "writes": {}
+}

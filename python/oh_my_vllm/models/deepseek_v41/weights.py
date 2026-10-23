@@ -22,6 +22,7 @@ _DEVICE_DTYPES = {
     "I8": "uint8",
 }
 _FAILED_LOADS = []
+_ELEMENT_BYTES = {"uint8": 1, "bfloat16": 2, "float32": 4}
 
 _FP8_VALUES = np.array(
     [
@@ -102,6 +103,10 @@ def _shape(spec):
     )
 
 
+def _aligned(size):
+    return _uint((size + 255) // 256 * 256)
+
+
 def _scale(plan, name):
     spec = plan.selections[name]
     scale_name = name.removesuffix(".weight") + ".scale"
@@ -124,7 +129,8 @@ def _scale(plan, name):
 def _inventory(plan, limit, tile_bytes):
     from ...operators.projection.plan import make_plan, scale_bytes
 
-    growth = scale_bound = resident = 0
+    growth = scale_bound = resident = scratch = 0
+    arenas = {}
     paired = set()
     for name, spec in plan.selections.items():
         if spec.dtype == "F8_E8M0":
@@ -141,7 +147,10 @@ def _inventory(plan, limit, tile_bytes):
             promotion and row_elements * 16 > tile_bytes - tile_bytes // 2
         ):
             raise ValueError("weight tile budget cannot hold one row")
-        resident += _size(*shape, DTYPE_BYTES[promotion or spec.dtype])
+        value_bytes = _size(*shape, DTYPE_BYTES[promotion or spec.dtype])
+        resident += value_bytes
+        dtype = _DEVICE_DTYPES[promotion or spec.dtype]
+        storage = _aligned(value_bytes)
         if spec.dtype in ("I8", "F8_E4M3"):
             scale_name, scale = _scale(plan, name)
             paired.add(scale_name)
@@ -164,6 +173,12 @@ def _inventory(plan, limit, tile_bytes):
                     - compact_scale
                 )
                 resident += compact_scale
+                storage = _aligned(packed) + _aligned(scale_bytes(rows, native.width))
+                temporary = _aligned(compact_scale)
+                if native.padded_width != native.width:
+                    temporary += _aligned(value_bytes)
+                scratch = max(scratch, temporary)
+        arenas[dtype] = _uint(arenas.get(dtype, 0) + storage)
     if paired != {
         name for name, spec in plan.selections.items() if spec.dtype == "F8_E8M0"
     }:
@@ -172,40 +187,71 @@ def _inventory(plan, limit, tile_bytes):
         raise ValueError("rank resident byte accounting differs")
     if not 0 <= growth <= 4 << 30:
         raise ValueError("native weight layout exceeds its 4 GiB cap")
-    if _uint(resident + growth) > limit:
-        raise ValueError("rank weight budget cannot hold persistent storage")
-    return growth, scale_bound
+    if _uint(sum(arenas.values()) + scratch) > limit:
+        raise ValueError("rank weight budget cannot hold arenas and packing overlap")
+    return growth, scale_bound, arenas, scratch
 
 
 class RankWeights:
-    """Own loaded tensors; limit covers requested GPU bytes, including pack overlap.
+    """Own typed arenas and a reusable packing buffer within a GPU byte limit.
 
     CUDA allocator/context overhead and unrelated device storage need a caller
     reserve. host_bound_bytes bounds bulk buffers, not Python/FFI metadata: reader
     source buffer plus tile_bytes for raw/conversion work plus one wo_a scale array.
+    persistent_bytes counts tensor payloads; allocated_bytes includes alignment.
     """
 
     def __init__(self, device, plan, limit, host_bound_bytes):
         self.device, self.plan, self.limit = device, plan, limit
         self.tensors, self.packed, self.identity = {}, {}, {}
-        self.persistent_bytes = self.peak_bytes = 0
+        self.persistent_bytes = self.allocated_bytes = self.peak_bytes = 0
         self.host_bound_bytes = host_bound_bytes
-        self._storage, self._pending, self._buffer = {}, (), None
+        self._arenas, self._offsets, self._capacities = {}, {}, {}
+        self._scratch = self._buffer = None
+        self._scratch_capacity = self._scratch_offset = 0
+        self._pending = ()
         self.closed = self._retained = False
 
+    def _reserve(self, capacities, scratch):
+        self._capacities = capacities
+        for dtype, size in capacities.items():
+            self._arenas[dtype] = self.device.empty(
+                (size // _ELEMENT_BYTES[dtype],), dtype
+            )
+            self._offsets[dtype] = 0
+            self.allocated_bytes += size
+            self.peak_bytes = self.allocated_bytes
+        if scratch:
+            self._scratch = self.device.empty((scratch,), "uint8")
+            self._scratch_capacity = scratch
+            self.allocated_bytes += scratch
+            self.peak_bytes = self.allocated_bytes
+
     def _allocate(self, shape, dtype):
-        size = _size(*shape, {"uint8": 1, "bfloat16": 2, "float32": 4}[dtype])
-        if self.persistent_bytes + size > self.limit:
-            raise ValueError("rank weight budget exceeded during startup overlap")
-        value = self.device.empty(shape, dtype)
-        self._storage[id(value)] = value, size
+        size = _size(*shape, _ELEMENT_BYTES[dtype])
+        offset = self._offsets[dtype]
+        if offset + _aligned(size) > self._capacities[dtype]:
+            raise ValueError("rank weight arena exceeds its planned capacity")
+        value = self.device.view(
+            self._arenas[dtype], shape, offset // _ELEMENT_BYTES[dtype]
+        )
+        self._offsets[dtype] += _aligned(size)
         self.persistent_bytes += size
-        self.peak_bytes = max(self.peak_bytes, self.persistent_bytes)
         return value
 
-    def _drop(self, value):
-        _, size = self._storage.pop(id(value))
-        self.persistent_bytes -= size
+    def _temporary(self, shape, dtype):
+        size = _aligned(_size(*shape))
+        if dtype != "uint8" or self._scratch_offset + size > self._scratch_capacity:
+            raise ValueError("rank packing buffer exceeds its planned capacity")
+        value = self.device.view(self._scratch, shape, self._scratch_offset)
+        self._scratch_offset += size
+        return value
+
+    def _release_scratch(self):
+        self._synchronize()
+        self._scratch = None
+        self.allocated_bytes -= self._scratch_capacity
+        self._scratch_capacity = self._scratch_offset = 0
 
     def _synchronize(self):
         try:
@@ -223,9 +269,10 @@ class RankWeights:
         self._synchronize()
         self.tensors.clear()
         self.packed.clear()
-        self._storage.clear()
+        self._arenas.clear()
+        self._scratch = None
         self._buffer = None
-        self.persistent_bytes = 0
+        self.persistent_bytes = self.allocated_bytes = 0
         self.closed = True
 
     def __enter__(self):
@@ -241,7 +288,7 @@ class RankWeights:
                 raise
 
 
-def _upload(owner, reader, name, tile_bytes):
+def _upload(owner, reader, name, tile_bytes, *, temporary=False):
     import tvm_ffi
 
     spec = owner.plan.selections[name]
@@ -257,7 +304,8 @@ def _upload(owner, reader, name, tile_bytes):
             scales = np.empty(_shape(scale), np.uint8)
             if reader.read_into(scale_name, 0, scales) != scales.shape[0]:
                 raise ValueError("incomplete startup weight scale")
-        output = owner._allocate(shape, _DEVICE_DTYPES[promotion or spec.dtype])
+        allocate = owner._temporary if temporary else owner._allocate
+        output = allocate(shape, _DEVICE_DTYPES[promotion or spec.dtype])
         raw = np.frombuffer(
             owner._buffer, RAW_DTYPES[spec.dtype], count=rows * columns
         ).reshape((rows, *shape[1:]))
@@ -291,11 +339,12 @@ def _load_tensor(owner, reader, name, tile_bytes):
 
     value = scales = packed = None
     try:
-        value = _upload(owner, reader, name, tile_bytes)
         spec = owner.plan.selections[name]
+        padded = spec.dtype == "I8" and _shape(spec)[1] % 64 != 0
+        value = _upload(owner, reader, name, tile_bytes, temporary=padded)
         if spec.dtype in ("I8", "F8_E4M3") and name not in owner.plan.promotions:
             scale_name, _ = _scale(owner.plan, name)
-            scales = _upload(owner, reader, scale_name, tile_bytes)
+            scales = _upload(owner, reader, scale_name, tile_bytes, temporary=True)
             packed = prepare_weights(
                 owner.device,
                 Weights(value, scales),
@@ -303,11 +352,9 @@ def _load_tensor(owner, reader, name, tile_bytes):
                 allocate=owner._allocate,
             )
             owner.packed[name] = packed
-            if packed.encoded is not value:
-                owner._drop(value)
-            owner._drop(scales)
         else:
             owner.tensors[name] = value
+        owner._scratch_offset = 0
     finally:
         value = scales = packed = None
 
@@ -319,20 +366,25 @@ def _load_plan(root, verified_files, device, plan, *, limit, tile_bytes=16 << 20
         raise ValueError("rank weight budget must be an unsigned byte count")
     if type(tile_bytes) is not int or not 2 <= tile_bytes <= MAX_TILE_BYTES:
         raise ValueError("startup tile exceeds its byte budget")
-    growth, scale_bound = _inventory(plan, limit, tile_bytes)
+    growth, scale_bound, arenas, scratch = _inventory(plan, limit, tile_bytes)
     require_eager(device)
     owner = RankWeights(device, plan, limit, MAX_TILE_BYTES + tile_bytes + scale_bound)
     try:
+        owner._reserve(arenas, scratch)
         owner._buffer = bytearray(tile_bytes // 2)
         with EncodedReader(root, verified_files, plan.selections) as reader:
             for name, spec in sorted(plan.selections.items()):
                 if spec.dtype != "F8_E8M0":
                     _load_tensor(owner, reader, name, tile_bytes)
-            if owner.persistent_bytes != plan.resident_bytes + growth:
+            if (
+                owner.persistent_bytes != plan.resident_bytes + growth
+                or owner._offsets != arenas
+            ):
                 raise ValueError(
                     "native weight storage differs from startup accounting"
                 )
             owner.identity = reader.finish()
+        owner._release_scratch()
         owner._buffer = None
         return owner
     except BaseException:

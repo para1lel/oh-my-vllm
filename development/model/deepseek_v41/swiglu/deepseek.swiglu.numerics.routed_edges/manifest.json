@@ -1,0 +1,144 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "deepseek.swiglu.numerics.routed_edges",
+    "boundary": "deepseek.swiglu",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 2304,
+      "batch": 64,
+      "queries": 36,
+      "width": 2304
+    },
+    "mode": "eager",
+    "weights": [],
+    "options": {
+      "limit": 10,
+      "route": true,
+      "output_dtype": "bfloat16",
+      "query_unit": "routed-edge"
+    },
+    "outputs": [
+      "value"
+    ]
+  },
+  "checkpoint": {
+    "manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+    "files": {
+      "config.json": {
+        "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879",
+        "size": 3311
+      },
+      "inference/model.py": {
+        "sha256": "4e9ae23620edc8028ccc5d5fef552ab7fdc7dcd6f79608754fe9f67644056f65",
+        "size": 61549
+      },
+      "inference/vision.py": {
+        "sha256": "5d49edc196a4ef22384abe76d35a40098cbe1e74b586c8f66a2edff4f076b26c",
+        "size": 4457
+      }
+    }
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "source": {
+      "development/model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "development/model/deepseek_v41/reference_model.py": "f80b5ace539b134aaf6e722f6c63e4801822ead75b59bdb17617c6979d678e8a",
+      "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+      "development/model/deepseek_v41/reference_vision.py": "03b56dd92673cbeff28eb7f0e0b0145f2d950f7e4f6a330fbeb1b9efc031e0e8",
+      "development/model/deepseek_v41/engram.py": "23a9c6f40cdd74630ce47eea9ae1d503cd0f92a13958d11a5964b997b908e13b",
+      "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+      "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+      "development/operators/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+      "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+      "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+      "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+      "development/operators/reference/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+      "external/generate-swiglu-v1.py": "d75eb12d69eb57e105ff5c1721a4745536506c4a7af0d414ad3b07c3da3bf851",
+      "external/swiglu-policy-proposal-v1.json": "6c0f316e2ead5d94809db5d9930dfeaf665c9ecade69c91085301ebfcc4fad43"
+    },
+    "torch": "2.12.0+cu130",
+    "scope": "Isolated BF16 gate/up inputs, FP32 elementwise SwiGLU and optional FP32 per-row route, BF16 output before w2. Excludes projections, dispatch, quantization, reductions, timing and full-model acceptance."
+  },
+  "files": {
+    "inputs.gate.0000.npz": "f12bbbe01c257157b8572178aa76f5d411770a2ddbadd1c1631022cd9a278bf4",
+    "inputs.up.0000.npz": "a2ef0f5e6b5aaa0c99a3fa279b2fa22deae7e5a24c16ba8f4ccd5538f9def24f",
+    "inputs.route.0000.npz": "c4d751efd443209e40c7130d794a295d4090d9d7ef3549684204fbf2002752f3",
+    "expected.value.0000.npz": "820090834c42f33abb89dd60e0897c13fb8bf88abd3db315279943ad4b0696cd",
+    "expected.value.0001.npz": "ca3c64caea69700dcd854eb9a6196b0ae173588b1689e7c25df6e5d2bdaf6d84"
+  },
+  "tensors": {
+    "inputs.gate": {
+      "shape": [
+        2304,
+        2304
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.gate.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 5308416
+        }
+      ]
+    },
+    "inputs.up": {
+      "shape": [
+        2304,
+        2304
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.up.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 5308416
+        }
+      ]
+    },
+    "inputs.route": {
+      "shape": [
+        2304
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.route.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2304
+        }
+      ]
+    },
+    "expected.value": {
+      "shape": [
+        2304,
+        2304
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4193792
+        },
+        {
+          "file": "expected.value.0001.npz",
+          "key": "value",
+          "offset": 4193792,
+          "count": 1114624
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

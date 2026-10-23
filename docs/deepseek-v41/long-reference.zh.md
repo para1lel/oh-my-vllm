@@ -1,11 +1,10 @@
-# DeepSeek 长上下文参考生成
+# DeepSeek 长上下文参考
 
 ## 范围
 
-[生成器](../../development/model/deepseek_v41/reference_long_case.py) 提供两个提示词长度下的独立 CPU FP64 参考构建.
-它不启用 DeepSeek 推理, 也不证明服务容量.
-目前尚未固定端点产物.
-数值和性能限值是 [阶段计划](plan.zh.md) 中的独立前置条件.
+[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 中的 `load_long()` 加载四个冻结的 CPU FP64 端点向量.
+[夹具索引](fixtures.zh.md) 给出其产物身份.
+数值限值和服务容量是 [阶段计划](plan.zh.md) 中的独立前置条件.
 
 提示词重复 [短参考](reference.zh.md#短文本生成) 中的 16 个 token IDs.
 它使用 65537 tokens, 不采用位置偏移, 截断历史或近似窗口重放.
@@ -18,11 +17,11 @@
 
 ## 计算和状态
 
-生成器使用已有目标模型, 以及解码到 FP64 的原始量化检查点值.
+[生成器](../../development/model/deepseek_v41/reference_long_case.py) 使用目标模型, 以及解码到 FP64 的原始量化检查点值.
 它不使用原生运行时算子或运行时激活量化.
 [参考指南](reference.zh.md) 规定算术和逐层流式权重读取.
 
-Prefill 默认使用最多 2048 tokens 的连续分块.
+冻结产物使用最多 4096 tokens 的连续 prefill 分块.
 每个分块的已接受状态为下一个分块提供完整续算状态.
 端点之前的最后一个分块在该端点结束.
 分块之间不跳过或重复任何 token.
@@ -37,41 +36,23 @@ Prefill 默认使用最多 2048 tokens 的连续分块.
 
 ## 身份和发布
 
-工具在计算前验证完整检查点清单.
-它从已验证的字节缓冲区读取配置和分词器控制数据.
-短提示词必须编码为其固定的 16 个 IDs.
-压缩 token 词表必须与检查点配置一致.
-模型上下文必须能容纳提示词和一个 decode token.
+元数据绑定完整检查点清单, 15 个源码身份, 全部提示词 IDs, 依赖版本, 执行设置和完整数组哈希.
+生成期间, 检查点文件, 源码和参考环境必须保持不变.
+工具仅接受完整的有限 FP64 数组和新的输出路径.
 
-元数据包含全部提示词 IDs, 端点长度, decode tokens, 完整检查点身份, 源码身份, 依赖版本和 token 映射身份.
-它还包含 CPU 设置, 分块大小, 生成时间, 以及完整数组的形状, dtypes 和哈希.
-检查点文件状态和参考源码身份必须保持不变, 直到发布.
-最后一次检查在序列化之后, 排他链接发布产物之前执行.
-已有输出路径, 缺失数组, 错误形状, 非 FP64 数组和非有限值会导致错误.
-
-生成期间保持源码文件和参考环境不变.
 将生成日志和未经审查的产物保留在仓库外部.
-仅在独立身份和输出审查后冻结端点夹具.
 常规验收必须加载固定数组, 而不是生成新的预期输出.
 
 ## 续算状态
 
-每个提示词分块和端点 decode 分支完成后保存续算检查点.
-检查点包含提示词状态, 最后 logits, 已完成端点, decode tokens, 游标, 阶段和生成时间.
-保存的状态保留局部窗口, 部分压缩器, 来源 KV, index keys 和 Engram 历史.
-Decode 探测状态不替换提示词状态.
-
-续算检查点身份包括模型文件身份, 配置, 提示词 IDs, token 映射, 源码, 依赖, Python 版本和执行设置.
-文件使用未压缩 NPZ 数组和 JSON 元数据.
-加载使用 `allow_pickle=False`.
+每个完成的分块和端点分支都会生成完整提示词续算状态的检查点.
+检查点还保留已完成端点和生成时间.
 身份变化, 状态形状无效或数据损坏会导致错误.
-续算检查点文件不是端点 fixture.
 
-工具在原子替换续算检查点前完成文件同步.
-上一个有效版本为 `<stem>.previous.npz`.
-当前续算检查点损坏时, 工具报错, 不自动回退.
-必要时显式选择上一版本.
-重启后的生成时间从最后保存的值继续累计.
+工具在原子替换前完成文件同步.
+`<stem>.previous.npz` 保留上一个有效版本.
+工具不会自动回退.
+这些检查点文件不是端点 fixture.
 
 ## 命令
 
@@ -86,24 +67,17 @@ Decode 探测状态不替换提示词状态.
 CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
   -m development.model.deepseek_v41.reference_long_case \
   --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
-  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE"
+  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE" \
+  --threads 8 --projection-row-limit 2048 --chunk-size 4096
 ```
 
-默认设置为八个 CPU 线程, 每次权重读取 2048 个投影行, 每个分块 2048 个提示词行.
-分块大小选项接受 1 至 4096 的整数.
+此命令使用冻结产物的执行设置.
 不同分块大小可能改变浮点归约顺序.
-将记录的分块大小与冻结输出一起保留.
 
 中断后重复相同命令.
 已有状态文件提供经过验证的续算状态.
 如需选择上一版本, 将 `LONG_STATE` 设为该版本的路径.
 不使用 `--checkpoint-state` 时, 工具不保存续算状态.
 
-小规模检查将分块数学端点与整个前缀调用比较.
-它们还检查续算等价性, 身份拒绝, 检查点损坏和发布失败条件.
-它们不生成完整检查点输出:
-
-```bash
-CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
-  -m unittest development.model.deepseek_v41.test_reference_long_case
-```
+[小规模检查](../../development/model/deepseek_v41/test_reference_long_case.py) 覆盖分块与续算等价性, 身份, 检查点损坏和发布失败.
+它们不重新生成完整检查点输出.

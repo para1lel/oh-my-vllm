@@ -1,11 +1,10 @@
-# DeepSeek long-context reference generation
+# DeepSeek long-context reference
 
 ## Scope
 
-The [generator](../../development/model/deepseek_v41/reference_long_case.py) supplies independent CPU FP64 reference construction at two prompt lengths.
-It does not enable DeepSeek inference or prove service capacity.
-The endpoint artifacts are not fixed at this time.
-Numerical and performance limits are separate prerequisites in the [phase plan](plan.md).
+`load_long()` in the [fixture reader](../../development/model/deepseek_v41/fixtures.py) loads four frozen CPU FP64 endpoint vectors.
+The [fixture index](fixtures.md) gives their artifact identity.
+Numerical limits and service capacity are separate prerequisites in the [phase plan](plan.md).
 
 The prompt repeats the 16 token IDs from the [short reference](reference.md#short-text-generation).
 It uses 65537 tokens without a position offset, truncated history, or approximate window replay.
@@ -18,11 +17,11 @@ These selected boundaries do not prove 1048576-token service capacity or 64-requ
 
 ## Computation and state
 
-The generator uses the existing target model and original quantized checkpoint values decoded to FP64.
+The [generator](../../development/model/deepseek_v41/reference_long_case.py) uses the target model and original quantized checkpoint values decoded to FP64.
 It does not use native runtime operators or runtime activation quantization.
 The [reference guide](reference.md) specifies the arithmetic and layer-streamed weight reads.
 
-Prefill uses contiguous chunks of at most 2048 tokens by default.
+The frozen artifact uses contiguous prefill chunks of at most 4096 tokens.
 The accepted state from each chunk supplies the next chunk's full continuation state.
 The last chunk before an endpoint ends at that endpoint.
 No token is skipped or repeated between chunks.
@@ -37,41 +36,23 @@ The artifact contains four FP64 arrays: `prefill_16385`, `decode_16385`, `prefil
 
 ## Identity and publication
 
-The tool verifies the full checkpoint manifest before computation.
-It reads configuration and tokenizer controls from verified byte buffers.
-The short prompt must encode to its fixed 16 IDs.
-The compressed-token vocabulary must agree with the checkpoint configuration.
-The model context must have space for the prompt and one decode token.
+The metadata binds the full checkpoint manifest, 15 source identities, all prompt IDs, dependency versions, execution settings, and complete array hashes.
+Checkpoint files, sources, and the reference environment must stay unchanged during generation.
+The tool accepts only complete finite FP64 arrays and a new output path.
 
-The metadata includes all prompt IDs, endpoint lengths, decode tokens, full checkpoint identity, source identities, dependency versions, and token-map identity.
-It also includes CPU settings, chunk size, generation time, and full array shapes, dtypes, and hashes.
-Checkpoint file states and reference source identities must stay unchanged until publication.
-The final check occurs after serialization and before an exclusive link publishes the artifact.
-Existing output paths, missing arrays, wrong shapes, non-FP64 arrays, and nonfinite values cause errors.
-
-Keep the source files and reference environment unchanged during generation.
 Keep generation logs and unreviewed artifacts external to the repository.
-Freeze endpoint fixtures only after independent identity and output review.
 Normal acceptance must load fixed arrays instead of generating new expected outputs.
 
 ## Resume state
 
-Checkpoints follow each completed prompt chunk and endpoint decode branch.
-They contain prompt state, last logits, completed endpoints, decode tokens, cursor, phase, and generation time.
-Saved state keeps local windows, partial compressors, source KV, index keys, and Engram history.
-The decode probe state does not replace prompt state.
+Each completed chunk and endpoint branch produces a checkpoint of the complete prompt continuation state.
+The checkpoint also keeps completed endpoints and generation time.
+Identity changes, invalid state shapes, and damaged data cause errors.
 
-Checkpoint identity includes model file identities, configuration, prompt IDs, token map, sources, dependencies, Python version, and execution settings.
-The files use uncompressed NPZ arrays and JSON metadata.
-Loading uses `allow_pickle=False`.
-Changed identities, invalid state shapes, and damaged data cause errors.
-Checkpoint files are not endpoint fixtures.
-
-The tool completes file synchronization before atomic checkpoint replacement.
-The previous valid generation is `<stem>.previous.npz`.
-The tool rejects a damaged current checkpoint without automatic fallback.
-Select the previous generation explicitly when necessary.
-Generation time continues from the last saved value after a restart.
+The tool completes file synchronization before atomic replacement.
+`<stem>.previous.npz` keeps the previous valid generation.
+The tool does not fall back automatically.
+These checkpoint files are not endpoint fixtures.
 
 ## Commands
 
@@ -86,24 +67,17 @@ Set `LONG_STATE` to a different external NPZ path.
 CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
   -m development.model.deepseek_v41.reference_long_case \
   --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
-  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE"
+  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE" \
+  --threads 8 --projection-row-limit 2048 --chunk-size 4096
 ```
 
-Defaults are eight CPU threads, 2048 projection rows per weight read, and 2048 prompt rows per chunk.
-The chunk-size option accepts integers from 1 through 4096.
+This command uses the frozen artifact's execution settings.
 Different chunk sizes can change floating-point reduction order.
-Keep the recorded chunk size with the frozen outputs.
 
 Repeat the same command after interruption.
 An existing state file supplies the validated continuation.
 To select the previous generation, set `LONG_STATE` to its path.
 Without `--checkpoint-state`, the tool does not save continuation state.
 
-The small checks compare chunked mathematical endpoints with whole-prefix calls.
-They also check resume equivalence, identity rejection, damaged checkpoints, and publication failure conditions.
-They do not generate full-checkpoint outputs:
-
-```bash
-CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
-  -m unittest development.model.deepseek_v41.test_reference_long_case
-```
+The [small checks](../../development/model/deepseek_v41/test_reference_long_case.py) cover chunk and resume equivalence, identities, damaged checkpoints, and publication failures.
+They do not regenerate full-checkpoint outputs.

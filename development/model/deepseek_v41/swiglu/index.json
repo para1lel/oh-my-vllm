@@ -1,0 +1,254 @@
+{
+  "version": "deepseek-swiglu-numerics-v1",
+  "policy_sha256": "6c0f316e2ead5d94809db5d9930dfeaf665c9ecade69c91085301ebfcc4fad43",
+  "checkpoint_manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+  "reference_sources": {
+    "development/model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/model/deepseek_v41/reference_model.py": "f80b5ace539b134aaf6e722f6c63e4801822ead75b59bdb17617c6979d678e8a",
+    "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+    "development/model/deepseek_v41/reference_vision.py": "03b56dd92673cbeff28eb7f0e0b0145f2d950f7e4f6a330fbeb1b9efc031e0e8",
+    "development/model/deepseek_v41/engram.py": "23a9c6f40cdd74630ce47eea9ae1d503cd0f92a13958d11a5964b997b908e13b",
+    "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+    "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+    "development/operators/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+    "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+    "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+    "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+    "development/operators/reference/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+    "external/generate-swiglu-v1.py": "d75eb12d69eb57e105ff5c1721a4745536506c4a7af0d414ad3b07c3da3bf851",
+    "external/swiglu-policy-proposal-v1.json": "6c0f316e2ead5d94809db5d9930dfeaf665c9ecade69c91085301ebfcc4fad43"
+  },
+  "cases": {
+    "shared_decode": {
+      "case": {
+        "id": "deepseek.swiglu.numerics.shared_decode",
+        "boundary": "deepseek.swiglu",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 1,
+          "batch": 1,
+          "queries": 1,
+          "width": 2304
+        },
+        "mode": "graph",
+        "weights": [],
+        "options": {
+          "limit": 10,
+          "route": false,
+          "output_dtype": "bfloat16",
+          "query_unit": "token"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "7c27c0fb011062ca1ac8560ffeff05cc130bf0313c1cbe8edba40b71ac75e49f",
+      "limits": {
+        "case_sha256": "5550cef9f788180642c499fce4c93b1ccadf46d72d522c0bffbbd64b27580fcc",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.003910064697265625,
+            "max_abs": [
+              0.390988718866188
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "7c27c0fb011062ca1ac8560ffeff05cc130bf0313c1cbe8edba40b71ac75e49f"
+      }
+    },
+    "tp_routed": {
+      "case": {
+        "id": "deepseek.swiglu.numerics.tp_routed",
+        "boundary": "deepseek.swiglu",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 128,
+          "batch": 4,
+          "queries": 32,
+          "width": 576
+        },
+        "mode": "eager",
+        "weights": [],
+        "options": {
+          "limit": 10,
+          "route": true,
+          "output_dtype": "bfloat16",
+          "query_unit": "routed-edge"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "8e249dc6fb3a3795d7ff477e346b80913eb55ad8095582aa0dbfb9e11eef1a5a",
+      "limits": {
+        "case_sha256": "a6eddabc0ed2ee198cca3fef86af1d65b9085036cb4e1a1c0068c4aaeb1694d7",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.003910064697265625,
+            "max_abs": [
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "8e249dc6fb3a3795d7ff477e346b80913eb55ad8095582aa0dbfb9e11eef1a5a"
+      }
+    },
+    "routed_edges": {
+      "case": {
+        "id": "deepseek.swiglu.numerics.routed_edges",
+        "boundary": "deepseek.swiglu",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 2304,
+          "batch": 64,
+          "queries": 36,
+          "width": 2304
+        },
+        "mode": "eager",
+        "weights": [],
+        "options": {
+          "limit": 10,
+          "route": true,
+          "output_dtype": "bfloat16",
+          "query_unit": "routed-edge"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "0d35f4d5db2c6ea5454eeb979322544ca03f96d6b9db64df76270852922d8d6c",
+      "limits": {
+        "case_sha256": "e0116fad2cb15ab705b96dc15d062346a2bbc466625595fa18e85b953bcefa15",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.003910064697265625,
+            "max_abs": [
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07,
+              0.586483078299282,
+              0.586483078299282,
+              0.586483078299282,
+              1e-07,
+              1e-07,
+              1.0560474344464634e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "0d35f4d5db2c6ea5454eeb979322544ca03f96d6b9db64df76270852922d8d6c"
+      }
+    },
+    "vision": {
+      "case": {
+        "id": "deepseek.swiglu.numerics.vision",
+        "boundary": "deepseek.swiglu",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 128,
+          "batch": 4,
+          "queries": 32,
+          "width": 2816
+        },
+        "mode": "eager",
+        "weights": [],
+        "options": {
+          "limit": 0,
+          "route": false,
+          "output_dtype": "bfloat16",
+          "query_unit": "patch"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "bcf6bd8dc2213ebf59cf99036507269a77190f1656969a77477d9d852abac3f5",
+      "limits": {
+        "case_sha256": "59f12e88e608fcca8d58c122eee1ec9e06611090e1482dbb7aef65d10ecda242",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.003910064697265625,
+            "max_abs": [
+              0.7507278092439204,
+              1e-07,
+              1e-07,
+              1e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "bcf6bd8dc2213ebf59cf99036507269a77190f1656969a77477d9d852abac3f5"
+      }
+    }
+  }
+}

@@ -287,7 +287,7 @@ class EncodedCheckpointWeights(unittest.TestCase):
             with (
                 patch("tvm_ffi.from_dlpack", new=lambda value: value),
                 runtime._load_plan(
-                    root, manifest["files"], device, plan, limit=288, tile_bytes=2048
+                    root, manifest["files"], device, plan, limit=1024, tile_bytes=2048
                 ) as loaded,
             ):
                 np.testing.assert_array_equal(
@@ -312,8 +312,10 @@ class EncodedCheckpointWeights(unittest.TestCase):
                 )
                 self.assertFalse(loaded.packed)
                 self.assertEqual(
-                    (loaded.persistent_bytes, loaded.peak_bytes), (288, 288)
+                    (loaded.persistent_bytes, loaded.peak_bytes), (288, 1024)
                 )
+                self.assertEqual(loaded.allocated_bytes, 1024)
+                self.assertEqual(len(device.allocations), 2)
                 self.assertEqual(
                     loaded.identity["model.safetensors"],
                     manifest["files"]["model.safetensors"]["sha256"],
@@ -322,6 +324,11 @@ class EncodedCheckpointWeights(unittest.TestCase):
             self.assertEqual(device.live_bytes, 0)
             self.assertFalse(device.pending)
             count = len(device.allocations)
+            with self.assertRaisesRegex(ValueError, "budget"):
+                runtime._load_plan(
+                    root, manifest["files"], device, plan, limit=1023, tile_bytes=2048
+                )
+            self.assertEqual(len(device.allocations), count)
             with self.assertRaises(ValueError):
                 runtime.load_rank(
                     root, manifest["files"], device, strategy="TP4", rank=3, limit=288
@@ -338,11 +345,14 @@ class EncodedCheckpointWeights(unittest.TestCase):
 
         def pack(device, weights, *, bits, allocate):
             self.assertEqual(weights.encoded.dtype, np.uint8)
-            np.testing.assert_array_equal(
-                weights.encoded.view(np.int8), np.full((32, 32), -98, np.int8)
-            )
+            code = int(weights.encoded.view(np.int8)[0, 0])
+            self.assertIn(code, (-98, -37))
+            np.testing.assert_array_equal(weights.encoded.view(np.int8), code)
             encoded = allocate((32, 64), "uint8")
             scales = allocate((512,), "uint8")
+            encoded[:, :32] = weights.encoded
+            encoded[:, 32:] = 0
+            scales[:] = 127
             device.synchronize_compute()
             if mode == "finish":
                 path = root / "config.json"
@@ -366,6 +376,16 @@ class EncodedCheckpointWeights(unittest.TestCase):
                     "packed.weight": ("I8", np.full((32, 32), -98, np.int8)),
                     "packed.scale": ("F8_E8M0", np.full((32, 2), 127, np.uint8)),
                 }
+                if mode == "success":
+                    extra.update(
+                        {
+                            "zpacked.weight": ("I8", np.full((32, 32), -37, np.int8)),
+                            "zpacked.scale": (
+                                "F8_E8M0",
+                                np.full((32, 2), 127, np.uint8),
+                            ),
+                        }
+                    )
                 if mode == "nonfinite":
                     extra = {"head.weight": ("BF16", np.array([0x7F80], "<u2"))}
                 _, manifest = reference_fixture(root, extra)
@@ -376,14 +396,22 @@ class EncodedCheckpointWeights(unittest.TestCase):
                 plan = RankPlan(
                     selections,
                     {"head.weight": "F32"} if mode == "nonfinite" else {},
-                    4 if mode == "nonfinite" else 1088,
-                    2 if mode == "nonfinite" else 1088,
+                    4 if mode == "nonfinite" else 2176 if mode == "success" else 1088,
+                    2 if mode == "nonfinite" else 2176 if mode == "success" else 1088,
                     "TP4",
                     0,
                 )
                 device.fail_copy = mode in ("copy", "completion")
                 device.fail_sync = mode in ("completion", "sync")
-                limit = 3647 if mode == "overlap" else 2559 if mode == "final" else 3648
+                limit = (
+                    3839
+                    if mode == "overlap"
+                    else 2559
+                    if mode == "final"
+                    else 6400
+                    if mode == "success"
+                    else 3840
+                )
                 with (
                     patch("tvm_ffi.from_dlpack", new=lambda value: value),
                     patch.object(workspace, "prepare_weights", new=pack),
@@ -398,12 +426,24 @@ class EncodedCheckpointWeights(unittest.TestCase):
                             limit=limit,
                             tile_bytes=2048,
                         ) as loaded:
-                            self.assertEqual(set(loaded.packed), {"packed.weight"})
+                            self.assertEqual(
+                                set(loaded.packed), {"packed.weight", "zpacked.weight"}
+                            )
                             self.assertEqual(
                                 (loaded.persistent_bytes, loaded.peak_bytes),
-                                (2560, 3648),
+                                (5120, 6400),
                             )
-                            self.assertEqual(device.live_bytes, 2560)
+                            self.assertEqual(device.live_bytes, 5120)
+                            self.assertEqual(loaded.allocated_bytes, 5120)
+                            self.assertEqual(len(device.allocations), 2)
+                            for name, code in (
+                                ("packed.weight", -98),
+                                ("zpacked.weight", -37),
+                            ):
+                                np.testing.assert_array_equal(
+                                    loaded.packed[name].encoded[:, :32].view(np.int8),
+                                    code,
+                                )
                     elif mode == "body":
                         with (
                             self.assertRaisesRegex(ValueError, "body failure"),

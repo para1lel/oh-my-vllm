@@ -5,6 +5,8 @@ from pathlib import Path
 
 import numpy as np
 
+LONG_PATH = Path(__file__).with_name("long-context.npz")
+LONG_SHA256 = "001cc434d3adb106fc490286d3a9625b18326b83d5fcca7deb83a553b11ea474"
 SHORT_PATH = Path(__file__).with_name("reference.npz")
 SHORT_SHA256 = "3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0"
 CODEC_PATH = Path(__file__).with_name("codec.json")
@@ -47,6 +49,10 @@ ROUTING_PATH = Path(__file__).with_name("routing")
 ROUTING_SHA256 = "bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28"
 PROJECTION_PATH = Path(__file__).with_name("projection")
 PROJECTION_SHA256 = "db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6"
+NORM_ROPE_PATH = Path(__file__).with_name("norm-rope")
+NORM_ROPE_SHA256 = "67d7400846ae0ce81fc4a4174d281e500ebfeff21faa82d303e34b1593a2c47a"
+SWIGLU_PATH = Path(__file__).with_name("swiglu")
+SWIGLU_SHA256 = "1cdbf7ca0b866fb633232a34cd65d95b9cfa3590b74a01fa994b155702de2de1"
 STARTUP_PROMOTION_PATH = Path(__file__).with_name("startup-promotion.npz")
 STARTUP_PROMOTION_SHA256 = (
     "0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51"
@@ -120,6 +126,14 @@ def load_routing(path=ROUTING_PATH):
 
 def load_projection(path=PROJECTION_PATH):
     return _load_operator_bundle(path, PROJECTION_SHA256)
+
+
+def load_norm_rope(path=NORM_ROPE_PATH):
+    return _load_operator_bundle(path, NORM_ROPE_SHA256)
+
+
+def load_swiglu(path=SWIGLU_PATH):
+    return _load_operator_bundle(path, SWIGLU_SHA256)
 
 
 def load_startup_promotion(path=STARTUP_PROMOTION_PATH):
@@ -321,6 +335,37 @@ def load_dspark(path=DSPARK_PATH):
             }
         ):
             raise ValueError(f"DSpark-reference full-vector identity differs: {name}")
+    return metadata, arrays
+
+
+def load_long(path=LONG_PATH):
+    data = Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != LONG_SHA256:
+        raise ValueError("frozen long-reference artifact identity differs")
+    names = {
+        f"{stage}_{length}"
+        for stage in ("prefill", "decode")
+        for length in (16385, 65537)
+    }
+    with np.load(io.BytesIO(data), allow_pickle=False) as stored:
+        if set(stored.files) != {"metadata", *names}:
+            raise ValueError("long-reference vocabulary endpoints are incomplete")
+        metadata = json.loads(stored["metadata"].item())
+        arrays = {name: stored[name].copy() for name in sorted(names)}
+    for name, value in arrays.items():
+        if (
+            value.shape != (129280,)
+            or value.dtype != np.float64
+            or not np.isfinite(value).all()
+            or metadata["arrays"][name]
+            != {
+                "shape": [129280],
+                "dtype": "float64",
+                "sha256": hashlib.sha256(value.astype("<f8").tobytes()).hexdigest(),
+            }
+        ):
+            raise ValueError(f"long-reference full-vector identity differs: {name}")
+        value.setflags(write=False)
     return metadata, arrays
 
 

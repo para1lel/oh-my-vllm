@@ -11,9 +11,9 @@ Phases 1 and 2 are implemented.
 Phase 0 reference and allocation work continues.
 
 Phase 3 has isolated exact quantization, Engram hash, and shared pinned-host lookup operators.
-Isolated hyper-connection, routing, and encoded projection operators use frozen field limits.
+Isolated hyper-connection, routing, projection, RMS, supplied-coefficient RoPE, and SwiGLU operators use frozen field limits.
 Complete Engram tables load into one sealed shared store.
-Rank weights use bounded loading, exact startup conversions, and native projection layouts.
+Rank weights use bounded loading, exact startup conversions, and aligned storage for native projection layouts.
 Model integration is pending.
 Full-model computation and Phases 4-8 are pending.
 
@@ -32,9 +32,8 @@ Full-model computation and Phases 4-8 are pending.
 ## Phase gates
 
 Each operator must have frozen mathematics, fixtures, and numerical limits before implementation.
-Isolated exact conversions and integer hashes can proceed while compound limits and long references are pending.
-This exception does not permit performance tuning without frozen latency limits.
-It does not permit full-model integration before the applicable Phase 0 gates close.
+Do not tune performance before latency limits are frozen.
+Do not integrate the full model before the applicable Phase 0 gates close.
 
 Do not modify sources or environments used by active reference generators.
 Keep existing numerical fixtures and limits unchanged during candidate acceptance.
@@ -52,13 +51,12 @@ Completed prerequisites:
 
 - Check all 48 shards, tensor layouts, scales, and source identities.
 - Define [model mathematics](model.md), [state ownership](state.md), [sampling](sampling.md), and [media encoding](video.md).
-- Store independent [short, DSpark, media, codec, and exact-operator fixtures](fixtures.md).
+- Store independent [short, DSpark, media, long-context, codec, and operator fixtures](fixtures.md).
 - Implement layer-streamed FP64 reference generation and the separate released-source capture tool.
 - Define the three parallel strategies and the exact measurement matrix.
 
 Next work:
 
-- Complete and freeze the [long-context reference](long-reference.md).
 - Freeze compound numerical limits and operator latency limits before tuning.
 - Close the [allocation plan's open bounds](memory.md#6-allocation-caps-and-open-bounds) for 64 requests at the context limit.
 

@@ -12,18 +12,18 @@ DeepSeek physical execution and state selection are pending.
 Qwen keeps its single-worker path, with prefill dispatch, block scheduling, and host-cache startup fixes.
 
 Phase 3 has isolated quantization, Engram hash, shared pinned-host lookup, hyper-connections, routing, and encoded projections with [fixed fixtures](deepseek-v41/fixtures.md).
+RMS, supplied-coefficient RoPE, and SwiGLU also have isolated implementations.
 The [Engram loader](deepseek-v41/memory.md#4-weight-bytes-and-formats) supplies complete encoded tables in one shared store.
-Rank weights use bounded loading, exact startup conversions, and native projection layouts.
+Rank weights use bounded loading, exact startup conversions, and aligned storage for native projection layouts.
 Model integration is pending.
+
 The [reference tools](deepseek-v41/reference.md) separate FP64 mathematics, source-precision quantization, and released-source diagnostics.
-Phase 0 compound numerical limits, long-context endpoints, and physical allocation bounds are pending.
+Phase 0 compound numerical limits and physical allocation bounds are pending.
 
 ## Next actions
 
-- Generate the [long-context fixture](deepseek-v41/long-reference.md).
 - Complete compound numerical limits and [allocation bounds](deepseek-v41/memory.md) before full-model integration.
 - Continue the other operators and Engram model integration after their applicable gates close.
-- Replace [Qwen results](deepseek-v41/qwen-results.md) only after the complete required HTTP regression.
 
 Use the [test scope](testing.md), [execution rules](execution.md), and [delivery procedure](../CONTRIBUTING.md#delivery).
 Keep host settings and process records in ignored `LOCAL.md`.
