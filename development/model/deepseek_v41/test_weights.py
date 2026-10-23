@@ -1,5 +1,7 @@
 import copy
+import hashlib
 import json
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -64,6 +66,128 @@ def reference_fixture(root, extra=None, config=None):
     )
     write_shard(root / "model.safetensors", header, payload)
     return layout, identity.scan_checkpoint(root, layout)
+
+
+def shared_fixture(root):
+    config = checkpoint_config()
+    config["text_config"]["engram_num_embeddings"] = [3, 5]
+    extra = {
+        "layers.1.engram.embed.weight": ("F8_E4M3", np.full((3, 256), 0x38, np.uint8)),
+        "layers.1.engram.embed.scale": ("F8_E8M0", np.full((3, 8), 128, np.uint8)),
+        "layers.14.engram.embed.weight": ("F8_E4M3", np.full((5, 256), 0xBC, np.uint8)),
+        "layers.14.engram.embed.scale": ("F8_E8M0", np.full((5, 8), 127, np.uint8)),
+    }
+    _, manifest = reference_fixture(root, extra, config)
+    return manifest["files"]
+
+
+class SharedEngramWeights(unittest.TestCase):
+    def test_load_keeps_encoded_ranges_and_seals_one_bounded_store(self):
+        from oh_my_vllm.models.deepseek_v41.engram import load_engram
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = shared_fixture(root)
+            with load_engram(root, files, limit=4096, read_bytes=17) as loaded:
+                self.assertTrue(loaded.shared.sealed)
+                self.assertEqual(loaded.shared.size, 2112)
+                self.assertEqual(loaded.shared.mapped_bytes, 4096)
+                self.assertEqual(set(loaded.tables), {1, 14})
+                for layer, rows, weight, scale in (
+                    (1, 3, 0x38, 128),
+                    (14, 5, 0xBC, 127),
+                ):
+                    table = loaded.tables[layer]
+                    self.assertEqual(table.rows, rows)
+                    self.assertEqual(
+                        os.pread(
+                            loaded.shared.fileno(), rows * 256, table.table_offset
+                        ),
+                        bytes([weight]) * (rows * 256),
+                    )
+                    self.assertEqual(
+                        os.pread(loaded.shared.fileno(), rows * 8, table.scale_offset),
+                        bytes([scale]) * (rows * 8),
+                    )
+                with self.assertRaises(OSError):
+                    os.pwrite(loaded.shared.fileno(), b"x", 0)
+                descriptor = os.dup(loaded.shared.fileno())
+            try:
+                self.assertEqual(os.fstat(descriptor).st_size, 4096)
+                with self.assertRaises(RuntimeError):
+                    loaded.shared.fileno()
+            finally:
+                os.close(descriptor)
+
+    def test_rejects_unverified_changed_and_invalid_checkpoint_bytes(self):
+        from oh_my_vllm.models.deepseek_v41.engram import load_engram
+
+        for mode in ("digest", "payload", "truncated", "shape", "index", "link", "cap"):
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
+                root = Path(directory)
+                files = shared_fixture(root)
+                shard = root / "model.safetensors"
+                if mode == "digest":
+                    files[shard.name]["sha256"] = None
+                elif mode == "payload":
+                    with shard.open("r+b") as source:
+                        source.seek(-1, 2)
+                        source.write(b"\xff")
+                elif mode == "truncated":
+                    shard.write_bytes(shard.read_bytes()[:-1])
+                elif mode in ("shape", "index"):
+                    name = (
+                        "config.json"
+                        if mode == "shape"
+                        else "model.safetensors.index.json"
+                    )
+                    path = root / name
+                    data = json.loads(path.read_text())
+                    if mode == "shape":
+                        data["text_config"]["engram_num_embeddings"][0] = 4
+                    else:
+                        data["weight_map"]["layers.1.engram.embed.scale"] = "../outside"
+                    path.write_text(json.dumps(data))
+                    files[name] = {
+                        "size": path.stat().st_size,
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    }
+                elif mode == "link":
+                    shard.rename(root / "renamed")
+                    shard.symlink_to("renamed")
+                with self.assertRaises((ValueError, OSError)):
+                    load_engram(root, files, limit=2112 if mode == "cap" else 4096)
+
+    def test_interrupted_or_changed_load_closes_partial_shared_storage(self):
+        from oh_my_vllm.models.deepseek_v41.engram import load_engram
+        from oh_my_vllm.operators.engram.shared import SharedWeightFile
+
+        append = SharedWeightFile.append
+        for mode in ("interrupt", "change"):
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
+                root = Path(directory)
+                files = shared_fixture(root)
+                owners = []
+
+                def inject(owner, data, owners=owners, mode=mode, root=root):
+                    result = append(owner, data)
+                    if not owners:
+                        owners.append(owner)
+                        if mode == "interrupt":
+                            raise KeyboardInterrupt
+                        path = root / "config.json"
+                        path.write_bytes(path.read_bytes() + b" ")
+                    return result
+
+                with (
+                    patch.object(SharedWeightFile, "append", new=inject),
+                    self.assertRaises(
+                        KeyboardInterrupt if mode == "interrupt" else ValueError
+                    ),
+                ):
+                    load_engram(root, files, limit=4096, read_bytes=17)
+                self.assertEqual(len(owners), 1)
+                self.assertIsNone(owners[0].fd)
 
 
 class ReferenceWeights(unittest.TestCase):

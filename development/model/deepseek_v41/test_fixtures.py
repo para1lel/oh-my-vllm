@@ -463,8 +463,28 @@ class FrozenFixtures(unittest.TestCase):
             [0, 0x8000, 0, 2, 0x8000, 0x8002, 1],
         )
         self.assertTrue(all(not value.flags.writeable for value in lookup.values()))
+        checkpoint_loader = getattr(fixtures, "load_engram_checkpoint", None)
+        self.assertTrue(
+            callable(checkpoint_loader), "checkpoint lookup fixture is missing"
+        )
+        checkpoint_metadata, checkpoint = checkpoint_loader()
+        self.assertEqual(
+            checkpoint_metadata["checkpoint_manifest_sha256"],
+            fixtures.CHECKPOINT_MANIFEST_SHA256,
+        )
+        for layer, rows in ((1, 384006168), (14, 384016682)):
+            prefix = str(layer)
+            self.assertEqual(checkpoint_metadata["cases"][prefix]["rows"], rows)
+            self.assertEqual(
+                checkpoint[prefix + ".expected_bf16_bits"].shape, (32, 256)
+            )
+            self.assertIn(rows - 1, checkpoint[prefix + ".indices"])
+        self.assertTrue(all(not value.flags.writeable for value in checkpoint.values()))
         with TemporaryDirectory() as directory:
             path = Path(directory) / "lookup.npz"
+            path.write_bytes(fixtures.ENGRAM_CHECKPOINT_PATH.read_bytes() + b"extra")
+            with self.assertRaisesRegex(ValueError, "identity"):
+                checkpoint_loader(path)
             original = fixtures.ENGRAM_LOOKUP_PATH.read_bytes()
             path.write_bytes(original + b"extra")
             with self.assertRaisesRegex(ValueError, "identity"):
@@ -498,9 +518,11 @@ class FrozenFixtures(unittest.TestCase):
                 "'development.model.deepseek_v41.quantization', "
                 "'development.model.deepseek_v41.reference_quantization')}); "
                 "from development.model.deepseek_v41.fixtures "
-                "import load_exact_operators, load_engram_lookup; "
+                "import load_exact_operators, load_engram_lookup, "
+                "load_engram_checkpoint; "
                 "assert len(load_exact_operators()[1]) == 4; "
-                "assert len(load_engram_lookup()[1]) == 4",
+                "assert len(load_engram_lookup()[1]) == 4; "
+                "assert len(load_engram_checkpoint()[1]) == 8",
             ],
             check=True,
         )

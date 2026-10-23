@@ -13,7 +13,9 @@ from oh_my_vllm.operators.engram.shared import SharedWeightFile
 from oh_my_vllm.operators.runtime.native import load
 
 from development.model.deepseek_v41.fixtures import (
+    ENGRAM_CHECKPOINT_SHA256,
     ENGRAM_LOOKUP_SHA256,
+    load_engram_checkpoint,
     load_engram_lookup,
 )
 
@@ -22,6 +24,55 @@ from .storage import equal_bits, storage_dtype
 
 TABLE_OFFSET = 64
 SCALE_OFFSET = TABLE_OFFSET + 16 * 256 + 32
+
+
+def checkpoint_cases(device, table, tables):
+    metadata, arrays = load_engram_checkpoint()
+    checks = []
+    for layer, placement in tables.items():
+        prefix = str(layer)
+        require(
+            placement.rows == metadata["cases"][prefix]["rows"],
+            "loaded checkpoint row count differs from the fixed fixture",
+        )
+        for rows in (0, 1, 64, 384):
+            positions = np.arange(rows * 24).reshape(rows, 24) % 32
+            indices = arrays[prefix + ".indices"][positions].copy()
+            expected = arrays[prefix + ".expected_bf16_bits"][positions]
+            plan = lookup.make_plan(
+                rows=rows,
+                heads=24,
+                table_rows=placement.rows,
+                table_offset=placement.table_offset,
+                scale_offset=placement.scale_offset,
+            )
+            workspace = lookup.prepare(plan, device, table)
+            try:
+                values = device.upload(indices)
+
+                def operation(workspace=workspace, values=values):
+                    workspace.run(values)
+
+                def check(workspace=workspace, expected=expected):
+                    output, status = workspace.outputs
+                    require(
+                        equal_bits(device.download(output, np.uint16), expected),
+                        "original checkpoint lookup BF16 bits differ",
+                    )
+                    require(
+                        not device.download(status, np.uint8).any(),
+                        "original checkpoint lookup returned invalid rows",
+                    )
+
+                execute_modes(device, (workspace,), operation, check)
+            finally:
+                device.synchronize()
+                workspace.close()
+            checks.append(
+                {"layer": layer, "rows": rows, "heads": 24, "modes": ["eager", "graph"]}
+            )
+    require(set(tables) == {1, 14}, "checkpoint lookup omitted an Engram layer")
+    return {"fixture_sha256": ENGRAM_CHECKPOINT_SHA256, "checks": checks}
 
 
 def lookup_payload(arrays):

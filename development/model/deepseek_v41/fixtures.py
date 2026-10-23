@@ -32,6 +32,13 @@ ENGRAM_LOOKUP_SHA256 = (
 ENGRAM_LOOKUP_METADATA_SHA256 = (
     "5833b226c5c3914ed11a6bbbf60a89e989a280e18f43142bfb1e77944a6dbada"
 )
+ENGRAM_CHECKPOINT_PATH = Path(__file__).with_name("engram-checkpoint.npz")
+ENGRAM_CHECKPOINT_SHA256 = (
+    "967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce"
+)
+ENGRAM_CHECKPOINT_METADATA_SHA256 = (
+    "90b9b52d5e371c375d13d4c4a4fae397cc393689aee0123961fde355dee4550a"
+)
 CHECKPOINT_MANIFEST_SHA256 = (
     "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
 )
@@ -77,15 +84,26 @@ DSPARK_INPUTS = {
 
 def load_engram_lookup(path=ENGRAM_LOOKUP_PATH):
     """Load encoded local lookup inputs and exact BF16 bits without an oracle."""
+    return _load_engram(path, ENGRAM_LOOKUP_SHA256, ENGRAM_LOOKUP_METADATA_SHA256)
+
+
+def load_engram_checkpoint(path=ENGRAM_CHECKPOINT_PATH):
+    """Load original checkpoint samples without checkpoint or runtime access."""
+    return _load_engram(
+        path, ENGRAM_CHECKPOINT_SHA256, ENGRAM_CHECKPOINT_METADATA_SHA256
+    )
+
+
+def _load_engram(path, digest, metadata_digest):
     data = Path(path).read_bytes()
-    if hashlib.sha256(data).hexdigest() != ENGRAM_LOOKUP_SHA256:
+    if hashlib.sha256(data).hexdigest() != digest:
         raise ValueError("frozen Engram lookup artifact identity differs")
     with np.load(io.BytesIO(data), allow_pickle=False) as stored:
         metadata = json.loads(stored["metadata"].item())
         canonical = json.dumps(
             metadata, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode()
-        if hashlib.sha256(canonical).hexdigest() != ENGRAM_LOOKUP_METADATA_SHA256:
+        if hashlib.sha256(canonical).hexdigest() != metadata_digest:
             raise ValueError("Engram lookup case or provenance differs")
         names = set(metadata["arrays"])
         if (

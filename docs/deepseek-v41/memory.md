@@ -119,12 +119,17 @@ Their scales contain 6144182800 bytes.
 The authoritative pinned total is 202758032400 bytes, not four copies.
 Engram projections stay on devices and are included in the rank totals.
 
-The isolated [Engram loader](../../python/oh_my_vllm/operators/engram/lookup.py) maps one sealed shared file without weight expansion.
+The [Engram loader](../../python/oh_my_vllm/models/deepseek_v41/engram.py) streams encoded tensors into one shared file, without weight expansion.
+It checks whole-shard identities before sealing, with a stream buffer of at most 64 MiB.
+The coordinator must set CPU NUMA policy before loading.
+Source page cache is separate from the stream buffer and shared storage.
+
+The [registration owner](../../python/oh_my_vllm/operators/engram/lookup.py) maps the sealed file.
 It uses read-only CUDA registration when supported.
 Otherwise, supported HMM systems use `mlock` with host placement and GPU access advice.
 Page-rounded mappings must fit one process-wide pinned budget.
 Workspace owners keep mappings through Eager completion and graph release.
-Full checkpoint loading, NUMA placement, and service allocation enforcement are pending.
+Service allocation enforcement and model integration are pending.
 
 ## 5. Persistent state
 

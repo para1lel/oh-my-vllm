@@ -16,6 +16,7 @@
 | [媒体端点](../../development/model/deepseek_v41/media.npz) | 静态图片和视频帧图片之后的两个完整 FP64 词表向量 | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
 | [精确算子](../../development/model/deepseek_v41/exact-operators.npz) | 四个合成量化和 Engram 用例 | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
 | [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 表, scale, 索引和 49152 个 BF16 输出位模式 | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
+| [Engram 检查点](../../development/model/deepseek_v41/engram-checkpoint.npz) | 每个表所选 32 行的原始字节及精确 BF16 输出 | `967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce` |
 
 产物绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 完整模型产物包含清单, 生成器身份, 固定输入, 数组形状和摘要.
@@ -34,6 +35,10 @@
 
 `load_engram_lookup()` 提供固定输入和独立计算的 BF16 输出位模式.
 其 16 行表覆盖重复索引, 有符号零, subnormal 中点和不同 scale 组.
+
+`load_engram_checkpoint()` 提供原始表样本, 行 ID, scale 和独立解码的输出.
+全部所选值都能用 BF16 精确表示.
+[检查点检查](../../development/operators/check_engram_lookup.py)使用这些固定输出验证完整共享存储.
 
 可选 native 模块提供量化, 整数 Engram 哈希, 以及通过共享 pinned-host 映射执行的 lookup.
 它们不提供服务集成.

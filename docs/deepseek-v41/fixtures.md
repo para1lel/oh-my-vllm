@@ -16,6 +16,7 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [Media endpoints](../../development/model/deepseek_v41/media.npz) | Two full FP64 vocabulary vectors after still and video-frame images | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
 | [Exact operators](../../development/model/deepseek_v41/exact-operators.npz) | Four synthetic quantization and Engram cases | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
 | [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 table, scales, indices, and 49152 BF16 output bit patterns | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
+| [Engram checkpoint](../../development/model/deepseek_v41/engram-checkpoint.npz) | Original bytes and exact BF16 outputs for 32 selected rows from each table | `967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce` |
 
 The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 Full-model artifacts contain the manifest, generator identities, fixed inputs, array shapes, and digests.
@@ -34,6 +35,10 @@ These synthetic cases do not set compound numerical or performance limits.
 
 `load_engram_lookup()` supplies fixed inputs and independently computed BF16 output bits.
 Its 16-row table covers repeated indices, signed zeros, subnormal ties, and distinct scale groups.
+
+`load_engram_checkpoint()` supplies original table samples, row IDs, scales, and independently decoded outputs.
+All selected values have exact BF16 representations.
+The [checkpoint check](../../development/operators/check_engram_lookup.py) uses these fixed outputs against the full shared store.
 
 The optional native modules supply quantization, integer Engram hashes, and lookup through a shared pinned-host mapping.
 They do not supply service integration.
