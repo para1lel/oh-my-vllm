@@ -22,6 +22,167 @@ def planner_config():
 
 
 class MemoryPlanTests(unittest.TestCase):
+    def allocation_budgets(self):
+        return {
+            "device_reserve_bytes": [2**30] * 4,
+            "host_capacity_bytes": 2**41,
+            "host_unavailable_bytes": 128 * 2**30,
+            "host_reserve_bytes": 128 * 2**30,
+            "request_state_max_bytes": 16 * 2**30,
+            "response_max_bytes": 8 * 2**30,
+            "pageable_reservations": {
+                "control": 4 * 2**30,
+                "request_payloads": 24 * 2**30,
+                "media": 2 * 2**30,
+                "processes": 16 * 2**30,
+                "registration": 2 * 2**30,
+                "kernel_io": 2 * 2**30,
+            },
+        }
+
+    def test_allocation_caps_keep_full_dspark_and_separate_startup_storage(self):
+        from .allocation import plan_allocation
+
+        for strategy in ("TP4", "TEP4", "DEP4"):
+            with self.subTest(strategy=strategy):
+                config = planner_config()
+                config["host_pinned_capacity_bytes"] = 512 * 2**30
+                plan = memory.plan_memory(config, strategy)
+                result = plan_allocation(plan, **self.allocation_budgets())
+                self.assertEqual(result["rows"], {"target": 384, "predictor": 320})
+                self.assertEqual(result["routed_edges"], {"target": 2304, "draft": 960})
+                self.assertFalse(result["runtime_feasibility_verified"])
+                self.assertTrue(result["unresolved_bounds"])
+                self.assertEqual(json.loads(json.dumps(result)), result)
+                self.assertNotIn("tensors", result)
+                for rank, source in zip(result["ranks"], plan["ranks"], strict=True):
+                    self.assertEqual(
+                        rank["persistent_bytes"],
+                        source["weight_bytes"] + source["cache_bytes"],
+                    )
+                    self.assertEqual(rank["available_bytes"], 183 * 2**30)
+                    self.assertEqual(
+                        rank["startup_bytes"] - rank["runtime_bytes"], 128 * 2**20
+                    )
+                    self.assertEqual(
+                        rank["runtime_bytes"],
+                        rank["persistent_bytes"]
+                        + sum(rank["arena_caps_bytes"].values()),
+                    )
+                    compute = result["device_arenas"]["compute"]
+                    self.assertLessEqual(compute["payload_bytes"], 4 * 2**30)
+                    self.assertEqual(
+                        compute["buffers"]["expert_intermediates"]["shape"],
+                        [2304, 2304],
+                    )
+                    self.assertEqual(
+                        compute["buffers"]["draft_base_hidden"]["shape"], [320, 5120]
+                    )
+                    self.assertEqual(
+                        result["device_arenas"]["staging"]["payload_bytes"], 14516224
+                    )
+                    self.assertEqual(rank["arena_caps_bytes"]["graphs"], 2 * 2**30)
+                    self.assertEqual(rank["arena_caps_bytes"]["staging"], 2**30)
+                host = result["host"]
+                self.assertEqual(host["pinned_runtime_bytes"], 479247466496)
+                self.assertEqual(host["pageable_runtime_bytes"], 50 * 2**30)
+                self.assertEqual(host["runtime_bytes"], 532934557696)
+                self.assertEqual(host["startup_bytes"], 534008299520)
+                self.assertEqual(
+                    host["pinned_startup_bytes"] - host["pinned_runtime_bytes"],
+                    512 * 2**20,
+                )
+
+    def test_allocation_caps_reject_startup_shortage_and_invalid_children(self):
+        from .allocation import _arena, plan_allocation
+
+        config = planner_config()
+        config["host_pinned_capacity_bytes"] = 512 * 2**30
+        plan = memory.plan_memory(config, "TP4")
+        budgets = self.allocation_budgets()
+        result = plan_allocation(plan, **budgets)
+        larger = dict(plan, ranks=[dict(rank) for rank in plan["ranks"]])
+        larger["ranks"][0]["reservations"] = dict(
+            plan["ranks"][0]["reservations"], staging={"charged_bytes": 2 * 2**30}
+        )
+        larger["host"] = dict(
+            plan["host"],
+            reservations={
+                "kv_offload": 257 * 2**30,
+                "uploads": 2**30,
+                "transfer_leases": 2 * 2**30,
+            },
+        )
+        increased = plan_allocation(larger, **budgets)
+        self.assertEqual(
+            increased["ranks"][0]["runtime_bytes"]
+            - result["ranks"][0]["runtime_bytes"],
+            2**30,
+        )
+        self.assertEqual(
+            increased["ranks"][0]["arena_caps_bytes"]["staging"], 2 * 2**30
+        )
+        self.assertEqual(
+            increased["host"]["runtime_bytes"] - result["host"]["runtime_bytes"],
+            5 * 2**29,
+        )
+        self.assertEqual(
+            plan["ranks"][0]["reservations"]["staging"]["charged_bytes"], 2**30
+        )
+        tiny = plan_allocation(
+            plan, **dict(budgets, request_state_max_bytes=1, response_max_bytes=257)
+        )
+        self.assertEqual(
+            tiny["host"]["pageable"]["request_payloads"]["payload_bytes"], 8192
+        )
+        short = dict(plan, ranks=[dict(rank) for rank in plan["ranks"]])
+        short["ranks"][0]["available_bytes"] = (
+            result["ranks"][0]["startup_bytes"] + 2**30 - 1
+        )
+        with self.assertRaisesRegex(ValueError, "startup"):
+            plan_allocation(short, **budgets)
+        for key, value in (
+            ("host_capacity_bytes", result["host"]["startup_bytes"] + 256 * 2**30 - 1),
+            ("device_reserve_bytes", [True] * 4),
+            ("host_reserve_bytes", -1),
+            ("request_state_max_bytes", True),
+            (
+                "pageable_reservations",
+                dict(budgets["pageable_reservations"], control=0),
+            ),
+            ("pageable_reservations", dict(budgets["pageable_reservations"], other=1)),
+            (
+                "pageable_reservations",
+                dict(budgets["pageable_reservations"], processes=2**64 - 1),
+            ),
+        ):
+            with (
+                self.subTest(key=key, value=value),
+                self.assertRaises((ValueError, OverflowError)),
+            ):
+                plan_allocation(plan, **dict(budgets, **{key: value}))
+        pinned_short = dict(
+            plan,
+            host=dict(
+                plan["host"], available_bytes=result["host"]["pinned_startup_bytes"] - 1
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "pinned"):
+            plan_allocation(pinned_short, **budgets)
+        child = ("buffer", (257,), 1, 1)
+        with self.assertRaises(ValueError):
+            _arena(511, [child])
+        with self.assertRaises(OverflowError):
+            _arena(
+                2**64 - 1,
+                [("buffer", (2**64 - 1, 2), 1, 1)],
+            )
+        with self.assertRaises(ValueError):
+            _arena(
+                1024,
+                [child, child],
+            )
+
     def test_placements_count_bytes_not_blanket_quarters(self):
         plans = {
             strategy: memory.plan_memory(planner_config(), strategy)

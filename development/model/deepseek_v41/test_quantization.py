@@ -149,6 +149,132 @@ class QuantizationTests(unittest.TestCase):
         np.testing.assert_array_equal(np.signbit(result), np.signbit(reference))
         np.testing.assert_array_equal(raw[0, :8], [16, 50, 84, 118, -104, -70, -36, -2])
 
+    def test_activation_fp8_bf16_boundary_ties_and_group_scales(self):
+        from .reference_quantization import activation_fp8
+
+        values = np.zeros((2, 64), dtype=np.float32)
+        values[0, :10] = [
+            0.0,
+            -0.0,
+            1.0625,
+            1.1875,
+            -1.0625,
+            -1.1875,
+            1.064453125,
+            2**-10,
+            3 * 2**-10,
+            -(2**-10),
+        ]
+        values[0, 31] = 448
+        values[0, 32:] = values[0, :32] * 2
+        original = values.copy()
+        values.setflags(write=False)
+        result = activation_fp8(values)
+        expected = np.zeros((2, 64), dtype=np.uint8)
+        expected[0, :10] = [0, 0x80, 0x38, 0x3A, 0xB8, 0xBA, 0x38, 0, 2, 0x80]
+        expected[0, 31] = 0x7E
+        expected[0, 32:] = expected[0, :32]
+        np.testing.assert_array_equal(result.encoded, expected)
+        np.testing.assert_array_equal(result.scales, [[127, 128], [105, 105]])
+        reference = np.zeros((2, 64), dtype=np.float32)
+        reference[0, :10] = [0, -0.0, 1, 1.25, -1, -1.25, 1, 0, 2**-8, -0.0]
+        reference[0, 31] = 448
+        reference[0, 32:] = reference[0, :32] * 2
+        self.assertEqual(result.dequantized.dtype, np.dtype(np.float32))
+        np.testing.assert_array_equal(
+            result.dequantized.view(np.uint32), reference.view(np.uint32)
+        )
+        np.testing.assert_array_equal(values.view(np.uint32), original.view(np.uint32))
+
+    def test_index_and_compressed_fp4_scale_rounding_and_packing(self):
+        from .reference_quantization import compressed_kv_fp4, indexer_fp4
+
+        values = np.zeros((2, 64), dtype=np.float32)
+        values[0, :16] = [
+            0.25,
+            0.75,
+            1.25,
+            1.75,
+            2.5,
+            3.5,
+            5,
+            -0.0,
+            -0.25,
+            -0.75,
+            -1.25,
+            -1.75,
+            -2.5,
+            -3.5,
+            -5,
+            0,
+        ]
+        values[0, 31] = 6
+        values[0, 32:] = values[0, :32] * 2
+        result = indexer_fp4(values)
+        expected = np.zeros((2, 32), dtype=np.uint8)
+        expected[0, :8] = [0x20, 0x42, 0x64, 0x86, 0xA8, 0xCA, 0xEC, 0x0E]
+        expected[0, 15] = 0x70
+        expected[0, 16:] = expected[0, :16]
+        np.testing.assert_array_equal(result.encoded, expected)
+        np.testing.assert_array_equal(result.scales, [[127, 128], [1, 1]])
+        reference = np.zeros((2, 64), dtype=np.float32)
+        reference[0, :16] = [0, 1, 1, 2, 2, 4, 4, -0.0, -0.0, -1, -1, -2, -2, -4, -4, 0]
+        reference[0, 31] = 6
+        reference[0, 32:] = reference[0, :32] * 2
+        np.testing.assert_array_equal(
+            result.dequantized.view(np.uint32), reference.view(np.uint32)
+        )
+
+        cache = np.zeros((3, 32), dtype=np.float32)
+        cache[0, :3] = [6.375, 1.25, -0.0]
+        cache[0, 16:19] = [7.125, 4.375, -0.0]
+        cache[1, 0] = 3000
+        result = compressed_kv_fp4(cache)
+        expected = np.zeros((3, 16), dtype=np.uint8)
+        expected[0, :2] = [0x27, 0x08]
+        expected[0, 8:10] = [0x67, 0x08]
+        expected[1, 0] = 7
+        np.testing.assert_array_equal(result.encoded, expected)
+        np.testing.assert_array_equal(result.scales, [[0x38, 0x3A], [0x7E, 1], [1, 1]])
+        reference = np.zeros((3, 32), dtype=np.float32)
+        reference[0, :3] = [6, 1, -0.0]
+        reference[0, 16:19] = [7.5, 5, -0.0]
+        reference[1, 0] = 2688
+        np.testing.assert_array_equal(
+            result.dequantized.view(np.uint32), reference.view(np.uint32)
+        )
+
+    def test_source_quantization_rejects_invalid_input_and_bf16_overflow(self):
+        from .reference_quantization import (
+            activation_fp8,
+            compressed_kv_fp4,
+            indexer_fp4,
+        )
+
+        for operation, invalid in (
+            (activation_fp8, [0.0] * 32),
+            (activation_fp8, np.zeros((1, 32), dtype=np.float64)),
+            (indexer_fp4, np.zeros((1, 32), dtype=np.int32)),
+            (activation_fp8, np.zeros((), dtype=np.float32)),
+            (indexer_fp4, np.zeros((0, 32), dtype=np.float32)),
+            (activation_fp8, np.zeros((1, 31), dtype=np.float32)),
+            (indexer_fp4, np.zeros((1, 16), dtype=np.float32)),
+            (compressed_kv_fp4, np.zeros((1, 17), dtype=np.float32)),
+            (activation_fp8, np.full((1, 32), np.nan, dtype=np.float32)),
+            (indexer_fp4, np.full((1, 32), np.inf, dtype=np.float32)),
+            (compressed_kv_fp4, np.full((1, 16), -np.inf, dtype=np.float32)),
+            (
+                activation_fp8,
+                np.full((1, 32), np.finfo(np.float32).max, dtype=np.float32),
+            ),
+            (indexer_fp4, np.full((1, 32), 255 * 2.0**120, dtype=np.float32)),
+        ):
+            with (
+                self.subTest(operation=operation.__name__, shape=np.shape(invalid)),
+                self.assertRaises(ValueError),
+            ):
+                operation(invalid)
+
     def test_rejects_nonfinite_encodings_and_invalid_scale_contracts(self):
         cases = []
         for bits in (0x7F80, 0xFF80, 0x7FC0, 0xFFFF):

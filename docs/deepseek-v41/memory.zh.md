@@ -163,26 +163,47 @@ Shadow 不替代完整已接受窗口, 也不授权截断 replay.
 计划还计入 token 历史, 惩罚计数器, Engram 历史/快照, Markov 特征, token 映射, hash 常量和两份共享 rotary 表.
 Grammar 状态, 逻辑标识, prefix 共享和 offload 记录仍须分配契约.
 
-## 6. 预留与容量含义
+## 6. 分配上限与未决边界
 
-规划器按所供预留量与指定缓冲下限中的较大值计费.
-这些下限不是完整运行时 workspace 边界.
-Staging 覆盖一个 Engram 层的打包行, scale, BF16 行和行 ID.
-其行容量取有界 prefill 行数与已调度验证行数中的较大值.
-逐层顺序执行允许在消费者完成后复用 staging.
+`plan_memory` 按所供预留量与缓冲下限中的较大值计费.
+其 `fits_supplied_budgets` 结果仅检查已计存储.
+[分配封装](../../development/model/deepseek_v41/allocation.py) 通过 `plan_allocation(plan, **budgets)` 消费一次该计划.
+它保持常驻权重/缓存字节不变, 并检查完整默认限制.
 
-分块下限计入有界索引分数 tile, candidate/top-k 列表, 残差输入/输出, attention query/output, FP32 目标分布和专家中间结果.
-预算不包含上下文长度平方的分数矩阵.
-通信下限覆盖稠密归约或保守的专家分发/返回缓冲.
-TP4/TEP4 还计入词表 all-gather 临时空间和本地 logit 分片.
-专家所有权不假定路由均衡.
+各设备上限取设计上限与对应规划器计费量中的较大值.
+Host `kv_offload`, `uploads` 和 `transfer_leases` 预留也继续作为下限.
+更大的预留会增加显式空闲容量和总量.
 
-Graph 和 media 没有源代码证明的下限.
-其显式预留是调用方额度, 不是测量边界.
-Host KV, 上传和传输 lease 分别使用调用方额度.
+输出给出一份设备缓冲表, 逐 rank 上限以及独立的 host arena.
+缓冲记录给出形状, 元素大小和数量.
+每个 arena 给出对齐, 生命周期, 复用条件以及经过检查的子项总和.
+不受支持的限制, 无符号 64 位溢出, 子项溢出或启动预算不足均会报错.
 
-`fits_supplied_budgets` 仅将已计存储与所供可用容量比较.
-`runtime_feasibility_verified` 始终为假.
-未知 native workspace, graph 池, NCCL 存储, 加载峰值, media 边界, grammar, 分配器开销和重叠 lease 都可能增加分配.
-零额度不证明零成本.
+完整 64 请求步骤包含 384 个目标行, 320 个预测器行, 2304 条目标路由边和 960 条草稿路由边.
+它不施加 16 请求分片.
+4 GiB compute 上限包含 1 GiB kernel 临时空间.
+64 MiB staging 上限容纳两个 Engram bank.
+通信, 状态, graph, native, media, 填充和启动存储分别计费.
+源缓冲细节由可调用接口的输出给出.
+
+提供四个 `device_reserve_bytes` 值.
+设备启动必须适合输入计划中的容量减不可用字节, 再减此独立预留后的预算.
+为 host 总量提供 `host_capacity_bytes`, `host_unavailable_bytes` 和 `host_reserve_bytes`.
+Pinned 启动还必须适合输入计划的可用 pinned 预算.
+启动为每个设备增加 128 MiB, 为 host 增加 512 MiB pinned 存储和 512 MiB pageable 存储.
+这些缓冲与运行时存储重叠存在.
+
+`pageable_reservations` 有六个上限: `control`, `request_payloads`, `media`, `processes`, `registration` 和 `kernel_io`.
+将 `request_state_max_bytes` 和 `response_max_bytes` 绑定到现有全局 CLI 预算.
+`request_payloads` 上限计入它们对齐后的总和.
+例如, 16 GiB 和 8 GiB 是设计设置, 不是默认值或逐请求限制.
+此封装不增加 API payload 或 grammar 限制.
+
+Native, graph 和 decoder 额度是上限, 不是已证明的物理边界.
+Grammar parser 存储和 `deep_copy` 字节边界尚未解决.
+请求/响应物理副本和 media 准备峰值也没有已证明的边界.
+封装列出这些缺口, 并设置 `runtime_feasibility_verified=False`.
+它不实现运行时分配保护, 也不完成 Phase 0.
+
+Ready 前, 运行时必须强制执行 arena 上限并拒绝不受支持的分配.
 在宣称服务容量前, [容量流程](validation.zh.md#容量检查) 必须验证峰值分配, 精确继续以及同时准入.

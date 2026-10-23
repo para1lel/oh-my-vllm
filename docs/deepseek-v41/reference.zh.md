@@ -38,6 +38,22 @@ Correction bias 用于选择专家.
 算子和全模型限值必须在调优之前固定.
 这些数学函数不设置或放宽这些限值.
 
+## 源精度量化
+
+独立的[量化 oracle](../../development/model/deepseek_v41/reference_quantization.py) 仅使用 NumPy 检查 activation 和 cache 转换.
+它不替代 FP64 数学参考, 也不设置复合算子的验收限值.
+`activation_fp8`, `indexer_fp4` 和 `compressed_kv_fp4` 接受 FP32 数组, 先将输入舍入到 BF16.
+它们返回编码字节, 尺度字节, 以及用 FP32 表示的 BF16 量化往返数值.
+
+每组分别包含 32, 32 和 16 个通道.
+UE8M0 尺度计算使用 FP32 倒数乘法.
+E4M3 尺度计算使用 FP32 除法.
+
+转换采用最近舍入, 中点取偶数.
+Packed 通道 `2j` 位于低 nibble.
+非有限输入, BF16 溢出, 无效形状和不支持的输入 dtype 均导致错误.
+该模块记录发布版 kernel 的源文件身份.
+
 ## 逐层流式构建
 
 将原始 packed 权重保留在 checkpoint 文件中.

@@ -11,6 +11,8 @@
 [检查点工具](deepseek-v41/checkpoint.zh.md)提供权重身份和惰性 CPU FP64 读取器.
 [参考指南](deepseek-v41/reference.zh.md)给出独立数学检查.
 [固定 fixture](deepseek-v41/fixtures.zh.md), [媒体参考](deepseek-v41/media-reference.zh.md)和[长上下文参考](deepseek-v41/long-reference.zh.md)给出端点构建方法.
+源精度量化和带检查的分配工具支持验收工作.
+长上下文生成可从已保存状态恢复.
 
 阶段 1 的[模型适配器](deepseek-v41/adapters.zh.md)及阶段 2 基础设施已完成.
 [类型化执行接口](deepseek-v41/typed-execution.zh.md)在发布已接受状态前验证整个组的完成状态.
@@ -24,6 +26,6 @@ Qwen prefill 分派, 块调度和主机缓存启动修改已实现.
 - 生成[长上下文 fixture](deepseek-v41/long-reference.zh.md).
 - 在阶段 3 算子之前, 完成阶段 0 数值门槛和[分配边界](deepseek-v41/memory.zh.md).
 - 保持已批准的[模型](deepseek-v41/model.zh.md), [状态](deepseek-v41/state.zh.md)和[采样](deepseek-v41/sampling.zh.md)契约.
-- 按[测试范围](testing.zh.md)和[执行规则](execution.zh.md)完成当前 Qwen 检查.
+- 后续实现修改遵循[测试范围](testing.zh.md)和[执行规则](execution.zh.md).
 - 下次完整 HTTP 测量完成后, 替换 [Qwen 结果](deepseek-v41/qwen-results.zh.md).
 - 遵守[交付流程](../CONTRIBUTING.zh.md#交付). 主机设置和原始产物不得放入受版本控制的文档.

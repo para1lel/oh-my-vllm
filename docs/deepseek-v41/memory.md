@@ -163,26 +163,47 @@ Shadows do not replace full accepted windows or authorize truncated replay.
 The plan also counts token history, penalty counters, Engram history/snapshots, Markov features, token mapping, hash constants, and two shared rotary tables.
 Allocation contracts for grammar state, logical identities, prefix sharing, and offload records are not complete.
 
-## 6. Reservations and capacity meaning
+## 6. Allocation caps and open bounds
 
-The planner charges the greater of supplied reservations and specified buffer floors.
-The floors are not complete runtime workspace bounds.
-Staging covers one Engram layer's packed rows, scales, BF16 rows, and row IDs.
-Its row capacity is the larger of bounded prefill rows and scheduled verification rows.
-Sequential layer execution permits staging reuse after consumers finish.
+`plan_memory` charges the greater of supplied reservations and buffer floors.
+Its `fits_supplied_budgets` result checks accounted storage only.
+The [allocation wrapper](../../development/model/deepseek_v41/allocation.py) consumes this plan once through `plan_allocation(plan, **budgets)`.
+It keeps persistent weight/cache bytes and checks the full default limits.
 
-Chunk floors count bounded index-score tiles, candidate/top-k lists, residual input/output, attention query/output, FP32 target distributions, and expert intermediates.
-No context-squared score matrix is budgeted.
-Communication floors cover dense reductions or conservative expert dispatch/return buffers.
-TP4/TEP4 also count vocabulary all-gather scratch and local logit shards.
-Expert ownership does not assume balanced routing.
+Each device cap is the greater of its design cap and the corresponding planner charge.
+Host `kv_offload`, `uploads`, and `transfer_leases` reservations also stay as lower bounds.
+Larger reservations increase explicit spare capacity and totals.
 
-Graphs and media have no source-proven floor.
-Their explicit reservations are caller allowances, not measured bounds.
-Host KV, uploads, and transfer leases have separate caller allowances.
+The output gives one device buffer table, per-rank caps, and separate host arenas.
+Buffer records give shapes, element sizes, and counts.
+Each arena supplies alignment, lifetime, reuse conditions, and checked child sums.
+Unsupported limits, unsigned 64-bit overflow, child overflow, or startup budget shortage cause errors.
 
-`fits_supplied_budgets` compares accounted storage with supplied available capacity only.
-`runtime_feasibility_verified` is always false.
-Unknown native workspaces, graph pools, NCCL storage, load peaks, media bounds, grammar, allocator overhead, and overlapping leases can increase allocation.
-Zero allowances do not prove zero cost.
+The full 64-request step has 384 target rows, 320 predictor rows, 2304 target routed edges, and 960 draft routed edges.
+It does not impose 16-request fragments.
+The 4 GiB compute cap includes 1 GiB kernel scratch.
+The 64 MiB staging cap holds two Engram banks.
+Communication, state, graph, native, media, padding, and startup storage have separate charges.
+Source buffer details belong in the callable output.
+
+Supply four `device_reserve_bytes` values.
+Device startup must fit capacity minus unavailable bytes from the input plan, minus this separate reserve.
+Supply `host_capacity_bytes`, `host_unavailable_bytes`, and `host_reserve_bytes` for the host total.
+Pinned startup must also fit the input plan's available pinned budget.
+Startup adds 128 MiB per device, 512 MiB pinned host storage, and 512 MiB pageable host storage.
+These buffers overlap runtime storage.
+
+`pageable_reservations` has six caps: `control`, `request_payloads`, `media`, `processes`, `registration`, and `kernel_io`.
+Bind `request_state_max_bytes` and `response_max_bytes` to the existing global CLI budgets.
+The `request_payloads` cap charges their sum after alignment.
+For example, 16 GiB and 8 GiB are design settings, not defaults or per-request limits.
+This wrapper adds no API payload or grammar limit.
+
+Native, graph, and decoder allowances are caps, not proven physical bounds.
+Grammar parser storage and `deep_copy` byte bounds are unresolved.
+Request/response physical copies and media preparation peaks also have no proven bounds.
+The wrapper lists these gaps and sets `runtime_feasibility_verified=False`.
+It does not implement runtime allocation guards or complete Phase 0.
+
+Before Ready, the runtime must enforce arena caps and reject unsupported allocations.
 The [capacity procedure](validation.md#capacity-checks) must validate peak allocations, exact continuation, and simultaneous admission before service capacity claims.

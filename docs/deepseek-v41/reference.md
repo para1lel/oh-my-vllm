@@ -38,6 +38,22 @@ The [source contract](model.md) and [state contract](state.md) specify the other
 Operator and full-model limits must be fixed before tuning.
 These mathematical functions do not set or relax those limits.
 
+## Source-precision quantization
+
+The separate [quantization oracle](../../development/model/deepseek_v41/reference_quantization.py) checks activation and cache conversions with NumPy only.
+It does not replace the FP64 mathematical reference or set compound acceptance limits.
+`activation_fp8`, `indexer_fp4`, and `compressed_kv_fp4` accept FP32 arrays and first round inputs to BF16.
+They return encoded bytes, scale bytes, and BF16 roundtrip values represented in FP32.
+
+Groups contain 32, 32, and 16 channels, respectively.
+UE8M0 scale calculation uses FP32 reciprocal multiplication.
+E4M3 scale calculation uses FP32 division.
+
+Conversion uses nearest rounding with ties to even.
+Packed channel `2j` occupies the low nibble.
+Nonfinite inputs, BF16 overflow, invalid shapes, and unsupported input dtypes cause errors.
+The module records the released kernel source identity.
+
 ## Layer-streamed construction
 
 Keep original packed weights in checkpoint files.
