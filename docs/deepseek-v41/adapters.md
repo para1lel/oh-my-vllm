@@ -18,7 +18,7 @@ The Qwen computation and accepted-state rules are unchanged.
 Phase 1 extraction is complete.
 The [Qwen results](qwen-results.md) record the last full HTTP regression matrix.
 Phase 2 supplies general cache transactions and four-rank control.
-These interfaces do not enable distributed execution or DeepSeek capabilities.
+These interfaces do not enable DeepSeek model execution.
 
 ## Python ownership
 
@@ -79,7 +79,7 @@ The existing weight loader repeats its checkpoint check during loading.
 Registry selection alone does not prove weight compatibility or numerical acceptance.
 It does not examine weight payloads, allocate cache state, or change context limits.
 The Qwen backend keeps its existing startup checks and numerical gates.
-The [phase plan](plan.md) specifies the subsequent extraction and regression work.
+The [phase plan](plan.md) specifies DeepSeek model integration and Qwen regression gates.
 
 ## Rust model policy
 
@@ -205,4 +205,5 @@ Rust accepts this descriptor only for the `stub` path.
 Qwen cannot use it after a load error.
 
 Readiness agreement does not supply numerical or GPU capacity acceptance.
-The [phase plan](plan.md) specifies Qwen regression checks and the next steps for model-specific control extraction.
+The [distributed interface](distributed.md) supplies typed rank control and scheduler integration.
+The [phase plan](plan.md) specifies subsequent DeepSeek physical layouts and state restoration.

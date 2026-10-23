@@ -10,6 +10,7 @@ import re
 import sys
 import tempfile
 import types
+import uuid
 from dataclasses import fields
 from datetime import timedelta
 from pathlib import Path
@@ -308,6 +309,10 @@ def launch_identity():
     return rank, uuids
 
 
+def cuda_uuid(value):
+    return "GPU-" + str(uuid.UUID(bytes=bytes(value.bytes)))
+
+
 def agree(dist, value):
     gathered = [None] * 4
     dist.all_gather_object(gathered, value)
@@ -380,7 +385,8 @@ def capture_short(model_root, manifest_path, output, read_bytes=64 << 20):
         dist.init_process_group("nccl", timeout=timedelta(minutes=30))
         device = torch.device("cuda", rank)
         properties = torch.cuda.get_device_properties(device)
-        if str(properties.uuid).lower() != uuids[rank].lower():
+        physical_uuid = cuda_uuid(properties.uuid)
+        if physical_uuid != uuids[rank]:
             raise ValueError("physical CUDA UUID differs from the leased rank mapping")
         agree(dist, digest(encoded(common)))
         torch.set_default_dtype(torch.bfloat16)
@@ -419,7 +425,7 @@ def capture_short(model_root, manifest_path, output, read_bytes=64 << 20):
             ranks,
             {
                 "rank": rank,
-                "physical_uuid": str(properties.uuid),
+                "physical_uuid": physical_uuid,
                 "device": str(properties),
                 "torch_cuda": torch.version.cuda,
                 "loader": loader_metadata,

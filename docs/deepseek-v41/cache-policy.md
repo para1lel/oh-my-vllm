@@ -14,9 +14,8 @@ This extraction does not replace those pools with the [state arena](state-arena.
 
 The service continues to select Qwen only.
 The Qwen worker messages keep their existing field names and values.
-The optional transaction policy supplies ownership transfer for [typed rank execution](typed-execution.md).
+The optional transaction policy supplies ownership transfer for [typed rank execution](distributed.md#transactions-and-publication).
 DeepSeek cache layouts and accepted-state selection are subsequent work.
-This interface does not complete Phase 2 or enable DeepSeek execution.
 
 ## Model operations
 
@@ -51,7 +50,7 @@ The policy uses the validated request progress to select accepted state.
 State assignments and copied block values cannot authorize new storage ownership.
 An arena-based policy must select storage through live owners, not through wire values.
 The caller must prove device completion before it supplies results to the scheduler.
-Distributed callers must also prove all-rank completion through the [rank gate](rank-control.md).
+Distributed callers must also prove all-rank completion through the [rank gate](distributed.md#transactions-and-publication).
 
 `free` releases request ownership only when release is permitted by its caller.
 The existing worker lifecycle controls execution cancellation and worker replacement.
@@ -92,6 +91,6 @@ The shared schedule trace records the policy's resource counts.
 The Python transfer helpers continue to validate the paired Qwen cache format.
 Other model families must have their own wire conversion and transfer validation.
 
-The [phase plan](plan.md) controls the subsequent typed-state and distributed-model work.
+The [phase plan](plan.md) controls subsequent DeepSeek state and distributed-model integration.
 The [validation plan](validation.md) controls numerical and performance acceptance.
 Generic Rust types do not prove a model's mathematics, capacity, or device safety.

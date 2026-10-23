@@ -5,7 +5,8 @@
 The [state arena](../../crates/kv-cache/src/state.rs) supplies typed logical storage reservations for Phase 2.
 It does not replace the Qwen coordinator at this time.
 It does not allocate GPU buffers, select an accepted model prefix, or publish worker results.
-Rank agreement, scheduler integration, and model-specific state restoration are subsequent work in the [phase plan](plan.md).
+The [distributed interface](distributed.md) supplies rank agreement and scheduler integration.
+Model-specific physical state restoration is subsequent work in the [phase plan](plan.md).
 
 ## Groups and owners
 

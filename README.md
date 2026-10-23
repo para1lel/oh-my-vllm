@@ -21,5 +21,5 @@ The [operator checks](docs/operators/microbench.md) use repository fixtures and 
 The [Qwen results](docs/deepseek-v41/qwen-results.md) contain the last completed HTTP matrix and its measurement identities.
 Use the [HTTP procedure](docs/performance.md) and [AgentX procedure](docs/agentx.md) for measurement commands and definitions.
 
-The [DeepSeek architecture](docs/deepseek-v41/design.md) gives the planned four-GPU extension on `nightly`.
+The [DeepSeek plan](docs/deepseek-v41/plan.md) gives the implementation phases and current state on `nightly`.
 DeepSeek inference is not enabled.

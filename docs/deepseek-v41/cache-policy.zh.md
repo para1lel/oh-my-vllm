@@ -14,9 +14,8 @@
 
 服务仍只选择 Qwen.
 Qwen worker 消息保持现有字段名和值.
-可选事务策略为[类型化 rank 执行](typed-execution.zh.md) 提供所有权转移.
+可选事务策略为[类型化 rank 执行](distributed.zh.md#事务和发布) 提供所有权转移.
 DeepSeek 缓存布局和已接受状态选择仍是后续工作.
-此接口不会完成阶段 2, 也不会启用 DeepSeek 执行.
 
 ## 模型操作
 
@@ -51,7 +50,7 @@ Prefill 对齐后的 token 数不得大于传入数量.
 状态分配和复制的块值不能授权新的存储所有权.
 基于 arena 的策略必须通过活动所有者选择存储, 而不是通过 wire 值.
 调用方必须在向调度器提供结果前证明设备完成.
-分布式调用方还必须通过 [rank gate](rank-control.zh.md) 证明全部 rank 完成.
+分布式调用方还必须通过 [rank gate](distributed.zh.md#事务和发布) 证明全部 rank 完成.
 
 `free` 仅在调用方允许释放时释放请求所有权.
 现有 worker 生命周期控制执行取消和 worker 替换.
@@ -92,6 +91,6 @@ Qwen 服务仍使用现有缓存诊断键.
 Python 迁移 helper 仍验证成对的 Qwen 缓存格式.
 其他模型族需要自己的 wire 转换和迁移验证.
 
-[阶段计划](plan.zh.md) 控制后续 typed-state 和分布式模型工作.
+[阶段计划](plan.zh.md) 控制后续 DeepSeek 状态和分布式模型集成.
 [验证计划](validation.zh.md) 控制数值和性能验收.
 泛型 Rust 类型不能证明模型的数学, 容量或设备安全性.

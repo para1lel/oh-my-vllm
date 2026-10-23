@@ -21,5 +21,5 @@ Worker 使用 [GPU 执行规则](docs/execution.zh.md)管理算子调度和资�
 [Qwen 结果](docs/deepseek-v41/qwen-results.zh.md)包含最新完成的 HTTP 矩阵及其测量身份.
 测量命令和定义见 [HTTP 流程](docs/performance.zh.md)和 [AgentX 流程](docs/agentx.zh.md).
 
-[DeepSeek 架构](docs/deepseek-v41/design.zh.md)给出 `nightly` 上计划中的四 GPU 扩展.
+[DeepSeek 计划](docs/deepseek-v41/plan.zh.md)给出 `nightly` 上的实施阶段和当前状态.
 DeepSeek 推理尚未启用.

@@ -1,8 +1,8 @@
 # 算子 microbench 设计
 
 本文给出算子开发的数值和性能验收规则.
-[验证计划](validation-plan.zh.md)给出实施任务和固定用例.
-数值和性能套件均已实现. 源码迁移前必须完成性能门槛校准.
+[用例清单](../../development/operators/cases.json)固定测量形状与模式.
+[限值](../../development/operators/limits.json)将数值和性能验收绑定到这些用例.
 
 ## 范围和边界
 

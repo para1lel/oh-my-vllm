@@ -1,6 +1,6 @@
-# 算子结构设计
+# 算子结构
 
-本文给出算子重构的目标结构.
+本文给出当前算子结构.
 [交接说明](../handoff.zh.md)给出实现状态.
 [运行时契约](../requirements.zh.md), [模型契约](model.zh.md)和 [GPU 执行规则](../execution.zh.md)规定行为.
 
@@ -9,7 +9,6 @@
 将一个算子的接口, 执行计划, 临时存储和 CUDA 实现放在同一个包中.
 模型按依赖顺序调用完整子层.
 算子可以修改内部 kernel, 而无需修改模型调用处.
-重构可以改变融合边界和执行路径.
 算子性能必须满足 [microbench 契约](microbench.zh.md)中的固定理论延迟倍率门槛.
 
 设计为各算子使用相应的函数和类型.
@@ -17,7 +16,7 @@
 
 ## 包与依赖
 
-目标包是 `python/oh_my_vllm/operators`:
+包路径是 `python/oh_my_vllm/operators`:
 
 ```text
 operators/
@@ -172,28 +171,23 @@ Worker 先对返回的 token 应用请求停止条件.
 保留完整的依赖哈希, 不可变二进制身份和 native library 身份检查.
 推理加载器不导入开发工具, 也不调用编译器.
 
-初期只改变源码位置, 保持现有 native 编译单元.
 仅当实现有经证实的理由时才改变编译边界.
 源码包, 语义接口, native library 和 kernel launch 是不同的边界.
 
-## 迁移与验收
-
-1. 移动源码, 同步修改构建映射和身份检查.
-2. 对 FA 及其 MTP 使用者应用接口与所有权设计.
-3. 将相同契约应用到 GDN, FFN, output 和 vision.
-4. 将新的融合与执行变更和结构迁移分开评估.
+## 变更验收
 
 随对应实现变更更新[阶段清单](../../python/oh_my_vllm/operators/specification.py)和 [serving 边界](fusion.zh.md).
-迁移各算子时, 移除对私有 buffer 的直接访问及模型层复制的 kernel 选择规则.
+将私有 buffer 和 kernel 选择规则保留在各自的算子包内.
 
 使用[测试范围](../testing.zh.md)和[数值流程](evaluation.zh.md).
 局部数值, 状态和性能检查使用[算子 microbench 设计](microbench.zh.md).
 变更影响 MTP, vision 或长上下文时, 扩展全模型输入.
 设备内存或同步行为变化时, 使用 Compute Sanitizer.
-新增测试遵循[贡献流程](../../CONTRIBUTING.md).
+新增测试遵循[贡献流程](../../CONTRIBUTING.zh.md).
 
 使用相同负载设置运行全部 24 种 [HTTP 配置](../performance.zh.md), 进行集成检查.
 应用固定算子性能门槛, 不与旧构建或旧计时比较.
 不确定性使门槛判定无法完成时, 增加测量.
 新的融合加速特定负载时, 检查其他配置.
-计时产物保存在仓库外, 并更新两个 README 性能表.
+计时产物保存在仓库外.
+完整矩阵完成后更新 [Qwen 结果](../deepseek-v41/qwen-results.zh.md).

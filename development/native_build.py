@@ -40,9 +40,17 @@ MODULES = {
 
 
 def optional_modules():
+    from oh_my_vllm.operators.engram.api import FUNCTIONS as ENGRAM_FUNCTIONS
+    from oh_my_vllm.operators.quantization.api import (
+        FUNCTIONS as QUANTIZATION_FUNCTIONS,
+    )
     from oh_my_vllm.operators.runtime.collectives import FUNCTIONS
 
-    return {"collectives": FUNCTIONS}
+    return {
+        "collectives": FUNCTIONS,
+        "quantization": QUANTIZATION_FUNCTIONS,
+        "engram": ENGRAM_FUNCTIONS,
+    }
 
 
 @functools.cache
@@ -62,7 +70,7 @@ def build(name, functions):
     compiler = subprocess.check_output([nvcc, "--version"]).decode()
     include_paths = [str(source.parent), str(SOURCES)]
     commit = None
-    if name not in ("device", "collectives"):
+    if name in MODULES and name != "device":
         cutlass = Path(os.environ["OH_MY_VLLM_CUTLASS"])
         commit = (
             subprocess.check_output(["git", "-C", str(cutlass), "rev-parse", "HEAD"])
@@ -151,7 +159,9 @@ def build(name, functions):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--module", action="append", choices=(*MODULES, "collectives"))
+    parser.add_argument(
+        "--module", action="append", choices=(*MODULES, *OPTIONAL_MODULE_SOURCES)
+    )
     options = parser.parse_args()
     selected = (
         MODULES

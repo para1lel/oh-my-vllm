@@ -4,6 +4,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -14,7 +15,14 @@ from .reference import write_reference
 class ReferenceArtifact(unittest.TestCase):
     def test_source_arguments_reject_unbound_or_unsupported_config(self):
         from .layout import _SUPPORTED_CONFIG
-        from .source_capture import model_arguments
+        from .source_capture import cuda_uuid, model_arguments
+
+        identity = SimpleNamespace(bytes=list(range(16)))
+        self.assertEqual(
+            cuda_uuid(identity), "GPU-" + "00010203-0405-0607-0809-0a0b0c0d0e0f"
+        )
+        with self.assertRaises(ValueError):
+            cuda_uuid(SimpleNamespace(bytes=[0] * 15))
 
         with TemporaryDirectory() as directory:
             root = Path(directory)

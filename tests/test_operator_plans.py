@@ -63,6 +63,53 @@ class OperatorPlans(unittest.TestCase):
                 with self.subTest(rows=rows, grid=grid), self.assertRaises(ValueError):
                     vision_plan(rows=rows, grid=grid, frames=frames)
 
+    def test_quantization_plan_rejects_invalid_layouts_without_loading_native(self):
+        from oh_my_vllm.operators.quantization.plan import make_plan as quant_plan
+
+        with patch(
+            "oh_my_vllm.operators.runtime.native.load",
+            side_effect=AssertionError("native load"),
+        ):
+            for mode, encoded, groups in (
+                ("fp8_ue8m0", 64, 2),
+                ("fp4_ue8m0", 32, 2),
+                ("fp4_e4m3", 32, 4),
+            ):
+                plan = quant_plan(rows=2, width=64, mode=mode)
+                self.assertEqual(
+                    plan.storage,
+                    (
+                        ((2, encoded), "uint8"),
+                        ((2, groups), "uint8"),
+                        ((2, 64), "bfloat16"),
+                        ((2, groups), "uint8"),
+                    ),
+                )
+                self.assertNotEqual(
+                    plan.reuse_key,
+                    quant_plan(rows=0, width=64, mode=mode).reuse_key,
+                )
+                self.assertEqual(
+                    quant_plan(rows=0, width=64, mode=mode).storage[0][0][0], 0
+                )
+            for rows, width, mode in (
+                (-1, 32, "fp8_ue8m0"),
+                (1, 0, "fp8_ue8m0"),
+                (1, 16, "fp8_ue8m0"),
+                (1, 48, "fp4_ue8m0"),
+                (1, 24, "fp4_e4m3"),
+                (1, 32, "fp8_e5m2"),
+                (True, 32, "fp8_ue8m0"),
+                (1, 32.0, "fp8_ue8m0"),
+                (1 << 31, 32, "fp8_ue8m0"),
+                (1 << 20, 1 << 20, "fp8_ue8m0"),
+            ):
+                with (
+                    self.subTest(rows=rows, width=width, mode=mode),
+                    self.assertRaises(ValueError),
+                ):
+                    quant_plan(rows=rows, width=width, mode=mode)
+
     def test_operator_workspace_keeps_outputs_and_graph_owners(self):
         from oh_my_vllm.operators.ffn import api as ffn
         from oh_my_vllm.operators.ffn.plan import make_plan as ffn_plan
@@ -70,6 +117,9 @@ class OperatorPlans(unittest.TestCase):
         from oh_my_vllm.operators.gdn import api as gdn
         from oh_my_vllm.operators.gdn.plan import make_plan as gdn_plan
         from oh_my_vllm.operators.gdn.workspace import prepare as prepare_gdn
+        from oh_my_vllm.operators.quantization import api as quantization
+        from oh_my_vllm.operators.quantization.plan import make_plan as quant_plan
+        from oh_my_vllm.operators.quantization.workspace import prepare as prepare_quant
 
         class Tensor:
             def __init__(self, shape, dtype):
@@ -115,6 +165,10 @@ class OperatorPlans(unittest.TestCase):
                     gdn.BatchView(object(), object(), object()),
                     gdn.StateView(object(), object()),
                 )
+            elif family == "quantization":
+                api, factory = quantization, prepare_quant
+                plan = quant_plan(rows=2, width=64, mode="fp4_e4m3")
+                bindings = tuple(api.Inputs(object()) for _ in range(3))
             else:
                 api, factory = ffn, prepare_ffn
                 plan = ffn_plan(rows=4)
@@ -129,28 +183,41 @@ class OperatorPlans(unittest.TestCase):
                     raise ValueError("record failed")
                 launches.append(args[2])
 
-            module = SimpleNamespace(**{family: launch})
+            function = "quantize" if family == "quantization" else family
+            module = SimpleNamespace(**{function: launch})
             with patch(
                 f"oh_my_vllm.operators.{family}.workspace.load",
                 return_value=(module, "source", "library"),
             ):
-                workspace = factory(plan, device, bindings)
-            inputs = api.Inputs(object(), object())
+                workspace = (
+                    factory(plan, device)
+                    if family == "quantization"
+                    else factory(plan, device, bindings)
+                )
+            inputs = (
+                None if family == "quantization" else api.Inputs(object(), object())
+            )
+
+            def operation_for(binding):
+                if family == "quantization":
+                    return partial(api.run, workspace, binding)
+                return partial(api.run, binding, workspace, inputs, *arguments)
+
             outputs = workspace.outputs
             count = allocated
             if not fail:
                 for weights in bindings:
-                    self.assertIs(
-                        api.run(weights, workspace, inputs, *arguments), outputs
-                    )
+                    self.assertIs(operation_for(weights)(), outputs)
                 self.assertEqual(len(launches), 3)
                 self.assertEqual(allocated, count)
-            references = [weakref.ref(workspace), weakref.ref(outputs.value)]
+            result = outputs.encoded if family == "quantization" else outputs.value
+            references = [weakref.ref(workspace), weakref.ref(result)]
+            owners = bindings[:1] if family == "quantization" else bindings
             references.extend(
                 weakref.ref(weight, lambda _: events.append(("weight-release",)))
-                for weight in bindings
+                for weight in owners
             )
-            operation = partial(api.run, bindings[0], workspace, inputs, *arguments)
+            operation = operation_for(bindings[0])
             operation.graph_lease = workspace.graph_lease
             recording = graph_device(events).graph(operation)
             if fail:
@@ -160,14 +227,14 @@ class OperatorPlans(unittest.TestCase):
             replay = recording.__enter__()
             workspace.close()
             with self.assertRaises(RuntimeError):
-                api.run(bindings[0], workspace, inputs, *arguments)
+                operation_for(bindings[0])()
             return recording, replay, references
 
         with (
             patch("tvm_ffi.use_raw_stream", new=lambda *_: nullcontext()),
             patch("tvm_ffi.get_raw_stream", return_value=77),
         ):
-            for family in ("fa", "gdn", "ffn"):
+            for family in ("fa", "gdn", "ffn", "quantization"):
                 for fail in (False, True):
                     events = []
                     with self.subTest(family=family, fail=fail):
@@ -197,3 +264,63 @@ class OperatorPlans(unittest.TestCase):
                         )
                         with self.assertRaisesRegex(RuntimeError, "closed"):
                             replay()
+
+    def test_engram_graph_inputs_have_separate_lifetimes(self):
+        from oh_my_vllm.operators.engram.api import Inputs
+        from oh_my_vllm.operators.engram.plan import make_plan
+        from oh_my_vllm.operators.engram.workspace import prepare
+
+        plan = make_plan(
+            rows=1,
+            pad_id=2,
+            vocabulary_size=10,
+            layers=1,
+            heads=1,
+            max_ngram_size=3,
+        )
+        status = [1]
+
+        def capture(stream, result):
+            self.assertEqual(stream, 77)
+            result._obj.value = status[0]
+            return 0
+
+        device = SimpleNamespace(
+            empty=lambda shape, dtype: SimpleNamespace(shape=shape),
+            checked=lambda result: self.assertEqual(result, 0),
+            runtime=SimpleNamespace(cudaStreamIsCapturing=capture),
+        )
+        module = SimpleNamespace(engram_hash=lambda *args: None)
+        with patch(
+            "oh_my_vllm.operators.engram.workspace.load",
+            return_value=(module, "source", "library"),
+        ):
+            workspace = prepare(plan, device)
+
+        def invoke():
+            inputs = Inputs(*(SimpleNamespace(shape=s) for s in plan.input_shapes))
+            workspace.run(inputs)
+            return weakref.ref(inputs)
+
+        with patch("tvm_ffi.get_raw_stream", return_value=77):
+            with workspace.graph_lease():
+                first = [invoke(), invoke()]
+                status[0] = 0
+                eager = [invoke() for _ in range(100)]
+                gc.collect()
+                self.assertTrue(all(ref() is not None for ref in first))
+                self.assertEqual(sum(ref() is not None for ref in eager), 1)
+                with workspace.graph_lease():
+                    status[0] = 1
+                    second = [invoke(), invoke()]
+                    status[0] = 0
+                    invoke()
+                    gc.collect()
+                    self.assertTrue(all(ref() is not None for ref in second))
+                gc.collect()
+                self.assertTrue(all(ref() is None for ref in second))
+                self.assertTrue(all(ref() is not None for ref in first))
+                workspace.close()
+                self.assertTrue(all(ref() is not None for ref in first))
+            gc.collect()
+            self.assertTrue(all(ref() is None for ref in first))

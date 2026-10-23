@@ -1,8 +1,8 @@
 # Operator microbench design
 
 This document gives the numerical and performance acceptance rules for operator development.
-The [validation plan](validation-plan.md) gives implementation tasks and fixed cases.
-The numerical and performance suites are implemented. Performance limit calibration must be complete before source migration.
+The [case manifest](../../development/operators/cases.json) fixes the measured shapes and modes.
+The [limits](../../development/operators/limits.json) bind numerical and performance acceptance to those cases.
 
 ## Scope and boundaries
 

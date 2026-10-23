@@ -21,6 +21,8 @@ MODULE_SOURCES = {
 }
 OPTIONAL_MODULE_SOURCES = {
     "collectives": SOURCES / "runtime/cuda/collectives.cu",
+    "quantization": SOURCES / "quantization/cuda/quantization.cu",
+    "engram": SOURCES / "engram/cuda/engram.cu",
 }
 
 
@@ -203,7 +205,7 @@ def load(name, functions):
         vendor = collectives_vendor_dependencies()
     if vendor is not None and metadata.get(f"{name}_vendor") != vendor:
         raise RuntimeError(f"native {name} vendor dependencies are stale")
-    if name in ("vision", "ffn", "gdn", "fa", "collectives"):
+    if name in ("vision", "ffn", "gdn", "fa", "collectives", "quantization", "engram"):
         identity = build_digest(
             metadata["source_fingerprint"],
             metadata["compiler"],

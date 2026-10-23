@@ -5,7 +5,8 @@
 [状态 arena](../../crates/kv-cache/src/state.rs) 为阶段 2 提供类型化逻辑存储预留.
 它目前不替换 Qwen 协调器.
 它不分配 GPU 缓冲区, 不选择已接受的模型前缀, 也不发布 worker 结果.
-Rank 一致性, 调度器集成和模型专属状态恢复是 [阶段计划](plan.zh.md) 中的后续工作.
+[分布式接口](distributed.zh.md)提供 rank 一致性和调度器集成.
+模型专属物理状态恢复是[阶段计划](plan.zh.md)中的后续工作.
 
 ## 分组和所有者
 

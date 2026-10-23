@@ -1,6 +1,6 @@
-# Operator structure design
+# Operator structure
 
-This document gives the target structure for the operator refactor.
+This document gives the current operator structure.
 The [handoff](../handoff.md) gives the implementation status.
 The [runtime contracts](../requirements.md), [model contract](model.md), and [GPU execution rules](../execution.md) control behavior.
 
@@ -9,7 +9,6 @@ The [runtime contracts](../requirements.md), [model contract](model.md), and [GP
 Keep the interface, execution plan, temporary storage, and CUDA implementation for an operator in one package.
 The model calls complete sublayers in dependency sequence.
 An operator can change its internal kernels without changes to the model call site.
-The refactor can change fusion boundaries and execution paths.
 Operator performance must meet the fixed theoretical-latency ratio limits in the [microbench contract](microbench.md).
 
 The design uses functions and types for each operator.
@@ -17,7 +16,7 @@ It does not use an operator base class, a backend registry, or automatic fusion 
 
 ## Packages and dependencies
 
-The target package is `python/oh_my_vllm/operators`:
+The package is `python/oh_my_vllm/operators`:
 
 ```text
 operators/
@@ -172,19 +171,13 @@ Directory changes must also change include dependency discovery and source finge
 Keep complete dependency hashes, immutable binary identities, and native library identity checks.
 The inference loader does not import development tools or invoke a compiler.
 
-Initially keep the existing native compilation units while their source locations change.
 Change compilation boundaries only when the implementation has a demonstrated reason.
 Source packages, semantic interfaces, native libraries, and kernel launches are different boundaries.
 
-## Migration and acceptance
-
-1. Move sources with their build mapping and identity checks.
-2. Apply the interface and ownership design to FA and its MTP consumers.
-3. Apply the same contracts to GDN, FFN, output, and vision.
-4. Examine new fusion and execution changes independently from structural migration.
+## Change acceptance
 
 Update the [stage inventory](../../python/oh_my_vllm/operators/specification.py) and [serving boundaries](fusion.md) with the related implementation changes.
-Remove direct access to private buffers and model-level copies of kernel selection rules during each operator migration.
+Keep private buffers and kernel selection rules inside their operator packages.
 
 Use the [test scope](../testing.md) and [numerical procedure](evaluation.md).
 Use the [operator microbench design](microbench.md) for local numerical, state, and performance checks.
@@ -196,4 +189,5 @@ Run all 24 [HTTP configurations](../performance.md) with the same workload setti
 Apply the fixed operator performance limits without comparison to old builds or timings.
 Do more measurements when uncertainty prevents a decision against a limit.
 Check the other configurations when a new fusion makes selected workloads faster.
-Keep timing artifacts external and update the two README performance tables.
+Keep timing artifacts external.
+Update the [Qwen results](../deepseek-v41/qwen-results.md) after a complete matrix.
