@@ -19,8 +19,17 @@ Rust 输出解析使用 Ready 阶段接受的模型系列.
 Rust 模型策略拥有默认值, 选项验证和模型系列特定的就绪规则.
 CPU 模型选择发生在绑定 socket 或启动 worker 之前.
 
-[Nightly Qwen 报告](deepseek-v41/qwen-regression.zh.md) 记录完整 HTTP 回归矩阵.
-阶段 2 提供通用缓存事务和四 rank 控制.
+[适配器报告](deepseek-v41/qwen-regression.zh.md) 和[生命周期报告](deepseek-v41/qwen-foundations.zh.md) 记录 Qwen HTTP 矩阵.
+阶段 2 正在进行.
+
+[状态 arena](deepseek-v41/state-arena.zh.md) 提供类型化逻辑存储预留和读 lease.
+它不替换 Qwen 协调器, 也不发布已接受前缀.
+
+[GPU lease 包装器](deepseek-v41/gpu-groups.zh.md) 通过协作锁提供单设备和四设备选择.
+[rank 检查器](deepseek-v41/rank-control.zh.md) 验证就绪和全部 rank 的完成元数据.
+[进程监督器](deepseek-v41/rank-supervisor.zh.md) 保留事务, 直到完成或所拥有的进程终止.
+这些机制不发布已接受前缀.
+类型化调度器集成和原生通信是后续工作.
 
 Qwen 计算和已接受状态语义保持不变.
 DeepSeek 执行未启用.

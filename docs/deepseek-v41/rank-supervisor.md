@@ -1,0 +1,93 @@
+# Rank process ownership
+
+## Scope
+
+The [group client](../../crates/zmq-worker/src/rank_client.rs) connects the [rank gate](rank-control.md) to owned worker processes.
+It uses the same Rust process-group and IPC cleanup mechanisms as the Qwen client.
+The Qwen client uses the same extracted [lifecycle module](../../crates/zmq-worker/src/client/lifecycle.rs).
+Its protocol and model execution stay unchanged.
+
+The group client is not connected to the service scheduler at this time.
+The CPU peer in `tests/rank_peer.py` is a test program, not a model adapter.
+No DeepSeek model, native collective, or distributed CUDA Graph executes through this test program.
+The [phase plan](plan.md) specifies these integration gates.
+
+## Startup and transport
+
+The caller supplies the epoch, model descriptor, ordered GPU UUIDs, logical capacity limits, and a worker command.
+The caller also supplies an IPC directory that is already available and positive startup and step timeouts.
+Model policy must select that command before service integration.
+This interface does not detect a model family or supply approval for one.
+
+The constructor validates the group contract before it starts workers.
+Each rank gets its own IPC endpoint and DEALER connection.
+The IPC path must be missing before startup.
+The client does not remove or replace an entry to start a worker.
+The caller must own the directory and prevent other processes from changing its entries.
+Host paths belong in ignored local configuration.
+
+Each worker runs in a different owned process group.
+On Linux, the worker gets the same parent-death signal setup as the Qwen worker.
+The ordered UUID list becomes `CUDA_VISIBLE_DEVICES` for each worker.
+The logical rank is a command argument.
+The native worker must validate device identities through the CUDA driver before readiness.
+The [GPU wrapper](gpu-groups.md) owns device selection and cooperative locks.
+
+This client does not manage those locks.
+
+Each reply enters a bounded inbox with the source rank from its connection.
+The reply must contain one msgpack frame of at most 1 MiB.
+Readiness and completion pass through the rank gate.
+Startup uses one group deadline for process startup, initialization sends, and readiness.
+The client monitors process exits and does deadline checks when the inbox is empty.
+Startup send retries do not extend that deadline.
+
+## State lifetime
+
+`execute` takes a step plan and owned [state transactions](state-arena.md).
+Their epoch, step, request, and transaction IDs must agree with the schedule before dispatch.
+The client keeps the transactions while the ranks execute.
+Cancellation of the waiting future does not release them or start a subsequent step.
+
+All ranks must supply correct completion metadata, also when their local schedules have zero rows.
+Only then does the client return `CompletedStorage` with the completion record and transactions.
+The caller must validate model outputs and select accepted state.
+This return value does not publish a prefix or validate physical tensor layouts.
+
+## Failure and closure
+
+A worker exit, worker error, invalid reply, transport error, or deadline expiry fails the group operation.
+The client stops all owned process groups before it returns an operation failure.
+`close` also stops the groups.
+This low-level closure uses process termination, not a graceful model-shutdown exchange.
+
+One cleanup owner keeps all children and pending transactions.
+It sends termination signals to all owned groups before it waits for them.
+It waits for the workers and their process-group descendants to stop before it releases the transactions.
+Failure to start a cleanup thread uses the same cleanup on the calling thread.
+Cleanup cannot release storage only because a timeout or cancellation occurred.
+
+Closure aborts connection readers and removes only the IPC entries with the recorded file identities.
+A different cleanup task keeps these operations active if the close-waiting future is cancelled.
+A subsequent close call waits for the same completion source.
+Closure keeps the same result for subsequent waits, also after a cleanup error.
+
+Dropping the client also starts owned-process cleanup and keeps pending transactions until that cleanup finishes.
+The background cleanup can continue after the client handle is gone.
+For proof of previous-group termination, call `close` before replacement.
+Wait for its result.
+The client does not restart failed groups or recover their active requests.
+
+## Checks and limits
+
+CPU process tests use four Python peers with DEALER connections and msgpack messages.
+They cover replicated schedules, request partitions, zero-row ranks, startup errors, execution errors, hanging workers, and cancellation.
+They also test process-group descendants, IPC removal, lease release, and an unrelated owned test process.
+The close-wait check uses the cleanup completion channel and cancellation before completion.
+
+These checks do not supply GPU numerical, collective-order, native-memory, throughput, or capacity evidence.
+Typed scheduler integration, graceful service shutdown, and native communication are subsequent Phase 2 work.
+
+```bash
+scripts/with-env.sh cargo test -p oh-my-vllm-zmq-worker --test rank_client
+```
