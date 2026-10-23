@@ -54,6 +54,25 @@ Prefill 默认使用最多 2048 tokens 的连续分块.
 仅在独立身份和输出审查后冻结端点夹具.
 常规验收必须加载固定数组, 而不是生成新的预期输出.
 
+## 续算状态
+
+每个提示词分块和端点 decode 分支完成后保存续算检查点.
+检查点包含提示词状态, 最后 logits, 已完成端点, decode tokens, 游标, 阶段和生成时间.
+保存的状态保留局部窗口, 部分压缩器, 来源 KV, index keys 和 Engram 历史.
+Decode 探测状态不替换提示词状态.
+
+续算检查点身份包括模型文件身份, 配置, 提示词 IDs, token 映射, 源码, 依赖, Python 版本和执行设置.
+文件使用未压缩 NPZ 数组和 JSON 元数据.
+加载使用 `allow_pickle=False`.
+身份变化, 状态形状无效或数据损坏会导致错误.
+续算检查点文件不是端点 fixture.
+
+工具在原子替换续算检查点前完成文件同步.
+上一个有效版本为 `<stem>.previous.npz`.
+当前续算检查点损坏时, 工具报错, 不自动回退.
+必要时显式选择上一版本.
+重启后的生成时间从最后保存的值继续累计.
+
 ## 命令
 
 使用 `requirements/deepseek-reference.lock` 中的固定环境.
@@ -61,12 +80,13 @@ Prefill 默认使用最多 2048 tokens 的连续分块.
 将 `MODEL_ROOT` 设为检查点目录.
 将 `CHECKPOINT_MANIFEST` 设为其完整身份清单.
 将 `LONG_OUTPUT` 设为新的外部 NPZ 路径.
+将 `LONG_STATE` 设为另一个外部 NPZ 路径.
 
 ```bash
 CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
   -m development.model.deepseek_v41.reference_long_case \
   --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
-  --output "$LONG_OUTPUT"
+  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE"
 ```
 
 默认设置为八个 CPU 线程, 每次权重读取 2048 个投影行, 每个分块 2048 个提示词行.
@@ -74,8 +94,13 @@ CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
 不同分块大小可能改变浮点归约顺序.
 将记录的分块大小与冻结输出一起保留.
 
+中断后重复相同命令.
+已有状态文件提供经过验证的续算状态.
+如需选择上一版本, 将 `LONG_STATE` 设为该版本的路径.
+不使用 `--checkpoint-state` 时, 工具不保存续算状态.
+
 小规模检查将分块数学端点与整个前缀调用比较.
-它们还检查发布失败条件.
+它们还检查续算等价性, 身份拒绝, 检查点损坏和发布失败条件.
 它们不生成完整检查点输出:
 
 ```bash

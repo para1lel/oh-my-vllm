@@ -54,6 +54,25 @@ Keep generation logs and unreviewed artifacts external to the repository.
 Freeze endpoint fixtures only after independent identity and output review.
 Normal acceptance must load fixed arrays instead of generating new expected outputs.
 
+## Resume state
+
+Checkpoints follow each completed prompt chunk and endpoint decode branch.
+They contain prompt state, last logits, completed endpoints, decode tokens, cursor, phase, and generation time.
+Saved state keeps local windows, partial compressors, source KV, index keys, and Engram history.
+The decode probe state does not replace prompt state.
+
+Checkpoint identity includes model file identities, configuration, prompt IDs, token map, sources, dependencies, Python version, and execution settings.
+The files use uncompressed NPZ arrays and JSON metadata.
+Loading uses `allow_pickle=False`.
+Changed identities, invalid state shapes, and damaged data cause errors.
+Checkpoint files are not endpoint fixtures.
+
+The tool completes file synchronization before atomic checkpoint replacement.
+The previous valid generation is `<stem>.previous.npz`.
+The tool rejects a damaged current checkpoint without automatic fallback.
+Select the previous generation explicitly when necessary.
+Generation time continues from the last saved value after a restart.
+
 ## Commands
 
 Use the pinned environment from `requirements/deepseek-reference.lock`.
@@ -61,12 +80,13 @@ Set `REFERENCE_PYTHON` to its Python executable.
 Set `MODEL_ROOT` to the checkpoint directory.
 Set `CHECKPOINT_MANIFEST` to its full identity manifest.
 Set `LONG_OUTPUT` to a new external NPZ path.
+Set `LONG_STATE` to a different external NPZ path.
 
 ```bash
 CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
   -m development.model.deepseek_v41.reference_long_case \
   --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
-  --output "$LONG_OUTPUT"
+  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE"
 ```
 
 Defaults are eight CPU threads, 2048 projection rows per weight read, and 2048 prompt rows per chunk.
@@ -74,8 +94,13 @@ The chunk-size option accepts integers from 1 through 4096.
 Different chunk sizes can change floating-point reduction order.
 Keep the recorded chunk size with the frozen outputs.
 
+Repeat the same command after interruption.
+An existing state file supplies the validated continuation.
+To select the previous generation, set `LONG_STATE` to its path.
+Without `--checkpoint-state`, the tool does not save continuation state.
+
 The small checks compare chunked mathematical endpoints with whole-prefix calls.
-They also do checks of publication failure conditions.
+They also check resume equivalence, identity rejection, damaged checkpoints, and publication failure conditions.
 They do not generate full-checkpoint outputs:
 
 ```bash

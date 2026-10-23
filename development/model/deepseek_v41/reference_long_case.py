@@ -5,6 +5,7 @@ import hashlib
 import importlib.metadata
 import json
 import os
+import sys
 import time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -32,7 +33,14 @@ ARRAY_SHAPES = {
 
 
 def long_endpoints(
-    target, tokens, *, checkpoints=CHECKPOINTS, chunk_size=2048, progress=None
+    target,
+    tokens,
+    *,
+    checkpoints=CHECKPOINTS,
+    chunk_size=2048,
+    progress=None,
+    resume=None,
+    save_checkpoint=None,
 ):
     if type(chunk_size) is not int or not 1 <= chunk_size <= 4096:
         raise ValueError("reference chunk size must be between one and 4096")
@@ -46,23 +54,59 @@ def long_endpoints(
             "reference checkpoints must increase to the full prompt length"
         )
     notify = progress or (lambda _: None)
-    arrays, decode_tokens = {}, {}
-    state, start = None, 0
-    for length in checkpoints:
+    point = resume or {
+        "arrays": {},
+        "decode_tokens": {},
+        "state": None,
+        "cursor": 0,
+        "last_logits": None,
+        "next_endpoint": 0,
+        "phase": "prefill",
+        "generation_seconds": 0.0,
+    }
+    arrays, decode_tokens = point["arrays"], point["decode_tokens"]
+    state, start = point["state"], point["cursor"]
+    elapsed = point["generation_seconds"]
+    started = time.monotonic()
+    if resume is not None:
+        notify(f"Resuming CPU FP64 at prompt row {start}: {point['phase']}")
+
+    def save(endpoint, phase):
+        if save_checkpoint is not None:
+            save_checkpoint(
+                {
+                    "arrays": arrays,
+                    "decode_tokens": decode_tokens,
+                    "state": state,
+                    "cursor": start,
+                    "last_logits": last_logits,
+                    "next_endpoint": endpoint,
+                    "phase": phase,
+                    "generation_seconds": elapsed + time.monotonic() - started,
+                }
+            )
+
+    last_logits = point["last_logits"]
+    for index in range(point["next_endpoint"], len(checkpoints)):
+        length = checkpoints[index]
         while start < length:
             end = min(start + chunk_size, length)
             notify(f"Computing CPU FP64 prompt rows {start}:{end}/{len(tokens)}")
             output = target.forward(tokens[start:end], previous=state)
             state = output.state
             start = end
-        token = int(output.logits[0].argmax())
-        arrays[f"prefill_{length}"] = np.asarray(output.logits[0]).copy()
+            last_logits = np.asarray(output.logits[0]).copy()
+            del output
+            save(index, "probe" if start == length else "prefill")
+        token = int(last_logits.argmax())
+        arrays[f"prefill_{length}"] = last_logits.copy()
         notify(f"Computing CPU FP64 branch at {length}: token {token}")
         decoded = target.forward([token], previous=state)
         arrays[f"decode_{length}"] = np.asarray(decoded.logits[0]).copy()
         decode_tokens[str(length)] = token
         # Probe decode is a branch, not part of the next checkpoint's prompt.
-        del decoded, output
+        del decoded
+        save(index + 1, "complete" if index + 1 == len(checkpoints) else "prefill")
     return {
         "tokens": list(tokens),
         "checkpoints": list(checkpoints),
@@ -73,9 +117,10 @@ def long_endpoints(
 def case_sources():
     sources = source_identity()
     path = Path(__file__).resolve()
-    sources[str(path.relative_to(path.parents[3]))] = hashlib.sha256(
-        path.read_bytes()
-    ).hexdigest()
+    for source in (path, path.with_name("reference_long_checkpoint.py")):
+        sources[str(source.relative_to(path.parents[3]))] = hashlib.sha256(
+            source.read_bytes()
+        ).hexdigest()
     return sources
 
 
@@ -113,6 +158,7 @@ def generate(
     row_limit=2048,
     chunk_size=2048,
     hash_workers=4,
+    checkpoint_state=None,
 ):
     root = Path(model_root).resolve(strict=True)
     output = output_path(output, root)
@@ -179,13 +225,6 @@ def generate(
     reader = Weights(root, manifest, tensor_layout(config))
     weights = TorchWeights(reader, device="cpu", row_limit=row_limit)
     target = Model(weights, config, token_map)
-    started = time.monotonic()
-    inputs, arrays = long_endpoints(
-        target,
-        tokens,
-        chunk_size=chunk_size,
-        progress=lambda message: print(message, flush=True),
-    )
 
     def validate_inputs():
         if (
@@ -194,29 +233,68 @@ def generate(
         ):
             raise ValueError("checkpoint or reference source changed during generation")
 
+    dependencies = {
+        item.metadata["Name"]: item.version
+        for item in importlib.metadata.distributions()
+    }
+    execution = {
+        "device": "cpu",
+        "dtype": "float64",
+        "threads": threads,
+        "projection_row_limit": row_limit,
+        "prefill_chunk_size": chunk_size,
+        "hash_workers": hash_workers,
+    }
+    manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    token_map_digest = hashlib.sha256(token_map.astype("<i8").tobytes()).hexdigest()
+    store, resume = None, None
+    if checkpoint_state is not None:
+        from .reference_long_checkpoint import Checkpoint
+
+        identity = {
+            "config": config,
+            "tokens": list(tokens),
+            "checkpoints": list(CHECKPOINTS),
+            "checkpoint_manifest_sha256": manifest_digest,
+            "reference_sources": sources,
+            "dependencies": dependencies,
+            "python": sys.version,
+            "token_map_sha256": token_map_digest,
+            "execution": execution,
+        }
+        store = Checkpoint(
+            checkpoint_state,
+            identity,
+            checkpoint_root=root,
+            final_output=output,
+            validate_inputs=validate_inputs,
+        )
+        resume = store.load()
+    validate_inputs()
+    started = time.monotonic()
+    inputs, arrays = long_endpoints(
+        target,
+        tokens,
+        chunk_size=chunk_size,
+        progress=lambda message: print(message, flush=True),
+        resume=resume,
+        save_checkpoint=None if store is None else store.save,
+    )
     validate_inputs()
     metadata = {
         "schema_version": 1,
         "case": "long-context-boundaries",
         "reference_kind": "independent-pytorch-fp64-no-activation-quantization",
         "checkpoint": manifest,
-        "checkpoint_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "checkpoint_manifest_sha256": manifest_digest,
         "reference_sources": sources,
-        "dependencies": {
-            item.metadata["Name"]: item.version
-            for item in importlib.metadata.distributions()
-        },
+        "dependencies": dependencies,
         "inputs": inputs,
-        "token_map_sha256": hashlib.sha256(
-            token_map.astype("<i8").tobytes()
-        ).hexdigest(),
-        "execution": {
-            "device": "cpu",
-            "threads": threads,
-            "projection_row_limit": row_limit,
-            "prefill_chunk_size": chunk_size,
-        },
-        "generation_seconds": time.monotonic() - started,
+        "token_map_sha256": token_map_digest,
+        "execution": execution,
+        "generation_seconds": (
+            time.monotonic() - started if store is None else store.generation_seconds
+        ),
         "arrays": {
             name: {
                 "shape": list(value.shape),
@@ -241,6 +319,7 @@ def main():
     parser.add_argument("--projection-row-limit", type=int, default=2048)
     parser.add_argument("--chunk-size", type=int, default=2048)
     parser.add_argument("--hash-workers", type=int, default=4)
+    parser.add_argument("--checkpoint-state", type=Path)
     args = parser.parse_args()
     result = generate(
         args.model,
@@ -250,6 +329,7 @@ def main():
         row_limit=args.projection_row_limit,
         chunk_size=args.chunk_size,
         hash_workers=args.hash_workers,
+        checkpoint_state=args.checkpoint_state,
     )
     print(
         json.dumps(
