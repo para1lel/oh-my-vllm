@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use oh_my_vllm_model_contract::ModelDescriptor;
 use oh_my_vllm_zmq_worker::group::protocol::{
-    ExecutionMode, RankHeader, RankReady, RankResult, RequestWork, StepPlan,
+    ExecutionMode, GROUP_PROTOCOL_VERSION, RankHeader, RankReady, RankResult, RequestWork, StepPlan,
 };
 use oh_my_vllm_zmq_worker::group::{GroupGate, GroupLimits};
 use serde_json::json;
@@ -55,7 +55,7 @@ fn ready(strategy: &str, rank: u32) -> RankReady {
     }
     RankReady {
         header: RankHeader {
-            version: 2,
+            version: GROUP_PROTOCOL_VERSION,
             epoch: 17,
             rank,
         },
@@ -111,7 +111,7 @@ fn plan() -> StepPlan {
 fn result(rank: u32, transactions: &[u64]) -> RankResult {
     RankResult {
         header: RankHeader {
-            version: 2,
+            version: GROUP_PROTOCOL_VERSION,
             epoch: 17,
             rank,
         },

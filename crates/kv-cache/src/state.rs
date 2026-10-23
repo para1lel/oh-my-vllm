@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use oh_my_vllm_model_contract::{CacheSchema, CacheSource, ContractError, ParallelPlan};
+use serde::{Deserialize, Serialize};
 
 use crate::BlockPool;
 
@@ -26,7 +27,8 @@ pub struct AllocationRequest {
     pub blocks: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StateBlock {
     pub group: String,
     pub rank: u32,
@@ -34,7 +36,8 @@ pub struct StateBlock {
     pub generation: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TransactionKey {
     pub epoch: u64,
     pub step_id: u64,
@@ -356,6 +359,10 @@ impl StateTransaction {
 
     pub fn blocks(&self) -> &[StateBlock] {
         self.writes.blocks()
+    }
+
+    pub fn read_blocks(&self) -> &[StateBlock] {
+        self.reads.blocks()
     }
 
     pub fn abort(self) {

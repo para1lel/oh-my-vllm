@@ -14,7 +14,8 @@ This extraction does not replace those pools with the [state arena](state-arena.
 
 The service continues to select Qwen only.
 The Qwen worker messages keep their existing field names and values.
-DeepSeek cache layouts, rank dispatch, and accepted-state integration are subsequent work.
+The optional transaction policy supplies ownership transfer for [typed rank execution](typed-execution.md).
+DeepSeek cache layouts and accepted-state selection are subsequent work.
 This interface does not complete Phase 2 or enable DeepSeek execution.
 
 ## Model operations

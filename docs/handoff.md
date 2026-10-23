@@ -20,7 +20,9 @@ Rust model policies own defaults, option validation, and family-specific readine
 CPU model selection occurs before socket binding or worker startup.
 
 The [adapter](deepseek-v41/qwen-regression.md), [lifecycle](deepseek-v41/qwen-foundations.md), [runtime](deepseek-v41/qwen-collectives.md), and [cache-policy](deepseek-v41/qwen-cache-policy.md) reports record the Qwen HTTP matrices.
-Phase 2 is active.
+The [typed-execution report](deepseek-v41/qwen-typed-execution.md) records the subsequent Qwen HTTP matrix.
+Phase 2 infrastructure is complete.
+Phase 0 numerical limits and complete allocation bounds are prerequisites for Phase 3 operators.
 
 The [state arena](deepseek-v41/state-arena.md) supplies typed logical storage reservations and read leases.
 Storage selections keep only blocks already held by their source owners.
@@ -36,7 +38,9 @@ The optional [native collective owner](deepseek-v41/native-collectives.md) suppl
 These mechanisms do not publish accepted prefixes.
 The [cache policy](deepseek-v41/cache-policy.md) supplies model types for state assignments and host transfer ownership in shared scheduling.
 Qwen keeps its existing coordinator and wire format.
-DeepSeek state selection and typed rank dispatch are subsequent work.
+The [typed execution interface](deepseek-v41/typed-execution.md) transfers scheduler transactions to the group client.
+It validates model outputs and all-rank completion before accepted-state publication.
+DeepSeek state selection and physical model execution are subsequent work.
 
 Qwen computation and accepted-state semantics stay unchanged.
 DeepSeek execution is not enabled.

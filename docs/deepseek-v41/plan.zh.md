@@ -96,7 +96,7 @@ Adapter 提供准备, 执行, 结果验证, 状态选择和资源关闭.
 扩展 `scripts/with-gpu.sh` 和 `development/serving/device.py`.
 **接口:** 在阶段 1 契约中增加 `StateTransaction`, `RankReady`, `RankResult` 和 group epoch 字段.
 
-- [ ] 泛化关联状态预留, 不改变 Qwen copy-on-write 行为.
+- [x] 泛化关联状态预留, 不改变 Qwen copy-on-write 行为.
 - [x] 增加带版本的 rank 就绪, 容量汇总, 完成校验, 截止时间和整组关闭.
 - [x] 按稳定顺序获取全部四张 GPU 的锁, 否则等待前释放所有已取得的锁.
 - [x] 获取锁后重新检查全部选定设备. 不修改其他用户的时钟或进程.

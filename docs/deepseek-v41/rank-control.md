@@ -3,7 +3,7 @@
 ## Scope
 
 The [group gate](../../crates/zmq-worker/src/group.rs) validates rank readiness and completion metadata for Phase 2.
-Its [messages](../../crates/zmq-worker/src/group/protocol.rs) use group protocol version 2.
+Its [messages](../../crates/zmq-worker/src/group/protocol.rs) use group protocol version 3.
 The existing Qwen worker protocol and client do not use this gate at this time.
 This module does not start processes, execute collectives, validate model outputs, or publish accepted prefixes.
 Those integration steps in the [phase plan](plan.md) are still necessary.

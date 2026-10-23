@@ -358,3 +358,224 @@ async fn group_failure_and_cancelled_wait_keep_leases_until_children_stop() {
         assert!(unrelated.0.try_wait().unwrap().is_none());
     }
 }
+
+#[path = "support/model_policy.rs"]
+mod model_policy;
+
+fn model_settings(directory: &Directory, strategy: &str, failure: &str) -> GroupConfig {
+    let mut settings = config(directory, strategy, failure);
+    let group = settings.descriptor.cache_schema.groups[0].clone();
+    settings.descriptor.cache_schema.groups = ["latent", "window", "history"]
+        .map(|name| {
+            let mut group = group.clone();
+            group.name = name.into();
+            group.capacity_blocks = 8;
+            group
+        })
+        .to_vec();
+    settings.limits.max_slots = 96;
+    settings.step_timeout = Duration::from_secs(2);
+    settings.descriptor.speculation = serde_json::from_value(json!([{
+        "method": "dspark", "predictor_stages": 1,
+        "max_draft_tokens": 5, "max_verification_rows": 6
+    }]))
+    .unwrap();
+    settings
+}
+
+fn model_scheduler(
+    settings: &GroupConfig,
+) -> oh_my_vllm_scheduler::Scheduler<model_policy::ArenaPolicy> {
+    use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
+
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig::default(),
+        model_policy::ArenaPolicy::new(settings.descriptor.clone(), settings.epoch),
+    );
+    assert!(scheduler.add_request(Request::new(4, vec![1, 2], 3, vec![])));
+    assert!(scheduler.add_request(Request::new(5, vec![4], 3, vec![])));
+    scheduler
+}
+
+fn model_plan(
+    batch: &oh_my_vllm_scheduler::SchedulerOutput<
+        oh_my_vllm_zmq_worker::group::model::ModelState<model_policy::Layout>,
+    >,
+    strategy: &str,
+) -> StepPlan {
+    StepPlan {
+        step_id: batch.scheduled[0].state.transaction.step_id,
+        collective_plan: serde_json::from_value(json!({
+            "version":1,"world_size":4,"operations":[]
+        }))
+        .unwrap(),
+        requests: batch
+            .scheduled
+            .iter()
+            .map(|request| RequestWork {
+                request_id: request.request_id,
+                transaction_id: request.state.transaction.transaction_id,
+                owner_rank: if strategy == "dep4" {
+                    (request.request_id % 4) as u32
+                } else {
+                    0
+                },
+                rows: request.token_ids.len() as u32,
+                prefill: request.num_computed_tokens == 0,
+            })
+            .collect(),
+    }
+}
+
+#[tokio::test]
+async fn typed_model_execution_commits_only_after_quorum_and_full_output_validation() {
+    for strategy in ["tp4", "tep4", "dep4"] {
+        let directory = Directory::new();
+        let settings = model_settings(&directory, strategy, "model_slow");
+        let policy = model_policy::ArenaPolicy::new(settings.descriptor.clone(), settings.epoch);
+        let commits = policy.commits.clone();
+        let mut scheduler = oh_my_vllm_scheduler::Scheduler::new(Default::default(), policy);
+        for (id, prompt) in [(4, vec![1, 2]), (5, vec![4])] {
+            assert!(scheduler.add_request(oh_my_vllm_scheduler::Request::new(
+                id,
+                prompt,
+                3,
+                vec![]
+            )));
+        }
+        let mut client = GroupClient::launch(settings).await.unwrap();
+        for step in [1, 2] {
+            let batch = scheduler.schedule();
+            let plan = model_plan(&batch, strategy);
+            assert_eq!(plan.step_id, step);
+            let mut execution = Box::pin(client.execute_scheduled(&mut scheduler, batch, plan));
+            assert!(
+                tokio::time::timeout(Duration::from_millis(30), &mut execution)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(commits.load(Ordering::SeqCst), (step as usize - 1) * 2);
+            let output = execution.await.unwrap();
+            assert_eq!(
+                output
+                    .outputs
+                    .iter()
+                    .map(|row| row.token_ids.clone())
+                    .collect::<Vec<_>>(),
+                [vec![3], vec![4]]
+            );
+            assert_eq!(commits.load(Ordering::SeqCst), step as usize * 2);
+            assert!(!scheduler.has_detached_state());
+            for rank in 0..4 {
+                let record: serde_json::Value = serde_json::from_slice(
+                    &std::fs::read(directory.0.join(format!("model-{rank}-{step}.json"))).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(record["payload"]["requests"].as_array().unwrap().len(), 2);
+            }
+        }
+        scheduler.abort(4);
+        scheduler.abort(5);
+        assert_eq!(scheduler.cache_resource_counts(), 84);
+        client.shutdown(Duration::from_secs(2)).await.unwrap();
+        directory.assert_graceful();
+        directory.assert_stopped();
+    }
+}
+
+#[tokio::test]
+async fn typed_model_input_and_result_errors_cannot_publish_state() {
+    for failure in [
+        "model_digest",
+        "model_missing",
+        "model_duplicate",
+        "model_foreign",
+        "model_token",
+        "model_accept",
+        "tokens",
+        "generation",
+        "duplicate_write",
+        "unowned_read",
+        "transaction",
+        "prefill",
+    ] {
+        let directory = Directory::new();
+        let settings = model_settings(&directory, "tp4", failure);
+        let policy = model_policy::ArenaPolicy::new(settings.descriptor.clone(), settings.epoch);
+        let commits = policy.commits.clone();
+        let mut scheduler = oh_my_vllm_scheduler::Scheduler::new(Default::default(), policy);
+        assert!(scheduler.add_request(oh_my_vllm_scheduler::Request::new(
+            4,
+            vec![1, 2],
+            3,
+            vec![]
+        )));
+        assert!(scheduler.add_request(oh_my_vllm_scheduler::Request::new(5, vec![4], 3, vec![])));
+        let mut client = GroupClient::launch(settings).await.unwrap();
+        let mut batch = scheduler.schedule();
+        let mut plan = model_plan(&batch, "tp4");
+        let first = &mut batch.scheduled[0];
+        match failure {
+            "tokens" => first.token_ids[0] += 1,
+            "generation" => first.state.writes[0].generation += 1,
+            "duplicate_write" => first.state.writes.push(first.state.writes[0].clone()),
+            "unowned_read" => {
+                let mut unowned = first.state.writes[0].clone();
+                unowned.slot = 0;
+                first.state.reads.push(unowned);
+            }
+            "transaction" => first.state.transaction.transaction_id += 1,
+            "prefill" => plan.requests[0].prefill = false,
+            _ => {}
+        }
+        let error = client
+            .execute_scheduled(&mut scheduler, batch, plan)
+            .await
+            .expect_err(failure);
+        if failure == "model_accept" {
+            assert!(
+                error.to_string().contains("accepted unscheduled drafts"),
+                "{error}"
+            );
+        }
+        assert_eq!(commits.load(Ordering::SeqCst), 0, "{failure}");
+        assert!(scheduler.has_detached_state());
+        assert!(scheduler.schedule().scheduled.is_empty());
+        assert!(
+            scheduler
+                .update(oh_my_vllm_scheduler::WorkerOutput { outputs: vec![] })
+                .is_err()
+        );
+        scheduler.abort(4);
+        scheduler.abort(5);
+        assert_eq!(scheduler.cache_resource_counts(), 84, "{failure}");
+        directory.assert_stopped();
+    }
+}
+
+#[tokio::test]
+async fn cancelled_typed_execution_keeps_detached_owners_until_process_reaping() {
+    let directory = Directory::new();
+    let settings = model_settings(&directory, "dep4", "model_hang");
+    let mut scheduler = model_scheduler(&settings);
+    let mut client = GroupClient::launch(settings).await.unwrap();
+    let batch = scheduler.schedule();
+    let plan = model_plan(&batch, "dep4");
+    assert_eq!(scheduler.cache_resource_counts(), 78);
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(30),
+            client.execute_scheduled(&mut scheduler, batch, plan)
+        )
+        .await
+        .is_err()
+    );
+    assert!(scheduler.has_detached_state());
+    scheduler.abort(4);
+    scheduler.abort(5);
+    assert_eq!(scheduler.cache_resource_counts(), 78);
+    client.close().await.unwrap();
+    assert_eq!(scheduler.cache_resource_counts(), 84);
+    assert!(!scheduler.empty_like().has_detached_state());
+    directory.assert_stopped();
+}

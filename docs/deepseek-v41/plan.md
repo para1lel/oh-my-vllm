@@ -96,7 +96,7 @@ Add `crates/zmq-worker/src/group.rs` and `python/oh_my_vllm/operators/runtime/di
 Extend `scripts/with-gpu.sh` and `development/serving/device.py`.
 **Interfaces:** Add `StateTransaction`, `RankReady`, `RankResult`, and group epoch fields to the Phase 1 contract.
 
-- [ ] Generalize related state reservations without changing Qwen copy-on-write behavior.
+- [x] Generalize related state reservations without changing Qwen copy-on-write behavior.
 - [x] Add versioned rank readiness, capacity aggregation, completion validation, deadlines, and group shutdown.
 - [x] Acquire all four GPU locks in stable order, or release all acquired locks before waiting.
 - [x] Recheck all selected devices after locking. Do not change other users' clocks or processes.

@@ -7,7 +7,8 @@ It uses the same Rust process-group and IPC cleanup mechanisms as the Qwen clien
 The Qwen client uses the same extracted [lifecycle module](../../crates/zmq-worker/src/client/lifecycle.rs).
 Its protocol and model execution stay unchanged.
 
-The group client is not connected to the service scheduler at this time.
+The [typed execution interface](typed-execution.md) connects the generic scheduler to the group client.
+The service still uses its Qwen client.
 The CPU peer in `tests/rank_peer.py` is a test program, not a model adapter.
 No DeepSeek model, native collective, or distributed CUDA Graph executes through this test program.
 The [phase plan](plan.md) specifies these integration gates.
@@ -127,7 +128,7 @@ They also check normal shutdown, incorrect closure headers, nonzero exits, missi
 The close-wait check uses the cleanup completion channel and cancellation before completion.
 
 These checks do not supply GPU numerical, collective-order, native-memory, throughput, or capacity evidence.
-Typed scheduler integration, graceful service shutdown, and native communication are subsequent Phase 2 work.
+DeepSeek service integration and its model execution are subsequent work.
 
 ```bash
 scripts/with-env.sh cargo test -p oh-my-vllm-zmq-worker --test rank_client

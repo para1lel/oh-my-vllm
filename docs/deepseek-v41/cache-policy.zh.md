@@ -14,7 +14,8 @@
 
 服务仍只选择 Qwen.
 Qwen worker 消息保持现有字段名和值.
-DeepSeek 缓存布局, rank 分发和已接受状态集成是后续工作.
+可选事务策略为[类型化 rank 执行](typed-execution.zh.md) 提供所有权转移.
+DeepSeek 缓存布局和已接受状态选择仍是后续工作.
 此接口不会完成阶段 2, 也不会启用 DeepSeek 执行.
 
 ## 模型操作

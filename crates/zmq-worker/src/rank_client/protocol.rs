@@ -1,6 +1,7 @@
 use oh_my_vllm_model_contract::ModelDescriptor;
 use serde::{Deserialize, Serialize};
 
+use crate::group::model::ModelRankResult;
 use crate::group::protocol::{RankHeader, RankReady, RankResult, StepDispatch};
 
 use super::GroupTransport;
@@ -43,6 +44,7 @@ pub enum Reply {
     Bootstrap(RankBootstrap),
     Ready(RankReady),
     Result(RankResult),
+    ModelResult(ModelRankResult),
     Closed { header: RankHeader },
     Error { header: RankHeader, message: String },
 }

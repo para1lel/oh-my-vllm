@@ -17,6 +17,8 @@ use crate::client::lifecycle::{Binding, IpcPath, ManagedChild, reap_worker_group
 use crate::group::protocol::{GROUP_PROTOCOL_VERSION, RankHeader, StepPlan};
 use crate::group::{CompletedStep, GroupCapacities, GroupGate, GroupLimits};
 
+mod encoding;
+mod model;
 mod protocol;
 mod shutdown;
 
@@ -298,7 +300,9 @@ impl GroupClient {
                 protocol::Reply::Error { header, message } => {
                     bail!("rank {rank} ({header:?}): {message}")
                 }
-                protocol::Reply::Result(_) => bail!("rank result before group readiness"),
+                protocol::Reply::Result(_) | protocol::Reply::ModelResult(_) => {
+                    bail!("rank result before group readiness")
+                }
                 protocol::Reply::Closed { .. } => bail!("rank closed before group readiness"),
                 protocol::Reply::Bootstrap(_) => {
                     bail!("unexpected rank bootstrap during readiness")
@@ -388,13 +392,23 @@ impl GroupClient {
         retry: bool,
     ) -> Result<()> {
         let bytes = rmp_serde::to_vec_named(message)?;
+        self.send_bytes(rank, &bytes, deadline, retry).await
+    }
+
+    async fn send_bytes(
+        &mut self,
+        rank: u32,
+        bytes: &[u8],
+        deadline: Instant,
+        retry: bool,
+    ) -> Result<()> {
         loop {
             self.check_children()?;
             self.gate.check_deadline(Instant::now())?;
             let remaining = deadline.saturating_duration_since(Instant::now());
             let result = tokio::time::timeout(
                 remaining,
-                self.senders[rank as usize].send(ZmqMessage::from(bytes.clone())),
+                self.senders[rank as usize].send(ZmqMessage::from(bytes.to_vec())),
             )
             .await?;
             match result {
@@ -430,6 +444,30 @@ impl GroupClient {
             !self.closed && self.pending.is_empty(),
             "group is closed or a step is pending"
         );
+        self.validate_transactions(&plan, &transactions)?;
+        let end = deadline(self.step_timeout)?;
+        let dispatch = self.gate.begin(plan, end, Instant::now())?;
+        self.pending = transactions;
+        let result = self.execute_dispatch(&dispatch, end).await;
+        match result {
+            Ok(completion) => Ok(CompletedStorage {
+                completion,
+                transactions: std::mem::take(&mut self.pending),
+            }),
+            Err(error) => {
+                self.close()
+                    .await
+                    .context("rank execution cleanup failed")?;
+                Err(error)
+            }
+        }
+    }
+
+    fn validate_transactions(
+        &self,
+        plan: &StepPlan,
+        transactions: &[StateTransaction],
+    ) -> Result<()> {
         ensure!(
             plan.requests.len() == transactions.len(),
             "transaction count differs from schedule"
@@ -453,22 +491,7 @@ impl GroupClient {
                 }),
             "transaction ownership differs from schedule"
         );
-        let end = deadline(self.step_timeout)?;
-        let dispatch = self.gate.begin(plan, end, Instant::now())?;
-        self.pending = transactions;
-        let result = self.execute_dispatch(&dispatch, end).await;
-        match result {
-            Ok(completion) => Ok(CompletedStorage {
-                completion,
-                transactions: std::mem::take(&mut self.pending),
-            }),
-            Err(error) => {
-                self.close()
-                    .await
-                    .context("rank execution cleanup failed")?;
-                Err(error)
-            }
-        }
+        Ok(())
     }
 
     async fn execute_dispatch(
@@ -487,6 +510,9 @@ impl GroupClient {
                     if let Some(complete) = self.gate.accept_result(rank, result, Instant::now())? {
                         return Ok(complete);
                     }
+                }
+                protocol::Reply::ModelResult(_) => {
+                    bail!("model result for metadata-only execution")
                 }
                 protocol::Reply::Error { header, message } => {
                     bail!("rank {rank} ({header:?}): {message}")

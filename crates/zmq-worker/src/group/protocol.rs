@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::collectives::CollectivePlan;
 
-pub const GROUP_PROTOCOL_VERSION: u32 = 2;
+pub const GROUP_PROTOCOL_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

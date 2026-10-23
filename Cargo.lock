@@ -665,6 +665,7 @@ version = "0.1.0"
 dependencies = [
  "oh-my-vllm-model-contract",
  "rustc-hash",
+ "serde",
  "sha2",
  "thiserror 2.0.20",
  "tracing",

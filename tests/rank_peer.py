@@ -1,6 +1,7 @@
 """CPU-only peer for Rust rank-supervisor process tests."""
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -48,6 +49,97 @@ def bootstrap(init, args):
         if args.failure == "bootstrap_hang":
             time.sleep(60)
     return reply
+
+
+def completion(dispatch, args):
+    reply = {
+        "header": {
+            "version": dispatch["version"],
+            "epoch": dispatch["epoch"],
+            "rank": args.rank,
+        },
+        "step_id": dispatch["step_id"],
+        "collective_plan_sha256": dispatch["collective_plan_sha256"],
+        "completed_collectives": dispatch["collective_count"],
+        "transaction_ids": [
+            request["transaction_id"]
+            for request in dispatch["ranks"][args.rank]["requests"]
+        ],
+        "device_work_complete": True,
+    }
+    if args.rank == 2 and args.failure == "stale_result":
+        reply["step_id"] -= 1
+    return reply
+
+
+def model_output(request, vocabulary_size):
+    return {
+        "request_id": request["request_id"],
+        "token_ids": (
+            [sum(request["token_ids"]) % vocabulary_size]
+            if request["state"]["layout"]["emit"]
+            else []
+        ),
+        "num_accepted_draft_tokens": 0,
+        "new_draft_token_ids": [],
+    }
+
+
+def model_result(message, init, args, child):
+    data = message["payload"]
+    if not isinstance(data, bytes) or len(data) > 64 << 20:
+        raise ValueError("model payload must be binary msgpack of at most 64 MiB")
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != message["payload_sha256"]:
+        raise ValueError("model payload digest differs")
+    payload = msgpack.unpackb(data, raw=False)
+    dispatch = message["dispatch"]
+    local_work = dispatch["ranks"][args.rank]["requests"]
+    args.records.joinpath(f"model-{args.rank}-{dispatch['step_id']}.json").write_text(
+        json.dumps(
+            {
+                "pid": os.getpid(),
+                "child": child.pid,
+                "payload": payload,
+                "local_request_ids": [work["request_id"] for work in local_work],
+                "payload_sha256": digest,
+            }
+        )
+    )
+    requests = {request["request_id"]: request for request in payload["requests"]}
+    vocabulary_size = init["descriptor"]["vocabulary_size"]
+    outputs = [
+        model_output(requests[work["request_id"]], vocabulary_size)
+        for work in local_work
+        if work["owner_rank"] == args.rank
+    ]
+    if args.rank == 0 and outputs:
+        if args.failure == "model_missing":
+            outputs.pop(0)
+        elif args.failure == "model_duplicate":
+            outputs.append(outputs[0].copy())
+        elif args.failure == "model_token":
+            for output in outputs:
+                if output["token_ids"]:
+                    output["token_ids"] = [vocabulary_size]
+                    break
+        elif args.failure == "model_accept":
+            outputs[-1]["num_accepted_draft_tokens"] = 1
+    if args.rank == 2:
+        if args.failure == "model_digest":
+            digest = ("1" if digest[0] == "0" else "0") + digest[1:]
+        elif args.failure == "model_foreign":
+            outputs.append(model_output(payload["requests"][0], vocabulary_size))
+        elif args.failure == "model_hang":
+            time.sleep(60)
+    if args.rank == 3 and args.failure == "model_slow":
+        time.sleep(0.2)
+    return {
+        "type": "model_result",
+        "completion": completion(dispatch, args),
+        "payload_sha256": digest,
+        "outputs": outputs,
+    }
 
 
 def main():
@@ -129,24 +221,11 @@ def main():
                     return
                 if args.rank == 2 and args.failure == "step_hang":
                     time.sleep(60)
-                reply = {
-                    "type": "result",
-                    "header": {
-                        "version": message["version"],
-                        "epoch": message["epoch"],
-                        "rank": args.rank,
-                    },
-                    "step_id": message["step_id"],
-                    "collective_plan_sha256": message["collective_plan_sha256"],
-                    "completed_collectives": message["collective_count"],
-                    "transaction_ids": [
-                        request["transaction_id"]
-                        for request in message["ranks"][args.rank]["requests"]
-                    ],
-                    "device_work_complete": True,
-                }
-                if args.rank == 2 and args.failure == "stale_result":
-                    reply["step_id"] -= 1
+                reply = (
+                    model_result(message, init, args, child)
+                    if message["type"] == "execute_model"
+                    else {"type": "result", **completion(message, args)}
+                )
             socket.send(msgpack.packb(reply, use_bin_type=True))
             if message["type"] == "init" and args.failure == "premature_ready":
                 args.records.joinpath(f"bootstrap-{args.rank}.sent").touch()

@@ -331,7 +331,7 @@ def run(args, socket):
     header = init["header"]
     if init["type"] != "init" or init["transport"] != "nccl":
         raise ValueError("native probe requires NCCL initialization")
-    if header["version"] != 2 or header["rank"] != args.rank:
+    if header["version"] != 3 or header["rank"] != args.rank:
         raise ValueError("native probe header differs")
     count, uuid = local_device()
     if count != 1 or uuid != init["device_uuids"][args.rank]:
@@ -385,7 +385,7 @@ def run(args, socket):
             return
         if message["type"] != "execute":
             raise ValueError("unexpected native probe command")
-        if message["version"] != 2 or message["epoch"] != header["epoch"]:
+        if message["version"] != 3 or message["epoch"] != header["epoch"]:
             raise ValueError("stale execute")
         plan = CollectivePlan.from_wire(message["collective_plan"], world_size=4)
         if (

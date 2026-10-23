@@ -7,7 +7,8 @@
 Qwen 客户端使用同一个提取出的[生命周期模块](../../crates/zmq-worker/src/client/lifecycle.rs).
 其协议和模型执行保持不变.
 
-组客户端目前未连接到服务调度器.
+[类型化执行接口](typed-execution.zh.md) 将泛型调度器连接到组客户端.
+服务仍使用其 Qwen 客户端.
 `tests/rank_peer.py` 中的 CPU 对端是测试程序, 而非模型适配器.
 此测试程序不执行 DeepSeek 模型, 原生集合通信或分布式 CUDA Graph.
 [阶段计划](plan.zh.md) 规定这些集成门槛.
@@ -127,7 +128,7 @@ CPU 进程测试使用四个 Python 对端, 以及 DEALER 连接和 msgpack 消�
 关闭等待检查使用清理完成通道, 并在完成前取消等待.
 
 这些检查不提供 GPU 数值, 集合通信顺序, 原生内存, 吞吐量或容量证据.
-类型化调度器集成, 优雅服务关闭和原生通信是后续阶段 2 工作.
+DeepSeek 服务集成及其模型执行仍是后续工作.
 
 ```bash
 scripts/with-env.sh cargo test -p oh-my-vllm-zmq-worker --test rank_client

@@ -3,7 +3,7 @@
 ## 范围
 
 [组检查器](../../crates/zmq-worker/src/group.rs) 为阶段 2 验证 rank 就绪和完成元数据.
-其[消息](../../crates/zmq-worker/src/group/protocol.rs) 使用组协议版本 2.
+其[消息](../../crates/zmq-worker/src/group/protocol.rs) 使用组协议版本 3.
 现有 Qwen worker 协议和客户端目前不使用此检查器.
 此模块不启动进程, 不执行集合通信, 不验证模型输出, 也不发布已接受前缀.
 [阶段计划](plan.zh.md) 中的这些集成步骤仍然必要.

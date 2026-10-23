@@ -6,6 +6,7 @@ use oh_my_vllm_model_contract::{
 };
 
 pub mod collectives;
+pub mod model;
 pub mod protocol;
 
 use protocol::{
@@ -176,6 +177,10 @@ impl GroupGate {
 
     pub fn capacities(&self) -> Option<&GroupCapacities> {
         matches!(self.phase, Phase::Ready | Phase::Running).then_some(&self.capacities)
+    }
+
+    pub(crate) fn descriptor(&self) -> &ModelDescriptor {
+        &self.expected
     }
 
     pub fn fail_rank(&mut self, _rank: u32) {

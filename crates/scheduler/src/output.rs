@@ -1,4 +1,5 @@
 use oh_my_vllm_kv_cache::group::RequestId;
+use serde::{Deserialize, Serialize};
 
 use crate::policy::qwen::QwenState;
 
@@ -37,7 +38,8 @@ pub struct WorkerOutput {
     pub outputs: Vec<RequestOutput>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RequestOutput {
     pub request_id: RequestId,
     pub token_ids: Vec<u32>,

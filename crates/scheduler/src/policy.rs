@@ -1,6 +1,10 @@
 use std::fmt::Debug;
 
-use oh_my_vllm_kv_cache::{group::RequestId, hash::BlockHash};
+use oh_my_vllm_kv_cache::{
+    group::RequestId,
+    hash::BlockHash,
+    state::{StateError, StateTransaction},
+};
 
 use crate::{Request, SchedulerConfig};
 
@@ -89,4 +93,18 @@ pub trait CachePolicy: Sized {
 
     // Call only after validated completion; request ownership is released separately.
     fn finish_transfer(&mut self, transfer: Self::Transfer) -> Self::Snapshot;
+}
+
+pub trait TransactionalCachePolicy: CachePolicy {
+    // Validate the full identity set before moving any owner out of the policy.
+    fn detach_transactions(
+        &mut self,
+        request_ids: &[RequestId],
+    ) -> Result<Vec<StateTransaction>, StateError>;
+
+    // Restore ownership only, after validating the full set; do not publish accepted state.
+    fn restore_transactions(
+        &mut self,
+        transactions: Vec<StateTransaction>,
+    ) -> Result<(), StateError>;
 }

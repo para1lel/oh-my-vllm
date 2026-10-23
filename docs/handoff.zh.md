@@ -20,7 +20,9 @@ Rust 模型策略拥有默认值, 选项验证和模型系列特定的就绪规�
 CPU 模型选择发生在绑定 socket 或启动 worker 之前.
 
 [适配器](deepseek-v41/qwen-regression.zh.md), [生命周期](deepseek-v41/qwen-foundations.zh.md), [运行时](deepseek-v41/qwen-collectives.zh.md) 和[缓存策略](deepseek-v41/qwen-cache-policy.zh.md) 报告记录 Qwen HTTP 矩阵.
-阶段 2 正在进行.
+[类型化执行报告](deepseek-v41/qwen-typed-execution.zh.md)记录后续 Qwen HTTP 矩阵.
+阶段 2 基础设施已完成.
+阶段 0 数值限制和完整分配边界是阶段 3 算子的前置条件.
 
 [状态 arena](deepseek-v41/state-arena.zh.md) 提供类型化逻辑存储预留和读 lease.
 存储选择仅保留其源所有者已经持有的块.
@@ -36,7 +38,9 @@ CPU 模型选择发生在绑定 socket 或启动 worker 之前.
 这些机制不发布已接受前缀.
 [缓存策略](deepseek-v41/cache-policy.zh.md) 为共享调度中的状态分配和主机迁移所有权提供模型类型.
 Qwen 保留现有 coordinator 和 wire 格式.
-DeepSeek 状态选择和类型化 rank 分发是后续工作.
+[类型化执行接口](deepseek-v41/typed-execution.zh.md) 将调度器事务转交给组 client.
+它在发布已接受状态之前验证模型输出和全部 rank 完成.
+DeepSeek 状态选择和物理模型执行仍是后续工作.
 
 Qwen 计算和已接受状态语义保持不变.
 DeepSeek 执行未启用.

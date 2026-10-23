@@ -2,6 +2,7 @@ pub mod cache;
 pub mod output;
 pub mod policy;
 pub mod request;
+pub mod transaction;
 
 use std::collections::VecDeque;
 
@@ -47,6 +48,7 @@ pub struct Scheduler<P: CachePolicy = HybridCoordinator> {
     finished_ids: Vec<u64>,
     prefill_cursor: Option<RequestId>,
     host: cache::HostCache<P>,
+    detached_state: bool,
 }
 
 impl<P: CachePolicy> Scheduler<P> {
@@ -160,6 +162,7 @@ impl<P: CachePolicy> Scheduler<P> {
             finished_ids: Vec::new(),
             prefill_cursor: None,
             host: cache::HostCache::default(),
+            detached_state: false,
         }
     }
 
@@ -213,6 +216,9 @@ impl<P: CachePolicy> Scheduler<P> {
     }
 
     pub fn schedule(&mut self) -> SchedulerOutput<P::State> {
+        if self.detached_state {
+            return SchedulerOutput::default();
+        }
         let started = std::time::Instant::now();
         self.kv.new_step_starts();
         self.retry_cache_stores();
@@ -539,6 +545,12 @@ impl<P: CachePolicy> Scheduler<P> {
     }
 
     pub fn update(&mut self, mut worker: WorkerOutput) -> Result<WorkerOutput, UpdateError> {
+        if self.detached_state {
+            return Err(UpdateError {
+                request_id: 0,
+                reason: "execution state is detached",
+            });
+        }
         self.validate_output(&worker)?;
         if !worker.outputs.is_empty() {
             self.cache_progress();
