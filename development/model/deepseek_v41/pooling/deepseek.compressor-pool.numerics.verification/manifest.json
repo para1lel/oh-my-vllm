@@ -1,0 +1,115 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "deepseek.compressor-pool.numerics.verification",
+    "boundary": "deepseek.compressor-pool",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 192,
+      "batch": 64,
+      "queries": 3,
+      "width": 512,
+      "ratio": 2
+    },
+    "mode": "eager",
+    "weights": [],
+    "options": {
+      "input_dtype": "float32",
+      "output_dtype": "bfloat16",
+      "query_unit": "complete-pair"
+    },
+    "outputs": [
+      "value"
+    ]
+  },
+  "checkpoint": {
+    "manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+    "files": {
+      "config.json": {
+        "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879",
+        "size": 3311
+      },
+      "inference/model.py": {
+        "sha256": "4e9ae23620edc8028ccc5d5fef552ab7fdc7dcd6f79608754fe9f67644056f65",
+        "size": 61549
+      }
+    }
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "source": {
+      "development/operators/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+      "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+      "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+      "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+      "development/operators/reference/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+      "development/model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+      "development/model/deepseek_v41/reference_attention.py": "6fdb87eed47dde8dc7ae7d6cd9edfb35b35b506b9aa093da18f06afa944b71bd",
+      "external/generate-compressor-pool-v1.py": "0c0bbe7bd2453000a31cff58318762f607b359bec6b6b4e06116bb5f680b621c",
+      "external/compressor-pool-policy-proposal-v1.json": "acc99522f07da1c51ba07919b8b4db765c9d423f8a9bc2f8f29f01e17a41e4da"
+    },
+    "torch": "2.12.0+cu130",
+    "scope": "Isolated complete ratio2 groups of FP32 projected KV and gates, stable per-channel pair softmax, weighted sum, one final BF16 conversion before RMS. No projections, normalization, RoPE, partial/cache state, dispatch, timing or full-model acceptance."
+  },
+  "files": {
+    "inputs.kv.0000.npz": "b242830173ba05cf58bbb131c6fe0e94d22c675e21d0cac18ea0327829cb10fc",
+    "inputs.gates.0000.npz": "2e3ed01f68df41e02970262165f29522ecc368eaa6b7d96114f8f88f343d0d9a",
+    "expected.value.0000.npz": "67ecafecd03de8e4083538b6281baf95b43e23349ad95ed05f8876d1ddf3a08b"
+  },
+  "tensors": {
+    "inputs.kv": {
+      "shape": [
+        192,
+        2,
+        512
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.kv.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 196608
+        }
+      ]
+    },
+    "inputs.gates": {
+      "shape": [
+        192,
+        2,
+        512
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.gates.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 196608
+        }
+      ]
+    },
+    "expected.value": {
+      "shape": [
+        192,
+        512
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 98304
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

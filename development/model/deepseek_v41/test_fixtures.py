@@ -13,6 +13,34 @@ from . import fixtures
 
 
 class FrozenFixtures(unittest.TestCase):
+    def test_sparse_attention_keeps_packed_stores_and_complete_requests(self):
+        loader = getattr(fixtures, "load_sparse_attention", None)
+        self.assertTrue(callable(loader), "sparse-attention fixture loader is missing")
+        metadata, cases = loader()
+        self.assertEqual(len(cases), 5)
+        for name, case in cases.items():
+            shape = case.manifest["case"]["shape"]
+            inputs, expected = case.inputs, case.expected["value"]
+            rows, heads = shape["rows"], shape["heads"]
+            self.assertEqual(rows, shape["batch"] * shape["queries"])
+            self.assertEqual(inputs["query"].shape, (rows, heads, 512))
+            self.assertEqual(inputs["query"].dtype, np.uint16)
+            self.assertEqual(inputs["sink"].dtype, np.float32)
+            self.assertEqual(inputs["window"].shape[1], 512)
+            self.assertEqual(inputs["compressed"].shape[1], 256)
+            self.assertEqual(inputs["window_scales"].shape[1], 16)
+            self.assertEqual(inputs["compressed_scales"].shape[1], 32)
+            self.assertEqual(inputs["indices"].shape, (rows, shape["slots"]))
+            self.assertEqual(expected.shape, (rows, heads, 512))
+            self.assertEqual(expected.dtype, np.float64)
+            self.assertTrue(np.isfinite(expected).all())
+            self.assertFalse(expected.flags.writeable)
+            limits = metadata["cases"][name]["limits"]["fields"]["value"]
+            self.assertEqual(np.asarray(limits["max_abs"]).shape, (shape["batch"], 512))
+            self.assertFalse(expected[(inputs["indices"] == -1).all(axis=1)].any())
+        self.assertEqual(cases["verification"].expected["value"].shape, (384, 64, 512))
+        self.assertEqual(cases["address_and_scale"].inputs["logical_rows"][1], 1048576)
+
     def test_long_reference_keeps_all_boundaries_and_fixed_prompt(self):
         loader = getattr(fixtures, "load_long", None)
         self.assertTrue(callable(loader), "long-reference fixture loader is missing")
@@ -124,7 +152,7 @@ class FrozenFixtures(unittest.TestCase):
                 self.assertEqual(case.inputs["weight"].shape, (width,))
                 self.assertEqual(case.inputs["weight"].dtype, np.uint16)
 
-    def test_projections_keep_encoded_inputs_full_outputs_and_cancellation(self):
+    def test_projections_and_pooling_keep_full_outputs_and_cancellation(self):
         loader = getattr(fixtures, "load_projection", None)
         self.assertTrue(callable(loader), "projection fixture loader is missing")
         _, cases = loader()
@@ -145,6 +173,30 @@ class FrozenFixtures(unittest.TestCase):
                 self.assertFalse((value if column < 0 else value[:, column]).any())
         self.assertEqual(cases["fp4_verification"].inputs["scales"].shape[1], 18)
         self.assertTrue(cases["fp4_decisions"].expected["value"][4:].any())
+        loader = getattr(fixtures, "load_pooling", None)
+        self.assertTrue(callable(loader), "ratio2 pooling fixture loader is missing")
+        metadata, cases = loader()
+        self.assertEqual(set(cases), {"single", "decode", "prefill", "verification"})
+        for name, case in cases.items():
+            shape = case.manifest["case"]["shape"]
+            rows = shape["rows"]
+            self.assertEqual(rows, shape["batch"] * shape["queries"])
+            for field in ("kv", "gates"):
+                self.assertEqual(case.inputs[field].shape, (rows, 2, 512))
+                self.assertEqual(case.inputs[field].dtype, np.float32)
+            expected = case.expected["value"]
+            self.assertEqual(expected.shape, (rows, 512))
+            self.assertEqual(expected.dtype, np.float64)
+            self.assertTrue(np.isfinite(expected).all())
+            self.assertFalse(expected.flags.writeable)
+            kv, gates = case.inputs["kv"], case.inputs["gates"]
+            cancellation = (kv[:, 0] == -kv[:, 1]) & (gates[:, 0] == gates[:, 1])
+            self.assertFalse(expected[cancellation].any())
+            limits = metadata["cases"][name]["limits"]["fields"]["value"]
+            self.assertEqual(len(limits["max_abs"]), shape["batch"])
+            if name != "single":
+                self.assertEqual(limits["max_abs"][1], 1e-7)
+                self.assertEqual(limits["max_abs"][3], 1e-7)
 
     def test_routing_keeps_full_requests_and_deterministic_decisions(self):
         loader = getattr(fixtures, "load_routing", None)

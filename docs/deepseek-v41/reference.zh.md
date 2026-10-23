@@ -4,8 +4,7 @@
 
 [阶段计划](plan.zh.md)控制 native 算子调优之前的参考构建.
 这些工具提供 checkpoint 身份, 解码后的权重, Engram 哈希, FP64 目标模型和预测器数学实现, 以及 CPU 文本参考生成器.
-[固定夹具](fixtures.zh.md) 提供短文本, DSpark 恢复和媒体端点, 以及提示词编码用例.
-目前尚未固定长上下文端点夹具.
+[固定夹具](fixtures.zh.md) 提供短文本, DSpark 恢复, 媒体和长上下文端点, 以及提示词编码用例.
 未声明运行时数值验收.
 [checkpoint 指南](checkpoint.zh.md)规定身份和行加载检查.
 
@@ -150,18 +149,68 @@ scripts/with-env.sh "$REFERENCE_PYTHON" \
 
 ## 媒体参考
 
-固定输入, 完整端点, 环境选择和生成命令见[媒体指南](media-reference.zh.md).
-[图像辅助函数](../../development/model/deepseek_v41/reference_image.py) 提供归一化 FP64 patches 和有序的图像跨度类型.
-[视觉参考](../../development/model/deepseek_v41/reference_vision.py) 提供包含已学习起始, 换行和结束行的完整 embeddings.
-[提示辅助函数](../../development/model/deepseek_v41/reference_media.py) 在展开占位符时保持图像顺序.
-[目标参考](../../development/model/deepseek_v41/reference_model.py) 在 hyper-connection 展开前插入这些 embeddings.
+[媒体生成器](../../development/model/deepseek_v41/reference_media_case.py) 提供[固定媒体端点](fixtures.zh.md#媒体端点).
+三张合成 RGB 图片尺寸为 17 乘 11, 11 乘 17 和 13 乘 13 像素.
+第一张为静态图片. 其余两张代表 `<0.0 seconds>` 和 `<0.5 seconds>` 的视频帧.
+该用例不测试视频解码或帧提取.
 
+[视觉参考](../../development/model/deepseek_v41/reference_vision.py) 包含已学习的起始, 换行和结束 embeddings.
+目标模型在 hyper-connection 展开前, 按提示词顺序插入完整图片跨度.
 图像位置不接收 Engram 贡献, 并使用视觉路由偏置.
-仅允许在第一次 prefill 调用期间插入.
+仅第一次 prefill 调用插入图片.
+Decode 使用其已接受状态, 不加入新图片.
+元数据绑定 PNG 字节, 提示词, patches, 视觉 embeddings, token map 和完整端点向量.
 
-参考资源上限不改变服务媒体约定.
-调用者必须在服务接纳前预留输出容量.
-不要修改正在运行的参考生成器所用的环境或源文件.
+使用 `requirements/deepseek-media-reference.lock` 对应的独立环境.
+将 `MEDIA_REFERENCE_PYTHON` 设为其 Python 可执行文件.
+将 `MEDIA_OUTPUT` 设为新的外部 NPZ 路径.
+
+```bash
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$MEDIA_REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.reference_media_case \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$MEDIA_OUTPUT"
+```
+
+默认使用八个 CPU 线程, projection-row 上限为 2048.
+小规模 `test_reference_media_case` 检查不重新生成完整模型端点.
+
+## 长上下文参考
+
+[长上下文生成器](../../development/model/deepseek_v41/reference_long_case.py) 将短提示词重复至 65537 tokens.
+它在 16385 和 65537 tokens 处存储完整 prefill 和 decode 向量.
+这些长度跨过第 20 层候选池的 2048 个八位置块, 以及原始 65536-token 旋转位置编码上下文.
+它们不能证明 1048576-token 容量或 64 个请求准入.
+
+连续 prefill 分块最多包含 4096 tokens, 并在每个端点处准确结束.
+全部来源 KV, 窗口, 部分压缩器和 Engram 历史在分块间延续.
+不采用位置偏移, 历史截断或近似重放.
+每个端点的 argmax 在独立分支上选择一个 decode token.
+该分支不成为下一个端点提示词的一部分.
+`load_long()` 通过[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 加载四个固定 FP64 数组.
+
+使用现有的 `REFERENCE_PYTHON`, 模型和 manifest 变量.
+将 `LONG_OUTPUT` 和 `LONG_STATE` 设为不同的外部 NPZ 路径.
+
+```bash
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.reference_long_case \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE" \
+  --threads 8 --projection-row-limit 2048 --chunk-size 4096
+```
+
+这些设置与冻结产物一致. 不同分块大小可能改变归约顺序.
+每个完成的分块和端点分支保存完整续算状态和已完成端点.
+身份变化, 形状无效或数据损坏会导致错误.
+工具在原子替换前同步文件, 并保留 `<stem>.previous.npz`.
+它不会自动回退.
+
+中断后重复相同命令.
+如需选择上一版本状态, 将 `LONG_STATE` 设为该路径.
+不使用 `--checkpoint-state` 时不保存续算状态.
+状态检查点不是数值夹具.
+小规模 `test_reference_long_case` 检查覆盖续算, 身份, 数据损坏和发布失败.
 
 ## 发布源码基线
 

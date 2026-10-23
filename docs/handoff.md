@@ -12,7 +12,7 @@ DeepSeek physical execution and state selection are pending.
 Qwen keeps its single-worker path, with prefill dispatch, block scheduling, and host-cache startup fixes.
 
 Phase 3 has isolated quantization, Engram hash, shared pinned-host lookup, hyper-connections, routing, and encoded projections with [fixed fixtures](deepseek-v41/fixtures.md).
-RMS, supplied-coefficient RoPE, and SwiGLU also have isolated implementations.
+RMS, supplied-coefficient RoPE, SwiGLU, complete-pair pooling, and packed sparse attention also have isolated implementations.
 The [Engram loader](deepseek-v41/memory.md#4-weight-bytes-and-formats) supplies complete encoded tables in one shared store.
 Rank weights use bounded loading, exact startup conversions, and aligned storage for native projection layouts.
 Model integration is pending.

@@ -119,6 +119,36 @@ It must reject excess input without silent truncation.
 Separate images and multiple videos contribute to the same request budget.
 
 The [fixed media fixture](fixtures.md#media-endpoints) supplies full model endpoints for one still image and two synthetic decoded frames.
-The [video prompt fixtures](video-fixtures.md) bind mixed media order, equal formatted timestamps, and context continuation.
 Video decoding, runtime allocation bounds, and service integration are later work.
 The [behavior tests](../../development/model/deepseek_v41/test_reference_video.py) check only selection, content order, and invalid inputs.
+
+## Fixed fixtures
+
+`load_video_codec()` reads [three fixed prompt cases](../../development/model/deepseek_v41/video_codec.json) without a tokenizer or inference runtime.
+The file SHA256 is `21553a1d0c51f5361a202ed34048c8d4b39fab2cb8a64856699c653439975f7b`.
+It binds the [checkpoint identity](fixtures.md) and verified local encoder bytes.
+The loader checks complete token sequences, source identities, and ordered media.
+Historical generator identities can differ from later implementation files.
+
+| Case | Required behavior | Tokens |
+|---|---|---:|
+| `mixed-still-video` | Keep still images before and after two selected frames in prompt order | 40 |
+| `rounded-timestamp-ties` | Keep four distinct frames even when all timestamps format as `<0.0 seconds>` | 46 |
+| `context-video-continuation` | Return only the new turn's text and images, without a new BOS token | 45 |
+
+Each case has four image records and four placeholders with token ID 129264.
+The continuation tokens equal the tied case after its BOS token.
+Opaque image URLs are not opened. These cases do not decode video or calculate model endpoints.
+
+Use `MEDIA_REFERENCE_PYTHON` from the [reference guide](reference.md#media-reference).
+Set `VIDEO_CODEC_OUTPUT` to a new external JSON path.
+Keep the fixed artifact unchanged during candidate acceptance.
+
+```bash
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$MEDIA_REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.video_codec \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$VIDEO_CODEC_OUTPUT"
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$MEDIA_REFERENCE_PYTHON" \
+  -m unittest development.model.deepseek_v41.test_video_codec
+```

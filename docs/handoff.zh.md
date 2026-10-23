@@ -12,7 +12,7 @@ DeepSeek 物理执行和状态选择仍待完成.
 Qwen 保留单 worker 路径, 已修复 prefill 分派, 块调度和主机缓存启动.
 
 阶段 3 已有使用[固定夹具](deepseek-v41/fixtures.zh.md)的独立量化, Engram 哈希, 共享 pinned-host lookup, hyper-connections, 路由和编码投影.
-RMS, 使用传入系数的 RoPE 和 SwiGLU 也已有独立实现.
+RMS, 使用传入系数的 RoPE, SwiGLU, 完整成对池化和 packed 稀疏注意力也已有独立实现.
 [Engram 加载器](deepseek-v41/memory.zh.md#4-权重字节与格式)在一个共享存储中提供完整编码表.
 Rank 权重使用有界加载, 精确启动转换和 native 投影布局的对齐存储.
 模型集成仍待完成.

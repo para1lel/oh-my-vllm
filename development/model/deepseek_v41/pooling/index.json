@@ -1,0 +1,314 @@
+{
+  "version": "deepseek-compressor-pool-numerics-v1",
+  "policy_sha256": "acc99522f07da1c51ba07919b8b4db765c9d423f8a9bc2f8f29f01e17a41e4da",
+  "checkpoint_manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+  "reference_sources": {
+    "development/operators/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+    "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+    "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+    "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+    "development/operators/reference/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+    "development/model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+    "development/model/deepseek_v41/reference_attention.py": "6fdb87eed47dde8dc7ae7d6cd9edfb35b35b506b9aa093da18f06afa944b71bd",
+    "external/generate-compressor-pool-v1.py": "0c0bbe7bd2453000a31cff58318762f607b359bec6b6b4e06116bb5f680b621c",
+    "external/compressor-pool-policy-proposal-v1.json": "acc99522f07da1c51ba07919b8b4db765c9d423f8a9bc2f8f29f01e17a41e4da"
+  },
+  "cases": {
+    "single": {
+      "case": {
+        "id": "deepseek.compressor-pool.numerics.single",
+        "boundary": "deepseek.compressor-pool",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 1,
+          "batch": 1,
+          "queries": 1,
+          "width": 512,
+          "ratio": 2
+        },
+        "mode": "graph",
+        "weights": [],
+        "options": {
+          "input_dtype": "float32",
+          "output_dtype": "bfloat16",
+          "query_unit": "complete-pair"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "55ccffeb7298b09cb22d4353f45bb4cb83f65eddf21388eb95d4d484f6d7283e",
+      "limits": {
+        "case_sha256": "f95f47e0632bd55e512483a3e49fbcdbc29582a3fdb0e02329b3cbb32260b217",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.003908227435489654,
+            "max_abs": [
+              0.2501220703125
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "55ccffeb7298b09cb22d4353f45bb4cb83f65eddf21388eb95d4d484f6d7283e"
+      }
+    },
+    "decode": {
+      "case": {
+        "id": "deepseek.compressor-pool.numerics.decode",
+        "boundary": "deepseek.compressor-pool",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 64,
+          "batch": 64,
+          "queries": 1,
+          "width": 512,
+          "ratio": 2
+        },
+        "mode": "graph",
+        "weights": [],
+        "options": {
+          "input_dtype": "float32",
+          "output_dtype": "bfloat16",
+          "query_unit": "complete-pair"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "7f9f66483b4e49abbc4ac631a2398ad28fd0756807713db24e92015a6a5c0d8d",
+      "limits": {
+        "case_sha256": "677ba426ec2a431a487a4a6284689f215b3b6183118b08b99f59bb50efb409d0",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.007812500310441029,
+            "max_abs": [
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "7f9f66483b4e49abbc4ac631a2398ad28fd0756807713db24e92015a6a5c0d8d"
+      }
+    },
+    "prefill": {
+      "case": {
+        "id": "deepseek.compressor-pool.numerics.prefill",
+        "boundary": "deepseek.compressor-pool",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 128,
+          "batch": 8,
+          "queries": 16,
+          "width": 512,
+          "ratio": 2
+        },
+        "mode": "eager",
+        "weights": [],
+        "options": {
+          "input_dtype": "float32",
+          "output_dtype": "bfloat16",
+          "query_unit": "complete-pair"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "a9be63f53bfca41b23061ef11e1d36b5049d9d49e8dc592db9cb1c536cc94995",
+      "limits": {
+        "case_sha256": "b145abcb4558fa0b9b57c9cb926d2a09e1fc7d09a0e912b6324b8346f7fef980",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.00781250031044103,
+            "max_abs": [
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "a9be63f53bfca41b23061ef11e1d36b5049d9d49e8dc592db9cb1c536cc94995"
+      }
+    },
+    "verification": {
+      "case": {
+        "id": "deepseek.compressor-pool.numerics.verification",
+        "boundary": "deepseek.compressor-pool",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 192,
+          "batch": 64,
+          "queries": 3,
+          "width": 512,
+          "ratio": 2
+        },
+        "mode": "eager",
+        "weights": [],
+        "options": {
+          "input_dtype": "float32",
+          "output_dtype": "bfloat16",
+          "query_unit": "complete-pair"
+        },
+        "outputs": [
+          "value"
+        ]
+      },
+      "fixture_sha256": "fae279b4edbc422f146efef6014881b809f3dceffd696dcf430e3e645732b05e",
+      "limits": {
+        "case_sha256": "43de18fa1c3a22ad83cdea9f750ae4e9570213efd0a57c45bdd3ec8e192743f2",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.007812500310441032,
+            "max_abs": [
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177,
+              0.2501220703125,
+              1e-07,
+              1e-07,
+              1e-07,
+              0.00024414061529871856,
+              0.062530517578125,
+              0.18180384561930177,
+              0.18180384561930177
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "fae279b4edbc422f146efef6014881b809f3dceffd696dcf430e3e645732b05e"
+      }
+    }
+  }
+}

@@ -53,6 +53,12 @@ NORM_ROPE_PATH = Path(__file__).with_name("norm-rope")
 NORM_ROPE_SHA256 = "67d7400846ae0ce81fc4a4174d281e500ebfeff21faa82d303e34b1593a2c47a"
 SWIGLU_PATH = Path(__file__).with_name("swiglu")
 SWIGLU_SHA256 = "1cdbf7ca0b866fb633232a34cd65d95b9cfa3590b74a01fa994b155702de2de1"
+POOLING_PATH = Path(__file__).with_name("pooling")
+POOLING_SHA256 = "878e5a00b671191bbd8081118217d0f0dfad790e9d345a9cd802afeafcf1fe08"
+SPARSE_ATTENTION_PATH = Path(__file__).with_name("sparse-attention")
+SPARSE_ATTENTION_SHA256 = (
+    "65480d5f378455ce128018013121cdd4d784c49796e1cedfe066fde273295e4d"
+)
 STARTUP_PROMOTION_PATH = Path(__file__).with_name("startup-promotion.npz")
 STARTUP_PROMOTION_SHA256 = (
     "0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51"
@@ -134,6 +140,14 @@ def load_norm_rope(path=NORM_ROPE_PATH):
 
 def load_swiglu(path=SWIGLU_PATH):
     return _load_operator_bundle(path, SWIGLU_SHA256)
+
+
+def load_pooling(path=POOLING_PATH):
+    return _load_operator_bundle(path, POOLING_SHA256)
+
+
+def load_sparse_attention(path=SPARSE_ATTENTION_PATH):
+    return _load_operator_bundle(path, SPARSE_ATTENTION_SHA256)
 
 
 def load_startup_promotion(path=STARTUP_PROMOTION_PATH):

@@ -11,7 +11,7 @@ DeepSeek 服务推理尚未启用.
 阶段 0 的参考与分配工作仍在继续.
 
 阶段 3 已有独立的精确量化, Engram 哈希和共享 pinned-host lookup 算子.
-独立的 hyper-connection, 路由, 投影, RMS, 使用传入系数的 RoPE 和 SwiGLU 算子使用冻结的字段限值.
+独立的 hyper-connection, 路由, 投影, RMS, 使用传入系数的 RoPE, SwiGLU, 完整成对池化和 packed 稀疏注意力算子使用冻结的字段限值.
 完整 Engram 表加载到一个 sealed 共享存储中.
 Rank 权重使用有界加载, 精确启动转换和 native 投影布局的对齐存储.
 模型集成仍待完成.

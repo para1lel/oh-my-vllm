@@ -22,6 +22,8 @@
 | [路由索引](../../development/model/deepseek_v41/routing/index.json) | 五个从 logits 开始, 包含精确专家 ID 和 FP64 系数的用例 | `bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28` |
 | [投影索引](../../development/model/deepseek_v41/projection/index.json) | 五个 A8W8 和五个 A8W4 用例, 包含完整 FP64 输出 | `db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6` |
 | [启动转换](../../development/model/deepseek_v41/startup-promotion.npz) | 精确的 FP8 到 BF16 及 BF16 到 F32 转换 | `0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51` |
+| [Ratio2 池化索引](../../development/model/deepseek_v41/pooling/index.json) | 四个完整成对用例, 含 FP64 输出和固定限值 | `878e5a00b671191bbd8081118217d0f0dfad790e9d345a9cd802afeafcf1fe08` |
+| [稀疏注意力索引](../../development/model/deepseek_v41/sparse-attention/index.json) | 五个打包缓存用例, 含完整 FP64 输出和按请求设置的限值 | `65480d5f378455ce128018013121cdd4d784c49796e1cedfe066fde273295e4d` |
 
 产物绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 完整模型产物包含清单, 生成器身份, 固定输入, 数组形状和摘要.
@@ -137,6 +139,26 @@ SwiGLU 使用与 RMS 和 RoPE 相同的误差限值, 每个请求分别计算.
 [检查器](../../development/operators/check_deepseek_activation.py)覆盖 [API](../../python/oh_my_vllm/operators/activation/api.py) 中规定范围内的输入.
 投影, 分发, 量化和完整模型验收另行处理.
 
+## Ratio2 池化
+
+`load_pooling()` 提供宽度为 512 的完整 FP32 KV 和 gate 对.
+Softmax 沿每对的两个元素计算, 各通道独立. 加权和在 RMS 之前仅转换一次为 BF16.
+固定限值包含最终 BF16 舍入和考虑抵消的 FP32 误差余量.
+[检查器](../../development/operators/check_deepseek_pooling.py) 覆盖 Eager 和 Graph 执行, 空输入, 输入不变性及无效参数.
+此边界不覆盖投影, RMS, RoPE, 不完整组状态, 性能或完整模型精度.
+
+## 打包稀疏注意力
+
+`load_sparse_attention()` 提供 BF16 查询, 原始 F32 sinks, 编码缓存行和显式槽位 ID.
+[API](../../python/oh_my_vllm/operators/sparse_attention/api.py) 规定格式, 掩码, 重复 IDs 和错误状态.
+仅解码选中的缓存块, 不展开整个逻辑缓存.
+
+归一化 L2 限值为 `2^-6`.
+索引为每个请求的每个通道固定一个绝对误差限值.
+RMS 下限和近零绝对误差限值均为 `1e-6`.
+[检查器](../../development/operators/check_deepseek_sparse_attention.py) 使用全部输出, 精确零值保护, Eager/Graph 执行和非法 ID 检查.
+投影, 索引选择, 状态恢复, 延迟和完整模型验收另行处理.
+
 ## 短文本
 
 [构建指南](reference.zh.md) 规定 FP64 方程和固定提示词.
@@ -168,7 +190,7 @@ prefill argmax 选择 token 16 作为固定续算输入.
 prefill argmax 选择 token 9544, 从已接受状态续算.
 元数据绑定完整提示词, 有序图片, patches, 视觉嵌入和 token 映射.
 
-[媒体指南](media-reference.zh.md) 规定生成流程.
+[参考指南](reference.zh.md#媒体参考) 规定生成流程.
 此夹具不能证明解码器, 服务, 性能或容量通过验收.
 
 ## 提示词编码

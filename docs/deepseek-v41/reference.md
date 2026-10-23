@@ -4,8 +4,7 @@
 
 The [phase plan](plan.md) controls reference construction before native operator tuning.
 The tools supply checkpoint identities, decoded weights, Engram hashes, FP64 target and predictor mathematics, and a CPU text reference generator.
-The [fixed fixtures](fixtures.md) supply short-text, DSpark restoration, and media endpoints, with prompt-codec cases.
-Long-context endpoint fixtures are not fixed at this time.
+The [fixed fixtures](fixtures.md) supply short-text, DSpark restoration, media, and long-context endpoints, with prompt-codec cases.
 No runtime numerical acceptance is declared.
 The [checkpoint guide](checkpoint.md) specifies identity and row-loading checks.
 
@@ -150,18 +149,68 @@ scripts/with-env.sh "$REFERENCE_PYTHON" \
 
 ## Media reference
 
-Use the [media guide](media-reference.md) for fixed inputs, complete endpoints, environment selection, and generation commands.
-The [image helper](../../development/model/deepseek_v41/reference_image.py) supplies normalized FP64 patches and ordered image-span types.
-The [vision reference](../../development/model/deepseek_v41/reference_vision.py) supplies complete embeddings with learned start, newline, and end rows.
-The [prompt helper](../../development/model/deepseek_v41/reference_media.py) keeps image order during placeholder expansion.
-The [target reference](../../development/model/deepseek_v41/reference_model.py) inserts those embeddings before hyper-connection expansion.
+The [media generator](../../development/model/deepseek_v41/reference_media_case.py) supplies the [fixed media endpoints](fixtures.md#media-endpoints).
+Its three synthetic RGB images measure 17 by 11, 11 by 17, and 13 by 13 pixels.
+The first is a still image. The others represent frames at `<0.0 seconds>` and `<0.5 seconds>`.
+This case does not test video decoding or frame extraction.
 
+The [vision reference](../../development/model/deepseek_v41/reference_vision.py) includes learned start, newline, and end embeddings.
+The target inserts complete image spans in prompt order before hyper-connection expansion.
 Image positions receive no Engram contribution and use the visual routing bias.
-Insertion is permitted only during the first prefill call.
+Only the first prefill call inserts images.
+Decode uses its accepted state without new images.
+Metadata binds the PNG bytes, prompt, patches, vision embeddings, token map, and complete endpoint vectors.
 
-Reference resource bounds do not change the service media contract.
-The caller must reserve output capacity before service admission.
-Do not change an environment or source file used by an active reference generator.
+Use the separate environment from `requirements/deepseek-media-reference.lock`.
+Set `MEDIA_REFERENCE_PYTHON` to its Python executable.
+Set `MEDIA_OUTPUT` to a new external NPZ path.
+
+```bash
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$MEDIA_REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.reference_media_case \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$MEDIA_OUTPUT"
+```
+
+The defaults use eight CPU threads and a projection-row limit of 2048.
+The small `test_reference_media_case` checks do not regenerate full-model endpoints.
+
+## Long-context reference
+
+The [long-context generator](../../development/model/deepseek_v41/reference_long_case.py) repeats the short prompt to 65537 tokens.
+It stores full prefill and decode vectors at 16385 and 65537 tokens.
+These lengths cross the layer-20 candidate pool's 2048 blocks of eight positions and the original 65536-token rotary context.
+They do not prove 1048576-token capacity or 64-request admission.
+
+Contiguous prefill chunks contain at most 4096 tokens and end exactly at each endpoint.
+All source KV, windows, partial compressors, and Engram history continue between chunks.
+No position offset, history truncation, or approximate replay is used.
+Each endpoint's argmax selects a decode token on a separate branch.
+That branch does not become part of the next endpoint's prompt.
+`load_long()` loads the four fixed FP64 arrays through the [fixture reader](../../development/model/deepseek_v41/fixtures.py).
+
+Use the existing `REFERENCE_PYTHON`, model, and manifest variables.
+Set `LONG_OUTPUT` and `LONG_STATE` to different external NPZ paths.
+
+```bash
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.reference_long_case \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$LONG_OUTPUT" --checkpoint-state "$LONG_STATE" \
+  --threads 8 --projection-row-limit 2048 --chunk-size 4096
+```
+
+These are the frozen artifact's settings. Different chunk sizes can change reduction order.
+Each completed chunk and endpoint branch saves the complete continuation state and finished endpoints.
+Identity changes, invalid shapes, and damaged data cause errors.
+The tool synchronizes files before atomic replacement and keeps `<stem>.previous.npz`.
+It does not fall back automatically.
+
+Repeat the same command after interruption.
+To select the previous state, set `LONG_STATE` to that path.
+Without `--checkpoint-state`, no continuation state is saved.
+State checkpoints are not numerical fixtures.
+The small `test_reference_long_case` checks cover continuation, identities, corruption, and publication failures.
 
 ## Released-source baseline
 

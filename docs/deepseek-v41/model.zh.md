@@ -184,8 +184,8 @@ Patch 大小为 14.
 不存在时序视觉编码器.
 
 [视频契约](video.zh.md)给出帧选择和时间戳文本.
-[视频提示 fixture](video-fixtures.zh.md) 给出 token 位置和图像顺序.
-[媒体 fixture](media-reference.zh.md) 提供合成已解码帧的完整 FP64 端点.
+[视频提示 fixture](video.zh.md#固定夹具) 给出 token 位置和图像顺序.
+[媒体 fixture](fixtures.zh.md#媒体端点) 提供合成已解码帧的完整 FP64 端点.
 视频解码和服务集成仍属于后续工作.
 
 ## 兼容性关卡

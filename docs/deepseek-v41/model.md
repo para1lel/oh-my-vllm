@@ -184,8 +184,8 @@ Video must first produce ordered frame images and timestamp text through a separ
 No temporal vision encoder is present.
 
 The [video contract](video.md) gives frame selection and timestamp text.
-The [video prompt fixtures](video-fixtures.md) give token positions and image order.
-The [media fixture](media-reference.md) supplies full FP64 endpoints for synthetic decoded frames.
+The [video prompt fixtures](video.md#fixed-fixtures) give token positions and image order.
+The [media fixture](fixtures.md#media-endpoints) supplies full FP64 endpoints for synthetic decoded frames.
 Video decoding and service integration are subsequent work.
 
 ## Compatibility gate

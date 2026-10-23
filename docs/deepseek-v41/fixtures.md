@@ -22,6 +22,8 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [Routing index](../../development/model/deepseek_v41/routing/index.json) | Five post-logit cases with exact expert IDs and FP64 coefficients | `bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28` |
 | [Projection index](../../development/model/deepseek_v41/projection/index.json) | Five A8W8 and five A8W4 cases with complete FP64 outputs | `db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6` |
 | [Startup conversion](../../development/model/deepseek_v41/startup-promotion.npz) | Exact FP8-to-BF16 and BF16-to-F32 conversions | `0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51` |
+| [Ratio2 pooling index](../../development/model/deepseek_v41/pooling/index.json) | Four complete-pair cases with FP64 outputs and fixed limits | `878e5a00b671191bbd8081118217d0f0dfad790e9d345a9cd802afeafcf1fe08` |
+| [Sparse-attention index](../../development/model/deepseek_v41/sparse-attention/index.json) | Five packed-cache cases with full FP64 outputs and request-specific limits | `65480d5f378455ce128018013121cdd4d784c49796e1cedfe066fde273295e4d` |
 
 The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 Full-model artifacts contain the manifest, generator identities, fixed inputs, array shapes, and digests.
@@ -137,6 +139,26 @@ SwiGLU uses the same error limits as RMS and RoPE, separately for each request.
 The [checker](../../development/operators/check_deepseek_activation.py) covers the bounded inputs in the [API](../../python/oh_my_vllm/operators/activation/api.py).
 Projection, dispatch, quantization, and full-model acceptance are separate.
 
+## Ratio2 pooling
+
+`load_pooling()` supplies complete FP32 KV and gate pairs with width 512.
+For each channel, softmax acts across the pair. The weighted sum converts once to BF16 before RMS.
+The fixed limits include final BF16 rounding and an FP32 allowance that accounts for cancellation.
+The [checker](../../development/operators/check_deepseek_pooling.py) covers Eager and Graph execution, empty inputs, input immutability, and invalid arguments.
+This boundary excludes projections, RMS, RoPE, partial-group state, performance, and full-model accuracy.
+
+## Packed sparse attention
+
+`load_sparse_attention()` supplies BF16 queries, original F32 sinks, encoded cache rows, and explicit slot IDs.
+The [API](../../python/oh_my_vllm/operators/sparse_attention/api.py) defines formats, masks, repeated IDs, and error status.
+Only selected cache tiles are decoded. The full logical cache is not expanded.
+
+The normalized L2 limit is `2^-6`.
+The index fixes one absolute-error limit per request and channel.
+The RMS floor and near-zero absolute limit are `1e-6`.
+The [checker](../../development/operators/check_deepseek_sparse_attention.py) uses all outputs, exact zero guards, Eager/Graph execution, and invalid-ID checks.
+Projection, index selection, state restoration, latency, and full-model acceptance are separate.
+
 ## Short text
 
 The [construction guide](reference.md) specifies the FP64 equations and fixed prompt.
@@ -168,7 +190,7 @@ The 37-token placeholder prompt expands to 624 tokens.
 The prefill argmax selects token 9544 for continuation from accepted state.
 Metadata binds the complete prompt, ordered images, patches, vision embeddings, and token map.
 
-The [media guide](media-reference.md) specifies generation.
+The [reference guide](reference.md#media-reference) specifies generation.
 This fixture does not prove decoder, service, performance, or capacity acceptance.
 
 ## Prompt codec

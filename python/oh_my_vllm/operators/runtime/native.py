@@ -28,6 +28,8 @@ OPTIONAL_MODULE_SOURCES = {
     "projection": SOURCES / "projection/cuda/projection.cu",
     "transform": SOURCES / "transform/cuda/transform.cu",
     "activation": SOURCES / "activation/cuda/activation.cu",
+    "compression": SOURCES / "compression/cuda/compression.cu",
+    "sparse_attention": SOURCES / "sparse_attention/cuda/sparse_attention.cu",
 }
 
 

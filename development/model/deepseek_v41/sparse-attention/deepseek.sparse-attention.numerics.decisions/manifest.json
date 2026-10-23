@@ -1,0 +1,345 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "deepseek.sparse-attention.numerics.decisions",
+    "boundary": "deepseek.sparse-attention",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 8,
+      "heads": 64,
+      "width": 512,
+      "slots": 65,
+      "batch": 8,
+      "queries": 1
+    },
+    "mode": "eager",
+    "weights": [
+      "layers.20.attn.attn_sink"
+    ],
+    "options": {
+      "defaults": {
+        "window_payload": 0,
+        "window_scale": 127,
+        "compressed_payload": 0,
+        "compressed_scale": 56
+      },
+      "bf16_roundtrip": true,
+      "scale": 0.044194173824159216,
+      "sink_selection": {
+        "tensor": "layers.20.attn.attn_sink",
+        "slice": [
+          0,
+          64
+        ],
+        "shard": "model-00023-of-00048.safetensors"
+      }
+    },
+    "outputs": [
+      "value"
+    ]
+  },
+  "checkpoint": {
+    "manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+    "files": {
+      "chat_template.jinja": {
+        "sha256": "d959d804d5101b79a49b6ff1bf3c54cd5affa9a5a78c503d925f3090040b31c3",
+        "size": 15348
+      },
+      "config.json": {
+        "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879",
+        "size": 3311
+      },
+      "encoding/encoding.py": {
+        "sha256": "502bdaec8a3fd88ebc24c4721a7038fbe42f2063c664638127056107920035c1",
+        "size": 37316
+      },
+      "inference/convert.py": {
+        "sha256": "035028340479145594a81d6084a8424e57363adf83c0d5983914783d95614d76",
+        "size": 9458
+      },
+      "inference/engram.py": {
+        "sha256": "11f35ecbead8150c35aa002b3d180ef290b05a25afe883a11884f94d476d3897",
+        "size": 8138
+      },
+      "inference/image_processor.py": {
+        "sha256": "482759e3bcc4e9bb5ee582b244cc563f5d0e163d8b48dda91ebb7106e62f9272",
+        "size": 7699
+      },
+      "inference/kernel.py": {
+        "sha256": "1236c3507019ed176f5dba5e04bcea58867cf654818c6cf138ed4845398c2455",
+        "size": 23790
+      },
+      "inference/model.py": {
+        "sha256": "4e9ae23620edc8028ccc5d5fef552ab7fdc7dcd6f79608754fe9f67644056f65",
+        "size": 61549
+      },
+      "inference/vision.py": {
+        "sha256": "5d49edc196a4ef22384abe76d35a40098cbe1e74b586c8f66a2edff4f076b26c",
+        "size": 4457
+      },
+      "model-00003-of-00048.safetensors": {
+        "sha256": "e1281f85d0ce4a3dfb63d41926fc4a47fa71f36ba20992e3597e702ead49d4c9",
+        "size": 7389759032
+      },
+      "model-00005-of-00048.safetensors": {
+        "sha256": "4a42dc78698bee6b1a821aa01c9650749ef1f716143751f1cdb815c6400280a9",
+        "size": 7405953784
+      },
+      "model-00023-of-00048.safetensors": {
+        "sha256": "096723fc8afa9886b976fb63aabef159406dc483e6f2a41e3fe386435b0436cc",
+        "size": 7400713088
+      },
+      "model.safetensors.index.json": {
+        "sha256": "74b0686a3d2891980d5e303251b075a3bccae2c2ff650747db2620a649b98fa8",
+        "size": 7470294
+      },
+      "tokenizer.json": {
+        "sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+        "size": 6367257
+      },
+      "tokenizer_config.json": {
+        "sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+        "size": 801
+      }
+    }
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "source": {
+      "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+      "development/model/deepseek_v41/reference_quantization.py": "6f4570ed39db59cdf75d2b5047c9044b719e0356a83a9952a48427bfb87493be",
+      "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+      "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+      "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+      "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+      "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+      "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+      "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+      "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+      "external/generate-sparse-attention-v2.py": "14c78ccce7f1c7677d670cbfab5640bc0dfbc7367fcc3458f57c8dab15bab37e",
+      "external/sparse-attention-policy-proposal-v2.json": "f92bf3c44ec86abedf31af2c02b2b95acb30acee44fa003aadfc481b2f08b51e",
+      "external/checkpoint-with-converter.json": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+      "checkpoint/inference/kernel.py": "1236c3507019ed176f5dba5e04bcea58867cf654818c6cf138ed4845398c2455",
+      "checkpoint/inference/model.py": "4e9ae23620edc8028ccc5d5fef552ab7fdc7dcd6f79608754fe9f67644056f65",
+      "environment/site-packages/numpy-2.5.4.dist-info/METADATA": "e2b909d6a37d76c2bc130f528d7fed0c517322bce16dc7846b6a6df30e200403",
+      "environment/site-packages/numpy-2.5.4.dist-info/RECORD": "f933a0bea4bbff02a350597a1685aa4aa6cf269480e4abf0e38b3b2c397ba13b",
+      "environment/site-packages/torch-2.12.0.dist-info/METADATA": "b6d383be28bad9be3ba58d2057c59b33e2e0eb4901da8fad0852c161e35dda05",
+      "environment/site-packages/torch-2.12.0.dist-info/RECORD": "9b837207c6da1d64fec4a3f951ba0e2a30a115c09d24b6a3d801b6e631a89060",
+      "environment/bin/python3.12": "12f6e74237b7c20a8ddff3cf5a6721deaadd3b6c02d6a124d2321358131692cb",
+      "environment/site-packages/numpy/__init__.py": "09295a80660f17925ae23765ce8cbd7ff7ceae968d5f2f89349f1cb74c0b9e11",
+      "environment/site-packages/torch/__init__.py": "d9dfff4b75d46e4c75572200a3466b70231d05b0318e38ac1bd121789165fb49",
+      "environment/site-packages/torch/_C.cpython-312-x86_64-linux-gnu.so": "fd8a4ca54d6ec19807edea5d92aa3340a179d8fef853a58788aa2a10c427ca13",
+      "environment/site-packages/numpy/_core/_multiarray_umath.cpython-312-x86_64-linux-gnu.so": "b185dfe64b07180bedc7c15fb2735b0d0f4f4e09eb9c15bd8e67f74568aebcbf",
+      "environment/site-packages/torch/lib/libtorch_cpu.so": "dfc851d57da30e0680f2ed85f0dbb3e82eb3e8ff2591c899f1d769ad85b53f85"
+    },
+    "torch": "2.12.0+cu130",
+    "scope": "post-quantizer BF16-roundtripped sparse KV; no projection/rope/state"
+  },
+  "files": {
+    "inputs.query.0000.npz": "3a10253945d05e8da9424fab6158002ddc3fe9958046cf7d2628a26fee071eee",
+    "inputs.sink.0000.npz": "e6a1318204cf0e6a9613f74a7a834be732804c20b121a6165d91a9247cc5c552",
+    "inputs.indices.0000.npz": "c673b770d1b8e6b1701fa0fae4d8eee029968181eb7fe5d89df30906ea4a195f",
+    "inputs.window_rows.0000.npz": "76f154c44198925dc8e06a000af71eb20d72250f677b4151757c95e3535c993e",
+    "inputs.window.0000.npz": "16ada98b32484854908e40d780bc5d51487398381c15f11e1b814d4fabaa02df",
+    "inputs.window_scales.0000.npz": "8502dd0b1450f597e259904100db8661a2582f6d21370f056bc3cefb271efb14",
+    "inputs.compressed_rows.0000.npz": "76f154c44198925dc8e06a000af71eb20d72250f677b4151757c95e3535c993e",
+    "inputs.compressed.0000.npz": "b597ad87e481fe0f8321668777f146b4a02df0cb72e03bcf0c0b6ce45ba6bf90",
+    "inputs.compressed_scales.0000.npz": "d1238677037e693c26e7d8b3dabaa661e29ecc52ea6547e60f44dc5524afc43d",
+    "inputs.logical_rows.0000.npz": "229d05a276794db65afcfd0069c4c549684c6b78aa10b69d05374946ccebf637",
+    "inputs.conditioning.0000.npz": "fb4f6012143f31c2c0363df626b53025e4cbcfdba2ed7a775447f5c355a5318e",
+    "expected.value.0000.npz": "df88d1c3c6945481e1520602097d6cd1805bb37d5f6ed65aa8248107ee8abb82"
+  },
+  "tensors": {
+    "inputs.query": {
+      "shape": [
+        8,
+        64,
+        512
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.query.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 262144
+        }
+      ]
+    },
+    "inputs.sink": {
+      "shape": [
+        64
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.sink.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 64
+        }
+      ]
+    },
+    "inputs.indices": {
+      "shape": [
+        8,
+        65
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.indices.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 520
+        }
+      ]
+    },
+    "inputs.window_rows": {
+      "shape": [
+        4
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.window_rows.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    },
+    "inputs.window": {
+      "shape": [
+        4,
+        512
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.window.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2048
+        }
+      ]
+    },
+    "inputs.window_scales": {
+      "shape": [
+        4,
+        16
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.window_scales.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 64
+        }
+      ]
+    },
+    "inputs.compressed_rows": {
+      "shape": [
+        4
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.compressed_rows.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    },
+    "inputs.compressed": {
+      "shape": [
+        4,
+        256
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.compressed.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1024
+        }
+      ]
+    },
+    "inputs.compressed_scales": {
+      "shape": [
+        4,
+        32
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.compressed_scales.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 128
+        }
+      ]
+    },
+    "inputs.logical_rows": {
+      "shape": [
+        2
+      ],
+      "dtype": "int64",
+      "tensor_dtype": "int64",
+      "parts": [
+        {
+          "file": "inputs.logical_rows.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2
+        }
+      ]
+    },
+    "inputs.conditioning": {
+      "shape": [
+        8,
+        512
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "inputs.conditioning.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4096
+        }
+      ]
+    },
+    "expected.value": {
+      "shape": [
+        8,
+        64,
+        512
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 262144
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

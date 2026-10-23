@@ -119,6 +119,36 @@ message = {"role": "user", "content": content}
 独立图像和多个视频计入同一个请求预算.
 
 [固定媒体夹具](fixtures.zh.md#媒体端点) 提供一张静态图片和两张合成已解码视频帧的完整模型端点.
-[视频提示词夹具](video-fixtures.zh.md) 绑定混合媒体顺序, 格式化后相同的时间戳和上下文续接.
 视频解码, 运行时分配边界和服务集成属于后续工作.
 [行为测试](../../development/model/deepseek_v41/test_reference_video.py) 仅检查选择, 内容顺序和无效输入.
+
+## 固定夹具
+
+`load_video_codec()` 无需分词器或推理运行时即可读取[三个固定提示词用例](../../development/model/deepseek_v41/video_codec.json).
+文件 SHA256 为 `21553a1d0c51f5361a202ed34048c8d4b39fab2cb8a64856699c653439975f7b`.
+它绑定[检查点身份](fixtures.zh.md) 和经过验证的本地编码器字节.
+读取器检查完整 token 序列, 来源身份和有序媒体.
+历史生成器身份可以与后续实现文件不同.
+
+| 用例 | 必须满足的行为 | Tokens |
+|---|---|---:|
+| `mixed-still-video` | 按提示词顺序保留两个选中帧之前和之后的静态图片 | 40 |
+| `rounded-timestamp-ties` | 即使全部时间戳格式化为 `<0.0 seconds>`, 仍保留四个不同帧 | 46 |
+| `context-video-continuation` | 仅返回新一轮文本和图片, 不加入新的 BOS token | 45 |
+
+每个用例包含四个图片记录和四个 token ID 为 129264 的占位符.
+续接 tokens 等于相同时间戳用例去掉 BOS token 后的序列.
+不打开不透明图片 URL. 这些用例不解码视频或计算模型端点.
+
+使用[参考指南](reference.zh.md#媒体参考) 中的 `MEDIA_REFERENCE_PYTHON`.
+将 `VIDEO_CODEC_OUTPUT` 设为新的外部 JSON 路径.
+候选实现验收期间保持固定产物不变.
+
+```bash
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$MEDIA_REFERENCE_PYTHON" \
+  -m development.model.deepseek_v41.video_codec \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$VIDEO_CODEC_OUTPUT"
+CUDA_VISIBLE_DEVICES= scripts/with-env.sh "$MEDIA_REFERENCE_PYTHON" \
+  -m unittest development.model.deepseek_v41.test_video_codec
+```
