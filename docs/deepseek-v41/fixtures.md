@@ -15,6 +15,7 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [DSpark continuation](../../development/model/deepseek_v41/dspark.npz) | Eighteen full FP64 vocabulary rows and two confidence vectors | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 | [Media endpoints](../../development/model/deepseek_v41/media.npz) | Two full FP64 vocabulary vectors after still and video-frame images | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
 | [Exact operators](../../development/model/deepseek_v41/exact-operators.npz) | Four synthetic quantization and Engram cases | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
+| [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 table, scales, indices, and 49152 BF16 output bit patterns | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
 
 The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 Full-model artifacts contain the manifest, generator identities, fixed inputs, array shapes, and digests.
@@ -31,9 +32,13 @@ Expected values come from hand-checked literals, not candidate outputs.
 Compare encoded bytes, scale bytes, BF16 roundtrip bits, hashes, and history with each case's exact limits.
 These synthetic cases do not set compound numerical or performance limits.
 
-The optional native modules supply quantization and integer Engram hashes.
-They do not supply Engram weight lookup or service integration.
+`load_engram_lookup()` supplies fixed inputs and independently computed BF16 output bits.
+Its 16-row table covers repeated indices, signed zeros, subnormal ties, and distinct scale groups.
+
+The optional native modules supply quantization, integer Engram hashes, and lookup through a shared pinned-host mapping.
+They do not supply service integration.
 The quantization caller must reject any nonzero group status.
+The lookup caller must reject any nonzero row status.
 Engram returns private continuation history without changing its input history.
 
 Set `EXACT_REPORT` to a new external JSON path.

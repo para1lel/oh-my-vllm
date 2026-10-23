@@ -25,6 +25,13 @@ EXACT_OPERATORS_SHA256 = (
 EXACT_OPERATORS_METADATA_SHA256 = (
     "cce21cf671863f16e5a8e5c03a4becddff2bce0263af05636c76bb980b27a994"
 )
+ENGRAM_LOOKUP_PATH = Path(__file__).with_name("engram-lookup.npz")
+ENGRAM_LOOKUP_SHA256 = (
+    "930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c"
+)
+ENGRAM_LOOKUP_METADATA_SHA256 = (
+    "5833b226c5c3914ed11a6bbbf60a89e989a280e18f43142bfb1e77944a6dbada"
+)
 CHECKPOINT_MANIFEST_SHA256 = (
     "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
 )
@@ -66,6 +73,38 @@ DSPARK_INPUTS = {
     "next_pending_position": 131,
     "next_proposal_tokens": [54994, 1060, 270, 41638, 6397],
 }
+
+
+def load_engram_lookup(path=ENGRAM_LOOKUP_PATH):
+    """Load encoded local lookup inputs and exact BF16 bits without an oracle."""
+    data = Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != ENGRAM_LOOKUP_SHA256:
+        raise ValueError("frozen Engram lookup artifact identity differs")
+    with np.load(io.BytesIO(data), allow_pickle=False) as stored:
+        metadata = json.loads(stored["metadata"].item())
+        canonical = json.dumps(
+            metadata, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+        if hashlib.sha256(canonical).hexdigest() != ENGRAM_LOOKUP_METADATA_SHA256:
+            raise ValueError("Engram lookup case or provenance differs")
+        names = set(metadata["arrays"])
+        if (
+            set(stored.files) != {"metadata", *names}
+            or len(stored.files) != len(names) + 1
+        ):
+            raise ValueError("Engram lookup inputs or outputs are incomplete")
+        arrays = {}
+        for name, description in metadata["arrays"].items():
+            value = stored[name].copy()
+            if (
+                list(value.shape) != description["shape"]
+                or value.dtype != np.dtype(description["dtype"])
+                or hashlib.sha256(value.tobytes()).hexdigest() != description["sha256"]
+            ):
+                raise ValueError(f"Engram lookup tensor identity differs: {name}")
+            value.setflags(write=False)
+            arrays[name] = value
+    return metadata, arrays
 
 
 def load_exact_operators(path=EXACT_OPERATORS_PATH):

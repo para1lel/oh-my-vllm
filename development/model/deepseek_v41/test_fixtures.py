@@ -447,6 +447,47 @@ class FrozenFixtures(unittest.TestCase):
                     self.assertRaisesRegex(ValueError, alteration),
                 ):
                     loader(path)
+        lookup_loader = getattr(fixtures, "load_engram_lookup", None)
+        self.assertTrue(
+            callable(lookup_loader), "frozen Engram lookup loader is missing"
+        )
+        lookup_metadata, lookup = lookup_loader()
+        self.assertEqual(
+            lookup_metadata["checkpoint_manifest_sha256"],
+            fixtures.CHECKPOINT_MANIFEST_SHA256,
+        )
+        self.assertEqual(lookup["indices"].shape, (8, 24))
+        self.assertEqual(lookup["expected_bf16_bits"].shape, (8, 24, 256))
+        np.testing.assert_array_equal(
+            lookup["expected_bf16_bits"][0, 0, :7],
+            [0, 0x8000, 0, 2, 0x8000, 0x8002, 1],
+        )
+        self.assertTrue(all(not value.flags.writeable for value in lookup.values()))
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "lookup.npz"
+            original = fixtures.ENGRAM_LOOKUP_PATH.read_bytes()
+            path.write_bytes(original + b"extra")
+            with self.assertRaisesRegex(ValueError, "identity"):
+                lookup_loader(path)
+            for alteration in ("provenance", "tensor"):
+                with np.load(fixtures.ENGRAM_LOOKUP_PATH, allow_pickle=False) as stored:
+                    values = {key: stored[key].copy() for key in stored.files}
+                if alteration == "provenance":
+                    changed = json.loads(values["metadata"].item())
+                    changed["reference_kind"] = "candidate-output"
+                    values["metadata"] = np.asarray(json.dumps(changed))
+                else:
+                    values["expected_bf16_bits"].flat[0] ^= 0x8000
+                np.savez(path, **values)
+                with (
+                    patch.object(
+                        fixtures,
+                        "ENGRAM_LOOKUP_SHA256",
+                        hashlib.sha256(path.read_bytes()).hexdigest(),
+                    ),
+                    self.assertRaisesRegex(ValueError, alteration),
+                ):
+                    lookup_loader(path)
         subprocess.run(
             [
                 sys.executable,
@@ -454,10 +495,12 @@ class FrozenFixtures(unittest.TestCase):
                 "-c",
                 "import sys; sys.modules.update({name: None for name in "
                 "('torch', 'development.model.deepseek_v41.engram', "
+                "'development.model.deepseek_v41.quantization', "
                 "'development.model.deepseek_v41.reference_quantization')}); "
                 "from development.model.deepseek_v41.fixtures "
-                "import load_exact_operators; "
-                "assert len(load_exact_operators()[1]) == 4",
+                "import load_exact_operators, load_engram_lookup; "
+                "assert len(load_exact_operators()[1]) == 4; "
+                "assert len(load_engram_lookup()[1]) == 4",
             ],
             check=True,
         )

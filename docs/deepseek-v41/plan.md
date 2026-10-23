@@ -9,7 +9,7 @@ DeepSeek service inference is not enabled.
 
 Phases 1 and 2 are implemented.
 Phase 0 reference and allocation work continues.
-Phase 3 has isolated exact quantization and Engram hash operators.
+Phase 3 has isolated exact quantization, Engram hash, and shared pinned-host lookup operators.
 Full-model computation and Phases 4-8 are pending.
 
 ## Constraints

@@ -1,4 +1,5 @@
 import gc
+import os
 import unittest
 import weakref
 from contextlib import nullcontext
@@ -266,9 +267,34 @@ class OperatorPlans(unittest.TestCase):
                             replay()
 
     def test_engram_graph_inputs_have_separate_lifetimes(self):
+        from oh_my_vllm.operators.engram import lookup
         from oh_my_vllm.operators.engram.api import Inputs
         from oh_my_vllm.operators.engram.plan import make_plan
+        from oh_my_vllm.operators.engram.shared import SharedWeightFile
         from oh_my_vllm.operators.engram.workspace import prepare
+
+        page = os.sysconf("SC_PAGE_SIZE")
+        with SharedWeightFile(4, limit=page) as shared:
+            self.assertEqual(shared.append(b"\x01\x02"), 0)
+            with self.assertRaises(ValueError):
+                shared.seal()
+            with self.assertRaises(RuntimeError):
+                lookup.register(shared, limit=page)
+            self.assertEqual(shared.append(b"\x03\x04"), 2)
+            shared.seal()
+            self.assertEqual(os.pread(shared.fileno(), 4, 0), b"\x01\x02\x03\x04")
+            with self.assertRaises(OSError):
+                os.pwrite(shared.fileno(), b"\x05", 0)
+            with self.assertRaises(RuntimeError):
+                shared.append(b"")
+        with self.assertRaises(RuntimeError):
+            shared.fileno()
+        with self.assertRaises(ValueError):
+            SharedWeightFile(page + 1, limit=page + 1)
+
+        class Tensor:
+            def __init__(self, shape, dtype):
+                self.shape, self.dtype = shape, dtype
 
         plan = make_plan(
             rows=1,
@@ -279,48 +305,171 @@ class OperatorPlans(unittest.TestCase):
             max_ngram_size=3,
         )
         status = [1]
+        ready = [True]
+        event_ids = []
 
         def capture(stream, result):
-            self.assertEqual(stream, 77)
+            self.assertIn(stream, (77, 88))
             result._obj.value = status[0]
             return 0
 
+        def create_event(result, flags):
+            event_ids.append(len(event_ids) + 1)
+            result._obj.value = event_ids[-1]
+            return 0
+
         device = SimpleNamespace(
-            empty=lambda shape, dtype: SimpleNamespace(shape=shape),
+            empty=Tensor,
             checked=lambda result: self.assertEqual(result, 0),
-            runtime=SimpleNamespace(cudaStreamIsCapturing=capture),
+            synchronize=lambda: None,
+            runtime=SimpleNamespace(
+                cudaStreamIsCapturing=capture,
+                cudaEventCreateWithFlags=create_event,
+                cudaEventRecord=lambda *args: 0,
+                cudaEventQuery=lambda event: 0 if ready[0] else 600,
+                cudaEventSynchronize=lambda event: 0,
+                cudaEventDestroy=lambda event: 0,
+            ),
         )
-        module = SimpleNamespace(engram_hash=lambda *args: None)
-        with patch(
-            "oh_my_vllm.operators.engram.workspace.load",
-            return_value=(module, "source", "library"),
-        ):
-            workspace = prepare(plan, device)
+        module = SimpleNamespace(
+            engram_hash=lambda *args: None, engram_lookup=lambda *args: None
+        )
 
-        def invoke():
-            inputs = Inputs(*(SimpleNamespace(shape=s) for s in plan.input_shapes))
-            workspace.run(inputs)
-            return weakref.ref(inputs)
+        for family in ("hash", "lookup"):
+            with self.subTest(family=family):
+                table_ref = None
+                if family == "hash":
+                    target = "oh_my_vllm.operators.engram.workspace.load"
+                    factory = partial(prepare, plan, device)
+                else:
+                    target = "oh_my_vllm.operators.engram.lookup.load"
+                    table = Tensor((528,), "uint8")
+                    table_ref = weakref.ref(table)
+                    lookup_plan = lookup.make_plan(
+                        rows=1, heads=1, table_rows=2, table_offset=0, scale_offset=512
+                    )
+                    factory = partial(lookup.prepare, lookup_plan, device, table)
+                    for changes in (
+                        dict(rows=385),
+                        dict(heads=25),
+                        dict(table_rows=0),
+                        dict(scale_offset=511),
+                    ):
+                        arguments = dict(
+                            rows=1,
+                            heads=1,
+                            table_rows=2,
+                            table_offset=0,
+                            scale_offset=512,
+                        )
+                        arguments.update(changes)
+                        with self.assertRaises(ValueError):
+                            lookup.make_plan(**arguments)
+                    self.assertEqual(
+                        lookup_plan.storage,
+                        (((1, 1, 256), "bfloat16"), ((1, 1), "uint8")),
+                    )
+                with patch(target, return_value=(module, "source", "library")):
+                    workspace = factory()
+                del factory
+                if family == "lookup":
+                    del table
 
-        with patch("tvm_ffi.get_raw_stream", return_value=77):
-            with workspace.graph_lease():
-                first = [invoke(), invoke()]
-                status[0] = 0
-                eager = [invoke() for _ in range(100)]
-                gc.collect()
-                self.assertTrue(all(ref() is not None for ref in first))
-                self.assertEqual(sum(ref() is not None for ref in eager), 1)
-                with workspace.graph_lease():
-                    status[0] = 1
-                    second = [invoke(), invoke()]
+                def invoke(family=family, workspace=workspace):
+                    inputs = (
+                        Inputs(*(SimpleNamespace(shape=s) for s in plan.input_shapes))
+                        if family == "hash"
+                        else Tensor((1, 1), "int64")
+                    )
+                    workspace.run(inputs)
+                    return weakref.ref(inputs)
+
+                with patch("tvm_ffi.get_raw_stream", return_value=77):
+                    if family == "lookup":
+                        status[0] = 1
+                        with self.assertRaises(RuntimeError):
+                            invoke()
+                        status[0], ready[0] = 0, False
+                        with patch.object(
+                            device.runtime,
+                            "cudaEventSynchronize",
+                            wraps=device.runtime.cudaEventSynchronize,
+                        ) as waited:
+                            pending = [
+                                invoke() for _ in range(workspace.max_pending + 2)
+                            ]
+                            self.assertTrue(waited.called)
+                        gc.collect()
+                        self.assertLessEqual(
+                            sum(ref() is not None for ref in pending),
+                            workspace.max_pending,
+                        )
+                        with (
+                            patch("tvm_ffi.get_raw_stream", return_value=88),
+                            self.assertRaisesRegex(RuntimeError, "stream"),
+                        ):
+                            invoke()
+                        ready[0] = True
+                        invoke()
+                        gc.collect()
+                        self.assertTrue(all(ref() is None for ref in pending))
                     status[0] = 0
-                    invoke()
+                    with workspace.graph_lease():
+                        status[0] = 1
+                        with patch(
+                            "tvm_ffi.get_raw_stream",
+                            return_value=88 if family == "lookup" else 77,
+                        ):
+                            first = [invoke(), invoke()]
+                            if family == "lookup":
+                                with self.assertRaisesRegex(RuntimeError, "capture"):
+                                    workspace.close()
+                        status[0] = 0
+                        eager = [invoke() for _ in range(100)]
+                        gc.collect()
+                        self.assertTrue(all(ref() is not None for ref in first))
+                        self.assertEqual(sum(ref() is not None for ref in eager), 1)
+                        with workspace.graph_lease():
+                            status[0] = 1
+                            second = [invoke(), invoke()]
+                            status[0] = 0
+                            invoke()
+                            gc.collect()
+                            self.assertTrue(all(ref() is not None for ref in second))
+                        gc.collect()
+                        self.assertTrue(all(ref() is None for ref in second))
+                        self.assertTrue(all(ref() is not None for ref in first))
+                        workspace.close()
+                        self.assertTrue(all(ref() is not None for ref in first))
+                        if table_ref:
+                            self.assertIsNotNone(table_ref())
                     gc.collect()
-                    self.assertTrue(all(ref() is not None for ref in second))
-                gc.collect()
-                self.assertTrue(all(ref() is None for ref in second))
-                self.assertTrue(all(ref() is not None for ref in first))
-                workspace.close()
-                self.assertTrue(all(ref() is not None for ref in first))
-            gc.collect()
-            self.assertTrue(all(ref() is None for ref in first))
+                    self.assertTrue(all(ref() is None for ref in first))
+                    if table_ref:
+                        self.assertIsNone(table_ref())
+                    with self.assertRaises(RuntimeError):
+                        invoke()
+                    if family == "lookup":
+                        with (
+                            patch(target, return_value=(module, "source", "library")),
+                            patch.object(lookup, "_failed_workspaces", []) as retained,
+                        ):
+                            broken = lookup.prepare(
+                                lookup_plan, device, Tensor((528,), "uint8")
+                            )
+                            broken.run(Tensor((1, 1), "int64"))
+                            with (
+                                patch.object(
+                                    device.runtime,
+                                    "cudaEventSynchronize",
+                                    side_effect=RuntimeError("completion failed"),
+                                ),
+                                self.assertRaisesRegex(RuntimeError, "completion"),
+                            ):
+                                broken.close()
+                            self.assertEqual(retained, [broken])
+                            broken.close()
+                            self.assertIsNotNone(broken.table)
+                            with self.assertRaisesRegex(RuntimeError, "closed"):
+                                broken.run(Tensor((1, 1), "int64"))
+                status[0] = 0

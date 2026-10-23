@@ -1,4 +1,6 @@
 #include "../../runtime/cuda/contracts.cuh"
+#include "lookup.cuh"
+#include "shared_weights.cuh"
 
 #include <algorithm>
 #include <cstdint>

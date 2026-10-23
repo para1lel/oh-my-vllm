@@ -118,7 +118,13 @@ The shared Engram tables contain 196613849600 bytes.
 Their scales contain 6144182800 bytes.
 The authoritative pinned total is 202758032400 bytes, not four copies.
 Engram projections stay on devices and are included in the rank totals.
-Shared-memory creation, pinned registration, NUMA placement, and transfer lifetimes have no runtime validation.
+
+The isolated [Engram loader](../../python/oh_my_vllm/operators/engram/lookup.py) maps one sealed shared file without weight expansion.
+It uses read-only CUDA registration when supported.
+Otherwise, supported HMM systems use `mlock` with host placement and GPU access advice.
+Page-rounded mappings must fit one process-wide pinned budget.
+Workspace owners keep mappings through Eager completion and graph release.
+Full checkpoint loading, NUMA placement, and service allocation enforcement are pending.
 
 ## 5. Persistent state
 

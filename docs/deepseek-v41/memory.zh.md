@@ -118,7 +118,13 @@ Ratio-2 compressor 投影, 词表 head, Markov head 和置信度投影转为 FP3
 其 scale 包含 6144182800 字节.
 权威 pinned 总量为 202758032400 字节, 不是四份副本.
 Engram 投影留在设备上, 并计入 rank 总量.
-共享内存创建, pinned 注册, NUMA 放置和传输生命周期仍须运行时验证.
+
+独立的 [Engram 加载器](../../python/oh_my_vllm/operators/engram/lookup.py) 映射一个 sealed 共享文件, 不展开权重.
+在支持时, 它使用只读 CUDA 注册.
+否则, 支持 HMM 的系统使用 `mlock`, 并设置 host 放置及 GPU 访问建议.
+按页对齐的映射必须满足进程级 pinned 预算总量.
+Workspace 所有者保持映射, 直到 Eager 完成和 graph 释放.
+完整检查点加载, NUMA 放置和服务分配约束仍待完成.
 
 ## 5. 常驻状态
 

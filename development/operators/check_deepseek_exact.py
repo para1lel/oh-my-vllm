@@ -345,11 +345,20 @@ def check_engram(device, fixture):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--lookup-fd",
+        type=int,
+        help="check lookup only, using an inherited sealed fixture memfd",
+    )
     options = parser.parse_args()
     output = options.output.resolve()
     repository = Path(__file__).resolve().parents[2]
     if output.is_relative_to(repository) or output.exists():
         parser.error("use a new report path outside the repository")
+    if options.lookup_fd is not None and options.lookup_fd < 0:
+        parser.error("lookup descriptor must be nonnegative")
+    from .check_engram_lookup import check_lookup
+
     _, cases = load_exact_operators()
     identity = device_identity(selected_uuid())
     device = Device()
@@ -362,13 +371,19 @@ def main():
     }
     try:
         with caller_stream(device):
-            for name in MODES:
-                native, checks = check_quantization(device, name, cases[name])
-                report["native"]["quantization"] = native
-                report["checks"].extend(checks)
-            native, checks = check_engram(device, cases["engram"])
+            # An earlier FFI exception can break the sanitizer's HMM mapping tracking.
+            native, checks, provenance = check_lookup(device, options.lookup_fd)
             report["native"]["engram"] = native
             report["checks"].extend(checks)
+            report["engram_lookup"] = provenance
+            if options.lookup_fd is None:
+                for name in MODES:
+                    native, checks = check_quantization(device, name, cases[name])
+                    report["native"]["quantization"] = native
+                    report["checks"].extend(checks)
+                native, checks = check_engram(device, cases["engram"])
+                report["native"]["engram"] = native
+                report["checks"].extend(checks)
     finally:
         try:
             device.synchronize()

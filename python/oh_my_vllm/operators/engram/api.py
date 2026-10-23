@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import NamedTuple
 
-FUNCTIONS = ("engram_hash",)
+FUNCTIONS = ("engram_hash", "engram_register", "engram_pinned_bytes", "engram_lookup")
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,7 @@
 | [DSpark 续算](../../development/model/deepseek_v41/dspark.npz) | 十八个完整 FP64 词表行和两个置信度向量 | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 | [媒体端点](../../development/model/deepseek_v41/media.npz) | 静态图片和视频帧图片之后的两个完整 FP64 词表向量 | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
 | [精确算子](../../development/model/deepseek_v41/exact-operators.npz) | 四个合成量化和 Engram 用例 | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
+| [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 表, scale, 索引和 49152 个 BF16 输出位模式 | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
 
 产物绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 完整模型产物包含清单, 生成器身份, 固定输入, 数组形状和摘要.
@@ -31,9 +32,13 @@
 按每个用例的精确限值, 比较编码字节, 尺度字节, BF16 往返位模式, 哈希和历史.
 这些合成用例不设定复合数值或性能限值.
 
-可选 native 模块提供量化和整数 Engram 哈希.
-它们不提供 Engram 权重查找或服务集成.
+`load_engram_lookup()` 提供固定输入和独立计算的 BF16 输出位模式.
+其 16 行表覆盖重复索引, 有符号零, subnormal 中点和不同 scale 组.
+
+可选 native 模块提供量化, 整数 Engram 哈希, 以及通过共享 pinned-host 映射执行的 lookup.
+它们不提供服务集成.
 量化调用者必须拒绝任何非零的分组状态.
+Lookup 调用者必须拒绝任何非零的行状态.
 Engram 返回私有续算历史, 不修改输入历史.
 
 将 `EXACT_REPORT` 设为新的外部 JSON 路径.
