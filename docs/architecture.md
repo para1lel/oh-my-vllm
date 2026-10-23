@@ -54,7 +54,7 @@ The accepted history does not contain new drafts.
 | Native operators | Compute values with the model's precision and private state rules |
 | Device resources | Manage streams, CUDA Graph recording, replay, and release |
 
-The [model](../python/oh_my_vllm/models/qwen38/model.py) calls the [operator stages](operators/fusion.md) through all language layers.
+The [model](../python/oh_my_vllm/models/qwen38/model.py) calls the [serving operators](operators/design.md#serving-boundaries) through all language layers.
 Eager execution and CUDA Graph recording use the same native operators.
 The [device wrapper](../python/oh_my_vllm/operators/runtime/device.py) supplies graph resources.
 Each workspace keeps its weights, cache, tensors, and resource leases until graph closure.

@@ -18,6 +18,8 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 table, scales, indices, and 49152 BF16 output bit patterns | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
 | [Engram checkpoint](../../development/model/deepseek_v41/engram-checkpoint.npz) | Original bytes and exact BF16 outputs for 32 selected rows from each table | `967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce` |
 | [Hyper-connection index](../../development/model/deepseek_v41/hyperconnection/index.json) | Five cases with complete FP64 outputs and fixed field limits | `933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47` |
+| [Routing index](../../development/model/deepseek_v41/routing/index.json) | Five post-logit cases with exact expert IDs and FP64 coefficients | `bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28` |
+| [Projection index](../../development/model/deepseek_v41/projection/index.json) | Five A8W8 and five A8W4 cases with complete FP64 outputs | `db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6` |
 
 The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 Full-model artifacts contain the manifest, generator identities, fixed inputs, array shapes, and digests.
@@ -78,6 +80,34 @@ Collapse uses incoming coefficients. `next_pre` belongs to the next sublayer.
 The [checker](../../development/operators/check_deepseek_hc.py) also permutes channels to detect addressing errors.
 It checks Eager and Graph execution, invalid arguments, empty inputs, and input immutability.
 Performance limits and model integration are pending.
+
+## Routing
+
+`load_routing()` supplies target decode, prefill, verification, draft, and synthetic decision cases.
+The boundary starts with stored FP32 logits. Original checkpoint biases control text and image selection.
+The cases cover 384 experts with top-6 and 128 experts with top-3.
+The [model contract](model.md) specifies unbiased coefficients and stable global expert IDs.
+
+The coefficient normalized L2 limit is `2^-19`.
+Its absolute-error limit is `max(1e-7, 2^-19 * P)`, with `P` equal to each request's FP64 peak.
+The RMS floor and near-zero absolute limit are the same as for hyper-connections.
+Expert IDs must match exactly.
+
+The index binds the independent score-error policy.
+Non-tied selection and order must pass its interval checks before implementation.
+Synthetic ties use identical stored logits and biases.
+This gate excludes projection rounding, expert dispatch, latency, and full-model accuracy.
+
+## Encoded projections
+
+`load_projection()` supplies encoded FP8 activations, UE8M0 scales, and complete FP64 matrix products.
+Original checkpoint weights stay external. The synthetic FP4 case stores its weights.
+The [checker](../../development/operators/check_deepseek_projection.py) covers weight packing, K=576, and widths up to 15360.
+
+Each request uses normalized L2 `2^-7` and maximum absolute error `max(1e-7, 2^-6 * P)`.
+`P` is that request's FP64 peak. The RMS floor and near-zero absolute limit are `1e-6`.
+Constructed zero endpoints also have a `1e-6` absolute limit.
+These engineering limits exclude activation quantization error, promoted weight formats, collectives, latency, and full-model accuracy.
 
 ## Short text
 
@@ -142,15 +172,9 @@ Moving image records alone is not sufficient.
 
 ## Upstream checkpoint boundary
 
-DeepInfer revision `9bd9cf243fc53ef9afbf8f04d391d989117d6ab9` defaults to the `-1017` checkpoint.
-The comparison uses [checkpoint revision 1bae0e1](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/1bae0e1088993b9b82de08f59de5be5a34e42170).
-Its configuration, index bytes, and shard sizes match locally, but all 48 whole-file hashes differ.
-
-Equal layouts do not prove equal tensor values.
-Different file hashes do not identify which values differ.
 Use the local checkpoint for weights and references.
-Upstream substitution and numerical-result reuse are not approved.
-Keep comparison records external to the repository.
+The compared [upstream checkpoint](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/1bae0e1088993b9b82de08f59de5be5a34e42170) has matching layouts but different whole-file hashes for all 48 shards.
+Do not substitute its weights or numerical results.
 
 ## Commands
 

@@ -43,6 +43,10 @@ HYPERCONNECTION_PATH = Path(__file__).with_name("hyperconnection")
 HYPERCONNECTION_SHA256 = (
     "933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47"
 )
+ROUTING_PATH = Path(__file__).with_name("routing")
+ROUTING_SHA256 = "bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28"
+PROJECTION_PATH = Path(__file__).with_name("projection")
+PROJECTION_SHA256 = "db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6"
 CHECKPOINT_MANIFEST_SHA256 = (
     "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
 )
@@ -86,20 +90,32 @@ DSPARK_INPUTS = {
 }
 
 
-def load_hyperconnection(path=HYPERCONNECTION_PATH):
+def _load_operator_bundle(path, identity):
     from development.operators.cases import Case
     from development.operators.fixtures import load_fixture
 
     path = Path(path)
     raw = (path / "index.json").read_bytes()
-    if hashlib.sha256(raw).hexdigest() != HYPERCONNECTION_SHA256:
-        raise ValueError("hyper-connection fixture index identity differs")
+    if hashlib.sha256(raw).hexdigest() != identity:
+        raise ValueError("operator fixture index identity differs")
     index = json.loads(raw)
     cases = {}
     for name, record in index["cases"].items():
         case = Case(**record["case"], fixture_sha256=record["fixture_sha256"])
         cases[name] = load_fixture(case, path / case.id)
     return index, cases
+
+
+def load_hyperconnection(path=HYPERCONNECTION_PATH):
+    return _load_operator_bundle(path, HYPERCONNECTION_SHA256)
+
+
+def load_routing(path=ROUTING_PATH):
+    return _load_operator_bundle(path, ROUTING_SHA256)
+
+
+def load_projection(path=PROJECTION_PATH):
+    return _load_operator_bundle(path, PROJECTION_SHA256)
 
 
 def load_engram_lookup(path=ENGRAM_LOOKUP_PATH):

@@ -106,6 +106,10 @@ FP4 输出行分片保留完整的逐行 scale.
 Ratio-2 compressor 投影, 词表 head, Markov head 和置信度投影转为 FP32.
 加载临时空间及重叠的源/目标分配不属于常驻权重字节.
 
+[编码读取器](../../python/oh_my_vllm/models/deepseek_v41/checkpoint.py)加载选定的向量和矩阵切片, 不做解码.
+其源缓冲和每个目标分别有 64 MiB 上限.
+张量放置与精度转换是独立操作.
+
 以下为根据类推导的字节数, 不是分配测量值:
 
 | 策略 | Rank 0 权重 | Rank 1-3 各自权重 |
@@ -193,6 +197,13 @@ Host `kv_offload`, `uploads` 和 `transfer_leases` 预留也继续作为下限.
 完整 64 请求步骤包含 384 个目标行, 320 个预测器行, 2304 条目标路由边和 960 条草稿路由边.
 它不施加 16 请求分片.
 4 GiB compute 上限包含 1 GiB kernel 临时空间.
+
+每个 rank 有独立的 4 GiB native 权重布局上限.
+它只计入编码 FP4 填充和打包 scales 的新增字节.
+不要保留被替换的紧凑存储.
+FP4 归约宽度向上取整到 128 的倍数. FP8 宽度保持不变.
+逐 rank 输出给出精确增量, 各分量字节及剩余容量.
+
 64 MiB staging 上限容纳两个 Engram bank.
 通信, 状态, graph, native, media, 填充和启动存储分别计费.
 源缓冲细节由可调用接口的输出给出.

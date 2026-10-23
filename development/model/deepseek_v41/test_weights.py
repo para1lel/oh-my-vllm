@@ -190,6 +190,158 @@ class SharedEngramWeights(unittest.TestCase):
                 self.assertIsNone(owners[0].fd)
 
 
+class EncodedCheckpointWeights(unittest.TestCase):
+    def test_column_slices_and_vectors_keep_raw_bits_with_bounded_reads(self):
+        from oh_my_vllm.models.deepseek_v41.checkpoint import EncodedReader, TensorSlice
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            extra = {
+                "columns": ("F8_E4M3", np.arange(32, dtype=np.uint8).reshape(4, 8)),
+                "packed": ("I8", np.array([[-128, -1, 0, 127]], np.int8)),
+                "bits": ("BF16", np.array([0, 0x8000, 0x7FC1, 0x3F80], "<u2")),
+                "float": ("F32", np.array([1.25, -0.0, -2.5], "<f4")),
+                "scale": ("F8_E8M0", np.array([0, 127, 255], np.uint8)),
+            }
+            _, manifest = reference_fixture(root, extra)
+            index_path = root / "model.safetensors.index.json"
+            index = json.loads(index_path.read_text())
+            index["weight_map"]["nonowned"] = "absent.safetensors"
+            index_path.write_text(json.dumps(index))
+            manifest["files"][index_path.name] = {
+                "size": index_path.stat().st_size,
+                "sha256": hashlib.sha256(index_path.read_bytes()).hexdigest(),
+            }
+            selections = {
+                "columns": TensorSlice("F8_E4M3", (4, 8), (1, 2), (4, 4)),
+                "packed": TensorSlice("I8", (1, 4), (0, 0), (1, 4)),
+                "bits": TensorSlice("BF16", (4,), (1,), (4,)),
+                "float": TensorSlice("F32", (3,), (0,), (3,)),
+                "scale": TensorSlice("F8_E8M0", (3,), (0,), (3,)),
+            }
+            with EncodedReader(
+                root, manifest["files"], selections, read_bytes=17
+            ) as reader:
+                output = np.full((4, 2), 90, np.uint8)
+                self.assertEqual(reader.read_into("columns", 0, output), 3)
+                np.testing.assert_array_equal(
+                    output, [[10, 11], [18, 19], [26, 27], [90, 90]]
+                )
+                self.assertEqual(reader.read_into("columns", 1, output[:2]), 2)
+                np.testing.assert_array_equal(output[:2], [[18, 19], [26, 27]])
+                self.assertEqual(reader.read_into("columns", 3, output), 0)
+                for name, wanted in (
+                    ("packed", np.array([[-128, -1, 0, 127]], np.int8)),
+                    ("bits", np.array([0x8000, 0x7FC1, 0x3F80], "<u2")),
+                    ("float", np.array([1.25, -0.0, -2.5], "<f4")),
+                    ("scale", np.array([0, 127, 255], np.uint8)),
+                ):
+                    actual = np.empty_like(wanted)
+                    self.assertEqual(reader.read_into(name, 0, actual), len(wanted))
+                    self.assertEqual(actual.tobytes(), wanted.tobytes())
+                verified = reader.finish()
+                self.assertEqual(
+                    set(verified),
+                    {"config.json", index_path.name, "model.safetensors"},
+                )
+                for name, digest in verified.items():
+                    self.assertEqual(digest, manifest["files"][name]["sha256"])
+            with self.assertRaises(RuntimeError):
+                reader.finish()
+
+    def test_rejects_invalid_selections_destinations_and_tile_limits(self):
+        from oh_my_vllm.models.deepseek_v41.checkpoint import EncodedReader, TensorSlice
+
+        for args in (
+            ("F16", (2,), (0,), (2,)),
+            ("BF16", (True,), (0,), (1,)),
+            ("BF16", (2,), (-1,), (1,)),
+            ("BF16", (2,), (0,), (3,)),
+            ("BF16", (2, 2), (0,), (2,)),
+            ("BF16", (2, 2, 2), (0, 0, 0), (2, 2, 2)),
+        ):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                TensorSlice(*args)
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, manifest = reference_fixture(root)
+            selection = {"embed.weight": TensorSlice("BF16", (2, 2), (0, 1), (2, 2))}
+            for cap in (0, True, (64 << 20) + 1):
+                with self.assertRaises(ValueError):
+                    EncodedReader(root, manifest["files"], selection, read_bytes=cap)
+            with EncodedReader(
+                root, manifest["files"], selection, read_bytes=3
+            ) as reader:
+                readonly = np.zeros((2, 1), "<u2")
+                readonly.flags.writeable = False
+                for destination in (
+                    np.empty((2, 1), np.uint8),
+                    np.empty((2, 3), "<u2"),
+                    np.empty((2, 2), "<u2")[:, :1],
+                    readonly,
+                    np.empty((2,), "<u2"),
+                ):
+                    with self.assertRaises(ValueError):
+                        reader.read_into("embed.weight", 0, destination)
+                for row in (-1, 3, True):
+                    with self.assertRaises(ValueError):
+                        reader.read_into("embed.weight", row, np.empty((1, 1), "<u2"))
+                with self.assertRaises(ValueError):
+                    reader.read_into("nonowned", 0, np.empty((1, 1), "<u2"))
+                raw = np.empty((2, 1), "<u2")
+                self.assertEqual(reader.read_into("embed.weight", 0, raw), 2)
+                np.testing.assert_array_equal(raw, [[0xC000], [0x3F00]])
+            for kind, shape in (("BF16", (4, 2)), ("F32", (2, 2))):
+                wrong = {"embed.weight": TensorSlice(kind, shape, (0, 0), (2, 2))}
+                with (
+                    EncodedReader(root, manifest["files"], wrong) as reader,
+                    self.assertRaises(ValueError),
+                ):
+                    reader.read_into(
+                        "embed.weight",
+                        0,
+                        np.empty((2, 2), "<f4" if kind == "F32" else "<u2"),
+                    )
+
+    def test_verifies_unselected_payload_before_copy_and_rechecks_controls(self):
+        from oh_my_vllm.models.deepseek_v41.checkpoint import EncodedReader, TensorSlice
+
+        for mode in (
+            "digest",
+            "config.json",
+            "model.safetensors.index.json",
+            "model.safetensors",
+        ):
+            with self.subTest(mode=mode), TemporaryDirectory() as directory:
+                root = Path(directory)
+                _, manifest = reference_fixture(root)
+                selection = {
+                    "embed.weight": TensorSlice("BF16", (2, 2), (0, 0), (2, 2))
+                }
+                if mode == "digest":
+                    with (root / "model.safetensors").open("r+b") as stream:
+                        stream.seek(-1, 2)
+                        stream.write(b"\xff")
+                with EncodedReader(
+                    root, manifest["files"], selection, read_bytes=17
+                ) as reader:
+                    output = np.full((2, 2), 0x5A5A, "<u2")
+                    if mode == "digest":
+                        with self.assertRaisesRegex(ValueError, "SHA256"):
+                            reader.read_into("embed.weight", 0, output)
+                        self.assertTrue(np.all(output == 0x5A5A))
+                        with self.assertRaisesRegex(ValueError, "verification"):
+                            reader.finish()
+                    else:
+                        reader.read_into("embed.weight", 0, output)
+                        path = root / mode
+                        path.write_bytes(path.read_bytes() + b" ")
+                        with self.assertRaisesRegex(ValueError, "changed"):
+                            reader.read_into("embed.weight", 0, output)
+                        with self.assertRaisesRegex(ValueError, "changed"):
+                            reader.finish()
+
+
 class ReferenceWeights(unittest.TestCase):
     def test_source_tiles_keep_column_shards_fp4_bytes_and_engram_tail(self):
         from . import source_weights

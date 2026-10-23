@@ -54,7 +54,7 @@ FA 与 GDN state pool 具有独立容量.
 | Native 算子 | 按模型的精度和私有状态规则计算数值 |
 | Device 资源 | 管理 stream, CUDA Graph 录制, 重放和释放 |
 
-[模型](../python/oh_my_vllm/models/qwen38/model.py)在全部语言层调用[算子阶段](operators/fusion.zh.md).
+[模型](../python/oh_my_vllm/models/qwen38/model.py)在全部语言层调用 [serving 算子](operators/design.zh.md#serving-边界).
 Eager 执行和 CUDA Graph 录制使用相同的 native 算子.
 [Device wrapper](../python/oh_my_vllm/operators/runtime/device.py) 提供 graph 资源.
 每个 workspace 保留其权重, cache, tensor 和资源 lease, 直到 graph 关闭.

@@ -179,4 +179,4 @@ Compare the complete vocabulary after a short input and one decode iteration.
 Use the [operator microbench contract](microbench.md) for fixed local cases and their reviewed numerical limits.
 
 Keep the state ownership, checkpoint, and precision contracts above.
-Use [the fusion plan](fusion.md) for the serving boundaries.
+Use the [operator design](design.md#serving-boundaries) for the serving boundaries.

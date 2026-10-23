@@ -106,6 +106,10 @@ Its checkpoint scales are consumed during loading.
 Ratio-2 compressor projections, vocabulary heads, Markov heads, and the confidence projection become FP32.
 Load scratch and overlapping source/destination allocations are not persistent weight bytes.
 
+The [encoded reader](../../python/oh_my_vllm/models/deepseek_v41/checkpoint.py) loads selected vector and matrix slices without decoding.
+Its source buffer and each destination have separate 64 MiB caps.
+Tensor placement and precision conversions are separate operations.
+
 These are class-derived byte counts, not allocation measurements:
 
 | Strategy | Rank 0 weights | Each rank 1-3 weights |
@@ -193,6 +197,13 @@ Unsupported limits, unsigned 64-bit overflow, child overflow, or startup budget 
 The full 64-request step has 384 target rows, 320 predictor rows, 2304 target routed edges, and 960 draft routed edges.
 It does not impose 16-request fragments.
 The 4 GiB compute cap includes 1 GiB kernel scratch.
+
+Each rank has a separate 4 GiB native weight-layout cap.
+It charges only additional bytes for encoded FP4 padding and packed scales.
+Do not keep replaced compact storage.
+FP4 reduction widths round up to multiples of 128. FP8 widths stay unchanged.
+The per-rank output gives exact growth, component bytes, and unused capacity.
+
 The 64 MiB staging cap holds two Engram banks.
 Communication, state, graph, native, media, padding, and startup storage have separate charges.
 Source buffer details belong in the callable output.

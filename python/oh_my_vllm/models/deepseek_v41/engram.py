@@ -1,94 +1,12 @@
 """Stream verified encoded Engram tensors into one sealed shared store."""
 
 import hashlib
-import json
-import math
-import os
-import re
-import stat
-import struct
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
 from ...operators.engram.shared import SharedWeightFile
-
-MAX_HEADER_BYTES = 64 << 20
-DTYPE_BYTES = {"BF16": 2, "F32": 4, "F8_E4M3": 1, "F8_E8M0": 1, "I8": 1}
-
-
-def _object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate checkpoint JSON key")
-        result[key] = value
-    return result
-
-
-def _json(data):
-    result = json.loads(data, object_pairs_hook=_object)
-    if type(result) is not dict:
-        raise ValueError("checkpoint JSON must contain an object")
-    return result
-
-
-def _state(value):
-    return (
-        value.st_dev,
-        value.st_ino,
-        value.st_size,
-        value.st_mtime_ns,
-        value.st_ctime_ns,
-    )
-
-
-class _Source:
-    def __init__(self, root, name, identities, resources):
-        if type(name) is not str or re.fullmatch(r"[A-Za-z0-9_.-]+", name) is None:
-            raise ValueError("invalid checkpoint file name")
-        expected = identities.get(name)
-        if (
-            type(expected) is not dict
-            or type(expected.get("size")) is not int
-            or expected["size"] <= 0
-            or type(expected.get("sha256")) is not str
-            or re.fullmatch(r"[0-9a-f]{64}", expected["sha256"]) is None
-        ):
-            raise ValueError("checkpoint file requires a verified size and SHA256")
-        self.expected = dict(expected)
-        self.path = root / name
-        descriptor = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        try:
-            source = os.fdopen(descriptor, "rb")
-        except BaseException:
-            os.close(descriptor)
-            raise
-        self.source = resources.enter_context(source)
-        info = os.fstat(descriptor)
-        self.initial = _state(info)
-        if not stat.S_ISREG(info.st_mode) or info.st_size != expected["size"]:
-            raise ValueError("checkpoint file type or size differs")
-        self.unchanged()
-
-    def unchanged(self):
-        if (
-            _state(os.fstat(self.source.fileno())) != self.initial
-            or _state(self.path.stat(follow_symlinks=False)) != self.initial
-        ):
-            raise ValueError("checkpoint file changed during loading")
-
-    def verify(self, digest):
-        if digest != self.expected["sha256"]:
-            raise ValueError("checkpoint SHA256 differs")
-        self.unchanged()
-
-    def control(self):
-        if self.initial[2] > MAX_HEADER_BYTES:
-            raise ValueError("checkpoint JSON exceeds its byte limit")
-        data = self.source.read(self.initial[2] + 1)
-        self.verify(hashlib.sha256(data).hexdigest())
-        return _json(data)
+from .checkpoint import _header, _Source
 
 
 @dataclass(frozen=True)
@@ -146,59 +64,16 @@ def _layout(config):
 
 
 def _spans(source, index, layout):
-    prefix = source.source.read(8)
-    if len(prefix) != 8:
-        raise ValueError("truncated checkpoint header")
-    length = struct.unpack("<Q", prefix)[0]
-    if not 0 < length <= min(MAX_HEADER_BYTES, source.initial[2] - 8) or length % 8:
-        raise ValueError("invalid checkpoint header length")
-    data = source.source.read(length)
-    if len(data) != length:
-        raise ValueError("truncated checkpoint header")
-    header = _json(data)
-    metadata = header.pop("__metadata__", {})
-    if type(metadata) is not dict or any(
-        type(value) is not str for value in metadata.values()
-    ):
-        raise ValueError("invalid checkpoint metadata")
-    if set(header) != {
-        name for name, shard in index.items() if shard == source.path.name
-    }:
-        raise ValueError("checkpoint header differs from index")
-    spans = []
+    header, base = _header(source, index)
+    selected = []
     for name, entry in header.items():
-        if type(entry) is not dict or set(entry) != {"dtype", "shape", "data_offsets"}:
-            raise ValueError("invalid checkpoint tensor record")
-        kind, shape, offsets = (
-            entry[key] for key in ("dtype", "shape", "data_offsets")
-        )
-        if (
-            type(kind) is not str
-            or kind not in DTYPE_BYTES
-            or type(shape) is not list
-            or any(type(size) is not int or size < 0 for size in shape)
-            or type(offsets) is not list
-            or len(offsets) != 2
-            or any(type(offset) is not int or offset < 0 for offset in offsets)
-            or offsets[1] - offsets[0] != math.prod(shape) * DTYPE_BYTES[kind]
-        ):
-            raise ValueError("invalid checkpoint tensor storage")
         if name in layout:
             _, count, dtype, width = layout[name]
-            if kind != dtype or shape != [count, width]:
+            if entry["dtype"] != dtype or entry["shape"] != [count, width]:
                 raise ValueError("Engram tensor layout differs from configuration")
-        spans.append((*offsets, name))
-    cursor, selected = 0, []
-    for begin, end, name in sorted(spans):
-        if begin != cursor:
-            raise ValueError("checkpoint tensors overlap or leave a gap")
-        cursor = end
-        if name in layout:
-            selected.append((length + 8 + begin, length + 8 + end, name))
-    if length + 8 + cursor != source.initial[2]:
-        raise ValueError("checkpoint payload length differs")
-    source.unchanged()
-    return selected
+            begin, end = entry["data_offsets"]
+            selected.append((base + begin, base + end, name))
+    return sorted(selected)
 
 
 def _copy(source, spans, shared, offsets, buffer):

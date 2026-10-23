@@ -42,9 +42,11 @@ MODULES = {
 def optional_modules():
     from oh_my_vllm.operators.engram.api import FUNCTIONS as ENGRAM_FUNCTIONS
     from oh_my_vllm.operators.hyperconnection.api import FUNCTIONS as HC_FUNCTIONS
+    from oh_my_vllm.operators.projection.api import FUNCTIONS as PROJECTION_FUNCTIONS
     from oh_my_vllm.operators.quantization.api import (
         FUNCTIONS as QUANTIZATION_FUNCTIONS,
     )
+    from oh_my_vllm.operators.routing.api import FUNCTIONS as ROUTING_FUNCTIONS
     from oh_my_vllm.operators.runtime.collectives import FUNCTIONS
 
     return {
@@ -52,6 +54,8 @@ def optional_modules():
         "quantization": QUANTIZATION_FUNCTIONS,
         "engram": ENGRAM_FUNCTIONS,
         "hyperconnection": HC_FUNCTIONS,
+        "routing": ROUTING_FUNCTIONS,
+        "projection": PROJECTION_FUNCTIONS,
     }
 
 
@@ -72,7 +76,7 @@ def build(name, functions):
     compiler = subprocess.check_output([nvcc, "--version"]).decode()
     include_paths = [str(source.parent), str(SOURCES)]
     commit = None
-    if name in MODULES and name != "device":
+    if (name in MODULES and name != "device") or name == "projection":
         cutlass = Path(os.environ["OH_MY_VLLM_CUTLASS"])
         commit = (
             subprocess.check_output(["git", "-C", str(cutlass), "rev-parse", "HEAD"])

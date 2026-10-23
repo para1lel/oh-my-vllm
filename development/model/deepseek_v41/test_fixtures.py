@@ -13,6 +13,55 @@ from . import fixtures
 
 
 class FrozenFixtures(unittest.TestCase):
+    def test_projections_keep_encoded_inputs_full_outputs_and_cancellation(self):
+        loader = getattr(fixtures, "load_projection", None)
+        self.assertTrue(callable(loader), "projection fixture loader is missing")
+        _, cases = loader()
+        for kind in ("fp8", "fp4"):
+            self.assertEqual(sum(name.startswith(kind) for name in cases), 5)
+        for case in cases.values():
+            shape = case.manifest["case"]["shape"]
+            rows, width = shape["batch"] * shape["queries"], shape["width"]
+            self.assertEqual(case.inputs["encoded"].shape, (rows, width))
+            self.assertEqual(case.inputs["scales"].shape, (rows, width // 32))
+            self.assertEqual(case.inputs["encoded"].dtype, np.uint8)
+            self.assertEqual(case.expected["value"].shape, (rows, shape["outputs"]))
+            self.assertEqual(case.expected["value"].dtype, np.float64)
+            self.assertTrue(np.isfinite(case.expected["value"]).all())
+            self.assertFalse(case.expected["value"].flags.writeable)
+            for first, last, column in case.manifest["case"]["options"]["zero_columns"]:
+                value = case.expected["value"][first:last]
+                self.assertFalse((value if column < 0 else value[:, column]).any())
+        self.assertEqual(cases["fp4_verification"].inputs["scales"].shape[1], 18)
+        self.assertTrue(cases["fp4_decisions"].expected["value"][4:].any())
+
+    def test_routing_keeps_full_requests_and_deterministic_decisions(self):
+        loader = getattr(fixtures, "load_routing", None)
+        self.assertTrue(callable(loader), "routing fixture loader is missing")
+        _, cases = loader()
+        self.assertEqual(
+            set(cases), {"decode", "prefill", "verification", "draft", "decisions"}
+        )
+        for name in ("decode", "prefill", "verification", "draft"):
+            case = cases[name]
+            shape = case.manifest["case"]["shape"]
+            rows = shape["batch"] * shape["queries"]
+            count = 3 if name == "draft" else 6
+            self.assertEqual(case.inputs["logits"].shape, (rows, shape["experts"]))
+            self.assertEqual(case.inputs["image_mask"].shape, (rows,))
+            self.assertEqual(case.expected["expert_ids"].shape, (rows, count))
+            self.assertEqual(case.expected["coefficients"].shape, (rows, count))
+            self.assertEqual(case.inputs["logits"].dtype, np.float32)
+            self.assertEqual(case.expected["coefficients"].dtype, np.float64)
+            self.assertFalse(case.expected["coefficients"].flags.writeable)
+            np.testing.assert_allclose(
+                case.expected["coefficients"].sum(-1), 1.5, rtol=1e-14
+            )
+        for group, count, per_rank in (("target", 6, 96), ("draft", 3, 32)):
+            ids = cases["decisions"].expected[f"{group}_expert_ids"]
+            np.testing.assert_array_equal(ids[0], np.arange(count))
+            self.assertEqual(len(np.unique(ids[1] // per_rank)), min(count, 4))
+
     def test_hyperconnection_keeps_complete_requests_and_separate_incoming_mix(self):
         loader = getattr(fixtures, "load_hyperconnection", None)
         self.assertTrue(callable(loader), "hyper-connection fixture loader is missing")

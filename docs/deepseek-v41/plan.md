@@ -9,9 +9,11 @@ DeepSeek service inference is not enabled.
 
 Phases 1 and 2 are implemented.
 Phase 0 reference and allocation work continues.
+
 Phase 3 has isolated exact quantization, Engram hash, and shared pinned-host lookup operators.
-The isolated hyper-connection operator uses frozen field limits.
+Isolated hyper-connection, routing, and encoded projection operators use frozen field limits.
 Complete Engram tables load into one sealed shared store.
+An encoded reader supplies bounded raw slices. Full weight preparation and model integration are pending.
 Full-model computation and Phases 4-8 are pending.
 
 ## Constraints

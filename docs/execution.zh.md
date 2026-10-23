@@ -4,7 +4,7 @@
 
 Rust 负责请求, 调度, 逻辑 KV 身份和 state commit.
 Python 通过 CUDA 算子及现有 ZMQ DEALER 和 msgpack 边界执行模型.
-[算子边界](operators/fusion.zh.md)规定计算和私有状态所有权.
+[算子设计](operators/design.zh.md#serving-边界)规定计算边界和私有状态所有权.
 
 Worker 为每条 Execute 消息选择一次执行方式.
 只要任一已调度行包含 prefill, 该 Execute 的所有分片都使用 Eager 执行.

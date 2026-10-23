@@ -1,0 +1,465 @@
+{
+  "version": "deepseek-routing-numerics-v1",
+  "checkpoint_manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+  "generator_sha256": "8aca31e9c7055a332638c30698c6331d1e15031204228589982c59314e42605b",
+  "reference_sources": {
+    "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+    "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+    "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+    "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+    "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+    "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+    "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+    "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+    "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+    "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a"
+  },
+  "precision_policy": {
+    "version": "deepseek-route-precision-v1",
+    "boundary": "FP32 logits and original FP32 text/image biases; projection excluded",
+    "experts_topk": [
+      [
+        384,
+        6
+      ],
+      [
+        128,
+        3
+      ]
+    ],
+    "rows_max": 384,
+    "temperature": 1.0,
+    "route_scale": 1.5,
+    "normalization_epsilon": 1e-20,
+    "coefficient_limits": {
+      "normalized_l2": 1.9073486328125e-06,
+      "max_abs": "max(1e-7, 2^-19 * per_request_FP64_peak)",
+      "rms_floor": 1e-06,
+      "near_zero_max_abs": 1e-06
+    },
+    "ids": "corrected_score_descending_then_global_expert_id_ascending; exact",
+    "score_envelope": {
+      "u": 5.960464477539063e-08,
+      "A": "16*u*max(1,abs(sqrt(softplus(logit))))",
+      "E": "(1+u)*A+u*abs(score+bias)",
+      "selected_order": "q_i-q_j>E_i+E_j for non-tied adjacent selected pairs",
+      "membership": "min_selected(q_i-E_i)>max_unselected(q_j+E_j)",
+      "ties": "identical stored FP32 logits and biases only"
+    },
+    "cases": [
+      "target_decode_rows1",
+      "target_prefill_rows128_mixed_media",
+      "target_verify_batch64_queries6",
+      "draft_batch64_queries5",
+      "synthetic_decisions_both_dimensions"
+    ],
+    "scope": "engineering allowances, not hard bounds; no projection, dispatch, performance, full-model or service acceptance",
+    "review": "independent Sagan proposal and envelope correction before reference generation or native candidate",
+    "frozen_unix": 1792766300.022706
+  },
+  "precision_policy_sha256": "7216fd442bc808d1e7ff6a0fae168024d60db3f4315f45e97e92b29f8e134e51",
+  "cases": {
+    "decode": {
+      "case": {
+        "id": "deepseek.route.numerics.decode",
+        "boundary": "deepseek.route",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 1,
+          "queries": 1,
+          "rows": 1,
+          "experts": 384
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.ffn.gate.weight",
+          "layers.0.ffn.gate.bias",
+          "layers.0.ffn.gate.bias_vl"
+        ],
+        "options": {
+          "topk": 6,
+          "seed": 47101,
+          "projection": "FP64 projection rounded once to stored FP32 boundary input",
+          "route_scale": 1.5,
+          "epsilon": 1e-20,
+          "stable_global_ids": true
+        },
+        "outputs": [
+          "expert_ids",
+          "coefficients"
+        ]
+      },
+      "fixture_sha256": "7bb6d432edb97209b55ae974312b63362ad6bbbeea3041c14252d94da05daf0e",
+      "limits": {
+        "case_sha256": "ce98bde6c49093038dff247bae6ed070a445ff221d3b1e1bd985d56e95e270ae",
+        "fixture_sha256": "7bb6d432edb97209b55ae974312b63362ad6bbbeea3041c14252d94da05daf0e",
+        "fields": {
+          "expert_ids": {
+            "kind": "exact"
+          },
+          "coefficients": {
+            "kind": "float",
+            "normalized_l2": 1.9073486328125e-06,
+            "max_abs": [
+              5.661159481613124e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "prefill": {
+      "case": {
+        "id": "deepseek.route.numerics.prefill",
+        "boundary": "deepseek.route",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 4,
+          "queries": 32,
+          "rows": 128,
+          "experts": 384
+        },
+        "mode": "eager",
+        "weights": [
+          "layers.0.ffn.gate.weight",
+          "layers.0.ffn.gate.bias",
+          "layers.0.ffn.gate.bias_vl"
+        ],
+        "options": {
+          "topk": 6,
+          "seed": 47102,
+          "projection": "FP64 projection rounded once to stored FP32 boundary input",
+          "route_scale": 1.5,
+          "epsilon": 1e-20,
+          "stable_global_ids": true
+        },
+        "outputs": [
+          "expert_ids",
+          "coefficients"
+        ]
+      },
+      "fixture_sha256": "2d7dd833bdedbda5ea56869459611588a9db9ff48833d3cc62a7a50ee6456efc",
+      "limits": {
+        "case_sha256": "d6a90e8fd93f90e9335914e863d460a46bedfc59039d1a469c0140e2867a6c8c",
+        "fixture_sha256": "2d7dd833bdedbda5ea56869459611588a9db9ff48833d3cc62a7a50ee6456efc",
+        "fields": {
+          "expert_ids": {
+            "kind": "exact"
+          },
+          "coefficients": {
+            "kind": "float",
+            "normalized_l2": 1.9073486328125e-06,
+            "max_abs": [
+              6.18557476099476e-07,
+              6.75664518564162e-07,
+              6.232504050857875e-07,
+              6.570573251572701e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "verification": {
+      "case": {
+        "id": "deepseek.route.numerics.verification",
+        "boundary": "deepseek.route",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 64,
+          "queries": 6,
+          "rows": 384,
+          "experts": 384
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.ffn.gate.weight",
+          "layers.0.ffn.gate.bias",
+          "layers.0.ffn.gate.bias_vl"
+        ],
+        "options": {
+          "topk": 6,
+          "seed": 47103,
+          "projection": "FP64 projection rounded once to stored FP32 boundary input",
+          "route_scale": 1.5,
+          "epsilon": 1e-20,
+          "stable_global_ids": true
+        },
+        "outputs": [
+          "expert_ids",
+          "coefficients"
+        ]
+      },
+      "fixture_sha256": "3417129a0346dca6acb72f0d57b851296e532a8e7808679c707b93e294988b06",
+      "limits": {
+        "case_sha256": "4a4730e0d935ec7721f1a21bee8d6ddec1a362b58025d2cbe804c03f03d3cd6c",
+        "fixture_sha256": "3417129a0346dca6acb72f0d57b851296e532a8e7808679c707b93e294988b06",
+        "fields": {
+          "expert_ids": {
+            "kind": "exact"
+          },
+          "coefficients": {
+            "kind": "float",
+            "normalized_l2": 1.9073486328125e-06,
+            "max_abs": [
+              5.974065693099434e-07,
+              5.429212238952839e-07,
+              6.057322097067607e-07,
+              5.576515159681974e-07,
+              5.631381345128103e-07,
+              5.902276377193009e-07,
+              5.79206874602588e-07,
+              5.806967079040963e-07,
+              5.910175908488255e-07,
+              6.215467739276129e-07,
+              6.20910918879478e-07,
+              5.895214797360149e-07,
+              5.376538534895562e-07,
+              6.26466214745611e-07,
+              5.912978225827888e-07,
+              6.445716152260274e-07,
+              5.546754269815965e-07,
+              5.915132277737987e-07,
+              5.607571178932523e-07,
+              5.571694584931764e-07,
+              5.69173996436987e-07,
+              5.635709108411423e-07,
+              5.624498638798934e-07,
+              5.516194045554749e-07,
+              5.800888731768757e-07,
+              5.831256821298258e-07,
+              6.294626534168795e-07,
+              6.112290787261602e-07,
+              5.898403957363229e-07,
+              5.850990920641299e-07,
+              6.645422059368439e-07,
+              6.063295911798389e-07,
+              5.643512012203557e-07,
+              5.613591791338145e-07,
+              5.664382200515392e-07,
+              6.558565753153504e-07,
+              6.069146889259695e-07,
+              6.54444690880612e-07,
+              5.78430555229104e-07,
+              5.415133637822924e-07,
+              5.381049222286922e-07,
+              5.466342562263099e-07,
+              5.474858783567989e-07,
+              5.385758671391489e-07,
+              5.884285034258682e-07,
+              5.819386147684058e-07,
+              6.185894981454378e-07,
+              5.754470111070293e-07,
+              5.658429497389455e-07,
+              5.360911968749606e-07,
+              5.631785903910188e-07,
+              6.333471918299101e-07,
+              6.303859822509874e-07,
+              5.724086907187476e-07,
+              5.883901091892197e-07,
+              5.596373650248101e-07,
+              6.104873204349036e-07,
+              5.661663128507732e-07,
+              5.952101949644916e-07,
+              5.451583428514288e-07,
+              5.547862479422085e-07,
+              5.793264223324135e-07,
+              6.191182435587763e-07,
+              5.833822720204284e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "draft": {
+      "case": {
+        "id": "deepseek.route.numerics.draft",
+        "boundary": "deepseek.route",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 64,
+          "queries": 5,
+          "rows": 320,
+          "experts": 128
+        },
+        "mode": "graph",
+        "weights": [
+          "mtp.0.ffn.gate.weight",
+          "mtp.0.ffn.gate.bias",
+          "mtp.0.ffn.gate.bias_vl"
+        ],
+        "options": {
+          "topk": 3,
+          "seed": 47104,
+          "projection": "FP64 projection rounded once to stored FP32 boundary input",
+          "route_scale": 1.5,
+          "epsilon": 1e-20,
+          "stable_global_ids": true
+        },
+        "outputs": [
+          "expert_ids",
+          "coefficients"
+        ]
+      },
+      "fixture_sha256": "b8b0ffb01fd47328b544838af7ccf284e6592b02f802fc7f804c0e944caafbfa",
+      "limits": {
+        "case_sha256": "5e79cad7f99f4fbbbd64c476ea49b35f06bc6ce108e1e266eb66442c326f3468",
+        "fixture_sha256": "b8b0ffb01fd47328b544838af7ccf284e6592b02f802fc7f804c0e944caafbfa",
+        "fields": {
+          "expert_ids": {
+            "kind": "exact"
+          },
+          "coefficients": {
+            "kind": "float",
+            "normalized_l2": 1.9073486328125e-06,
+            "max_abs": [
+              1.059501823314985e-06,
+              1.1251136017336814e-06,
+              1.1616695612122201e-06,
+              1.0511573882295165e-06,
+              1.028775638343709e-06,
+              1.0349001954039994e-06,
+              1.068446730405403e-06,
+              1.2375601460368356e-06,
+              1.0224164967848847e-06,
+              1.2288811087102503e-06,
+              1.2396711055684657e-06,
+              1.0985501634851374e-06,
+              1.1897985913214978e-06,
+              1.15253214996201e-06,
+              1.0351935466810777e-06,
+              1.1013219393136038e-06,
+              1.1307211647609777e-06,
+              1.1690151950248036e-06,
+              1.083482297811593e-06,
+              1.116275047058998e-06,
+              1.085103132328581e-06,
+              1.0694485745006053e-06,
+              1.1248790133875527e-06,
+              1.1088068533079628e-06,
+              1.1433194044220844e-06,
+              1.0329959988781974e-06,
+              1.0551851050018552e-06,
+              1.1016736366566867e-06,
+              1.0766003178342432e-06,
+              1.093312228294368e-06,
+              1.2181937039915456e-06,
+              1.1524553190772843e-06,
+              1.1804171656036483e-06,
+              1.1077592177252844e-06,
+              1.0567460226137498e-06,
+              1.100211129104513e-06,
+              1.0402765927037338e-06,
+              1.1483208844923369e-06,
+              1.2138338076087516e-06,
+              1.0731128459876273e-06,
+              1.086411869580368e-06,
+              1.0181597742203343e-06,
+              1.0944233745963747e-06,
+              1.0018300693336492e-06,
+              1.0968616167654657e-06,
+              1.0754233530664608e-06,
+              1.033661937928334e-06,
+              1.0608942722171272e-06,
+              1.244999957359921e-06,
+              1.0848521924487472e-06,
+              1.1128766951447721e-06,
+              1.0757711184218258e-06,
+              1.171196516725624e-06,
+              1.0782014970061125e-06,
+              1.2551036793665103e-06,
+              1.139396026219471e-06,
+              1.0531400874165847e-06,
+              1.1691062190692074e-06,
+              1.1278247407559724e-06,
+              1.0755917183523972e-06,
+              1.136180606336515e-06,
+              1.0703868917515354e-06,
+              1.1147999622691673e-06,
+              1.1199188920969582e-06
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "decisions": {
+      "case": {
+        "id": "deepseek.route.numerics.decisions",
+        "boundary": "deepseek.route",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 1,
+          "queries": 4,
+          "rows": 4,
+          "experts": 384
+        },
+        "mode": "graph",
+        "weights": [],
+        "options": {
+          "groups": {
+            "target": {
+              "experts": 384,
+              "topk": 6
+            },
+            "draft": {
+              "experts": 128,
+              "topk": 3
+            }
+          },
+          "rows": [
+            "all_tied",
+            "owner_boundary_ties",
+            "image_bias_selection_only",
+            "separated_cutoffs"
+          ],
+          "route_scale": 1.5,
+          "epsilon": 1e-20,
+          "stable_global_ids": true
+        },
+        "outputs": [
+          "target_expert_ids",
+          "target_coefficients",
+          "draft_expert_ids",
+          "draft_coefficients"
+        ]
+      },
+      "fixture_sha256": "7305ff757e01389f13cd363d93d25e9b7879714948e581542f59880546ceb7b2",
+      "limits": {
+        "case_sha256": "e3c3296183ad2e33e33c8a3c6fc6085eefa94472efa4bf54be476da3015e6ad9",
+        "fixture_sha256": "7305ff757e01389f13cd363d93d25e9b7879714948e581542f59880546ceb7b2",
+        "fields": {
+          "target_expert_ids": {
+            "kind": "exact"
+          },
+          "target_coefficients": {
+            "kind": "float",
+            "normalized_l2": 1.9073486328125e-06,
+            "max_abs": [
+              1.0089299288261607e-06
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "draft_expert_ids": {
+            "kind": "exact"
+          },
+          "draft_coefficients": {
+            "kind": "float",
+            "normalized_l2": 1.9073486328125e-06,
+            "max_abs": [
+              1.4327686303237777e-06
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    }
+  }
+}

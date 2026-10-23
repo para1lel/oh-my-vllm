@@ -1,0 +1,325 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "deepseek.route.numerics.decisions",
+    "boundary": "deepseek.route",
+    "purpose": "numerics",
+    "shape": {
+      "batch": 1,
+      "queries": 4,
+      "rows": 4,
+      "experts": 384
+    },
+    "mode": "graph",
+    "weights": [],
+    "options": {
+      "groups": {
+        "target": {
+          "experts": 384,
+          "topk": 6
+        },
+        "draft": {
+          "experts": 128,
+          "topk": 3
+        }
+      },
+      "rows": [
+        "all_tied",
+        "owner_boundary_ties",
+        "image_bias_selection_only",
+        "separated_cutoffs"
+      ],
+      "route_scale": 1.5,
+      "epsilon": 1e-20,
+      "stable_global_ids": true
+    },
+    "outputs": [
+      "target_expert_ids",
+      "target_coefficients",
+      "draft_expert_ids",
+      "draft_coefficients"
+    ]
+  },
+  "checkpoint": {
+    "manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+    "files": {
+      "chat_template.jinja": {
+        "sha256": "d959d804d5101b79a49b6ff1bf3c54cd5affa9a5a78c503d925f3090040b31c3",
+        "size": 15348
+      },
+      "config.json": {
+        "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879",
+        "size": 3311
+      },
+      "encoding/encoding.py": {
+        "sha256": "502bdaec8a3fd88ebc24c4721a7038fbe42f2063c664638127056107920035c1",
+        "size": 37316
+      },
+      "inference/convert.py": {
+        "sha256": "035028340479145594a81d6084a8424e57363adf83c0d5983914783d95614d76",
+        "size": 9458
+      },
+      "inference/engram.py": {
+        "sha256": "11f35ecbead8150c35aa002b3d180ef290b05a25afe883a11884f94d476d3897",
+        "size": 8138
+      },
+      "inference/image_processor.py": {
+        "sha256": "482759e3bcc4e9bb5ee582b244cc563f5d0e163d8b48dda91ebb7106e62f9272",
+        "size": 7699
+      },
+      "inference/kernel.py": {
+        "sha256": "1236c3507019ed176f5dba5e04bcea58867cf654818c6cf138ed4845398c2455",
+        "size": 23790
+      },
+      "inference/model.py": {
+        "sha256": "4e9ae23620edc8028ccc5d5fef552ab7fdc7dcd6f79608754fe9f67644056f65",
+        "size": 61549
+      },
+      "inference/vision.py": {
+        "sha256": "5d49edc196a4ef22384abe76d35a40098cbe1e74b586c8f66a2edff4f076b26c",
+        "size": 4457
+      },
+      "model-00003-of-00048.safetensors": {
+        "sha256": "e1281f85d0ce4a3dfb63d41926fc4a47fa71f36ba20992e3597e702ead49d4c9",
+        "size": 7389759032
+      },
+      "model-00044-of-00048.safetensors": {
+        "sha256": "9a6b39fb88a2510487a8efaef77aa7864e8061f6b62c95a0f010e9dd538f3b05",
+        "size": 2652728736
+      },
+      "model.safetensors.index.json": {
+        "sha256": "74b0686a3d2891980d5e303251b075a3bccae2c2ff650747db2620a649b98fa8",
+        "size": 7470294
+      },
+      "tokenizer.json": {
+        "sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+        "size": 6367257
+      },
+      "tokenizer_config.json": {
+        "sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+        "size": 801
+      }
+    }
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "source": {
+      "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+      "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+      "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+      "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+      "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+      "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+      "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+      "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+      "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+      "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a"
+    },
+    "generator_sha256": "8aca31e9c7055a332638c30698c6331d1e15031204228589982c59314e42605b",
+    "torch": "2.12.0+cu130",
+    "scope": "post_logit_routing_only; projection, dispatch, and full model not accepted"
+  },
+  "files": {
+    "inputs.target_logits.0000.npz": "a3a738b17218b60174ac9fb47a4c751252a232cce0944560769d245c371c1e29",
+    "inputs.target_bias.0000.npz": "303259df86e97c95d9f558228b66aa703be6e82685867838efbf9ec7cc48ab8a",
+    "inputs.target_bias_vl.0000.npz": "407f1bb6230803b2486bef53bcd60fabf0d583a73a3d304b653b4789049d4b75",
+    "inputs.target_image_mask.0000.npz": "430950ce4306685fb24b3fcabf961cfaaca111b5f2204880a89601ae26ebc92c",
+    "inputs.draft_logits.0000.npz": "dcadb27403f8693dec34ef85a62c74275fcce69ac0c70cdb5e95a5f7e30f6255",
+    "inputs.draft_bias.0000.npz": "c5e4df23f0dad58796d73a528032531f96e0e7786854726453f597606bfa48be",
+    "inputs.draft_bias_vl.0000.npz": "cc17acf8a18cabf150c0d283b3611f4ff9f833acf70642086c88dbdfa402a8a0",
+    "inputs.draft_image_mask.0000.npz": "430950ce4306685fb24b3fcabf961cfaaca111b5f2204880a89601ae26ebc92c",
+    "expected.target_expert_ids.0000.npz": "067eb05e5a85d81a89a503f6e139d83e56e60d0c999bbeeede94c4dff9a28f79",
+    "expected.target_coefficients.0000.npz": "9ae108cfd87d7c64070d805f50f89b2dc62f8d49a1eed80488508accfb47c579",
+    "expected.draft_expert_ids.0000.npz": "efa61af0d96ad707bf8d1a5d99089175a41e61ee5f8239ec327c4dc2ecbd95d5",
+    "expected.draft_coefficients.0000.npz": "4442e50af230fb22e4dc6c47b66c3411920ac451e0d35e5167cd2215d2112641"
+  },
+  "tensors": {
+    "inputs.target_logits": {
+      "shape": [
+        4,
+        384
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.target_logits.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1536
+        }
+      ]
+    },
+    "inputs.target_bias": {
+      "shape": [
+        384
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.target_bias.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 384
+        }
+      ]
+    },
+    "inputs.target_bias_vl": {
+      "shape": [
+        384
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.target_bias_vl.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 384
+        }
+      ]
+    },
+    "inputs.target_image_mask": {
+      "shape": [
+        4
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.target_image_mask.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    },
+    "inputs.draft_logits": {
+      "shape": [
+        4,
+        128
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.draft_logits.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 512
+        }
+      ]
+    },
+    "inputs.draft_bias": {
+      "shape": [
+        128
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.draft_bias.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 128
+        }
+      ]
+    },
+    "inputs.draft_bias_vl": {
+      "shape": [
+        128
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.draft_bias_vl.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 128
+        }
+      ]
+    },
+    "inputs.draft_image_mask": {
+      "shape": [
+        4
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.draft_image_mask.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    },
+    "expected.target_expert_ids": {
+      "shape": [
+        4,
+        6
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "expected.target_expert_ids.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 24
+        }
+      ]
+    },
+    "expected.target_coefficients": {
+      "shape": [
+        4,
+        6
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.target_coefficients.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 24
+        }
+      ]
+    },
+    "expected.draft_expert_ids": {
+      "shape": [
+        4,
+        3
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "expected.draft_expert_ids.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 12
+        }
+      ]
+    },
+    "expected.draft_coefficients": {
+      "shape": [
+        4,
+        3
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.draft_coefficients.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 12
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

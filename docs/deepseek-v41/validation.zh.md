@@ -120,19 +120,36 @@ DeepSeek 独立参考基于原始量化权重值, 不使用推理输出作为参
 
 ## 结果与交付
 
-将获批的 DeepSeek HTTP 和 AgentX 测量写入[性能文档](performance.zh.md)及其完整中文翻译.
+仅在正确性验收及策略矩阵获批后发布测量.
+仅在首次完成获批的 DeepSeek HTTP 或 AgentX 测量时, 创建 `docs/deepseek-v41/performance.md` 和 `docs/deepseek-v41/performance.zh.md`.
+将这些测量写入其中.
 将 Qwen HTTP 测量写入 [Qwen 结果](qwen-results.zh.md)及其完整中文翻译.
+
 这些结果文档只保留最新完成的测量.
 完整测量完成后替换对应结果.
 新测量完成前保留上次完成的结果.
 不要为每次变更创建结果文档.
 
-从 README 链接这些文档.
+从 README 链接已完成的结果文档.
 不要在 README 中放置测量表格.
 原始日志, traces, responses, profiler reports 和无关测试结果保存在仓库外.
+
 每个英文结果文档不得超过 2000 words.
 每张表附结果来源: 源码, 可执行程序, native modules, checkpoint, tokenizer, rank 拓扑和配置身份.
-报告延迟, 吞吐, 草稿接受率, 失败数量和内存, 附单位与定义.
+将结果绑定到设备拓扑, 采样 profile 和命令.
+使用 artifact digests 或可移植标识符, 不使用主机路径.
+超过文档字数限制前, 将长表拆成互相链接的双语文档.
+
+每个 HTTP 行标明模式, 策略, batch, 输入长度, 输出长度和测量请求数.
+报告完整 HTTP 时间, 输入/输出吞吐, 首 token 延迟, token 间延迟和草稿接受率.
+随表定义吞吐分母, 接受率计数器和单位.
+失败数量与逐 rank 内存和成功吞吐分开报告, 附单位与定义.
+
+每个获批的 AgentX 并行度/策略组合单独一节.
+报告请求输出速率分布, 前缀缓存命中率, 排队和请求状态计数.
+记录 profiling 时长, drain 上限, 数据集身份及观测到的 HTTP 并行度.
+不将未完成请求作为成功样本.
+
 DeepSeek 不复用 Qwen 的 `http-reference-v4` efficiency 计算.
 新的 efficiency 模型必须经版本化审查, 计入原生格式, 通信, 复制工作及 host transfers.
 实测吞吐不设置虚构的最低验收门槛.

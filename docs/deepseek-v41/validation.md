@@ -126,20 +126,36 @@ Include graph pools, expert buffers, incomplete compressor state, rollback stora
 
 ## Results and delivery
 
-Put approved DeepSeek HTTP and AgentX measurements in the [performance document](performance.md) and its full Chinese translation.
+Publish measurements only after correctness acceptance and approval of the strategy matrix.
+Create `docs/deepseek-v41/performance.md` and `docs/deepseek-v41/performance.zh.md` only for the first completed, approved DeepSeek HTTP or AgentX measurements.
+Put these measurements there.
 Put Qwen HTTP measurements in the [Qwen results](qwen-results.md) and its full Chinese translation.
+
 Keep only the last completed measurements in these result documents.
 Replace the applicable results after a full measurement.
 Keep the previous completed results until the new measurement is completed.
 Do not create a result document for each change.
 
-Use links to these documents from README.
+Link completed result documents from README.
 Do not put measurement tables in README.
 Keep raw logs, traces, responses, profiler reports, and unrelated test results external to the repository.
 
 Keep each English result document at most 2000 words.
 Keep result provenance with each table: source, executable, native modules, checkpoint, tokenizer, rank topology, and configuration identities.
-Report latency, throughput, draft acceptance, failure counts, and memory with their units and definitions.
+Bind results to device topology, sampling profile, and commands.
+Use artifact digests or portable identifiers, not host paths.
+Split long tables into linked bilingual documents before the document word limit is exceeded.
+
+Each HTTP row identifies mode, strategy, batch, input length, output length, and measured request count.
+Report full HTTP time, input/output throughput, first-token latency, inter-token latency, and draft acceptance.
+Define throughput denominators, acceptance counters, and units with the table.
+Report failure counts and per-rank memory separately from successful throughput, with units and definitions.
+
+Keep one AgentX section for each approved concurrency/strategy pair.
+Report the request output-rate distribution, prefix cache hit ratio, queueing, and request status counts.
+Record profiling duration, drain limit, dataset identity, and observed HTTP concurrency.
+Do not present incomplete requests as successful samples.
+
 Do not reuse Qwen's `http-reference-v4` efficiency calculation for DeepSeek.
 Any new efficiency model must count native formats, communication, replicated work, and host transfers with a reviewed version.
 Measured throughput has no invented minimum acceptance threshold.

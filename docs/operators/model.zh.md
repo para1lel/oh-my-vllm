@@ -179,4 +179,4 @@ W/U 输出也使用 BF16 存储.
 固定局部用例及其经审查的数值门槛使用[算子 microbench 契约](microbench.zh.md).
 
 保持上述状态所有权, checkpoint 和精度契约.
-服务边界使用[融合计划](fusion.zh.md).
+Serving 边界使用[算子设计](design.zh.md#serving-边界).

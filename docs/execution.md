@@ -4,7 +4,7 @@
 
 Rust controls requests, scheduling, logical KV identities, and state commit.
 Python executes the model through CUDA operators and the existing ZMQ DEALER and msgpack boundary.
-The [operator boundaries](operators/fusion.md) specify computation and private state ownership.
+The [operator design](operators/design.md#serving-boundaries) specifies computation boundaries and private state ownership.
 
 The worker selects execution once for each Execute message.
 If any scheduled row contains prefill, all fragments of that Execute use Eager execution.

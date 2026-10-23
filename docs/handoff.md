@@ -11,9 +11,9 @@ Phase 1 [model adapters](deepseek-v41/adapters.md) and Phase 2 [distributed infr
 DeepSeek physical execution and state selection are pending.
 Qwen keeps its single-worker path, with prefill dispatch, block scheduling, and host-cache startup fixes.
 
-Phase 3 has isolated quantization, Engram hash, shared pinned-host lookup, and hyper-connections with [fixed fixtures](deepseek-v41/fixtures.md).
+Phase 3 has isolated quantization, Engram hash, shared pinned-host lookup, hyper-connections, routing, and encoded projections with [fixed fixtures](deepseek-v41/fixtures.md).
 The [Engram loader](deepseek-v41/memory.md#4-weight-bytes-and-formats) supplies complete encoded tables in one shared store.
-Other weight loading and model integration are pending.
+An encoded reader supplies bounded raw slices. Full weight preparation and model integration are pending.
 The [reference tools](deepseek-v41/reference.md) separate FP64 mathematics, source-precision quantization, and released-source diagnostics.
 Phase 0 compound numerical limits, long-context endpoints, and physical allocation bounds are pending.
 

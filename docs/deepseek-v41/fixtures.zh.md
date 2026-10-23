@@ -18,6 +18,8 @@
 | [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 表, scale, 索引和 49152 个 BF16 输出位模式 | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
 | [Engram 检查点](../../development/model/deepseek_v41/engram-checkpoint.npz) | 每个表所选 32 行的原始字节及精确 BF16 输出 | `967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce` |
 | [Hyper-connection 索引](../../development/model/deepseek_v41/hyperconnection/index.json) | 五个包含完整 FP64 输出和固定字段限值的用例 | `933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47` |
+| [路由索引](../../development/model/deepseek_v41/routing/index.json) | 五个从 logits 开始, 包含精确专家 ID 和 FP64 系数的用例 | `bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28` |
+| [投影索引](../../development/model/deepseek_v41/projection/index.json) | 五个 A8W8 和五个 A8W4 用例, 包含完整 FP64 输出 | `db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6` |
 
 产物绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 完整模型产物包含清单, 生成器身份, 固定输入, 数组形状和摘要.
@@ -78,6 +80,34 @@ RMS 下限为 `1e-6`. 近零绝对限值为 `1e-6`.
 [检查器](../../development/operators/check_deepseek_hc.py)还置换通道, 以检测寻址错误.
 它检查 Eager 和 Graph 执行, 非法参数, 空输入及输入不变性.
 性能限值和模型集成仍待完成.
+
+## 路由
+
+`load_routing()` 提供目标 decode, prefill, verification, 草稿和合成决策用例.
+边界从已存储的 FP32 logits 开始. 原始检查点偏置控制文本和图像的专家选择.
+用例覆盖 384 个专家的 top-6 和 128 个专家的 top-3.
+[模型契约](model.zh.md)规定不含偏置的系数和稳定的全局专家 ID.
+
+系数的归一化 L2 限值为 `2^-19`.
+其绝对误差限值为 `max(1e-7, 2^-19 * P)`, 其中 `P` 是每个请求的 FP64 峰值.
+RMS 下限和近零绝对限值与 hyper-connections 相同.
+专家 ID 必须精确匹配.
+
+索引绑定独立的分数误差策略.
+实现前, 非并列的选择和顺序必须通过该策略的区间检查.
+合成并列值使用相同的已存储 logits 和偏置.
+该门槛不包含投影舍入, 专家分发, 延迟和完整模型精度.
+
+## 编码投影
+
+`load_projection()` 提供编码 FP8 激活, UE8M0 scales 和完整 FP64 矩阵乘积.
+原始检查点权重保存在外部. 合成 FP4 用例保存自身权重.
+[检查器](../../development/operators/check_deepseek_projection.py)覆盖权重打包, K=576 和最大 15360 的宽度.
+
+每个请求使用归一化 L2 `2^-7` 和最大绝对误差 `max(1e-7, 2^-6 * P)`.
+`P` 是该请求的 FP64 峰值. RMS 下限和近零绝对限值为 `1e-6`.
+构造的零值端点也有 `1e-6` 的绝对限值.
+这些工程限值不包含激活量化误差, 提升精度后的权重格式, collectives, 延迟和完整模型精度.
 
 ## 短文本
 
@@ -142,15 +172,9 @@ Python 编码器在适用位置提供 BOS.
 
 ## 上游检查点边界
 
-DeepInfer 修订版 `9bd9cf243fc53ef9afbf8f04d391d989117d6ab9` 默认使用 `-1017` 检查点.
-比较使用[检查点修订版 1bae0e1](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/1bae0e1088993b9b82de08f59de5be5a34e42170).
-其配置, 索引字节和分片大小与本地相同, 但全部 48 个整文件哈希不同.
-
-相同布局不能证明张量值相同.
-不同文件哈希不能指出哪些值不同.
 权重和参考使用本地检查点.
-未批准上游替换或数值结果复用.
-将比较记录保存在仓库之外.
+用于比较的[上游检查点](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/1bae0e1088993b9b82de08f59de5be5a34e42170)具有匹配的布局, 但全部 48 个分片的整文件哈希不同.
+不要用其权重或数值结果进行替换.
 
 ## 命令
 

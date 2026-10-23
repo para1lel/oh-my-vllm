@@ -11,6 +11,13 @@ The model calls complete sublayers in dependency sequence.
 An operator can change its internal kernels without changes to the model call site.
 Operator performance must meet the fixed theoretical-latency ratio limits in the [microbench contract](microbench.md).
 
+Use CUDA C++ and CUTLASS for this implementation.
+The [runtime contracts](../requirements.md) also allow CuTe DSL.
+CUTLASS, cuBLAS, CUB, and native CUDA libraries are permitted.
+Use only project CUDA operators and these permitted libraries.
+Do not use other external operator libraries, such as DeepGEMM or FlashInfer.
+Python can allocate tensors and launch the CUDA implementations.
+
 The design uses functions and types for each operator.
 It does not use an operator base class, a backend registry, or automatic fusion through an operation graph.
 
@@ -134,20 +141,32 @@ These resources include each layer's weights, persistent cache references, buffe
 Keeping only the final layer's weight binding is not sufficient.
 The [Graph resource rules](../execution.md#graph-resources) control failed recording, closure order, and release.
 
-## Model output and MTP
+## Serving boundaries
 
 FA, GDN, FFN, and vision interfaces supply complete sublayers.
-Their internal stages follow the [model contract](model.md).
-The model output and MTP interfaces have these responsibilities:
+The [stage inventory](../../python/oh_my_vllm/operators/specification.py) gives their internal tensor contracts and computation.
+These stages follow the [model contract](model.md) and [GPU execution rules](../execution.md).
+Native operators supply each complete boundary below.
+Timing includes all internal stages of that boundary.
 
-| Interface | Computation |
+| Serving operator | Full measured operation |
 |---|---|
+| `gdn` | GDN input, recurrent or prefill computation, and output. |
+| `fa` | FA input, attention, gate, and output projection. |
+| `ffn` | Gate/up projection, activation, and down projection. |
 | `output.hidden` | Final normalization and hidden-state export without vocabulary projection. |
-| `output.distribution` | Vocabulary projection, penalties, constraints, and the necessary probability distribution. |
+| `output.distribution` | Final normalization, vocabulary projection, penalties, constraints, and the necessary probability distribution. |
 | `output.sample` | Distribution computation and token selection. |
-| `mtp.context` | MTP context preparation and its FA component. |
-| `mtp.draft` | A complete MTP draft computation with the shared FA, FFN, and output components. |
+| `mtp.context` | MTP input projection and FA input with the KV-only variant. |
+| `mtp.draft` | MTP input projection if applicable, one full FA layer, FFN, and sampling with shared components. |
 | `mtp.accept` | Acceptance decisions, rejection sampling, and candidate state-slot selection. |
+| `vision` | One vision layer. The first layer includes patch input. The last layer includes spatial merge. |
+
+Fuse producer work into GEMM input loads or output stores when this reduces time for the complete operation.
+Small normalization, activation, quantization, and position operations can execute in their producer or consumer kernels.
+Use different small-row and prefill implementations when necessary.
+The [GDN entry point](../../python/oh_my_vllm/operators/gdn/cuda/gdn.cu) selects recurrent and prefill implementations.
+Use the independent PyTorch FP64 full-model reference for numerical checks.
 
 The output interfaces share the necessary final normalization computation.
 Hidden export accepts its full input row count independently of the smaller vocabulary-projection row selection.
@@ -170,13 +189,14 @@ Use one source-path mapping for the development builder and runtime identity che
 Directory changes must also change include dependency discovery and source fingerprints.
 Keep complete dependency hashes, immutable binary identities, and native library identity checks.
 The inference loader does not import development tools or invoke a compiler.
+The seven Qwen native libraries do not define the public interfaces.
 
 Change compilation boundaries only when the implementation has a demonstrated reason.
 Source packages, semantic interfaces, native libraries, and kernel launches are different boundaries.
 
 ## Change acceptance
 
-Update the [stage inventory](../../python/oh_my_vllm/operators/specification.py) and [serving boundaries](fusion.md) with the related implementation changes.
+Update the [stage inventory](../../python/oh_my_vllm/operators/specification.py) and serving boundaries above with the related implementation changes.
 Keep private buffers and kernel selection rules inside their operator packages.
 
 Use the [test scope](../testing.md) and [numerical procedure](evaluation.md).

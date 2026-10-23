@@ -1,6 +1,14 @@
 """Checked allocation design over one existing memory plan, without a runtime."""
 
-from .memory import DEFAULT_LIMITS, _keys, _rank_bytes, _size, _sum, _uint
+from .memory import (
+    DEFAULT_LIMITS,
+    _keys,
+    _rank_bytes,
+    _size,
+    _sum,
+    _tensor_placement,
+    _uint,
+)
 
 MiB = 2**20
 GiB = 2**30
@@ -57,6 +65,106 @@ def _arena(cap, children, *, lifetime="transaction", alignment=256):
 def _cap(arena, floor):
     cap = max(arena["cap_bytes"], _uint(floor))
     return dict(arena, cap_bytes=cap, spare_bytes=cap - arena["payload_bytes"])
+
+
+def _layout_matrix(tensor):
+    shape = tensor["stored_shape"]
+    axis, owner = tensor["shard_axis"], tensor["owner_rank"]
+    placement = tensor["placement"]
+    if len(shape) != 2 or not (
+        (placement == "replicated" and axis is None and owner is None)
+        or (
+            placement == "sharded"
+            and type(axis) is int
+            and axis in (0, 1)
+            and owner is None
+        )
+        or (
+            placement == "owned"
+            and axis is None
+            and type(owner) is int
+            and owner in range(4)
+        )
+    ):
+        raise ValueError("Invalid weight-layout matrix placement")
+    _uint(tensor["stored_bytes"])
+    _rank_bytes(tensor["rank_source_bytes"])
+    _rank_bytes(tensor["rank_resident_bytes"])
+    expected = _tensor_placement(
+        {"dtype": tensor["stored_dtype"], "shape": shape},
+        dict(
+            placement=placement,
+            shard_axis=axis,
+            owner_rank=owner,
+            promoted_dtype=None,
+        ),
+    )
+    if any(tensor.get(key) != value for key, value in expected.items()):
+        raise ValueError("Inconsistent weight-layout matrix metadata")
+    local = list(shape)
+    if axis is not None:
+        local[axis] //= 4
+    return local
+
+
+def _weight_layouts(tensors):
+    padding, scales = [0] * 4, [0] * 4
+    for name, weight in tensors.items():
+        if weight["placement"] in ("shared_pinned_host", "consumed_on_load"):
+            continue
+        if name.endswith(".scale") and weight["resident_dtype"] == "F8_E8M0":
+            peer = tensors.get(name.removesuffix(".scale") + ".weight")
+            if (
+                peer is None
+                or peer["resident_dtype"] not in ("I8", "F8_E4M3")
+                or peer["placement"] != weight["placement"]
+            ):
+                raise ValueError("Unpaired native weight scale")
+        if not name.endswith(".weight") or weight["resident_dtype"] not in (
+            "I8",
+            "F8_E4M3",
+        ):
+            continue
+        scale = tensors.get(name.removesuffix(".weight") + ".scale")
+        if (
+            scale is None
+            or scale["resident_dtype"] != "F8_E8M0"
+            or any(
+                weight[key] != scale[key]
+                for key in ("placement", "shard_axis", "owner_rank")
+            )
+        ):
+            raise ValueError("Inconsistent native weight/scale pair")
+        rows, columns = _layout_matrix(weight)
+        fp4 = weight["resident_dtype"] == "I8"
+        width = _size(columns, 2 if fp4 else 1)
+        expected_scale = [rows if fp4 else (rows + 31) // 32, width // 32]
+        if width % 32 or _layout_matrix(scale) != expected_scale:
+            raise ValueError("Native weight scale shape mismatch")
+        native_weight = _size(rows, _aligned(width, 128) // 2 if fp4 else width)
+        native_scale = _size(_aligned(rows, 128), _aligned(width // 32, 4))
+        for rank, compact in enumerate(weight["rank_resident_bytes"]):
+            if compact:
+                padding[rank] = _sum((padding[rank], _uint(native_weight - compact)))
+                scales[rank] = _sum(
+                    (
+                        scales[rank],
+                        _uint(native_scale - scale["rank_resident_bytes"][rank]),
+                    )
+                )
+    # Compact storage is already charged; tensor rounding stays in state_extra.
+    return [
+        _arena(
+            4 * GiB,
+            [
+                ("encoded_weight_padding", (weight,), 1, 1),
+                ("packed_scale_growth", (scale,), 1, 1),
+            ],
+            lifetime="process",
+            alignment=1,
+        )
+        for weight, scale in zip(padding, scales, strict=True)
+    ]
 
 
 def _device_arenas(strategy):
@@ -203,12 +311,14 @@ def plan_allocation(
     reserves = _rank_bytes(device_reserve_bytes)
     _keys(pageable_reservations, PAGEABLE)
     arenas = _device_arenas(plan["strategy"])
+    layouts = _weight_layouts(plan["tensors"])
     ranks = []
     for rank, reserve in zip(plan["ranks"], reserves, strict=True):
         local = {
             k: v for k, v in arenas.items() if k not in ("media", "media_other", "load")
         }
         local["media"] = arenas["media" if rank["rank"] == 0 else "media_other"]
+        local["weight_layout"] = layouts[rank["rank"]]
         padding = _sum(
             _aligned(t["rank_resident_bytes"][rank["rank"]], 256)
             - t["rank_resident_bytes"][rank["rank"]]
@@ -234,6 +344,7 @@ def plan_allocation(
                 available_bytes=available,
                 headroom_bytes=available - startup,
                 weight_alignment_bytes=padding,
+                weight_layout=local["weight_layout"],
                 arena_caps_bytes={name: a["cap_bytes"] for name, a in local.items()},
             )
         )

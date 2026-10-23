@@ -43,7 +43,11 @@ class MemoryPlanTests(unittest.TestCase):
     def test_allocation_caps_keep_full_dspark_and_separate_startup_storage(self):
         from .allocation import plan_allocation
 
-        for strategy in ("TP4", "TEP4", "DEP4"):
+        for strategy, layout_bytes in (
+            ("TP4", 3127455680),
+            ("TEP4", 64303040),
+            ("DEP4", 180385280),
+        ):
             with self.subTest(strategy=strategy):
                 config = planner_config()
                 config["host_pinned_capacity_bytes"] = 512 * 2**30
@@ -56,6 +60,20 @@ class MemoryPlanTests(unittest.TestCase):
                 self.assertEqual(json.loads(json.dumps(result)), result)
                 self.assertNotIn("tensors", result)
                 for rank, source in zip(result["ranks"], plan["ranks"], strict=True):
+                    native_layout = rank["weight_layout"]
+                    self.assertEqual(native_layout["payload_bytes"], layout_bytes)
+                    self.assertEqual(native_layout["cap_bytes"], 4 * 2**30)
+                    self.assertEqual(
+                        native_layout["spare_bytes"], 4 * 2**30 - layout_bytes
+                    )
+                    self.assertEqual(native_layout["lifetime"], "process")
+                    self.assertEqual(
+                        sum(b["bytes"] for b in native_layout["buffers"].values()),
+                        layout_bytes,
+                    )
+                    self.assertEqual(
+                        rank["arena_caps_bytes"]["weight_layout"], 4 * 2**30
+                    )
                     self.assertEqual(
                         rank["persistent_bytes"],
                         source["weight_bytes"] + source["cache_bytes"],
@@ -141,6 +159,28 @@ class MemoryPlanTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "startup"):
             plan_allocation(short, **budgets)
+        weight = "layers.0.ffn.experts.0.w2.weight"
+        scale = weight.removesuffix(".weight") + ".scale"
+        for invalid in (
+            {scale: None},
+            {weight: None},
+            {weight: dict(plan["tensors"][weight], placement="shared_pinned_host")},
+            {scale: dict(plan["tensors"][scale], stored_shape=[5120, 73])},
+            {
+                scale: dict(
+                    plan["tensors"][scale],
+                    rank_resident_bytes=[92161, 92160, 92160, 92160],
+                )
+            },
+        ):
+            tensors = dict(plan["tensors"])
+            for name, tensor in invalid.items():
+                if tensor is None:
+                    tensors.pop(name)
+                else:
+                    tensors[name] = tensor
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                plan_allocation(dict(plan, tensors=tensors), **budgets)
         for key, value in (
             ("host_capacity_bytes", result["host"]["startup_bytes"] + 256 * 2**30 - 1),
             ("device_reserve_bytes", [True] * 4),

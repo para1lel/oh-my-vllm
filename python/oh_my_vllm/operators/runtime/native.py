@@ -24,6 +24,8 @@ OPTIONAL_MODULE_SOURCES = {
     "quantization": SOURCES / "quantization/cuda/quantization.cu",
     "engram": SOURCES / "engram/cuda/engram.cu",
     "hyperconnection": SOURCES / "hyperconnection/cuda/hyperconnection.cu",
+    "routing": SOURCES / "routing/cuda/routing.cu",
+    "projection": SOURCES / "projection/cuda/projection.cu",
 }
 
 
