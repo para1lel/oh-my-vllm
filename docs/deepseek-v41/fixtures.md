@@ -2,7 +2,7 @@
 
 ## Scope and identity
 
-The [fixture reader](../../development/model/deepseek_v41/fixtures.py) binds four fixed artifacts by SHA256.
+The [fixture reader](../../development/model/deepseek_v41/fixtures.py) binds fixed artifacts by SHA256.
 Ordinary checks load them without PyTorch, GPU execution, or checkpoint access.
 They are reference inputs and expected outputs, not service performance results.
 Do not replace them with runtime outputs.
@@ -14,12 +14,21 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [Prompt codec](../../development/model/deepseek_v41/codec.json) | Twenty encoding cases with complete token IDs | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
 | [DSpark continuation](../../development/model/deepseek_v41/dspark.npz) | Eighteen full FP64 vocabulary rows and two confidence vectors | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 | [Media endpoints](../../development/model/deepseek_v41/media.npz) | Two full FP64 vocabulary vectors after still and video-frame images | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
+| [Exact operators](../../development/model/deepseek_v41/exact-operators.npz) | Four synthetic quantization and Engram cases | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
 
-The four artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
+The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 That manifest records full identities for the 48 local weight shards and identified control files.
 The artifacts also record their generator sources and dependency versions.
 The fixed artifact hash binds those records to their outputs.
 Subsequent source changes do not regenerate expected values during tests.
+
+## Exact operators
+
+`load_exact_operators()` supplies four existing operator `Fixture` objects.
+The cases cover FP8/UE8M0 group32, FP4/UE8M0 group32, FP4/E4M3 group16, and Engram chunk continuation with dead tokens.
+Expected values come from hand-checked literals, not candidate outputs.
+Compare encoded bytes, scale bytes, BF16 roundtrip bits, hashes, and history with each case's exact limits.
+These synthetic cases do not set compound numerical or performance limits.
 
 ## Short text
 
@@ -74,15 +83,11 @@ It supplies independent CPU FP64 reference values, not service DSpark execution.
 Long-context endpoints and model-specific numerical thresholds are later gates.
 Phase 0 is not complete.
 
-The file hash binds the historical generator-source and dependency records to these outputs.
-Ordinary checks do not compare those source records with current generator files.
-Subsequent generator edits do not change this fixed reference.
 The [construction guide](reference.md) gives the generator and its source checks.
 
 ## Media endpoints
 
 `load_media()` loads the fixed 2012626-byte `media.npz` through NumPy only.
-The file is a byte-for-byte copy of the reviewed external reference.
 It uses schema 1, case `still-and-video-frames`, and reference kind `independent-pytorch-fp64-no-activation-quantization`.
 The loader checks the full file hash before it reads arrays.
 It also checks the embedded full checkpoint manifest, full input identity, historical source records, and compressed-token-map identity.
@@ -94,8 +99,6 @@ The 21 historical source records have SHA256 `c099eb57db022052006567e726dbd3cd4f
 
 These identities use UTF-8 JSON with sorted keys, separators `(",", ":")`, and `allow_nan=False`, without a final newline.
 JSON uses `ensure_ascii=True`.
-Tests do not compare historical source records with current implementation files.
-The full file hash also binds the recorded dependency versions and CPU settings.
 
 The 37-token placeholder prompt expands to 624 tokens.
 Three vision embeddings have shapes `(200, 5120)`, `(206, 5120)`, and `(184, 5120)` in image order.

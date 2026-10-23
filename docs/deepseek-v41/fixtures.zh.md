@@ -2,7 +2,7 @@
 
 ## 范围和身份
 
-[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 用 SHA256 绑定四个固定产物.
+[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 用 SHA256 绑定固定产物.
 普通检查无需 PyTorch, GPU 执行或访问检查点即可加载它们.
 它们是参考输入和期望输出, 而不是服务性能结果.
 不要用运行时输出替换它们.
@@ -14,12 +14,21 @@
 | [提示词编码](../../development/model/deepseek_v41/codec.json) | 二十个带完整 token IDs 的编码用例 | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
 | [DSpark 续算](../../development/model/deepseek_v41/dspark.npz) | 十八个完整 FP64 词表行和两个置信度向量 | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 | [媒体端点](../../development/model/deepseek_v41/media.npz) | 静态图片和视频帧图片之后的两个完整 FP64 词表向量 | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
+| [精确算子](../../development/model/deepseek_v41/exact-operators.npz) | 四个合成量化和 Engram 用例 | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
 
-四个产物均绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
+产物均绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 该清单记录 48 个本地权重分片及已标识控制文件的完整身份.
 产物还记录各自的生成器源码和依赖版本.
 固定产物哈希将这些记录与输出绑定.
 后续源码变更不会在测试期间重新生成期望值.
+
+## 精确算子
+
+`load_exact_operators()` 提供四个现有算子 `Fixture` 对象.
+用例覆盖 FP8/UE8M0 group32, FP4/UE8M0 group32, FP4/E4M3 group16, 以及含 dead tokens 的 Engram 分块续算.
+期望值来自手工检查的字面量, 而不是候选实现输出.
+按每个用例的精确限值, 比较编码字节, 尺度字节, BF16 往返位模式, 哈希和历史.
+这些合成用例不设定复合数值或性能限值.
 
 ## 短文本
 
@@ -74,15 +83,11 @@ prefill argmax 选择 token 16 作为固定续算输入.
 长上下文端点和模型专用数值阈值是后续门槛.
 Phase 0 尚未完成.
 
-文件哈希将历史生成器源码和依赖记录与这些输出绑定.
-普通检查不将这些源码记录与当前生成器文件比较.
-后续生成器编辑不会改变此固定 reference.
 [构建指南](reference.zh.md) 给出生成器及其源码检查.
 
 ## 媒体端点
 
 `load_media()` 仅通过 NumPy 加载固定的 2012626-byte `media.npz`.
-该文件逐字节复制已审查的外部 reference.
 它使用 schema 1, 用例 `still-and-video-frames` 和 reference kind `independent-pytorch-fp64-no-activation-quantization`.
 加载器先检查完整文件哈希, 再读取数组.
 它还检查内嵌的完整检查点清单, 完整输入身份, 历史源码记录和压缩 token 映射身份.
@@ -94,8 +99,6 @@ Phase 0 尚未完成.
 
 两个身份均使用 UTF-8 JSON, 键排序, 分隔符 `(",", ":")` 和 `allow_nan=False`, 不含末尾换行.
 JSON 使用 `ensure_ascii=True`.
-测试不将历史源码记录与当前实现文件比较.
-完整文件哈希还绑定已记录的依赖版本和 CPU 设置.
 
 37-token 占位符提示词展开为 624 tokens.
 三个视觉嵌入按图片顺序具有形状 `(200, 5120)`, `(206, 5120)` 和 `(184, 5120)`.

@@ -9,10 +9,12 @@ Execute the [phase plan](deepseek-v41/plan.md) without additional phase approval
 
 Phase 0 reference and acceptance work is active.
 The [checkpoint tools](deepseek-v41/checkpoint.md) supply weight identities and a lazy CPU FP64 reader.
-The [reference guide](deepseek-v41/reference.md) gives independent mathematical checks.
-[Fixed fixtures](deepseek-v41/fixtures.md), [media references](deepseek-v41/media-reference.md), and [long-context references](deepseek-v41/long-reference.md) give endpoint construction.
-Source-precision quantization and checked allocation tools support acceptance work.
-Long-context generation can resume from saved state.
+The [reference guide](deepseek-v41/reference.md) separates FP64 mathematics, source-precision quantization, and released-source capture.
+The [fixed fixtures](deepseek-v41/fixtures.md) supply reviewed endpoints.
+Released-source GPU capture and compound acceptance limits are pending.
+
+[Long-context generation](deepseek-v41/long-reference.md) can resume from saved state.
+The [allocation tools](deepseek-v41/memory.md) check design caps, not runtime capacity.
 
 Phase 1 [model adapters](deepseek-v41/adapters.md) and Phase 2 infrastructure are completed.
 The [typed execution interface](deepseek-v41/typed-execution.md) validates group completion before accepted-state publication.

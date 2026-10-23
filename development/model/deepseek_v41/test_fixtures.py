@@ -1,5 +1,7 @@
 import hashlib
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -342,7 +344,7 @@ class FrozenFixtures(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "identity"):
                 fixtures.load_codec(replaced)
 
-    def test_short_reference_is_complete_bound_and_cannot_be_replaced(self):
+    def test_short_and_exact_references_are_complete_bound_and_cannot_be_replaced(self):
         metadata, arrays = fixtures.load_short()
         self.assertEqual(metadata["decode_token"], 16)
         self.assertEqual(len(metadata["tokens"]), 16)
@@ -364,6 +366,101 @@ class FrozenFixtures(unittest.TestCase):
                 path.write_bytes(altered)
                 with self.assertRaisesRegex(ValueError, "identity"):
                     fixtures.load_short(path)
+        loader = getattr(fixtures, "load_exact_operators", None)
+        self.assertTrue(callable(loader), "frozen exact-operator loader is missing")
+        exact_metadata, cases = loader()
+        self.assertEqual(
+            set(cases),
+            {"activation_fp8", "indexer_fp4", "compressed_kv_fp4", "engram"},
+        )
+        self.assertEqual(
+            exact_metadata["reference_kind"], "hand-checked-source-precision-literals"
+        )
+        from development.operators.numerics import compare
+
+        from . import reference_quantization
+        from .engram import HashLayout, hash_rows
+
+        for name, case in cases.items():
+            if name == "engram":
+                options = case.manifest["case"]["options"]
+                tokens, split = case.inputs["tokens"], options["split"]
+                layout = HashLayout(**options["layout"])
+                first, history = hash_rows(
+                    tokens[:split],
+                    layout,
+                    pad_id=options["pad_id"],
+                    history=case.state["history"],
+                )
+                second, tail = hash_rows(
+                    tokens[split:], layout, pad_id=options["pad_id"], history=history
+                )
+                actual = {
+                    "hashes": np.concatenate((first, second)),
+                    "history_after_split": np.asarray(history, dtype=np.int64),
+                    "history": np.asarray(tail, dtype=np.int64),
+                }
+            else:
+                result = getattr(reference_quantization, name)(case.inputs["values"])
+                actual = {
+                    "encoded": result.encoded,
+                    "scales": result.scales,
+                    "dequantized_bf16_bits": (
+                        result.dequantized.view(np.uint32) >> 16
+                    ).astype(np.uint16),
+                }
+            limits = case.manifest["limits"]
+            with self.subTest(case=name):
+                self.assertTrue(compare(actual, case, limits).passed)
+                self.assertTrue(
+                    all(not value.flags.writeable for value in case.expected.values())
+                )
+                field = "hashes" if name == "engram" else "dequantized_bf16_bits"
+                changed = {key: value.copy() for key, value in actual.items()}
+                changed[field].flat[0] ^= 1 if name == "engram" else 0x8000
+                self.assertFalse(compare(changed, case, limits).passed)
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "exact.npz"
+            original = fixtures.EXACT_OPERATORS_PATH.read_bytes()
+            path.write_bytes(original + b"extra")
+            with self.assertRaisesRegex(ValueError, "identity"):
+                loader(path)
+            with np.load(fixtures.EXACT_OPERATORS_PATH, allow_pickle=False) as stored:
+                original_values = {key: stored[key] for key in stored.files}
+            for alteration in ("incomplete", "provenance", "tensor"):
+                values = {key: value.copy() for key, value in original_values.items()}
+                if alteration == "incomplete":
+                    del values["activation_fp8.expected.encoded"]
+                elif alteration == "provenance":
+                    changed = json.loads(values["metadata"].item())
+                    changed["reference_kind"] = "candidate-output"
+                    values["metadata"] = np.asarray(json.dumps(changed))
+                else:
+                    values["activation_fp8.expected.encoded"].flat[0] ^= 1
+                np.savez(path, **values)
+                with (
+                    patch.object(
+                        fixtures,
+                        "EXACT_OPERATORS_SHA256",
+                        hashlib.sha256(path.read_bytes()).hexdigest(),
+                    ),
+                    self.assertRaisesRegex(ValueError, alteration),
+                ):
+                    loader(path)
+        subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-c",
+                "import sys; sys.modules.update({name: None for name in "
+                "('torch', 'development.model.deepseek_v41.engram', "
+                "'development.model.deepseek_v41.reference_quantization')}); "
+                "from development.model.deepseek_v41.fixtures "
+                "import load_exact_operators; "
+                "assert len(load_exact_operators()[1]) == 4",
+            ],
+            check=True,
+        )
 
 
 if __name__ == "__main__":

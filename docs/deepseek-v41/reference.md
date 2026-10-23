@@ -1,4 +1,4 @@
-# DeepSeek FP64 reference construction
+# DeepSeek reference construction
 
 ## Scope
 
@@ -134,33 +134,9 @@ Each call leaves its input state unchanged.
 
 Predictor attention positions and output sample positions differ by one.
 Use the [sampling contract](sampling.md) for pending tokens, verification, accepted feature updates, RNG, and exact correction.
-Its NumPy oracle does not use model weights or native operators.
-These small CPU checks are not local-checkpoint DSpark endpoint fixtures.
-
-## DSpark restoration generation
-
-The [case generator](../../development/model/deepseek_v41/reference_cases.py) repeats the fixed short-prompt token IDs.
-The prefix has 129 tokens.
-This prefix crosses the 128-token window boundary and leaves a ratio-2 compressor group that is not full.
-The target computes the prefix, then supplies features for a five-row DSpark proposal.
-Verification consumes the pending token and all five proposals.
-
-The reference separately computes the first two verification inputs from the original prefix state.
-It checks their features and logits against the corresponding full verification rows.
-Their target argmax supplies a fixed correction input.
-This is a forced state-selection case, not a stochastic rejection event.
-The [sampling oracle](sampling.md) checks rejection probabilities separately.
-
-Only accepted target features update the predictor main windows before the next proposal.
-The next boundary feature is appended once.
-The target then computes the correction input from the selected state.
-The artifact contains 18 full vocabulary rows across prefill, two proposal blocks, verification, and restored decode.
-It also contains five raw confidence values for each proposal block.
-
-The generator records checkpoint identity, source identity, dependency versions, all input IDs, and all output-array hashes.
-Before publication, it checks consumed control bytes and input states.
-An exclusive link publishes the complete external NPZ file without replacement.
-The [fixed fixture](fixtures.md) stores this restoration case.
+The [case generator](../../development/model/deepseek_v41/reference_cases.py) constructs the [fixed restoration fixture](fixtures.md#dspark-continuation).
+That fixture guide specifies its inputs, state selection, and complete outputs.
+The generator checks consumed control bytes, file states, and source identities before exclusive publication.
 
 Set `CASE_OUTPUT` to a new external NPZ path.
 Use the pinned reference environment:
@@ -172,74 +148,57 @@ scripts/with-env.sh "$REFERENCE_PYTHON" \
   --output "$CASE_OUTPUT"
 ```
 
-## Vision mathematics
+## Media reference
 
-The [vision reference](../../development/model/deepseek_v41/reference_vision.py) accepts normalized FP64 patches or normalized FP64 RGB pixels with an explicit patch grid.
-It calculates vision-layer outputs with split-half 2D RoPE and full bidirectional attention.
-The aligner uses zero-padded 3-by-3 groups, channel-first gather order, and exact-erf GELU.
-Learned start, newline, and end embeddings form the complete language-model image span.
+Use the [media guide](media-reference.md) for fixed inputs, complete endpoints, environment selection, and generation commands.
+The [image helper](../../development/model/deepseek_v41/reference_image.py) supplies normalized FP64 patches and ordered image-span types.
+The [vision reference](../../development/model/deepseek_v41/reference_vision.py) supplies complete embeddings with learned start, newline, and end rows.
+The [prompt helper](../../development/model/deepseek_v41/reference_media.py) keeps image order during placeholder expansion.
+The [target reference](../../development/model/deepseek_v41/reference_model.py) inserts those embeddings before hyper-connection expansion.
 
-Query tiles limit score storage without dropping keys.
-Projection-row limits bound weight reads.
-The reference uses CPU FP64 arithmetic without source BF16/FP32 rounding.
-It does not include image loading, resizing, normalization, video frame selection, or language-model image insertion.
-Small mathematical checks do not supply a fixed local-checkpoint media endpoint.
+Image positions receive no Engram contribution and use the visual routing bias.
+Insertion is permitted only during the first prefill call.
 
-## Image preparation
+Reference resource bounds do not change the service media contract.
+The caller must reserve output capacity before service admission.
+Do not change an environment or source file used by an active reference generator.
 
-The [image reference](../../development/model/deepseek_v41/reference_image.py) accepts encoded image bytes, not paths or URLs.
-Its grid calculation uses the source minimum pixel area, patch rounding, token bound, and optional wide-image resize rule.
-Pillow supplies the source RGB conversion, resize, and gray padding.
-No EXIF rotation occurs.
-The output has FP64 normalized patches and ordered start, image, newline, and end token types.
-FP64 normalization does not include the source FP32 arithmetic or the final BF16 conversion.
+## Released-source baseline
 
-The tool rejects encoded inputs above 64 MiB, decoded images above 67108864 pixels, and prepared FP64 arrays above 512 MiB.
-These are reference resource bounds, not a new service media contract.
-It does not execute the vision or language model.
+The separate [capture tool](../../development/model/deepseek_v41/source_capture.py) records short-context FP32 logits from the verified released source.
+It uses the fixed short prompt and continuation input.
+The [loader](../../development/model/deepseek_v41/source_weights.py) reads bounded slices from the original checkpoint.
+It does not create another converted checkpoint.
+Model arguments come from verified root configuration bytes.
+The capture records an in-memory correction that publishes an index owner's cache before each forward call.
 
-Use a separate environment from `requirements/deepseek-media-reference.lock` for image and vision checks together.
-Its versions match the text reference lock, with Pillow 12.3.0 added.
-Do not change packages used by an active reference-generation process.
-Set `MEDIA_REFERENCE_ENV` to a new external environment directory:
+This baseline uses released MP4 placement: owned experts, replicated shared experts and vision, and device-resident Engram shards.
+It does not implement the framework's TP4, TEP4, DEP4, or pinned-host Engram contracts.
+Its full-vector errors, cosine similarity, and top-1 agreement are diagnostics.
+They do not set compound numerical limits or replace the FP64 reference.
+
+Use a separate environment from `requirements/deepseek-baseline.lock`.
+Set `BASELINE_ENV` to that external environment directory.
+Set `BASELINE_OUTPUT` to a new external NPZ path.
+Use the model and manifest variables from Short text generation.
+Keep device selection settings in `LOCAL.md`.
+Run the command through the four-GPU wrapper:
 
 ```bash
-scripts/with-env.sh uv venv "$MEDIA_REFERENCE_ENV"
-scripts/with-env.sh uv pip sync --python "$MEDIA_REFERENCE_ENV/bin/python" \
-  requirements/deepseek-media-reference.lock
-scripts/with-env.sh "$MEDIA_REFERENCE_ENV/bin/python" -m unittest \
-  development.model.deepseek_v41.test_reference_image \
-  development.model.deepseek_v41.test_reference_vision
+scripts/with-env.sh uv venv "$BASELINE_ENV"
+scripts/with-env.sh uv pip sync --python "$BASELINE_ENV/bin/python" \
+  requirements/deepseek-baseline.lock
+PYTHONDONTWRITEBYTECODE=1 OH_MY_VLLM_GPU_COUNT=4 \
+  scripts/with-env.sh scripts/with-gpu.sh \
+  "$BASELINE_ENV/bin/python" -B -m torch.distributed.run \
+  --standalone --nproc-per-node=4 \
+  -m development.model.deepseek_v41.source_capture \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$BASELINE_OUTPUT" --run-gpu
 ```
 
-## Media prompt expansion
-
-The [prompt expansion helper](../../development/model/deepseek_v41/reference_media.py) accepts tokenizer IDs and ordered encoded image bytes.
-Each image placeholder becomes one full source image span.
-Each span position keeps the configured image token ID, with start, image, newline, and end types.
-Text positions have type -1.
-The helper keeps image order and records each span's start position.
-It rejects image-count mismatches, missing vision support, invalid token IDs, and expanded prompts above the context capacity.
-
-Combined patch storage has a 512 MiB limit for this reference helper.
-This limit does not include temporary storage for the preparation of one image.
-Prompt IDs, types, and patch arrays are read-only after expansion.
-The helper does not run vision, insert embeddings, or reserve output tokens.
-The caller must make sure that combined input/output length is not more than its limit before service admission.
-
-## Language-model image insertion
-
-The [target reference](../../development/model/deepseek_v41/reference_model.py) accepts `token_types` and `image_embeddings` for the first prefill chunk.
-The caller supplies one finite CPU FP64 embedding row for each image-span position, in prompt order.
-These rows include learned start, newline, and end embeddings from the vision reference.
-They replace token embeddings before hyper-connection expansion.
-Each image position must carry the configured image token ID.
-
-Image positions become dead markers in Engram history and receive no Engram contribution.
-Their expert selection uses the visual routing bias.
-Subsequent text calls use the accepted state without image inputs.
-The reference rejects image insertion during continuation, missing image rows, invalid types, and incorrect embedding arrays.
-It does not change the caller's input arrays or the previous state.
-
-The small composition check includes insertion, masks, routing, and text continuation.
-It does not supply a fixed local-checkpoint media endpoint.
+Before publication, all four ranks must have identical full vectors.
+Source, checkpoint, and environment identities must stay unchanged.
+The JSON file contains provenance and diagnostics.
+The NPZ file is the completion marker.
+An existing output is never replaced.

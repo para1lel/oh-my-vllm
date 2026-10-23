@@ -18,6 +18,13 @@ MEDIA_SOURCES_SHA256 = (
     "c099eb57db022052006567e726dbd3cd4f56c5bebd35eaf7bce45a3ed2383dd7"
 )
 MEDIA_SHAPES = {"prefill": (129280,), "decode": (129280,)}
+EXACT_OPERATORS_PATH = Path(__file__).with_name("exact-operators.npz")
+EXACT_OPERATORS_SHA256 = (
+    "a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79"
+)
+EXACT_OPERATORS_METADATA_SHA256 = (
+    "cce21cf671863f16e5a8e5c03a4becddff2bce0263af05636c76bb980b27a994"
+)
 CHECKPOINT_MANIFEST_SHA256 = (
     "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
 )
@@ -59,6 +66,51 @@ DSPARK_INPUTS = {
     "next_pending_position": 131,
     "next_proposal_tokens": [54994, 1060, 270, 41638, 6397],
 }
+
+
+def load_exact_operators(path=EXACT_OPERATORS_PATH):
+    """Load synthetic source-precision literals, without reference execution."""
+    from development.operators.fixtures import Fixture
+
+    data = Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != EXACT_OPERATORS_SHA256:
+        raise ValueError("frozen exact-operator artifact identity differs")
+    cases = {}
+    with np.load(io.BytesIO(data), allow_pickle=False) as stored:
+        metadata = json.loads(stored["metadata"].item())
+        canonical = json.dumps(
+            metadata, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()
+        if hashlib.sha256(canonical).hexdigest() != EXACT_OPERATORS_METADATA_SHA256:
+            raise ValueError("exact-operator case definitions or provenance differ")
+        names = {
+            f"{name}.{field}"
+            for name, record in metadata["cases"].items()
+            for field in record["tensors"]
+        }
+        if (
+            set(stored.files) != {"metadata", *names}
+            or len(stored.files) != len(names) + 1
+        ):
+            raise ValueError("exact-operator inputs, state or outputs are incomplete")
+        for name, record in metadata["cases"].items():
+            groups = {"inputs": {}, "state": {}, "expected": {}}
+            for field, description in record["tensors"].items():
+                group, key = field.split(".", 1)
+                value = stored[f"{name}.{field}"].copy()
+                if (
+                    list(value.shape) != description["shape"]
+                    or value.dtype != np.dtype(description["dtype"])
+                    or hashlib.sha256(value.tobytes()).hexdigest()
+                    != description["sha256"]
+                ):
+                    raise ValueError(
+                        f"exact-operator tensor identity differs: {name}.{field}"
+                    )
+                value.setflags(write=False)
+                groups[group][key] = value
+            cases[name] = Fixture(record, **groups)
+    return metadata, cases
 
 
 def load_media(path=MEDIA_PATH):

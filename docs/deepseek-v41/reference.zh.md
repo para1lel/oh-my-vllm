@@ -1,4 +1,4 @@
-# DeepSeek FP64 参考构建
+# DeepSeek 参考构建
 
 ## 范围
 
@@ -134,33 +134,9 @@ scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
 
 预测器注意力位置和输出采样位置相差一.
 待处理 tokens, 验证, 已接受特征更新, RNG 和精确修正遵循[采样约定](sampling.zh.md).
-其 NumPy 参考不使用模型权重或 native 算子.
-这些小型 CPU 检查不是本地 checkpoint 的 DSpark 端点 fixtures.
-
-## DSpark 恢复生成
-
-[用例生成器](../../development/model/deepseek_v41/reference_cases.py) 重复固定短提示词的 token IDs.
-此前缀具有 129 个 tokens.
-此前缀跨越 128-token 窗口边界, 并留下一个未满的 ratio-2 压缩器组.
-目标模型计算此前缀, 然后为五行 DSpark 提案提供特征.
-验证消费待处理 token 和全部五个提案.
-
-参考从原始前缀状态单独计算前两个验证输入.
-它对照完整验证中对应行检查特征和 logits.
-其目标 argmax 提供固定修正输入.
-这是强制状态选择用例, 而不是随机拒绝事件.
-[采样参考](sampling.zh.md) 单独检查拒绝概率.
-
-下一次提案前, 仅已接受的目标特征更新预测器主窗口.
-下一个边界特征仅追加一次.
-目标模型随后从所选状态计算修正输入.
-产物包含 prefill, 两个提案块, 验证和恢复解码的共 18 个完整词表行.
-它还包含每个提案块的五个原始置信度值.
-
-生成器记录检查点身份, 源码身份, 依赖版本, 全部输入 IDs 和全部输出数组哈希.
-发布前, 它检查所用控制字节和输入状态.
-排他链接发布完整的外部 NPZ 文件, 不替换已有文件.
-[固定夹具](fixtures.zh.md) 保存此恢复用例.
+[用例生成器](../../development/model/deepseek_v41/reference_cases.py) 构建[固定恢复夹具](fixtures.zh.md#dspark-续算).
+该夹具指南规定输入, 状态选择和完整输出.
+生成器在排他发布前检查所用控制字节, 文件状态和源码身份.
 
 将 `CASE_OUTPUT` 设为新的外部 NPZ 路径.
 使用固定参考环境:
@@ -172,74 +148,57 @@ scripts/with-env.sh "$REFERENCE_PYTHON" \
   --output "$CASE_OUTPUT"
 ```
 
-## 视觉数学
+## 媒体参考
 
-[视觉参考](../../development/model/deepseek_v41/reference_vision.py) 接受带显式 patch 网格的已归一化 FP64 patches 或已归一化 FP64 RGB pixels.
-它计算视觉层输出, 使用分半 2D RoPE 和完整双向注意力.
-合并器使用零填充的 3-by-3 分组, 通道优先的收集顺序和精确 erf GELU.
-学习得到的起始, 换行和结束 embeddings 构成完整的语言模型图像跨度.
+固定输入, 完整端点, 环境选择和生成命令见[媒体指南](media-reference.zh.md).
+[图像辅助函数](../../development/model/deepseek_v41/reference_image.py) 提供归一化 FP64 patches 和有序的图像跨度类型.
+[视觉参考](../../development/model/deepseek_v41/reference_vision.py) 提供包含已学习起始, 换行和结束行的完整 embeddings.
+[提示辅助函数](../../development/model/deepseek_v41/reference_media.py) 在展开占位符时保持图像顺序.
+[目标参考](../../development/model/deepseek_v41/reference_model.py) 在 hyper-connection 展开前插入这些 embeddings.
 
-Query 分块限制分数存储, 不丢弃 keys.
-权重读取按 projection 行设置上界.
-参考使用 CPU FP64 算术, 不进行源实现的 BF16/FP32 舍入.
-它不包含图像加载, resize, 归一化, 视频帧选择或语言模型图像插入.
-小型数学检查不提供固定的本地检查点媒体端点.
+图像位置不接收 Engram 贡献, 并使用视觉路由偏置.
+仅允许在第一次 prefill 调用期间插入.
 
-## 图像准备
+参考资源上限不改变服务媒体约定.
+调用者必须在服务接纳前预留输出容量.
+不要修改正在运行的参考生成器所用的环境或源文件.
 
-[图像参考](../../development/model/deepseek_v41/reference_image.py) 接受编码后的图像字节, 而不是路径或 URLs.
-其网格计算使用源实现的最小像素面积, patch 对齐舍入, token 上限和可选的宽图像 resize 规则.
-Pillow 提供源实现的 RGB 转换, resize 和灰色填充.
-不进行 EXIF 旋转.
-输出包含 FP64 归一化 patches, 以及有序的起始, 图像, 换行和结束 token 类型.
-FP64 归一化不包含源实现的 FP32 算术和最终 BF16 转换.
+## 发布源码基线
 
-此工具拒绝超过 64 MiB 的编码输入, 超过 67108864 pixels 的解码图像, 以及超过 512 MiB 的准备后 FP64 数组.
-这些是参考资源上限, 不是新的服务媒体约定.
-它不执行视觉或语言模型.
+独立的[捕获工具](../../development/model/deepseek_v41/source_capture.py) 记录经过验证的发布源码产生的短上下文 FP32 logits.
+它使用固定的短提示词和续算输入.
+[加载器](../../development/model/deepseek_v41/source_weights.py) 从原始 checkpoint 读取有界切片.
+它不创建另一份转换后的 checkpoint.
+模型参数来自经过验证的根配置字节.
+捕获记录一项内存修正, 在每次 forward 调用前发布 index owner 的 cache.
 
-组合图像和视觉检查时, 使用 `requirements/deepseek-media-reference.lock` 指定的独立环境.
-其版本与文本参考锁定文件一致, 另加入 Pillow 12.3.0.
-不要修改正在生成参考的进程使用的包.
-将 `MEDIA_REFERENCE_ENV` 设为新的外部环境目录:
+此基线使用发布版 MP4 放置: 专家归属各 rank, 共享专家和视觉权重复制, Engram 切片驻留设备.
+它不实现框架的 TP4, TEP4, DEP4 或 pinned-host Engram 约定.
+完整向量误差, 余弦相似度和 top-1 一致性属于诊断数据.
+它们不设定复合数值限值, 也不替代 FP64 参考.
+
+使用 `requirements/deepseek-baseline.lock` 指定的独立环境.
+将 `BASELINE_ENV` 设为该外部环境目录.
+将 `BASELINE_OUTPUT` 设为新的外部 NPZ 路径.
+使用短文本生成一节中的模型和 manifest 变量.
+将设备选择设置保存在 `LOCAL.md`.
+通过四 GPU wrapper 运行命令:
 
 ```bash
-scripts/with-env.sh uv venv "$MEDIA_REFERENCE_ENV"
-scripts/with-env.sh uv pip sync --python "$MEDIA_REFERENCE_ENV/bin/python" \
-  requirements/deepseek-media-reference.lock
-scripts/with-env.sh "$MEDIA_REFERENCE_ENV/bin/python" -m unittest \
-  development.model.deepseek_v41.test_reference_image \
-  development.model.deepseek_v41.test_reference_vision
+scripts/with-env.sh uv venv "$BASELINE_ENV"
+scripts/with-env.sh uv pip sync --python "$BASELINE_ENV/bin/python" \
+  requirements/deepseek-baseline.lock
+PYTHONDONTWRITEBYTECODE=1 OH_MY_VLLM_GPU_COUNT=4 \
+  scripts/with-env.sh scripts/with-gpu.sh \
+  "$BASELINE_ENV/bin/python" -B -m torch.distributed.run \
+  --standalone --nproc-per-node=4 \
+  -m development.model.deepseek_v41.source_capture \
+  --model "$MODEL_ROOT" --checkpoint-manifest "$CHECKPOINT_MANIFEST" \
+  --output "$BASELINE_OUTPUT" --run-gpu
 ```
 
-## 媒体提示展开
-
-[提示展开辅助函数](../../development/model/deepseek_v41/reference_media.py) 接受 tokenizer IDs 和有序的编码图像字节.
-每个图像占位符变为一个完整的源图像跨度.
-跨度内每个位置保持配置的图像 token ID, 通过独立类型区分起始, 图像, 换行和结束.
-文本位置的类型为 -1.
-辅助函数保持图像顺序, 并记录每个跨度的起始位置.
-它拒绝图像数量不匹配, 缺少视觉支持, 无效 token IDs, 以及展开后超过上下文容量的提示.
-
-此参考辅助函数的合计 patch 存储上限为 512 MiB.
-此上限不包含单张图像准备所需的临时存储.
-展开后的提示 IDs, 类型和 patch 数组均为只读.
-辅助函数不运行视觉模型, 不插入 embeddings, 也不预留输出 tokens.
-调用者必须在服务接纳前确保输入输出合计长度不超过其上限.
-
-## 语言模型图像插入
-
-[目标模型参考](../../development/model/deepseek_v41/reference_model.py) 在第一个 prefill 块接受 `token_types` 和 `image_embeddings`.
-调用者按提示顺序, 为每个图像跨度位置提供一行有限的 CPU FP64 embedding.
-这些行包含视觉参考提供的已学习起始, 换行和结束 embeddings.
-它们在 hyper-connection 展开前替换 token embeddings.
-每个图像位置必须携带配置的图像 token ID.
-
-图像位置在 Engram 历史中变为 dead markers, 并且不接收 Engram 贡献.
-这些位置的专家选择使用视觉路由偏置.
-后续文本调用使用已接受状态, 不携带图像输入.
-参考拒绝在续算期间插入图像, 缺失图像行, 无效类型和错误的 embedding 数组.
-它不修改调用者的输入数组或先前状态.
-
-小型组合检查包含插入, 掩码, 路由和文本续算.
-它不提供固定的本地检查点媒体端点.
+发布前, 四个 rank 的完整向量必须一致.
+源码, checkpoint 和环境身份必须保持不变.
+JSON 文件包含来源信息和诊断数据.
+NPZ 文件是完成标记.
+不会替换已有输出.

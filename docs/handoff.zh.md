@@ -9,10 +9,12 @@
 
 阶段 0 的参考和验收工作正在进行.
 [检查点工具](deepseek-v41/checkpoint.zh.md)提供权重身份和惰性 CPU FP64 读取器.
-[参考指南](deepseek-v41/reference.zh.md)给出独立数学检查.
-[固定 fixture](deepseek-v41/fixtures.zh.md), [媒体参考](deepseek-v41/media-reference.zh.md)和[长上下文参考](deepseek-v41/long-reference.zh.md)给出端点构建方法.
-源精度量化和带检查的分配工具支持验收工作.
-长上下文生成可从已保存状态恢复.
+[参考指南](deepseek-v41/reference.zh.md)分别说明 FP64 数学, 源精度量化和发布源码捕获.
+[固定 fixture](deepseek-v41/fixtures.zh.md) 提供已审查的端点.
+发布源码 GPU 捕获和复合验收限值仍待完成.
+
+[长上下文生成](deepseek-v41/long-reference.zh.md)可从已保存状态恢复.
+[分配工具](deepseek-v41/memory.zh.md)检查设计上限, 不证明运行时容量.
 
 阶段 1 的[模型适配器](deepseek-v41/adapters.zh.md)及阶段 2 基础设施已完成.
 [类型化执行接口](deepseek-v41/typed-execution.zh.md)在发布已接受状态前验证整个组的完成状态.
