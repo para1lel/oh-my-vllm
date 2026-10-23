@@ -41,6 +41,7 @@ MODULES = {
 
 def optional_modules():
     from oh_my_vllm.operators.engram.api import FUNCTIONS as ENGRAM_FUNCTIONS
+    from oh_my_vllm.operators.hyperconnection.api import FUNCTIONS as HC_FUNCTIONS
     from oh_my_vllm.operators.quantization.api import (
         FUNCTIONS as QUANTIZATION_FUNCTIONS,
     )
@@ -50,6 +51,7 @@ def optional_modules():
         "collectives": FUNCTIONS,
         "quantization": QUANTIZATION_FUNCTIONS,
         "engram": ENGRAM_FUNCTIONS,
+        "hyperconnection": HC_FUNCTIONS,
     }
 
 

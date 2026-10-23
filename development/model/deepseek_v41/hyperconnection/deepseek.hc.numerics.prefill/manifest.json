@@ -1,0 +1,216 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "deepseek.hc.numerics.prefill",
+    "boundary": "deepseek.hc",
+    "purpose": "numerics",
+    "shape": {
+      "batch": 4,
+      "queries": 32,
+      "rows": 128,
+      "copies": 4,
+      "width": 5120
+    },
+    "mode": "eager",
+    "weights": [
+      "layers.0.hc_attn_fn",
+      "layers.0.hc_attn_scale",
+      "layers.0.hc_attn_base"
+    ],
+    "options": {
+      "iterations": 20,
+      "eps": 1e-06,
+      "norm_eps": 1e-20,
+      "incoming_pre_is_separate": true
+    },
+    "outputs": [
+      "collapsed",
+      "expanded",
+      "next_pre"
+    ]
+  },
+  "checkpoint": {
+    "manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+    "files": {
+      "chat_template.jinja": {
+        "sha256": "d959d804d5101b79a49b6ff1bf3c54cd5affa9a5a78c503d925f3090040b31c3",
+        "size": 15348
+      },
+      "config.json": {
+        "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879",
+        "size": 3311
+      },
+      "encoding/encoding.py": {
+        "sha256": "502bdaec8a3fd88ebc24c4721a7038fbe42f2063c664638127056107920035c1",
+        "size": 37316
+      },
+      "inference/convert.py": {
+        "sha256": "035028340479145594a81d6084a8424e57363adf83c0d5983914783d95614d76",
+        "size": 9458
+      },
+      "inference/engram.py": {
+        "sha256": "11f35ecbead8150c35aa002b3d180ef290b05a25afe883a11884f94d476d3897",
+        "size": 8138
+      },
+      "inference/image_processor.py": {
+        "sha256": "482759e3bcc4e9bb5ee582b244cc563f5d0e163d8b48dda91ebb7106e62f9272",
+        "size": 7699
+      },
+      "inference/kernel.py": {
+        "sha256": "1236c3507019ed176f5dba5e04bcea58867cf654818c6cf138ed4845398c2455",
+        "size": 23790
+      },
+      "inference/model.py": {
+        "sha256": "4e9ae23620edc8028ccc5d5fef552ab7fdc7dcd6f79608754fe9f67644056f65",
+        "size": 61549
+      },
+      "inference/vision.py": {
+        "sha256": "5d49edc196a4ef22384abe76d35a40098cbe1e74b586c8f66a2edff4f076b26c",
+        "size": 4457
+      },
+      "model-00003-of-00048.safetensors": {
+        "sha256": "e1281f85d0ce4a3dfb63d41926fc4a47fa71f36ba20992e3597e702ead49d4c9",
+        "size": 7389759032
+      },
+      "model.safetensors.index.json": {
+        "sha256": "74b0686a3d2891980d5e303251b075a3bccae2c2ff650747db2620a649b98fa8",
+        "size": 7470294
+      },
+      "tokenizer.json": {
+        "sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+        "size": 6367257
+      },
+      "tokenizer_config.json": {
+        "sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+        "size": 801
+      }
+    }
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "source": {
+      "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+      "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+      "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+      "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+      "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+      "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+      "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+      "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+      "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+      "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a"
+    },
+    "torch": "2.12.0+cu130",
+    "scope": "complete_hyperconnection_sublayer_with_fixed_external_branch_output",
+    "generator_sha256": "a76ac71567602302ba20ae90cc52766083fb9a5a1dccde5be25b243487342c4e"
+  },
+  "files": {
+    "inputs.residual.0000.npz": "030658c1df8d676e7fd4ba74be42f25e5a483e7f1371f82e7175b55c89bd7eca",
+    "inputs.incoming_pre.0000.npz": "cf546f40e0bb10eea98bb4ee1e01af67814393a7ba11fe2b3455804556154be1",
+    "inputs.branch.0000.npz": "c82dccfa4c25578cc9f3e82098a8a96db5f1b50df99f8a01c80a7776511e736e",
+    "expected.collapsed.0000.npz": "e6ca87db741738bb93db2aa3bd50599fa32a10d8419ea55550179954a936f60e",
+    "expected.expanded.0000.npz": "d97d7fc157c86fb5de763c6922ca9c81edd03ea8154b7d1fda7317e624ca84c6",
+    "expected.next_pre.0000.npz": "55a28ee61dfce59052709bdbcb2bc1510e4637d5aed1606af9ad22e3078aca4a"
+  },
+  "tensors": {
+    "inputs.residual": {
+      "shape": [
+        128,
+        4,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2621440
+        }
+      ]
+    },
+    "inputs.incoming_pre": {
+      "shape": [
+        128,
+        4
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.incoming_pre.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 512
+        }
+      ]
+    },
+    "inputs.branch": {
+      "shape": [
+        128,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.branch.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 655360
+        }
+      ]
+    },
+    "expected.collapsed": {
+      "shape": [
+        128,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.collapsed.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 655360
+        }
+      ]
+    },
+    "expected.expanded": {
+      "shape": [
+        128,
+        4,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.expanded.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2621440
+        }
+      ]
+    },
+    "expected.next_pre": {
+      "shape": [
+        128,
+        4
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.next_pre.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 512
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

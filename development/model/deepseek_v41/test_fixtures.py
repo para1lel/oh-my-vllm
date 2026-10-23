@@ -13,6 +13,46 @@ from . import fixtures
 
 
 class FrozenFixtures(unittest.TestCase):
+    def test_hyperconnection_keeps_complete_requests_and_separate_incoming_mix(self):
+        loader = getattr(fixtures, "load_hyperconnection", None)
+        self.assertTrue(callable(loader), "hyper-connection fixture loader is missing")
+        metadata, cases = loader()
+        self.assertEqual(
+            set(cases), {"decode", "prefill", "verification", "zero", "cancellation"}
+        )
+        for name, case in cases.items():
+            shape = case.manifest["case"]["shape"]
+            rows = shape["rows"]
+            self.assertEqual(rows, shape["batch"] * shape["queries"])
+            self.assertEqual(case.inputs["residual"].shape, (rows, 4, 5120))
+            self.assertEqual(case.inputs["incoming_pre"].shape, (rows, 4))
+            self.assertEqual(case.expected["collapsed"].shape, (rows, 5120))
+            self.assertEqual(case.expected["expanded"].shape, (rows, 4, 5120))
+            self.assertEqual(case.expected["next_pre"].shape, (rows, 4))
+            for value in case.expected.values():
+                self.assertEqual(value.dtype, np.float64)
+                self.assertTrue(np.isfinite(value).all())
+                self.assertFalse(value.flags.writeable)
+            self.assertEqual(
+                metadata["cases"][name]["limits"]["fixture_sha256"],
+                metadata["cases"][name]["fixture_sha256"],
+            )
+        self.assertFalse(
+            np.array_equal(
+                cases["decode"].inputs["incoming_pre"],
+                cases["decode"].expected["next_pre"],
+            )
+        )
+        self.assertFalse(cases["zero"].expected["expanded"].any())
+        self.assertFalse(cases["cancellation"].expected["collapsed"].any())
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.json").write_bytes(
+                fixtures.HYPERCONNECTION_PATH.joinpath("index.json").read_bytes() + b" "
+            )
+            with self.assertRaisesRegex(ValueError, "identity"):
+                loader(root)
+
     def test_media_reference_keeps_complete_inputs_vectors_and_historical_provenance(
         self,
     ):

@@ -17,6 +17,7 @@
 | [精确算子](../../development/model/deepseek_v41/exact-operators.npz) | 四个合成量化和 Engram 用例 | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
 | [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 表, scale, 索引和 49152 个 BF16 输出位模式 | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
 | [Engram 检查点](../../development/model/deepseek_v41/engram-checkpoint.npz) | 每个表所选 32 行的原始字节及精确 BF16 输出 | `967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce` |
+| [Hyper-connection 索引](../../development/model/deepseek_v41/hyperconnection/index.json) | 五个包含完整 FP64 输出和固定字段限值的用例 | `933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47` |
 
 产物绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 完整模型产物包含清单, 生成器身份, 固定输入, 数组形状和摘要.
@@ -56,6 +57,27 @@ scripts/with-env.sh python -m development.native_build \
 OH_MY_VLLM_GPU_COUNT=1 scripts/with-env.sh scripts/with-gpu.sh \
   python -m development.operators.check_deepseek_exact --output "$EXACT_REPORT"
 ```
+
+## Hyper-connections
+
+`load_hyperconnection()` 提供 decode, prefill, verification, 零值和抵消用例.
+它们使用原始 F32 权重, 四份残差, 宽度 5120, 以及 1, 128 或 384 行.
+索引绑定全部数组和 `deepseek-hc-precision-v1` 策略.
+
+| 输出 | 归一化 L2 限值 | 最大绝对误差 |
+|---|---:|---|
+| `collapsed`, `expanded` | `2^-8` | `max(1e-7, 2^-8 * P)` |
+| `next_pre` | `2^-16` | `max(1e-7, 2^-16 * P)` |
+
+`P` 是每个字段和请求的 FP64 峰值.
+RMS 下限为 `1e-6`. 近零绝对限值为 `1e-6`.
+这些工程限值不能证明完整模型精度.
+
+[Native workspace](../../python/oh_my_vllm/operators/hyperconnection/workspace.py) 将子层前的准备与子层后的展开分开.
+折叠使用传入系数. `next_pre` 属于下一个子层.
+[检查器](../../development/operators/check_deepseek_hc.py)还置换通道, 以检测寻址错误.
+它检查 Eager 和 Graph 执行, 非法参数, 空输入及输入不变性.
+性能限值和模型集成仍待完成.
 
 ## 短文本
 

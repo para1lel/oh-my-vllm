@@ -17,6 +17,7 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [Exact operators](../../development/model/deepseek_v41/exact-operators.npz) | Four synthetic quantization and Engram cases | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
 | [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 table, scales, indices, and 49152 BF16 output bit patterns | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
 | [Engram checkpoint](../../development/model/deepseek_v41/engram-checkpoint.npz) | Original bytes and exact BF16 outputs for 32 selected rows from each table | `967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce` |
+| [Hyper-connection index](../../development/model/deepseek_v41/hyperconnection/index.json) | Five cases with complete FP64 outputs and fixed field limits | `933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47` |
 
 The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 Full-model artifacts contain the manifest, generator identities, fixed inputs, array shapes, and digests.
@@ -56,6 +57,27 @@ scripts/with-env.sh python -m development.native_build \
 OH_MY_VLLM_GPU_COUNT=1 scripts/with-env.sh scripts/with-gpu.sh \
   python -m development.operators.check_deepseek_exact --output "$EXACT_REPORT"
 ```
+
+## Hyper-connections
+
+`load_hyperconnection()` supplies decode, prefill, verification, zero, and cancellation cases.
+They use original F32 weights, four residual copies, width 5120, and 1, 128, or 384 rows.
+The index binds all arrays and the `deepseek-hc-precision-v1` policy.
+
+| Output | Normalized L2 limit | Maximum absolute error |
+|---|---:|---|
+| `collapsed`, `expanded` | `2^-8` | `max(1e-7, 2^-8 * P)` |
+| `next_pre` | `2^-16` | `max(1e-7, 2^-16 * P)` |
+
+`P` is the FP64 peak for each field and request.
+The RMS floor is `1e-6`. The near-zero absolute limit is `1e-6`.
+These engineering limits do not prove full-model accuracy.
+
+The [native workspace](../../python/oh_my_vllm/operators/hyperconnection/workspace.py) separates preparation from expansion around the sublayer.
+Collapse uses incoming coefficients. `next_pre` belongs to the next sublayer.
+The [checker](../../development/operators/check_deepseek_hc.py) also permutes channels to detect addressing errors.
+It checks Eager and Graph execution, invalid arguments, empty inputs, and input immutability.
+Performance limits and model integration are pending.
 
 ## Short text
 

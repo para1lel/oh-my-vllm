@@ -1,8 +1,8 @@
-# DeepSeek V4.1 architecture proposal
+# DeepSeek V4.1 architecture
 
 ## Scope and status
 
-This approved design extends the service on `nightly` from base `b99701a`.
+This approved design extends the service on `nightly`.
 It does not declare DeepSeek support in the current executable.
 Execute the [phase plan](plan.md) without additional phase approval.
 The [validation plan](validation.md) gives the approved measurement matrix.
@@ -34,19 +34,12 @@ Experts use packed FP4 weights.
 Main compressed KV uses FP4 with separate scale rules.
 These formats differ from the Qwen operators.
 
-The checkpoint configuration SHA256 is `8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879`.
-The tensor-index SHA256 is `74b0686a3d2891980d5e303251b075a3bccae2c2ff650747db2620a649b98fa8`.
-These identities do not verify all weight bytes.
-
-The 48 shard headers specify 475.24 GiB of tensor payload.
-Engram tensors account for 189.13 GiB. Other tensors account for 286.11 GiB.
-These are storage calculations, not runtime memory measurements.
-Host paths belong in ignored local configuration.
+The [fixtures](fixtures.md) bind the complete checkpoint identity.
+The [memory plan](memory.md) gives weight placement and allocation gates.
 
 Use the checkpoint's reference model, encoder, and image processor as mathematical sources.
 Its generation loop implements ordinary sampling, not full DSpark acceptance.
-Resolve the difference between its README template statement and its supplied `chat_template.jinja` before prompt integration.
-Compare encoded token IDs, not only rendered text.
+Use the authoritative Python encoder and the [fixed codec cases](fixtures.md#prompt-codec) for prompt integration.
 
 [DeepInfer](https://github.com/deepseek-ai/DeepInfer/tree/9bd9cf243fc53ef9afbf8f04d391d989117d6ab9) is a reference, not a runtime dependency.
 Its default checkpoint has the `-1017` suffix.
@@ -61,14 +54,6 @@ Do not adopt these approximations as exact state restoration or exact sampling.
 
 ## Architecture choice
 
-Three approaches are possible:
-
-| Approach | Advantage | Cost |
-|---|---|---|
-| Extend the current Qwen worker directly | Small initial changes | Model-specific branches spread through scheduling and state |
-| Wrap DeepInfer as a second engine | Fast reference experiments | Conflicts with ownership and dependency contracts |
-| Model adapters with shared service and execution mechanisms | Clear model boundaries and gradual migration | Initial protocol and cache work |
-
 Use model adapters.
 Keep the existing operator package layout from the [operator design](../operators/design.md).
 Do not build a universal model graph compiler.
@@ -78,24 +63,10 @@ It does not promise immediate support for unimplemented architectures.
 
 ## Module boundaries
 
-Paths in this table are implementation targets, not existing interfaces.
-
-| Path | Responsibility |
-|---|---|
-| `crates/model-contract/src/lib.rs` | Versioned model, capability, cache, speculation, and parallel descriptors |
-| `crates/kv-cache/src/` | Typed state groups, prefix ownership, reservations, and transfer records |
-| `crates/scheduler/src/` | Model-independent step scheduling and state transactions |
-| `crates/zmq-worker/src/protocol.rs` | Versioned group messages and validated responses |
-| `crates/zmq-worker/src/group.rs` | Rank startup, readiness, deadlines, failure, and shutdown |
-| `crates/zmq-worker/src/serving/` | Shared HTTP functions and model-selected output parsing |
-| `python/oh_my_vllm/models/api.py` | Model adapter interface |
-| `python/oh_my_vllm/models/registry.py` | Checkpoint detection and supported adapter selection |
-| `python/oh_my_vllm/models/qwen38/` | Existing weights, model, cache layout, media, and MTP4 behavior |
-| `python/oh_my_vllm/models/deepseek_v41/` | DeepSeek configuration, weights, execution, cache, media, and DSpark |
-| `python/oh_my_vllm/worker/` | Transport, request lifecycle, shared sampling, constraints, and execution policy |
-| `python/oh_my_vllm/operators/runtime/distributed.py` | Native communication handles and fixed-address communication buffers |
-| `python/oh_my_vllm/operators/engram/` | Host weight ownership, lookup plans, and bounded device staging |
-| `python/oh_my_vllm/operators/` | Separate FP4, MoE, sparse attention, compression, hyper-connection, and DSpark packages |
+The implemented [model adapters](adapters.md) and [rank control](distributed.md) specify the shared interfaces.
+Keep DeepSeek weights, execution, cache, media, and DSpark in `python/oh_my_vllm/models/deepseek_v41/`.
+DeepSeek model computation is pending.
+Use the existing API/plan/workspace packages in `python/oh_my_vllm/operators/` for GPU operations.
 
 Model selection uses configuration architecture and model type, not a directory name.
 Unknown architectures, formats, capabilities, or protocol versions cause startup errors.

@@ -10,6 +10,7 @@ DeepSeek 服务推理尚未启用.
 阶段 1 和 2 已实现.
 阶段 0 的参考与分配工作仍在继续.
 阶段 3 已有独立的精确量化, Engram 哈希和共享 pinned-host lookup 算子.
+独立的 hyper-connection 算子使用冻结的字段限值.
 完整 Engram 表加载到一个 sealed 共享存储中.
 完整模型计算与阶段 4-8 尚待完成.
 

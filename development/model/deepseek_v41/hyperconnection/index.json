@@ -1,0 +1,562 @@
+{
+  "version": "deepseek-hyperconnection-numerics-v1",
+  "checkpoint_manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+  "reference_sources": {
+    "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+    "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+    "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+    "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+    "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+    "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+    "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+    "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+    "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+    "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a"
+  },
+  "precision_policy": {
+    "version": "deepseek-hc-precision-v1",
+    "rationale": "BF16 collapse and expanded residual use operator-precision-v1 Other residuals; FP32 next_pre uses independent engineering allowance 256*2^-24 for reduction, normalization and sigmoid; not a worst-case bound",
+    "units": {
+      "activation": 0.00390625,
+      "next_pre": 1.52587890625e-05
+    },
+    "rms_floor": 1e-06,
+    "absolute_floor": 1e-07,
+    "near_zero_max_abs": 1e-06
+  },
+  "cases": {
+    "decode": {
+      "case": {
+        "id": "deepseek.hc.numerics.decode",
+        "boundary": "deepseek.hc",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 1,
+          "queries": 1,
+          "rows": 1,
+          "copies": 4,
+          "width": 5120
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.hc_attn_fn",
+          "layers.0.hc_attn_scale",
+          "layers.0.hc_attn_base"
+        ],
+        "options": {
+          "iterations": 20,
+          "eps": 1e-06,
+          "norm_eps": 1e-20,
+          "incoming_pre_is_separate": true
+        },
+        "outputs": [
+          "collapsed",
+          "expanded",
+          "next_pre"
+        ]
+      },
+      "fixture_sha256": "03836909130f8e0617870e3a234e9bcac2f79797eb0232571ba0a0e45e595c61",
+      "limits": {
+        "case_sha256": "8921517c19fe8256a692fbc1f24fa74d9e418fa8705e04b71dcf579c017905ba",
+        "fixture_sha256": "03836909130f8e0617870e3a234e9bcac2f79797eb0232571ba0a0e45e595c61",
+        "fields": {
+          "collapsed": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              0.003204345703125
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "expanded": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              0.002200786657466392
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "next_pre": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1.4152377480817479e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "prefill": {
+      "case": {
+        "id": "deepseek.hc.numerics.prefill",
+        "boundary": "deepseek.hc",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 4,
+          "queries": 32,
+          "rows": 128,
+          "copies": 4,
+          "width": 5120
+        },
+        "mode": "eager",
+        "weights": [
+          "layers.0.hc_attn_fn",
+          "layers.0.hc_attn_scale",
+          "layers.0.hc_attn_base"
+        ],
+        "options": {
+          "iterations": 20,
+          "eps": 1e-06,
+          "norm_eps": 1e-20,
+          "incoming_pre_is_separate": true
+        },
+        "outputs": [
+          "collapsed",
+          "expanded",
+          "next_pre"
+        ]
+      },
+      "fixture_sha256": "fdd8a855f2caa2efe1f3db6ce232a981e7b6c9a7e81d7ab688cc03cf3031de75",
+      "limits": {
+        "case_sha256": "c4f280db51e4e4f64e4c0d852a387d63338211fc27b94f9468e1e30e5c927ab8",
+        "fixture_sha256": "fdd8a855f2caa2efe1f3db6ce232a981e7b6c9a7e81d7ab688cc03cf3031de75",
+        "fields": {
+          "collapsed": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              0.05450439453125,
+              0.0533447265625,
+              0.05218505859375,
+              0.0538330078125
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "expanded": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              0.023978980280569467,
+              0.02393142238978698,
+              0.023392563054405624,
+              0.024028602866337855
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "next_pre": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1.46549660484959e-05,
+              1.4656843233614375e-05,
+              1.4657532796740497e-05,
+              1.46549660484959e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "verification": {
+      "case": {
+        "id": "deepseek.hc.numerics.verification",
+        "boundary": "deepseek.hc",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 64,
+          "queries": 6,
+          "rows": 384,
+          "copies": 4,
+          "width": 5120
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.hc_attn_fn",
+          "layers.0.hc_attn_scale",
+          "layers.0.hc_attn_base"
+        ],
+        "options": {
+          "iterations": 20,
+          "eps": 1e-06,
+          "norm_eps": 1e-20,
+          "incoming_pre_is_separate": true
+        },
+        "outputs": [
+          "collapsed",
+          "expanded",
+          "next_pre"
+        ]
+      },
+      "fixture_sha256": "bcf6ad39bf5510c7fdfd58ebb669dc2bdc0b5b8a0398bbaa452049c2a91cc0ce",
+      "limits": {
+        "case_sha256": "b0aaaaf7564f90c4e3691120e879d923ac2d6870a912607492eeb39fec0ca219",
+        "fixture_sha256": "bcf6ad39bf5510c7fdfd58ebb669dc2bdc0b5b8a0398bbaa452049c2a91cc0ce",
+        "fields": {
+          "collapsed": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              0.05450439453125,
+              0.05126953125,
+              0.0450439453125,
+              0.04400634765625,
+              0.047119140625,
+              0.0533447265625,
+              0.05242919921875,
+              0.04931640625,
+              0.0430908203125,
+              0.04595947265625,
+              0.049072265625,
+              0.0535888671875,
+              0.05047607421875,
+              0.04736328125,
+              0.0452880859375,
+              0.051513671875,
+              0.05462646484375,
+              0.0511474609375,
+              0.044921875,
+              0.04412841796875,
+              0.0472412109375,
+              0.053466796875,
+              0.05230712890625,
+              0.0491943359375,
+              0.04296875,
+              0.04608154296875,
+              0.0491943359375,
+              0.053466796875,
+              0.05035400390625,
+              0.0472412109375,
+              0.04180908203125,
+              0.04803466796875,
+              0.0511474609375,
+              0.05462646484375,
+              0.04840087890625,
+              0.0452880859375,
+              0.04736328125,
+              0.0535888671875,
+              0.05218505859375,
+              0.049072265625,
+              0.0428466796875,
+              0.04620361328125,
+              0.04931640625,
+              0.0533447265625,
+              0.05023193359375,
+              0.047119140625,
+              0.04193115234375,
+              0.04815673828125,
+              0.05126953125,
+              0.05450439453125,
+              0.04827880859375,
+              0.045166015625,
+              0.04388427734375,
+              0.05010986328125,
+              0.0556640625,
+              0.05255126953125,
+              0.04632568359375,
+              0.04632568359375,
+              0.0494384765625,
+              0.0556640625,
+              0.05010986328125,
+              0.0469970703125,
+              0.04205322265625,
+              0.04827880859375
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "expanded": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              0.023309735870340208,
+              0.023704809357026464,
+              0.02274696062044976,
+              0.023328193254908546,
+              0.022511559579206898,
+              0.023978980280569467,
+              0.02364091067461329,
+              0.02393142238978698,
+              0.022842084324583425,
+              0.022536617519151775,
+              0.022706365302535246,
+              0.023392563054405624,
+              0.022853163743371867,
+              0.023295772516291998,
+              0.022894965345325393,
+              0.023163584663106647,
+              0.02366215502080305,
+              0.023000818363547844,
+              0.022591501255630586,
+              0.024028602866337855,
+              0.023476552496058234,
+              0.023884928758243693,
+              0.02379312730303036,
+              0.024287910051506677,
+              0.02268199746887382,
+              0.023944975572375057,
+              0.023391730671251963,
+              0.02334760181304725,
+              0.022485933875172247,
+              0.02301306034335062,
+              0.02312746909152147,
+              0.022746124469509476,
+              0.0230479017063929,
+              0.022933694113413096,
+              0.02400326149495718,
+              0.023646767792066474,
+              0.023899841327654325,
+              0.024237118151253574,
+              0.02320344290988835,
+              0.0226705709695044,
+              0.02394744826737585,
+              0.023470592904787615,
+              0.02321806974227406,
+              0.023746177568455106,
+              0.023119794200455814,
+              0.02310456679609421,
+              0.023324154613975065,
+              0.022805859483528076,
+              0.02251476194292109,
+              0.02356437560737421,
+              0.02332606760462244,
+              0.0237269644263102,
+              0.024255880942955447,
+              0.023043531844219808,
+              0.024538410221101,
+              0.024003352343905528,
+              0.02357728801317307,
+              0.023847253629467026,
+              0.022657976570517203,
+              0.023437476074917897,
+              0.022800707964525227,
+              0.023363890378446363,
+              0.022905047377681367,
+              0.022713363362653033
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "next_pre": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1.4490534551659949e-05,
+              1.46549660484959e-05,
+              1.4584004469396207e-05,
+              1.4482544796344396e-05,
+              1.4600004255049181e-05,
+              1.4367818205510316e-05,
+              1.4656843233614375e-05,
+              1.4462603687270449e-05,
+              1.4525228004484978e-05,
+              1.458914135530062e-05,
+              1.4399222544279622e-05,
+              1.4601986394774029e-05,
+              1.4657532796740497e-05,
+              1.4522908142955966e-05,
+              1.4541174929495577e-05,
+              1.4538218826981296e-05,
+              1.4421452490664837e-05,
+              1.46549660484959e-05,
+              1.4539858624809608e-05,
+              1.4584004469396207e-05,
+              1.4600004255049181e-05,
+              1.4394117650472679e-05,
+              1.4656843233614375e-05,
+              1.4517115240293235e-05,
+              1.4525228004484978e-05,
+              1.458914135530062e-05,
+              1.4399222544279622e-05,
+              1.4569537549104527e-05,
+              1.4657532796740497e-05,
+              1.4522908142955966e-05,
+              1.450948852357135e-05,
+              1.4541174929495577e-05,
+              1.4437111978194338e-05,
+              1.46549660484959e-05,
+              1.4539858624809608e-05,
+              1.4584004469396207e-05,
+              1.4600004255049181e-05,
+              1.4394117650472679e-05,
+              1.4656843233614375e-05,
+              1.4607327753081283e-05,
+              1.4525228004484978e-05,
+              1.458914135530062e-05,
+              1.4521735507883165e-05,
+              1.451312362324555e-05,
+              1.4657532796740497e-05,
+              1.4522908142955966e-05,
+              1.450948852357135e-05,
+              1.4541174929495577e-05,
+              1.4437111978194338e-05,
+              1.46549660484959e-05,
+              1.4517171788385034e-05,
+              1.4584004469396207e-05,
+              1.4600004255049181e-05,
+              1.4394117650472679e-05,
+              1.4585164838239556e-05,
+              1.4656843233614375e-05,
+              1.4525228004484978e-05,
+              1.4524173374034344e-05,
+              1.458914135530062e-05,
+              1.4399222544279622e-05,
+              1.4657532796740497e-05,
+              1.4522908142955966e-05,
+              1.450948852357135e-05,
+              1.4541174929495577e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "zero": {
+      "case": {
+        "id": "deepseek.hc.numerics.zero",
+        "boundary": "deepseek.hc",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 1,
+          "queries": 1,
+          "rows": 1,
+          "copies": 4,
+          "width": 5120
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.hc_attn_fn",
+          "layers.0.hc_attn_scale",
+          "layers.0.hc_attn_base"
+        ],
+        "options": {
+          "iterations": 20,
+          "eps": 1e-06,
+          "norm_eps": 1e-20,
+          "incoming_pre_is_separate": true
+        },
+        "outputs": [
+          "collapsed",
+          "expanded",
+          "next_pre"
+        ]
+      },
+      "fixture_sha256": "9789d58f5e71cda959b90ee5622d379b5f46f6cfc86fe925d97a374fc00d5044",
+      "limits": {
+        "case_sha256": "498cf9b9dee4202efd995a9cb8e702bc16793c696a799e74418209c03a347fe8",
+        "fixture_sha256": "9789d58f5e71cda959b90ee5622d379b5f46f6cfc86fe925d97a374fc00d5044",
+        "fields": {
+          "collapsed": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              1e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "expanded": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              1e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "next_pre": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1.442055649972179e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    },
+    "cancellation": {
+      "case": {
+        "id": "deepseek.hc.numerics.cancellation",
+        "boundary": "deepseek.hc",
+        "purpose": "numerics",
+        "shape": {
+          "batch": 4,
+          "queries": 32,
+          "rows": 128,
+          "copies": 4,
+          "width": 5120
+        },
+        "mode": "eager",
+        "weights": [
+          "layers.0.hc_attn_fn",
+          "layers.0.hc_attn_scale",
+          "layers.0.hc_attn_base"
+        ],
+        "options": {
+          "iterations": 20,
+          "eps": 1e-06,
+          "norm_eps": 1e-20,
+          "incoming_pre_is_separate": true
+        },
+        "outputs": [
+          "collapsed",
+          "expanded",
+          "next_pre"
+        ]
+      },
+      "fixture_sha256": "b4953457a2ef7cec9ba056bbd3abcd32a317ca3873dbf521bce6892a3dd7e5bf",
+      "limits": {
+        "case_sha256": "37a097c5834e83c3b178bc6a48eb99269d917f4be2163355765859a0548d1575",
+        "fixture_sha256": "b4953457a2ef7cec9ba056bbd3abcd32a317ca3873dbf521bce6892a3dd7e5bf",
+        "fields": {
+          "collapsed": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              1e-07,
+              1e-07
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "expanded": {
+            "kind": "float",
+            "normalized_l2": 0.00390625,
+            "max_abs": [
+              0.024214465772093182,
+              0.023434488966354056,
+              0.02416594283226295,
+              0.02411721984535429
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "next_pre": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1.4421413562907313e-05,
+              1.4421719959496844e-05,
+              1.4421522946383918e-05,
+              1.4421413562907313e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        }
+      }
+    }
+  },
+  "generator_sha256": "a76ac71567602302ba20ae90cc52766083fb9a5a1dccde5be25b243487342c4e"
+}

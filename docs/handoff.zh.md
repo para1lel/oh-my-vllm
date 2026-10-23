@@ -11,7 +11,7 @@
 DeepSeek 物理执行和状态选择仍待完成.
 Qwen 保留单 worker 路径, 已修复 prefill 分派, 块调度和主机缓存启动.
 
-阶段 3 已有使用[固定夹具](deepseek-v41/fixtures.zh.md)的独立精确量化, Engram 哈希和共享 pinned-host lookup.
+阶段 3 已有使用[固定夹具](deepseek-v41/fixtures.zh.md)的独立量化, Engram 哈希, 共享 pinned-host lookup 和 hyper-connections.
 [Engram 加载器](deepseek-v41/memory.zh.md#4-权重字节与格式)在一个共享存储中提供完整编码表.
 其余权重加载和模型集成仍待完成.
 [参考工具](deepseek-v41/reference.zh.md)区分 FP64 数学, 源精度量化和发布源码诊断.

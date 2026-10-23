@@ -39,6 +39,10 @@ ENGRAM_CHECKPOINT_SHA256 = (
 ENGRAM_CHECKPOINT_METADATA_SHA256 = (
     "90b9b52d5e371c375d13d4c4a4fae397cc393689aee0123961fde355dee4550a"
 )
+HYPERCONNECTION_PATH = Path(__file__).with_name("hyperconnection")
+HYPERCONNECTION_SHA256 = (
+    "933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47"
+)
 CHECKPOINT_MANIFEST_SHA256 = (
     "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
 )
@@ -80,6 +84,22 @@ DSPARK_INPUTS = {
     "next_pending_position": 131,
     "next_proposal_tokens": [54994, 1060, 270, 41638, 6397],
 }
+
+
+def load_hyperconnection(path=HYPERCONNECTION_PATH):
+    from development.operators.cases import Case
+    from development.operators.fixtures import load_fixture
+
+    path = Path(path)
+    raw = (path / "index.json").read_bytes()
+    if hashlib.sha256(raw).hexdigest() != HYPERCONNECTION_SHA256:
+        raise ValueError("hyper-connection fixture index identity differs")
+    index = json.loads(raw)
+    cases = {}
+    for name, record in index["cases"].items():
+        case = Case(**record["case"], fixture_sha256=record["fixture_sha256"])
+        cases[name] = load_fixture(case, path / case.id)
+    return index, cases
 
 
 def load_engram_lookup(path=ENGRAM_LOOKUP_PATH):
