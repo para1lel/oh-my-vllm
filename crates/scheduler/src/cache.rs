@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, VecDeque};
 
-use oh_my_vllm_kv_cache::{hash::BlockHash, snapshot::BlockTables};
+use oh_my_vllm_kv_cache::hash::BlockHash;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 
-use crate::{Request, RequestStatus, Scheduler};
+use crate::{
+    Request, RequestStatus, Scheduler,
+    policy::{CachePolicy, qwen::QwenTransferPlan},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -15,13 +18,13 @@ pub enum CacheKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheOperation {
+pub struct CacheOperation<T = QwenTransferPlan> {
     pub transfer_id: u64,
     pub snapshot_id: u64,
     pub kind: CacheKind,
     pub request_id: Option<u64>,
-    pub fa_blocks: Vec<u32>,
-    pub mamba_blocks: Vec<u32>,
+    #[serde(flatten)]
+    pub state: T,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,36 +53,35 @@ struct Prefix {
     salt: Option<BlockHash>,
 }
 
-struct HostEntry {
+struct HostEntry<S> {
     snapshot: u64,
-    tables: BlockTables,
+    tables: S,
     prefix: Prefix,
 }
 
-pub(crate) struct HostRequest {
+pub(crate) struct HostRequest<S> {
     request: Request,
     snapshot: u64,
-    tables: BlockTables,
+    tables: S,
 }
 
-pub(crate) struct Pending {
+pub(crate) struct Pending<P: CachePolicy> {
     kind: CacheKind,
     snapshot: u64,
     request: Option<Request>,
-    tables: BlockTables,
-    source: Option<BlockTables>,
+    transfer: Option<P::Transfer>,
+    source: Option<P::Snapshot>,
     prefix: Option<Prefix>,
     cancelled: bool,
 }
 
-#[derive(Default)]
-pub(crate) struct HostCache {
+pub(crate) struct HostCache<P: CachePolicy> {
     pub capacity: u64,
     next_id: u64,
-    pub pending: BTreeMap<u64, Pending>,
-    operations: Vec<CacheOperation>,
-    pub requests: VecDeque<HostRequest>,
-    prefixes: VecDeque<HostEntry>,
+    pub pending: BTreeMap<u64, Pending<P>>,
+    operations: Vec<CacheOperation<P::TransferPlan>>,
+    pub requests: VecDeque<HostRequest<P::Snapshot>>,
+    prefixes: VecDeque<HostEntry<P::Snapshot>>,
     pub blocked: FxHashSet<u64>,
     capacity_blocked: FxHashSet<u64>,
     retry_at: Option<std::time::Instant>,
@@ -88,7 +90,26 @@ pub(crate) struct HostCache {
     candidates: VecDeque<Request>,
 }
 
-impl HostCache {
+impl<P: CachePolicy> Default for HostCache<P> {
+    fn default() -> Self {
+        Self {
+            capacity: 0,
+            next_id: 0,
+            pending: BTreeMap::new(),
+            operations: Vec::new(),
+            requests: VecDeque::new(),
+            prefixes: VecDeque::new(),
+            blocked: FxHashSet::default(),
+            capacity_blocked: FxHashSet::default(),
+            retry_at: None,
+            failures: Vec::new(),
+            prefix_hits: BTreeMap::new(),
+            candidates: VecDeque::new(),
+        }
+    }
+}
+
+impl<P: CachePolicy> HostCache<P> {
     fn id(&mut self) -> u64 {
         self.next_id = self
             .next_id
@@ -97,7 +118,7 @@ impl HostCache {
         self.next_id
     }
 
-    fn submit(&mut self, job: Pending) {
+    fn submit(&mut self, job: Pending<P>) {
         let transfer_id = self.id();
         self.operations.push(CacheOperation {
             transfer_id,
@@ -108,8 +129,7 @@ impl HostCache {
                 .as_ref()
                 .filter(|_| job.prefix.is_none())
                 .map(|r| r.id),
-            fa_blocks: job.tables.fa_sources(),
-            mamba_blocks: job.tables.mamba_sources(),
+            state: P::transfer_plan(job.transfer.as_ref()),
         });
         self.pending.insert(transfer_id, job);
     }
@@ -119,12 +139,7 @@ impl HostCache {
             snapshot,
             kind: CacheKind::Drop,
             request: None,
-            tables: BlockTables {
-                fa: vec![],
-                mamba: vec![],
-                mamba_last_state: None,
-                mamba_read_source: None,
-            },
+            transfer: None,
             source: None,
             prefix: None,
             cancelled: false,
@@ -155,7 +170,7 @@ impl HostCache {
     }
 }
 
-impl Scheduler {
+impl<P: CachePolicy> Scheduler<P> {
     pub fn enable_host_cache(&mut self, capacity: u64) {
         assert!(self.host.pending.is_empty() && self.host.requests.is_empty());
         self.host.capacity = capacity;
@@ -165,7 +180,7 @@ impl Scheduler {
         !self.host.pending.is_empty()
     }
 
-    pub fn cache_operations(&mut self) -> Vec<CacheOperation> {
+    pub fn cache_operations(&mut self) -> Vec<CacheOperation<P::TransferPlan>> {
         std::mem::take(&mut self.host.operations)
     }
 
@@ -230,12 +245,12 @@ impl Scheduler {
             return;
         }
         let snapshot = self.host.id();
-        let tables = self.kv.request_tables(request.id);
+        let transfer = self.kv.store_request(request.id);
         self.host.submit(Pending {
             kind: CacheKind::Store,
             snapshot,
             request: Some(request),
-            tables,
+            transfer: Some(transfer),
             source: None,
             prefix: None,
             cancelled: false,
@@ -264,10 +279,10 @@ impl Scheduler {
     fn reserve_load(
         &mut self,
         request: &Request,
-        source: &BlockTables,
+        source: &P::Snapshot,
         prefix: bool,
         budget: usize,
-    ) -> Option<BlockTables> {
+    ) -> Option<P::Transfer> {
         let count = self.aligned_prefill(
             request,
             request.num_computed_tokens,
@@ -279,32 +294,13 @@ impl Scheduler {
         if count == 0 {
             return None;
         }
-        let tables = self.kv.reserve_tables(source)?;
-        // A reservation can retire old GDN checkpoints; DMA still owns their destinations.
-        self.kv.pin_tables(&tables);
-        self.kv.install_tables(
-            request.id,
-            tables.clone(),
+        self.kv.load_snapshot(
+            request,
+            source,
             prefix,
-            request.num_computed_tokens,
-        );
-        if self
-            .kv
-            .allocate_slots(
-                request,
-                (vec![], vec![]),
-                0,
-                count,
-                self.lookahead(request, request.num_computed_tokens, count),
-                true,
-            )
-            .is_none()
-        {
-            self.kv.free(request.id);
-            self.kv.release_tables(&tables);
-            return None;
-        }
-        Some(tables)
+            count,
+            self.lookahead(request, request.num_computed_tokens, count),
+        )
     }
 
     pub(crate) fn restore_host_requests(&mut self, budget: usize) {
@@ -316,7 +312,7 @@ impl Scheduler {
                 self.host.requests.push_back(saved);
                 continue;
             }
-            let Some(tables) = self.reserve_load(&saved.request, &saved.tables, false, budget)
+            let Some(transfer) = self.reserve_load(&saved.request, &saved.tables, false, budget)
             else {
                 self.host.requests.push_back(saved);
                 continue;
@@ -325,7 +321,7 @@ impl Scheduler {
                 kind: CacheKind::Load,
                 snapshot: saved.snapshot,
                 request: Some(saved.request),
-                tables,
+                transfer: Some(transfer),
                 source: Some(saved.tables),
                 prefix: None,
                 cancelled: false,
@@ -365,7 +361,8 @@ impl Scheduler {
         if self.host.capacity == 0 {
             return false;
         }
-        let (fa, mamba, end) = self.kv.get_computed_blocks(request);
+        let hit = self.kv.find_prefix(request);
+        let end = hit.length;
         if end == 0 {
             return false;
         }
@@ -375,19 +372,13 @@ impl Scheduler {
         }) {
             return false;
         }
-        let tables = BlockTables {
-            fa,
-            mamba,
-            mamba_last_state: None,
-            mamba_read_source: None,
-        };
-        self.kv.pin_tables(&tables);
+        let transfer = self.kv.store_prefix(hit);
         let snapshot = self.host.id();
         self.host.submit(Pending {
             kind: CacheKind::Store,
             snapshot,
             request: None,
-            tables,
+            transfer: Some(transfer),
             source: None,
             prefix: Some(Prefix {
                 length: end,
@@ -423,7 +414,7 @@ impl Scheduler {
         request.num_computed_tokens = self.host.prefixes[index].prefix.length;
         request.prefill_start = request.num_computed_tokens;
         let source = self.host.prefixes[index].tables.clone();
-        let Some(tables) = self.reserve_load(&request, &source, true, budget) else {
+        let Some(transfer) = self.reserve_load(&request, &source, true, budget) else {
             return Some(false);
         };
         let entry = self.host.prefixes.remove(index).expect("index checked");
@@ -431,7 +422,7 @@ impl Scheduler {
             kind: CacheKind::Load,
             snapshot: entry.snapshot,
             request: Some(request),
-            tables,
+            transfer: Some(transfer),
             source: Some(entry.tables),
             prefix: Some(entry.prefix),
             cancelled: false,
@@ -502,10 +493,13 @@ impl Scheduler {
         Ok(())
     }
 
-    fn finish_cache(&mut self, mut job: Pending, status: CacheStatus) {
+    fn finish_cache(&mut self, mut job: Pending<P>, status: CacheStatus) {
         if job.kind == CacheKind::Drop {
             return;
         }
+        let tables = self
+            .kv
+            .finish_transfer(job.transfer.take().expect("store or load owner"));
         let complete = status == CacheStatus::Complete;
         if job.kind == CacheKind::Store {
             if let Some(request) = job.request {
@@ -521,7 +515,7 @@ impl Scheduler {
                     self.host.requests.push_back(HostRequest {
                         request,
                         snapshot: job.snapshot,
-                        tables: job.tables,
+                        tables,
                     });
                 } else {
                     self.host.blocked.insert(request.id);
@@ -537,11 +531,10 @@ impl Scheduler {
                     }
                 }
             } else {
-                self.kv.release_tables(&job.tables);
                 if complete {
                     self.host.prefixes.push_back(HostEntry {
                         snapshot: job.snapshot,
-                        tables: job.tables,
+                        tables,
                         prefix: job.prefix.expect("prefix store"),
                     });
                 } else if status == CacheStatus::Capacity {
@@ -551,7 +544,6 @@ impl Scheduler {
             return;
         }
         let mut request = job.request.take().expect("load request");
-        self.kv.release_tables(&job.tables);
         if complete && !job.cancelled {
             if let Some(prefix) = &job.prefix {
                 request.num_computed_tokens = prefix.length;

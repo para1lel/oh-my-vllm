@@ -187,3 +187,84 @@ fn foreign_owners_stale_steps_and_reused_slot_identities_are_rejected() {
     assert!(state.free_blocks("latent", 4).is_err());
     assert_eq!(foreign.free_blocks("latent", 0).unwrap(), 2);
 }
+
+#[test]
+fn selected_storage_keeps_only_authorized_old_and_new_blocks() {
+    let state = arena(9);
+    let accepted = state
+        .reserve(1, 41, &[request("latent", 0, 2)], &[])
+        .unwrap()
+        .into_storage();
+    let pending = state
+        .reserve(2, 41, &[request("window", 3, 3)], &[&accepted])
+        .unwrap();
+    let selected_blocks = [pending.blocks()[2].clone(), accepted.blocks()[0].clone()];
+    let selected = pending.select_storage(&selected_blocks).unwrap();
+    assert_eq!(selected.blocks(), &selected_blocks);
+    assert_eq!(selected.epoch(), 9);
+    drop(accepted);
+    assert_eq!(state.free_blocks("latent", 0).unwrap(), 1);
+    assert_eq!(state.free_blocks("window", 3).unwrap(), 0);
+    drop(pending);
+    assert_eq!(state.free_blocks("latent", 0).unwrap(), 2);
+    assert_eq!(state.free_blocks("window", 3).unwrap(), 2);
+
+    let old_only = selected.select(&selected_blocks[1..]).unwrap();
+    let empty = selected.select(&[]).unwrap();
+    assert!(empty.blocks().is_empty());
+    drop(selected);
+    assert_eq!(state.free_blocks("latent", 0).unwrap(), 2);
+    assert_eq!(state.free_blocks("window", 3).unwrap(), 3);
+    drop(old_only);
+    assert_eq!(state.free_blocks("latent", 0).unwrap(), 3);
+    drop(state);
+    assert_eq!(empty.epoch(), 9);
+    drop(empty);
+}
+
+#[test]
+fn invalid_selections_do_not_pin_valid_prefixes_or_change_source_owners() {
+    let state = arena(11);
+    let source = state
+        .reserve(1, 5, &[request("latent", 0, 2)], &[])
+        .unwrap()
+        .into_storage();
+    let unrelated = state
+        .reserve(1, 6, &[request("window", 1, 1)], &[])
+        .unwrap();
+    let pending = state
+        .reserve(2, 5, &[request("window", 3, 2)], &[&source])
+        .unwrap();
+    let valid = source.blocks()[0].clone();
+    let mut stale = valid.clone();
+    stale.generation += 1;
+    let mut unknown = valid.clone();
+    unknown.group = "missing".into();
+    let mut alias = valid.clone();
+    alias.group = "reuse".into();
+    let mut null = valid.clone();
+    null.slot = 0;
+    for invalid in [
+        valid.clone(),
+        stale,
+        unknown,
+        alias,
+        null,
+        unrelated.blocks()[0].clone(),
+    ] {
+        let selection = [valid.clone(), invalid];
+        assert!(source.select(&selection).is_err());
+        assert!(pending.select_storage(&selection).is_err());
+        assert_eq!(state.free_blocks("latent", 0).unwrap(), 1);
+        assert_eq!(state.free_blocks("window", 3).unwrap(), 1);
+    }
+    assert!(source.select(pending.blocks()).is_err());
+    assert!(pending.select_storage(&[]).unwrap().blocks().is_empty());
+    drop(pending);
+    drop(source);
+    assert_eq!(state.free_blocks("latent", 0).unwrap(), 3);
+    assert_eq!(state.free_blocks("window", 3).unwrap(), 3);
+    assert_eq!(state.free_blocks("window", 1).unwrap(), 2);
+    drop(unrelated);
+    assert_eq!(state.free_blocks("window", 1).unwrap(), 3);
+}

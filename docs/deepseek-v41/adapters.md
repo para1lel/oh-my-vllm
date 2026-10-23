@@ -86,8 +86,8 @@ The [phase plan](plan.md) specifies the subsequent extraction and regression wor
 The [Qwen policy](../../crates/zmq-worker/src/models/qwen38/policy.rs) owns model-specific defaults, vocabulary limits, speculation rules, and readiness checks.
 The shared CLI uses the selected policy for options that the caller does not supply.
 Explicit options must pass that policy's validation.
-The paired-cache scheduler uses the resolved block unit.
-This change keeps the current cache transaction format.
+The [Qwen cache policy](cache-policy.md) uses the resolved block unit.
+It keeps the existing Qwen cache transaction format.
 
 `WorkerConfig::default()` keeps the legacy Qwen preset for existing library callers.
 It does not select defaults for another model family.

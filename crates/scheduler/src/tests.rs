@@ -200,7 +200,7 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
     let store = scheduler.cache_operations().remove(0);
     assert_eq!(store.kind, CacheKind::Store);
     assert_eq!(store.request_id, Some(2));
-    assert!(store.mamba_blocks.contains(&read));
+    assert!(store.state.mamba_blocks.contains(&read));
     finish_transfer(&mut scheduler, store.transfer_id);
     while scheduler.running.iter().any(|r| r.id == 6) {
         let batch = scheduler.schedule();
@@ -229,7 +229,7 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
         let store = scheduler.cache_operations().remove(0);
         assert_eq!(store.kind, CacheKind::Store);
         assert_eq!(store.request_id, Some(2));
-        assert!(store.mamba_blocks.contains(&read));
+        assert!(store.state.mamba_blocks.contains(&read));
         scheduler
             .complete_cache(&[CacheCompletion {
                 transfer_id: store.transfer_id,
@@ -241,7 +241,10 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
         assert!(scheduler.schedule().scheduled.is_empty());
         let load = scheduler.cache_operations().remove(0);
         assert_eq!(load.kind, CacheKind::Load);
-        assert_eq!(load.mamba_blocks.len(), store.mamba_blocks.len());
+        assert_eq!(
+            load.state.mamba_blocks.len(),
+            store.state.mamba_blocks.len()
+        );
         scheduler
             .complete_cache(&[CacheCompletion {
                 transfer_id: load.transfer_id,
@@ -264,8 +267,8 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
     let batch = scheduler.schedule();
     assert_eq!(batch.scheduled[0].num_computed_tokens, 1566);
     assert_eq!(batch.scheduled[0].token_ids.len(), 2);
-    let read = batch.scheduled[0].prefix_state_slot.unwrap();
-    assert_ne!(batch.scheduled[0].mamba_block_table[1], read);
+    let read = batch.scheduled[0].state.prefix_state_slot.unwrap();
+    assert_ne!(batch.scheduled[0].state.mamba_block_table[1], read);
     let before_commit = scheduler.cache_resource_counts().4;
     assert!(
         scheduler

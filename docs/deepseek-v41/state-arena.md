@@ -47,6 +47,28 @@ Reusing a physical slot produces a different generation.
 `StateBlock` values identify group, rank, slot, and generation.
 Copies of these values do not own storage and cannot authorize pinning or release.
 
+## Storage selection
+
+`StorageLease::select` creates a lease for blocks held by its source lease.
+`StateTransaction::select_storage` can select from the transaction's read pins and write slots together.
+These methods do not release or change the source owners.
+The result owns one more reference for each selected block.
+
+The selected list must contain unique values from the authorized source blocks.
+Each group, rank, slot, and generation must agree with a source block.
+A shared-view group name cannot replace the root producer name in a block identity.
+The result keeps the supplied sequence.
+An empty selection is valid and holds no slots.
+
+The methods validate all selected identities and reference counts before they change any count.
+Reference-count validation and pinning use one arena lock.
+An invalid selection keeps its source owners unchanged and does not pin a partial selection.
+
+These operations supply storage ownership.
+They do not prove model acceptance or device completion.
+The caller must keep an executing transaction alive until all asynchronous read and write operations are completed.
+The caller must validate model results before accepted-state publication.
+
 ## Lease lifetime
 
 `StorageLease` has private ownership fields and no `Clone` or deserialization implementation.
@@ -74,6 +96,7 @@ A poisoned arena rejects further allocation and does not recycle possibly incons
 ## Checks
 
 The small Rust checks exercise cross-group allocation failure, compatible shared views, read pin lifetime, cancellation, stale steps, and slot generations.
+They also check mixed read/write selection, lease lifetime, and invalid selections without partial pinning.
 Existing Qwen paired-cache tests stay unchanged.
 These checks do not prove distributed execution, GPU completion, prefix restoration, or service capacity.
 

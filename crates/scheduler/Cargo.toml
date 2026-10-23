@@ -10,3 +10,6 @@ rustc-hash.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+oh-my-vllm-model-contract = { path = "../model-contract" }

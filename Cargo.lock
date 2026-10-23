@@ -685,6 +685,7 @@ name = "oh-my-vllm-scheduler"
 version = "0.1.0"
 dependencies = [
  "oh-my-vllm-kv-cache",
+ "oh-my-vllm-model-contract",
  "rustc-hash",
  "serde",
  "thiserror 2.0.20",

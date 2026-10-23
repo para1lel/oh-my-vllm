@@ -5,6 +5,8 @@ use oh_my_vllm_model_contract::{CacheSchema, CacheSource, ContractError, Paralle
 
 use crate::BlockPool;
 
+mod selection;
+
 type PoolKey = (String, u32);
 
 #[derive(Debug, thiserror::Error)]
