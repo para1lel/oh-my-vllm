@@ -14,9 +14,11 @@ Qwen 在一张 B200 上提供推理. DeepSeek 服务推理尚未启用.
 随后最小化包含零散后缀的请求数. 额外 decode 验证使用剩余预算.
 
 [DeepSeek 计划](models/deepseek_v41/plan.zh.md)跟踪尚未完成的模型工作.
-已实现独立 CUDA 算子, rank 自有权重, 共享专家输入, 文本旋转系数表和共享 pinned Engram 加载器.
+已实现独立 CUDA 算子, rank 自有权重, 文本旋转系数表和共享 pinned Engram 存储.
 尚未启用的块通过预先准备的 TP4, TEP4 和 DEP4 collective 组合 HC, attention, 归一化和 MoE.
 DEP4 MoE 的 gate 和共享专家仅在各请求所有者本地计算.
+Engram 组合连接 host 查找, 投影和残差混合.
+源压缩器连接投影, 调用方提供的完整分组, 归一化, RoPE 和 FP4 编码.
 
 HC 直接使用已完成的 FP32 attention 和 MoE 结果, 无需单独的转换 kernel.
 启用面向用户的推理前, 必须闭合复合数值限值和完整分配边界.
@@ -24,7 +26,8 @@ HC 直接使用已完成的 FP32 attention 和 MoE 结果, 无需单独的转换
 
 ## 下一步
 
-- 完成未启用的 DeepSeek 目标计算, 同时继续数值和分配检查.
+- 解决先前 GPU 计算之后注册 host 表时出现的内存检查失败.
+- 使用共享临时存储完成未启用的 DeepSeek 目标计算, 同时继续数值和分配检查.
 - 集成物理状态和 DSpark, 然后完成容量与功能验收.
 - 正确性验收后, 运行已批准的 DeepSeek HTTP 和 AgentX 矩阵.
 

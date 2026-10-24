@@ -15,7 +15,10 @@ Complete Engram tables load into one sealed shared store.
 Rank weights use bounded loading, exact startup conversions, and aligned storage for native projection layouts.
 Disabled rank-local [blocks](../../../python/oh_my_vllm/models/deepseek_v41/block.py) compose HC, attention, normalization, and MoE.
 Prepared [block collectives](../../../python/oh_my_vllm/models/deepseek_v41/block_collectives.py) connect TP4, TEP4, and DEP4 computation.
-The caller supplies Engram and prediction-layer inputs, physical KV, row identities, and all-rank completion checks.
+
+[Engram composition](../../../python/oh_my_vllm/models/deepseek_v41/engram_runtime.py) uses the shared host table, encoded projection, and residual blending.
+[Source compressors](../../../python/oh_my_vllm/models/deepseek_v41/compressor.py) supply normalized latents before RoPE and FP4 encoding.
+The caller supplies hashes, compression groups, prediction-layer inputs, physical KV, row identities, and all-rank completion checks.
 
 Complete model and physical-state integration are pending.
 Full-model computation and Phases 4-8 are pending.

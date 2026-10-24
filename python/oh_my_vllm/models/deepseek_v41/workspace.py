@@ -7,7 +7,14 @@ from contextlib import ExitStack, contextmanager
 from ...operators.projection.workspace import require_eager
 
 _FAILED_PREPARATIONS = []
-_ELEMENT_BYTES = {"uint8": 1, "bfloat16": 2, "float32": 4, "int32": 4, "uint64": 8}
+_ELEMENT_BYTES = {
+    "uint8": 1,
+    "bfloat16": 2,
+    "float32": 4,
+    "int32": 4,
+    "int64": 8,
+    "uint64": 8,
+}
 
 
 def _span(value):

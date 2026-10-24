@@ -15,7 +15,10 @@ DeepSeek 服务推理尚未启用.
 Rank 权重使用有界加载, 精确启动转换和 native 投影布局的对齐存储.
 尚未启用的 rank 本地[块](../../../python/oh_my_vllm/models/deepseek_v41/block.py)组合 HC, attention, 归一化和 MoE.
 预先准备的[块 collective](../../../python/oh_my_vllm/models/deepseek_v41/block_collectives.py) 连接 TP4, TEP4 和 DEP4 计算.
-调用方提供 Engram 和预测层输入, 物理 KV, 行身份以及全部 rank 的完成检查.
+
+[Engram 组合](../../../python/oh_my_vllm/models/deepseek_v41/engram_runtime.py)使用共享 host 表, 编码投影和残差混合.
+[源压缩器](../../../python/oh_my_vllm/models/deepseek_v41/compressor.py)在 RoPE 和 FP4 编码前提供已归一化的 latent.
+调用方提供哈希, 压缩分组, 预测层输入, 物理 KV, 行身份以及全部 rank 的完成检查.
 
 完整模型和物理状态集成仍待完成.
 完整模型计算与阶段 4-8 尚待完成.
