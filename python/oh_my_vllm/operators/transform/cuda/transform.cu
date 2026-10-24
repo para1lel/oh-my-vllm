@@ -3,6 +3,20 @@
 
 namespace {
 
+__global__ void widen_kernel(const uint16_t *values, uint32_t *output, uint8_t *status) {
+  int row = blockIdx.x, invalid = 0;
+  for (int column = threadIdx.x; column < 5120; column += blockDim.x) {
+    uint16_t word = values[row * 5120 + column];
+    bool nonfinite = (word & 0x7f80) == 0x7f80;
+    invalid |= nonfinite;
+    // Integer storage preserves signed zero and subnormals without floating arithmetic.
+    output[row * 5120 + column] = nonfinite ? 0u : uint32_t(word) << 16;
+  }
+  int row_invalid = __syncthreads_or(invalid);
+  if (threadIdx.x == 0)
+    status[row] = row_invalid ? 1 : 0;
+}
+
 __device__ float warp_sum(float value) {
   for (int offset = 16; offset; offset >>= 1)
     value += __shfl_xor_sync(0xffffffff, value, offset);
@@ -57,6 +71,25 @@ void values_contract(TensorView values, TensorView output) {
 }
 
 } // namespace
+
+void widen(TensorView values, TensorView output, TensorView status) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 384);
+  int rows = values.size(0);
+  tensor_contract(values, values, kDLBfloat, 16, {rows, 5120});
+  tensor_contract(output, values, kDLFloat, 32, {rows, 5120});
+  tensor_contract(status, values, kDLUInt, 8, {rows});
+  if (!rows)
+    return;
+  disjoint(values, output);
+  disjoint(values, status);
+  disjoint(output, status);
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  widen_kernel<<<rows, 256, 0, stream>>>(static_cast<const uint16_t *>(values.data_ptr()),
+                                         static_cast<uint32_t *>(output.data_ptr()),
+                                         static_cast<uint8_t *>(status.data_ptr()));
+  check_cuda(cudaGetLastError());
+}
 
 void rms(TensorView values, TensorView weight, TensorView output, double epsilon) {
   values_contract(values, output);

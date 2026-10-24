@@ -95,8 +95,12 @@ Reject nonzero quantization status before state commit.
 
 `load_startup_promotion()` contains all finite FP8/UE8M0 pairs and all finite BF16 words.
 It also contains overflow inputs, invalid BF16 words, and original and synthetic dense32 scales.
-Conversion uses ties-to-even rounding, keeps signed zero, and rejects nonfinite outputs.
+Startup conversion uses ties-to-even rounding, keeps signed zero, and rejects nonfinite outputs.
 External generation metadata has SHA256 `b341dd5dcf26691c104757b29b7cd6d1ea1eecf0f5429f3f7638e5f29d7e0dcb`.
+
+The [transform checker](../../development/operators/check_deepseek_transform.py) reuses these BF16 values for exact device conversion with 0, 1, 128, and 384 rows.
+Nonfinite inputs become positive zero and set row status to one. Reject nonzero status before state commit.
+Eager and Graph checks cover output replacement and status reset.
 
 ## Unquantized projections
 

@@ -95,8 +95,12 @@ Lookup 和投影是独立边界.
 
 `load_startup_promotion()` 包含全部有限 FP8/UE8M0 组合和全部有限 BF16 位模式.
 它还包含溢出输入, 非法 BF16 位模式, 以及原始和合成 dense32 scales.
-转换使用 ties-to-even 舍入, 保留有符号零, 并拒绝非有限输出.
+启动转换使用 ties-to-even 舍入, 保留有符号零, 并拒绝非有限输出.
 外部生成元数据的 SHA256 为 `b341dd5dcf26691c104757b29b7cd6d1ea1eecf0f5429f3f7638e5f29d7e0dcb`.
+
+[变换检查器](../../development/operators/check_deepseek_transform.py) 复用这些 BF16 值, 检查 0, 1, 128 和 384 行的精确设备转换.
+非有限输入变为正零, 并将所在行的状态设为一. 在状态提交前拒绝非零状态.
+Eager 和 Graph 检查覆盖输出替换及状态重置.
 
 ## 未量化投影
 

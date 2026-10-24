@@ -16,6 +16,11 @@ class Plan:
 
     @property
     def storage(self):
+        if self.kind == "widen":
+            return (
+                ((self.rows, self.width), "float32"),
+                ((self.rows,), "uint8"),
+            )
         shape = (
             (self.rows, self.heads, self.width)
             if self.kind == "rope"
@@ -44,6 +49,9 @@ def make_plan(*, kind, rows, width, heads=1, epsilon=None, inverse=False):
             or epsilon is not None
         ):
             raise ValueError("unsupported RoPE width or epsilon")
+    elif kind == "widen":
+        if width != 5120 or heads != 1 or epsilon is not None or inverse:
+            raise ValueError("unsupported widening width or parameters")
     else:
         raise ValueError("unknown transform kind")
     return Plan(kind, rows, width, heads, epsilon, inverse)
