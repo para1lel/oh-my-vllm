@@ -1,25 +1,26 @@
 # oh-my-vllm
 
-本程序提供在单张 NVIDIA B200 上运行 Qwen3.8-27B-FP8 的 Rust 服务.
-Python worker 加载模型, 执行文本, 图片和视频推理.
-支持普通解码或 MTP4, 并提供约束解码.
+本推理框架使用 Rust 实现服务, 调度和逻辑状态.
+Python 模型适配器通过 ZMQ DEALER 和 msgpack 调用原生 CUDA 算子.
+各适配器负责自己的模型配置, 计算, 缓存布局和 token 语法.
 
 安装, 命令和 HTTP 请求见[服务指南](docs/serving.zh.md).
 服务提供 Chat 和 Responses API, 流式输出, 工具和结构化输出.
-[Host KV cache](docs/kv-offload.zh.md) 使用预留的 pinned 内存, 支持请求换出和前缀复用.
 
 [English](README.md) | [贡献流程](CONTRIBUTING.zh.md)
 
-## 执行和检查
+## 模型适配器
 
-Worker 使用 [GPU 执行规则](docs/execution.zh.md)管理算子调度和资源所有权.
-[全模型数值检查](docs/operators/evaluation.zh.md)将固定端点与直接 PyTorch FP64 计算进行比较.
-[算子检查](docs/operators/microbench.zh.md)使用仓库内的 fixture 和固定的理论延迟倍率门槛.
+| 适配器 | 执行 | 状态和文档 |
+|---|---|---|
+| Qwen3.8-27B-FP8 | 单张 B200, 普通解码和 MTP4, 总计 262144 tokens | [已实现的适配器](docs/models/qwen38/README.zh.md), [最新 HTTP 结果](docs/models/qwen38/results.zh.md) |
+| DeepSeek-V4.1-Flash | 四张 B200, TP4/TEP4/DEP4, DSpark5, 总计 1048576 tokens | [适配器设计](docs/models/deepseek_v41/README.zh.md), [实施计划](docs/models/deepseek_v41/plan.zh.md); 服务推理尚未启用 |
 
-## 测量和计划扩展
+适配器具有相同的架构地位. 实现和验收状态可以不同.
+未知或尚未实现的模型导致启动错误.
 
-[Qwen 结果](docs/deepseek-v41/qwen-results.zh.md)包含最新完成的 HTTP 矩阵及其测量身份.
-测量命令和定义见 [HTTP 流程](docs/performance.zh.md)和 [AgentX 流程](docs/agentx.zh.md).
+## 开发
 
-[DeepSeek 计划](docs/deepseek-v41/plan.zh.md)给出 `nightly` 上的实施阶段和当前状态.
-DeepSeek 推理尚未启用.
+使用[适配器契约](docs/adapters.zh.md), [GPU 执行规则](docs/execution.zh.md)和[测试范围](docs/testing.zh.md).
+模型目录包含各自的数学定义, 固定数值限值, 测量流程和最新完整结果.
+[交接](docs/handoff.zh.md)给出当前工作和下一步.

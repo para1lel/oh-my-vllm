@@ -35,7 +35,7 @@ Use a text anchor that occurs only once in the source file for each source line 
 The documentation hook updates the line numbers.
 Put host paths and addresses in ignored local configuration.
 
-Use the [nightly reporting policy](deepseek-v41/validation.md) for approved performance documents.
+Use the [reporting policy](testing.md#reporting) for approved performance documents.
 Do not add unrelated test results, raw logs, or delivery histories.
 
 Get a document review from another agent. Examine the word meanings, parts of speech, and translation.

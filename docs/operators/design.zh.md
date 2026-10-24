@@ -2,14 +2,14 @@
 
 本文给出当前算子结构.
 [交接说明](../handoff.zh.md)给出实现状态.
-[运行时契约](../requirements.zh.md), [模型契约](model.zh.md)和 [GPU 执行规则](../execution.zh.md)规定行为.
+[运行时契约](../requirements.zh.md), [适配器契约](../adapters.zh.md)和 [GPU 执行规则](../execution.zh.md)规定行为.
 
 ## 目的
 
 将一个算子的接口, 执行计划, 临时存储和 CUDA 实现放在同一个包中.
 模型按依赖顺序调用完整子层.
 算子可以修改内部 kernel, 而无需修改模型调用处.
-算子性能必须满足 [microbench 契约](microbench.zh.md)中的固定理论延迟倍率门槛.
+算子性能必须满足 [模型验收范围](../testing.zh.md#模型验收)中的固定理论延迟倍率门槛.
 
 此实现使用 CUDA C++ 和 CUTLASS.
 [运行时契约](../requirements.zh.md)也允许 CuTe DSL.
@@ -143,45 +143,14 @@ Worker 不复制算子分派阈值, 也不通过查看实现字段来选择准�
 
 ## Serving 边界
 
-FA, GDN, FFN 和 vision 接口提供完整子层.
-[阶段清单](../../python/oh_my_vllm/operators/specification.py)给出内部张量契约和计算.
-这些阶段遵循[模型契约](model.zh.md)和 [GPU 执行规则](../execution.zh.md).
-原生算子提供下表中的各个完整边界.
-计时包含该边界的全部内部阶段.
+算子接口定义完整计算操作, 不强制使用独立 kernel 启动.
+完整操作有收益时, 将小规模归一化, 激活, 量化或位置计算融合到 producer 或 consumer.
+小行数与 prefill 可以选择不同实现.
+已准备的布局和设备元数据可以在相关操作之间复用.
 
-| Serving 算子 | 完整计时操作 |
-|---|---|
-| `gdn` | GDN 输入, recurrent 或 prefill 计算及输出. |
-| `fa` | FA 输入, attention, gate 及输出投影. |
-| `ffn` | Gate/up 投影, activation 及 down 投影. |
-| `output.hidden` | 最终归一化及 hidden 状态导出, 不进行词表投影. |
-| `output.distribution` | 最终归一化, 词表投影, 惩罚, 约束和所需概率分布. |
-| `output.sample` | 分布计算和 token 选择. |
-| `mtp.context` | MTP 输入投影及 KV-only 变体的 FA 输入. |
-| `mtp.draft` | 使用共享组件完成适用的 MTP 输入投影, 完整的一层 FA, FFN 及采样. |
-| `mtp.accept` | 接受判断, 拒绝采样和候选状态 slot 选择. |
-| `vision` | 一个视觉层. 首层包含 patch 输入. 末层包含空间合并. |
-
-能降低完整操作耗时时, 将 producer 计算融合到 GEMM 输入加载或输出存储中.
-小型 normalization, activation, quantization 和位置操作可以在其 producer 或 consumer kernel 中执行.
-必要时分别使用小行数与 prefill 实现.
-[GDN 入口](../../python/oh_my_vllm/operators/gdn/cuda/gdn.cu)选择 recurrent 与 prefill 实现.
-数值检查使用独立的 PyTorch FP64 全模型参考.
-
-各输出接口共享必要的最终归一化计算.
-Hidden 导出支持其完整输入行数, 独立于词表投影所选择的较少行数.
-分布接口可以在不选择 token 的情况下执行.
-这些语义接口可以使用融合的物理执行.
-
-MTP 包包含其组合融合实现, 并控制其存储布局.
-组件接口规定兼容的输入, 输出, 存储使用方式和生命周期.
-它不根据其他算子的私有 buffer 下标推断兼容性, 也不复制该算子的完整 scratch 布局.
-
-MTP acceptance 返回候选结果, 不返回已发布状态.
-Worker 先对返回的 token 应用请求停止条件.
-随后由停止条件处理后的接受数量通过现有状态提交过程控制状态选择.
-处理停止条件前, GPU 候选 slot 不能替代这一决策.
-保持 target, proposal 和 acceptance 各域的 RNG 状态与计数器规则.
+语义输出, 私有状态和资源生命周期必须保持明确.
+模型适配器在候选状态发布前处理停止条件并选择已接受状态.
+参见 [Qwen 边界](../models/qwen38/operators.zh.md#serving-边界)和 [DeepSeek 契约](../models/deepseek_v41/model.zh.md).
 
 ## Native 构建
 
@@ -189,25 +158,18 @@ Worker 先对返回的 token 应用请求停止条件.
 目录变化还必须同步修改 include 依赖发现和源码指纹.
 保留完整的依赖哈希, 不可变二进制身份和 native library 身份检查.
 推理加载器不导入开发工具, 也不调用编译器.
-七个 Qwen native 库不定义公共接口.
+原生库数量不定义公共接口.
 
 仅当实现有经证实的理由时才改变编译边界.
 源码包, 语义接口, native library 和 kernel launch 是不同的边界.
 
 ## 变更验收
 
-随对应实现变更更新[阶段清单](../../python/oh_my_vllm/operators/specification.py)和上述 serving 边界.
-将私有 buffer 和 kernel 选择规则保留在各自的算子包内.
+与实现一起更新相关模型契约.
+私有缓冲区和 kernel 选择规则保留在算子包中.
+使用共享[测试范围](../testing.zh.md)和所选模型的数值与性能限值.
+涉及推测, 媒体或长上下文时执行相关固定用例.
+设备内存或同步行为改变时使用 Compute Sanitizer.
 
-使用[测试范围](../testing.zh.md)和[数值流程](evaluation.zh.md).
-局部数值, 状态和性能检查使用[算子 microbench 设计](microbench.zh.md).
-变更影响 MTP, vision 或长上下文时, 扩展全模型输入.
-设备内存或同步行为变化时, 使用 Compute Sanitizer.
+将测量记录放在仓库外. 完整矩阵完成后更新模型结果文档.
 新增测试遵循[贡献流程](../../CONTRIBUTING.zh.md).
-
-使用相同负载设置运行全部 24 种 [HTTP 配置](../performance.zh.md), 进行集成检查.
-应用固定算子性能门槛, 不与旧构建或旧计时比较.
-不确定性使门槛判定无法完成时, 增加测量.
-新的融合加速特定负载时, 检查其他配置.
-计时产物保存在仓库外.
-完整矩阵完成后更新 [Qwen 结果](../deepseek-v41/qwen-results.zh.md).

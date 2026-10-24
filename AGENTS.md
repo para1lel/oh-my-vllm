@@ -1,7 +1,7 @@
 # Project principles
 
-Build the Qwen3.8-27B-FP8 service for one NVIDIA B200.
-Use the [nightly proposal](docs/deepseek-v41/design.md) for the planned DeepSeek extension.
+Build a common inference framework with model adapters.
+Keep Qwen and DeepSeek as peer adapters. Put model-specific rules in their [model directories](docs/models).
 Use Rust for the service, the scheduler, and the logical KV cache.
 
 Use Python for GPU computation. Use a ZMQ DEALER socket and msgpack for process communication.
@@ -9,7 +9,7 @@ Obey the [runtime contracts](docs/requirements.md).
 
 Read the Git status, the [handoff](docs/handoff.md), and the applicable directory instructions before work.
 Obey [CONTRIBUTING.md](CONTRIBUTING.md).
-Codex uses `nightly` for this extension.
+Codex uses `nightly`.
 Use the [GPU execution rules](docs/execution.md) for scheduling and resource ownership.
 
 Keep the root guides short. Put local instructions in the related directory.
@@ -18,7 +18,7 @@ Write all English documents in ASD-STE100. Supply a full Chinese translation for
 Use clear names and small functions. Add a comment only when the code cannot give the necessary information.
 Keep the tests few. Before you add a test, tell the user why it is necessary.
 
-Do the applicable tests in the repository. Use the [nightly reporting policy](docs/deepseek-v41/validation.md) for performance documents.
+Do the applicable tests in the repository. Use the [reporting policy](docs/testing.md#reporting) for performance documents.
 Do not put unrelated test results in project files.
 Use the [test scope](docs/testing.md).
 

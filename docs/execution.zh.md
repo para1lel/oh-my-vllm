@@ -9,7 +9,7 @@ Python 通过 CUDA 算子及现有 ZMQ DEALER 和 msgpack 边界执行模型.
 Worker 为每条 Execute 消息选择一次执行方式.
 只要任一已调度行包含 prefill, 该 Execute 的所有分片都使用 Eager 执行.
 仅含 decode 的 Execute 使用 CUDA Graph 录制和重放.
-此规则也控制采样, MTP context, proposal 和 acceptance.
+此规则也控制采样, 推测 context, proposal 和 acceptance.
 Vision 和权重准备使用 Eager 执行.
 
 Eager 和 CUDA Graph 执行使用相同的 native 算子.
@@ -18,11 +18,8 @@ CUDA kernel 可以融合操作并在内部使用矩阵 tile.
 
 ## 依赖 kernel 启动
 
-小规模 FFN 和 GDN 操作在归一化与输入投影之间使用 [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html).
-它们也在输出量化与输出投影之间使用 PDL.
-65 到 1024 行的 FFN prefill 在这两个边界使用 PDL.
-其融合输入投影包括激活和输出量化.
-更大的 prefill 操作保留串行启动.
+只在算子契约支持且完整操作有收益时使用 PDL.
+具体 kernel 边界和行数阈值属于模型算子契约.
 
 Stream capture 将这些选定的依赖记录在 CUDA Graph 中.
 Consumer 可以在 producer 完成执行前准备自身存储并读取固定权重.
@@ -80,5 +77,5 @@ Context 复用取决于算子 plan, 不取决于 target workspace 地址.
 
 ## 数值与状态契约
 
-遵守[模型契约](operators/model.zh.md)及[全模型数值评估](operators/evaluation.zh.md).
+遵守[模型契约](models/qwen38/model.zh.md)及[全模型数值评估](models/qwen38/evaluation.zh.md).
 保留[测试范围](testing.zh.md)中的服务, graph 资源, 内存安全和状态所有权检查.

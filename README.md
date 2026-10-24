@@ -1,25 +1,26 @@
 # oh-my-vllm
 
-This program supplies a Rust service for Qwen3.8-27B-FP8 on one NVIDIA B200.
-The Python worker loads the model and runs text, image, and video inference.
-Use ordinary decode or MTP4, with constrained decoding.
+This inference framework uses Rust for service, scheduling, and logical state.
+Python model adapters run native CUDA operators through ZMQ DEALER and msgpack.
+Each adapter owns its model configuration, computation, cache layout, and token syntax.
 
 Use the [service guide](docs/serving.md) for installation, commands, and HTTP requests.
 The service supplies Chat and Responses APIs, streaming, tools, and structured output.
-The [host KV cache](docs/kv-offload.md) supports request offload and reusable prefixes with reserved pinned memory.
 
 [中文](README.zh.md) | [Contribution procedure](CONTRIBUTING.md)
 
-## Execution and checks
+## Model adapters
 
-The worker uses the [GPU execution rules](docs/execution.md) for operator scheduling and resource ownership.
-The [full-model numerical checks](docs/operators/evaluation.md) compare fixed endpoints against direct PyTorch FP64 computation.
-The [operator checks](docs/operators/microbench.md) use repository fixtures and fixed theoretical-latency ratio limits.
+| Adapter | Execution | Status and documents |
+|---|---|---|
+| Qwen3.8-27B-FP8 | One B200, ordinary decode and MTP4, 262144 total tokens | [Implemented adapter](docs/models/qwen38/README.md), [latest HTTP results](docs/models/qwen38/results.md) |
+| DeepSeek-V4.1-Flash | Four B200 GPUs, TP4/TEP4/DEP4, DSpark5, 1048576 total tokens | [Adapter design](docs/models/deepseek_v41/README.md), [implementation plan](docs/models/deepseek_v41/plan.md). Service inference is not enabled |
 
-## Measurements and planned extension
+The adapters have the same architectural role. Their implementation and acceptance status can differ.
+Unknown or unimplemented models cause startup errors.
 
-The [Qwen results](docs/deepseek-v41/qwen-results.md) contain the last completed HTTP matrix and its measurement identities.
-Use the [HTTP procedure](docs/performance.md) and [AgentX procedure](docs/agentx.md) for measurement commands and definitions.
+## Development
 
-The [DeepSeek plan](docs/deepseek-v41/plan.md) gives the implementation phases and current state on `nightly`.
-DeepSeek inference is not enabled.
+Use the [adapter contract](docs/adapters.md), [GPU execution rules](docs/execution.md), and [test scope](docs/testing.md).
+Model directories contain their mathematics, fixed numerical limits, measurement procedures, and latest complete results.
+The [handoff](docs/handoff.md) gives current work and next actions.

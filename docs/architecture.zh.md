@@ -1,77 +1,62 @@
 # 进程边界
 
-## Rust
+## 控制和状态
 
-[KV crate](../crates/kv-cache/src/lib.rs) 负责块标识, 引用计数, LRU 和前缀复用.
-[调度器](../crates/scheduler/src/lib.rs) 负责请求准入, decode 优先级, prefill 分块, 抢占和推测 token 的状态提交.
+[服务](../crates/zmq-worker/src/lib.rs)负责 CLI, HTTP API, worker 生命周期和传输.
+[调度器](../crates/scheduler/src/lib.rs)负责准入, 请求队列, token 预算, 抢占和经过验证的状态提交.
+[缓存策略](cache-policy.zh.md)提供模型专属分配, 前缀查询, 状态分配和恢复.
+[KV crate](../crates/kv-cache/src/lib.rs) 提供逻辑存储和所有权机制.
 
-[服务 crate](../crates/zmq-worker/src/lib.rs) 负责 CLI, HTTP API, worker 生命周期及传输.
+调度遵循[运行时契约](requirements.zh.md)中的优先级.
+调度器验证全部输出行后才修改已接受历史或发布前缀.
+事务失败不能发布未经验证的前缀.
+抢占保留已接受历史, 丢弃新草稿.
+物理状态释放还取决于设备和传输完成状态.
 
-调度器先选择 decode 请求, 再选择 prefill 请求.
-它在 prefill 请求之间分配剩余 token 预算, 并按 cache 边界调整.
+## 模型执行
 
-每个调度步骤预留 FA 和 GDN 状态.
-调度器先验证全部输出行, 再更新 token 历史或发布前缀.
+[Bridge](../python/oh_my_vllm/worker/zmq_bridge.py) 负责 ZMQ DEALER 和 msgpack 帧.
+[注册表](../python/oh_my_vllm/models/registry.py)在 GPU 导入前选择模型适配器.
+各适配器通过[公共契约](adapters.zh.md)提供计算, 编解码器, 物理缓存和已接受状态选择.
+显式 `stub` 后端仅提供服务测试行为.
 
-事务出错后, 调度器不能发布未验证的前缀.
-被抢占请求保留已接受的历史. 抢占会移除新 drafts.
-
-## Python
-
-[bridge](../python/oh_my_vllm/worker/zmq_bridge.py) 负责 DEALER socket 和 msgpack 帧.
-[注册表](../python/oh_my_vllm/models/registry.py)在导入 GPU 后端前选择已实现的模型适配器.
-[Qwen worker](../python/oh_my_vllm/models/qwen38/inference.py) 负责 token 准备和模型计算.
-[占位实现](../python/oh_my_vllm/worker/placeholder.py) 仅用于 `--model stub`.
-[适配器指南](deepseek-v41/adapters.zh.md)规定模型系列所有权和共享机制.
-
-Rust 保持逻辑 cache 所有权. Python 存储张量及私有 recurrent state.
-Worker 选择已接受的 state slot, 不为接受 token 而复制整个 recurrent state.
-
-Target 与 proposal 分布保存在独立存储中, 直至验证完成.
-约束状态只随已接受的 token 改变.
-
-模型权重常驻 GPU. Eager 路径在语言层之间复用 forward buffer.
-每个已录制的 graph 保留其算子引用的缓冲区.
-必要时, Worker 将较大的调度步骤拆为原生 batch.
+模型权重遵循适配器的设备和主机放置计划.
+按顺序执行的层可以复用临时缓冲区.
+录制的 graph 保持全部引用的缓冲区和资源所有者.
+较大的调度步骤可以使用较小的原生 batch.
 [执行规则](execution.zh.md)为完整 Execute 消息选择 Eager 或 CUDA Graph 执行.
 
-FA 与 GDN state pool 具有独立容量.
-媒体请求使用独立的前缀 cache 标识.
+在验证完成前, target 和 proposal 分布使用独立存储.
+只有已接受 token 修改约束和请求历史.
+最后一块之前的 prefill chunk 不返回输出 token.
+完成的生成步骤返回已接受 proposal 和一个 target token, 并遵守请求停止条件.
+新 proposal 不属于已接受历史.
 
-[协议类型](../crates/zmq-worker/src/protocol.rs) 给出 Init, Register, Prepare, Execute, Abort, Stats 和 Shutdown 消息的字段.
-回复使用对应 RPC ID. 每个已调度请求有一行结果.
-
-最终分块之前的 prefill 分块不返回输出 token.
-最终 prefill 或 decode 步骤返回已接受 drafts 加一个 target token.
-
-已接受的历史不包含新 drafts.
+[单 worker 协议](../crates/zmq-worker/src/protocol.rs)通过 RPC ID 和已调度请求结果关联回复.
+[Rank 协议](distributed.zh.md)增加组 epoch, 步骤, 事务和全 rank 完成检查.
+模型专属 client 将逻辑分配转换为选定的 wire 布局.
 
 ## GPU 计算
 
 | 部分 | 职责 |
 |---|---|
-| Python 模型 | 按依赖顺序调用算子并管理 tensor 存储 |
-| Native 算子 | 按模型的精度和私有状态规则计算数值 |
-| Device 资源 | 管理 stream, CUDA Graph 录制, 重放和释放 |
+| Python 适配器 | 按依赖顺序调用算子并拥有模型状态 |
+| 原生算子 | 按选定精度和状态规则计算数值 |
+| 设备资源 | 分配存储并管理 stream, Graph, lease 和释放 |
 
-[模型](../python/oh_my_vllm/models/qwen38/model.py)在全部语言层调用 [serving 算子](operators/design.zh.md#serving-边界).
-Eager 执行和 CUDA Graph 录制使用相同的 native 算子.
-[Device wrapper](../python/oh_my_vllm/operators/runtime/device.py) 提供 graph 资源.
-每个 workspace 保留其权重, cache, tensor 和资源 lease, 直到 graph 关闭.
-FP8 转换和 tensor 检查在算子类别之间共享.
+[算子设计](operators/design.zh.md)将语义接口与 kernel 和库边界分离.
+Eager 执行和 Graph 录制使用相同的原生算子.
+完整操作有收益且所有权规则成立时, 融合可以跨内部阶段进行.
 
-## 失败与资源
+## 失败和资源
 
-服务在读取 body 或复制已存储历史前, 先预留请求数量和字节容量.
-流式缓冲和已存储响应都有数量及字节限制.
+服务在读取请求体或复制存储历史前预留请求数量和字节容量.
+Stream 和已存响应都有数量及字节限制.
+取消在安全操作边界释放状态.
+Worker 失败会使相关请求失败, HTTP listener 继续运行.
 
-取消操作在操作边界释放请求状态.
-worker 故障终止受影响的请求. HTTP listener 保持运行.
-
-恢复时先移除一个 epoch 的 worker 和逻辑 cache 标识, 再接纳下一个 epoch 的请求.
-服务不重放已经输出的内容或工具调用.
-
-worker 清理会停止其进程组, 并移除自己创建的 IPC 路径.
-请求, 步骤和关闭期限的范围不同.
-
-命令和 worker 限制见[服务指南](serving.zh.md).
+恢复先移除旧 worker 和逻辑身份, 再在新 epoch 中准入.
+恢复不重放输出或工具调用.
+清理停止自有进程组并移除其 IPC 路径.
+请求, 步骤和关闭截止时间具有不同范围.
+命令和限制见[服务指南](serving.zh.md).

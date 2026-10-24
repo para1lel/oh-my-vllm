@@ -2,14 +2,14 @@
 
 This document gives the current operator structure.
 The [handoff](../handoff.md) gives the implementation status.
-The [runtime contracts](../requirements.md), [model contract](model.md), and [GPU execution rules](../execution.md) control behavior.
+The [runtime contracts](../requirements.md), [adapter contract](../adapters.md), and [GPU execution rules](../execution.md) control behavior.
 
 ## Purpose
 
 Keep the interface, execution plan, temporary storage, and CUDA implementation for an operator in one package.
 The model calls complete sublayers in dependency sequence.
 An operator can change its internal kernels without changes to the model call site.
-Operator performance must meet the fixed theoretical-latency ratio limits in the [microbench contract](microbench.md).
+Operator performance must meet the fixed theoretical-latency ratio limits in the [model acceptance scope](../testing.md#model-acceptance).
 
 Use CUDA C++ and CUTLASS for this implementation.
 The [runtime contracts](../requirements.md) also allow CuTe DSL.
@@ -143,45 +143,14 @@ The [Graph resource rules](../execution.md#graph-resources) control failed recor
 
 ## Serving boundaries
 
-FA, GDN, FFN, and vision interfaces supply complete sublayers.
-The [stage inventory](../../python/oh_my_vllm/operators/specification.py) gives their internal tensor contracts and computation.
-These stages follow the [model contract](model.md) and [GPU execution rules](../execution.md).
-Native operators supply each complete boundary below.
-Timing includes all internal stages of that boundary.
+Operator interfaces define complete computation, not separate kernel launches.
+Fuse small normalization, activation, quantization, or position work into producers or consumers when the complete operation benefits.
+Small-row and prefill shapes can select different implementations.
+Related operations can reuse prepared layouts and device metadata.
 
-| Serving operator | Full measured operation |
-|---|---|
-| `gdn` | GDN input, recurrent or prefill computation, and output. |
-| `fa` | FA input, attention, gate, and output projection. |
-| `ffn` | Gate/up projection, activation, and down projection. |
-| `output.hidden` | Final normalization and hidden-state export without vocabulary projection. |
-| `output.distribution` | Final normalization, vocabulary projection, penalties, constraints, and the necessary probability distribution. |
-| `output.sample` | Distribution computation and token selection. |
-| `mtp.context` | MTP input projection and FA input with the KV-only variant. |
-| `mtp.draft` | MTP input projection if applicable, one full FA layer, FFN, and sampling with shared components. |
-| `mtp.accept` | Acceptance decisions, rejection sampling, and candidate state-slot selection. |
-| `vision` | One vision layer. The first layer includes patch input. The last layer includes spatial merge. |
-
-Fuse producer work into GEMM input loads or output stores when this reduces time for the complete operation.
-Small normalization, activation, quantization, and position operations can execute in their producer or consumer kernels.
-Use different small-row and prefill implementations when necessary.
-The [GDN entry point](../../python/oh_my_vllm/operators/gdn/cuda/gdn.cu) selects recurrent and prefill implementations.
-Use the independent PyTorch FP64 full-model reference for numerical checks.
-
-The output interfaces share the necessary final normalization computation.
-Hidden export accepts its full input row count independently of the smaller vocabulary-projection row selection.
-The distribution interface can execute without token selection.
-These semantic interfaces can use fused physical execution.
-
-The MTP package contains its composite fusion implementation and controls its storage layout.
-Its component interfaces give compatible inputs, outputs, storage use, and lifetimes.
-It does not infer compatibility from a different operator's private buffer indices or duplicate that operator's complete scratch layout.
-
-MTP acceptance returns candidate results, not published state.
-The worker first applies request stop conditions to the returned tokens.
-The accepted count after stop handling then controls state selection through the existing state commit procedure.
-The GPU candidate slot cannot replace this decision before stop handling.
-Keep the RNG state and counter rules for each of the target, proposal, and acceptance domains.
+Keep semantic outputs, private state, and resource lifetimes explicit.
+The model adapter applies stop conditions and selects accepted state before publication.
+See the [Qwen boundaries](../models/qwen38/operators.md#serving-boundaries) and [DeepSeek contract](../models/deepseek_v41/model.md).
 
 ## Native builds
 
@@ -189,25 +158,18 @@ Use one source-path mapping for the development builder and runtime identity che
 Directory changes must also change include dependency discovery and source fingerprints.
 Keep complete dependency hashes, immutable binary identities, and native library identity checks.
 The inference loader does not import development tools or invoke a compiler.
-The seven Qwen native libraries do not define the public interfaces.
+The native library count does not define public interfaces.
 
 Change compilation boundaries only when the implementation has a demonstrated reason.
 Source packages, semantic interfaces, native libraries, and kernel launches are different boundaries.
 
 ## Change acceptance
 
-Update the [stage inventory](../../python/oh_my_vllm/operators/specification.py) and serving boundaries above with the related implementation changes.
-Keep private buffers and kernel selection rules inside their operator packages.
-
-Use the [test scope](../testing.md) and [numerical procedure](evaluation.md).
-Use the [operator microbench design](microbench.md) for local numerical, state, and performance checks.
-Extend full-model inputs when a change has an effect on MTP, vision, or long contexts.
+Update the applicable model contract with implementation changes.
+Keep private buffers and kernel selection rules inside operator packages.
+Use the shared [test scope](../testing.md) and the selected model's numerical and performance limits.
+Run applicable fixed cases when speculation, media, or long contexts change.
 Use Compute Sanitizer when device memory or synchronization behavior changes.
-New tests follow the [contribution procedure](../../CONTRIBUTING.md).
 
-Run all 24 [HTTP configurations](../performance.md) with the same workload settings for integration checks.
-Apply the fixed operator performance limits without comparison to old builds or timings.
-Do more measurements when uncertainty prevents a decision against a limit.
-Check the other configurations when a new fusion makes selected workloads faster.
-Keep timing artifacts external.
-Update the [Qwen results](../deepseek-v41/qwen-results.md) after a complete matrix.
+Keep measurements external. Update model results after a complete matrix.
+New tests follow the [contribution procedure](../../CONTRIBUTING.md).

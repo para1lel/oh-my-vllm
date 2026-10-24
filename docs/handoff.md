@@ -1,29 +1,25 @@
 # Work state
 
-Use `nightly` for the planned [DeepSeek extension](deepseek-v41/design.md).
-The service runs Qwen on one B200. DeepSeek inference is not enabled.
-The architecture and measurement matrix have approval.
-Execute the [phase plan](deepseek-v41/plan.md) without additional phase approval.
+Work continues on `nightly` without additional phase approval.
+Qwen and DeepSeek are peer [model adapters](adapters.md).
+Qwen serves inference on one B200. DeepSeek service inference is not enabled.
 
-## Current state
+## Current work
 
-Phase 1 [model adapters](deepseek-v41/adapters.md) and Phase 2 [distributed infrastructure](deepseek-v41/distributed.md) are implemented.
-DeepSeek physical execution and state selection are pending.
-Qwen keeps its single-worker path, with prefill dispatch, block scheduling, and host-cache startup fixes.
+Shared code supplies model descriptors, cache policies, typed state ownership, and rank control.
+The scheduler update follows decode-count, whole-block, residual-token, then partial-suffix priorities.
+Adapter cleanup removes implicit Qwen defaults and obsolete migration descriptions.
+Qwen numerical and HTTP validation must bind the final runtime candidate before delivery.
 
-Phase 3 has isolated CUDA operators with [fixed fixtures and numerical limits](deepseek-v41/fixtures.md).
-The [Engram loader](deepseek-v41/memory.md#4-weight-bytes-and-formats) supplies complete encoded tables in one shared store.
-Rank-owned and grouped expert projections, final-head collapse, and exact device conversion are implemented.
-Model integration is pending.
-
-The [reference tools](deepseek-v41/reference.md) separate FP64 mathematics, source-precision quantization, and released-source diagnostics.
-Phase 0 compound numerical limits and physical allocation bounds are pending.
+The [DeepSeek plan](models/deepseek_v41/plan.md) tracks the incomplete model work.
+Isolated CUDA operators, rank-owned weights, grouped projections, and the shared pinned Engram loader are implemented.
+Compound numerical limits and complete allocation bounds must close before full-model integration.
+Physical state, complete inference, DSpark, feature acceptance, and the approved measurement matrices are pending.
 
 ## Next actions
 
-- Complete compound numerical limits and [allocation bounds](deepseek-v41/memory.md) before full-model integration.
-- Continue the other operators and Engram model integration after their applicable gates close.
+- Complete scheduler and adapter cleanup, independent review, and applicable Qwen regression.
+- Close DeepSeek numerical and allocation gates, then continue model integration.
 
 Use the [test scope](testing.md), [execution rules](execution.md), and [delivery procedure](../CONTRIBUTING.md#delivery).
-Keep host settings and process records in ignored `LOCAL.md`.
-Keep raw artifacts external to the repository.
+Keep host settings and process records in ignored `LOCAL.md`. Keep raw artifacts external.

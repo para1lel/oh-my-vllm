@@ -34,7 +34,7 @@ Tell the maintainer why the other tests are not sufficient.
 Agents do the applicable tests in the repository for the maintainer.
 
 Keep raw test reports and logs external to the repository.
-Use the [nightly reporting policy](docs/deepseek-v41/validation.md) for approved performance documents.
+Use the [reporting policy](docs/testing.md#reporting) for approved performance documents.
 Do not add unrelated result tables or pass/fail histories.
 
 ## Delivery

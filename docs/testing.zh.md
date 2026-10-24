@@ -1,59 +1,77 @@
 # 测试范围
 
-新增测试前使用 [贡献流程](../CONTRIBUTING.zh.md).
-代理为维护者执行测试.
-运行[开发命令](development.zh.md#git-hooks)中的 hooks.
-模型专属范围及纯文档变更使用 [nightly 验证计划](deepseek-v41/validation.zh.md).
+添加测试前遵循[贡献流程](../CONTRIBUTING.zh.md).
+为当前契约和失败路径保留少量行为检查.
+优先使用已有用例. 删除过时迁移检查和重复断言.
+代理为维护者执行适用测试和 [hooks](development.zh.md#git-hooks).
 
-Rust 测试包含服务, scheduler, 逻辑 KV 和 worker 生命周期检查.
-HTTP 测试通过进程边界使用 Python placeholder.
-它们不测量模型推理或 GPU 性能.
+## 共享检查
 
-CPU 检查涵盖 checkpoint 和 native identities, 全模型报告验证, 规范化 HTTP 计费和 manifest 验证.
-约束测试检查 schema masks 及独立的 speculative grammar 状态.
-Rust 检查流式 JSON tool frames 和媒体请求的 prefix cache 隔离.
+Rust 检查服务行为, 调度, 逻辑状态和 worker 生命周期.
+HTTP 服务测试通过进程边界使用显式 Python 占位实现.
+这些测试的耗时不是推理性能.
+CPU 检查涵盖模型选择, readiness, 约束, 证据身份, 计算口径和 manifest.
 
-[执行测试](../tests/test_execution.py)检查完整 Execute 的决策和 graph 资源释放.
-它们检查录制失败, 调用者 stream 上的重放, 中断及关闭顺序.
-它们不提供模型数值或性能证据.
+[执行检查](../tests/test_execution.py)覆盖完整 Execute 策略和 Graph 资源所有权.
+它们检查录制失败, replay stream, 中断和关闭顺序.
+传输检查覆盖取消和存储生命周期.
+原生内存或同步行为改变时使用 Compute Sanitizer.
 
-[草稿采样检查](../development/operators/check_draft_chain.py)比较 CUDA Graph 采样和逐步采样.
-它在每次 graph 重放后检查概率, RNG offset 和采样历史.
-通过 GPU wrapper 运行:
+仅文档变更使用文档和空白 hooks.
+这类变更不触发 GPU 测量, 也不改变已记录的性能值.
+代码变更使用相关 CPU, 数值, 状态, 内存和性能检查.
+没有新问题时, 不重复无关且已经完成的检查.
+
+## 模型验收
+
+各模型维护自己的数学参考, fixtures, 限值和 workload 定义.
+候选实现验收期间, 冻结的预期数组和数值限值保持不变.
+通常验收加载 fixtures, 不生成预期输出.
+将完整端点向量与独立参考计算比较.
+不将推理输出作为自身参考.
+
+| 适配器 | 数值和状态范围 | 性能范围 |
+|---|---|---|
+| Qwen | [全模型端点](models/qwen38/evaluation.zh.md), [算子用例](models/qwen38/operators.zh.md), 适用的 MTP, 媒体和恢复用例 | [24 组 HTTP 用例](models/qwen38/performance.zh.md), [AgentX](models/qwen38/agentx.zh.md) |
+| DeepSeek | [固定 fixtures](models/deepseek_v41/fixtures.zh.md), [验收范围](models/deepseek_v41/validation.zh.md) | 验收范围中的 38 组 HTTP 和三组 AgentX 用例 |
+
+共享运行时变更执行适用的适配器回归.
+Qwen 运行时交付包含其 24 组 HTTP 用例.
+模型局部变更不触发另一模型的完整矩阵, 除非共享路径改变.
+通用描述符或状态检查不能证明数值正确性, 容量或性能.
+
+已有的[草稿链检查](../development/operators/check_draft_chain.py)将 Graph 采样, RNG offset 和历史与顺序采样比较.
+GPU 命令通过 wrapper 执行:
 
 ```bash
 scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_chain
 ```
 
-数值检查使用 [全模型评估](operators/evaluation.zh.md).
-在固定短提示和一次 decode 迭代后, 将全部词表 logits 与独立 PyTorch FP64 模型比较.
-不使用抽样中间输出或旧低精度路径作为数值参考.
-后续变更使用同一参考 artifact.
+## 记录
 
-这些路径变化时使用固定的 MTP 恢复, 图像/视频和长上下文用例.
-它们的仓库 fixture 包含完整 PyTorch FP64 endpoint logits.
-常规测试不运行参考生成器.
-[开发命令](operators/development.zh.md#数值命令)负责生成和比较这些 artifacts.
+保留当前说明和各已批准 workload 的最新完整结果.
+使用各模型的结果文档及其完整中文翻译.
+新矩阵完成后才替换表格.
+不为每次变更新建报告, 不在 README 中放结果表.
+从 README 链接已完成报告. 原始记录和无关测试结果保留在仓库外.
 
-固定算子数值和性能用例使用[算子 microbench 设计](operators/microbench.zh.md).
-数值 fixture 和预期 PyTorch 输出保存在仓库内.
-常规数值测试直接加载这些 fixture, 不生成参考数据.
-性能验收使用冻结的理论延迟倍率门槛.
+HTTP 行标明模式, 策略, batch, 输入/输出长度和实测请求数.
+报告完整 HTTP 秒数, 理论参考秒数, efficiency 百分比和草稿接受情况.
+Efficiency 是理论参考秒数除以完整 HTTP 秒数, 以百分比表示.
+这些表格不包含 Input/s, Output/s, TTFT 或旧 prefill 对比.
+各表格同时定义计算方式, 接受计数和单位.
+失败和各 rank 内存单独报告.
 
-保持状态选择, 约束, 媒体顺序和请求隔离的服务契约.
-内存安全和 graph 资源检查与模型数值检查分开.
-Device 内存或同步行为变化时使用 Compute Sanitizer.
+结果保留源码, 可执行文件, 原生模块, checkpoint, tokenizer, 拓扑, 配置, 采样和命令身份.
+使用可移植标识符或产物摘要, 不使用主机路径.
+各模型必须有经过审查的参考计算, 计入其原生格式, 通信, 重复计算和主机传输.
+未经此审查, 不复用另一模型的 efficiency 计算.
+理论资源估算不证明物理最小延迟.
 
-完整推理计时使用 [HTTP benchmark](performance.zh.md#测量命令).
-它检查精确的输入和输出长度, 未缓存 prefix 及实测 MTP 接受率.
-GPU 工作使用 GPU wrapper.
-每次运行后停止自己启动的进程.
-测量 artifacts 保存在仓库外.
+AgentX 为各已批准并行度和策略保留一个章节.
+包含输出速率分布, 前缀复用, 排队, 请求状态计数, profiling 和 drain 时长, 数据集身份及观测 HTTP 并行度.
+不将未完成请求计为成功样本.
+原始 trace 和 profiler 记录保留在仓库外. 已批准的 CSV 和图放在模型结果旁.
 
-使用 [AgentX 流程](agentx.zh.md)测试带前缀复用的 trace 回放.
-获准保存的 CSV 和图片可以保存在仓库内.
-原始记录和日志保留在仓库外.
-CPU 检查覆盖其固定配置和请求数据校验.
-
-获批性能文档使用 nightly 验证计划, 不新增 README 结果表.
-不要把无关测试结果写入项目文档.
+遵循[文档规则](AGENTS.zh.md)和[交付流程](../CONTRIBUTING.zh.md#交付).
+检查后停止自有 worker 和临时服务.

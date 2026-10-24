@@ -9,7 +9,7 @@ The [operator design](operators/design.md#serving-boundaries) specifies computat
 The worker selects execution once for each Execute message.
 If any scheduled row contains prefill, all fragments of that Execute use Eager execution.
 A decode-only Execute uses CUDA Graph recording and replay.
-This rule also controls sampling, MTP context, proposals, and acceptance.
+This rule also controls sampling, speculative context, proposals, and acceptance.
 Vision and weight preparation use Eager execution.
 
 Eager and CUDA Graph execution use the same native operators.
@@ -18,11 +18,8 @@ CUDA kernels can fuse operations and use matrix tiles internally.
 
 ## Dependent kernel launch
 
-Small FFN and GDN operations use [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html) between normalization and input projection.
-They also use PDL between output quantization and output projection.
-FFN prefill with 65 to 1024 rows uses PDL at these boundaries.
-Its fused input projection includes activation and output quantization.
-Larger prefill operations keep serial launches.
+Use PDL only when the operator contract supports it and the complete operation benefits.
+Specific kernel boundaries and row thresholds belong in the model operator contract.
 
 Stream capture records these selected dependencies in the CUDA Graph.
 The consumer can prepare its storage and read constant weights before its producer completes execution.
@@ -80,5 +77,5 @@ An execution failure keeps the existing worker removal and state cleanup rules.
 
 ## Numerical and state contracts
 
-Obey the [model contract](operators/model.md) and [full-model numerical evaluation](operators/evaluation.md).
+Obey the [adapter contract](adapters.md) and the selected model's [acceptance scope](testing.md#model-acceptance).
 Keep the service, graph resource, memory safety, and state ownership checks in the [test scope](testing.md).
