@@ -112,7 +112,7 @@ class Worker:
         return self.samplers[rows]
 
     def fragments(self, rows, limit, batch_limit, *, block_size=1):
-        pending, size, partial = [], 0, False
+        pending, size = [], 0
         for row in rows:
             offset = 0
             while offset < len(row["token_ids"]):
@@ -124,20 +124,14 @@ class Worker:
                         count = aligned
                     elif pending:
                         yield pending
-                        pending, size, partial = [], 0, False
+                        pending, size = [], 0
                         continue
-                non_block = bool(start % block_size or count % block_size)
-                if partial and non_block:
-                    yield pending
-                    pending, size, partial = [], 0, False
-                    continue
                 fragment = dict(
                     row,
                     token_ids=row["token_ids"][offset : offset + count],
                     num_computed_tokens=start,
                 )
                 pending.append(fragment)
-                partial |= non_block
                 offset += count
                 size += count
                 if (
@@ -146,7 +140,7 @@ class Worker:
                     or offset < len(row["token_ids"])
                 ):
                     yield pending
-                    pending, size, partial = [], 0, False
+                    pending, size = [], 0
         if pending:
             yield pending
 

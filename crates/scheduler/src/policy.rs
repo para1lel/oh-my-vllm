@@ -36,13 +36,19 @@ pub trait CachePolicy: Sized {
 
     fn extend_hashes(&self, request: &mut Request);
 
-    fn prefill_quantum(&self, budget: usize) -> usize;
-
     fn prefill_block_size(&self) -> usize {
         1
     }
 
     fn align_prefill(&self, request: &Request, start: usize, count: usize, budget: usize) -> usize;
+
+    fn prefill_ranges(
+        &self,
+        request: &Request,
+        start: usize,
+        limit: usize,
+        budget: usize,
+    ) -> Vec<(usize, usize)>;
 
     fn find_prefix(&self, request: &Request) -> PrefixHit<Self::Hit>;
 

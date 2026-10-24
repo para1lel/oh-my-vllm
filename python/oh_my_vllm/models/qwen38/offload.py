@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from math import prod
 
 from ...operators.runtime.storage import WIDTHS
-from ...worker.offload import completion, validate_operation
+from .transfers import completion, validate_operation
 
 
 @dataclass(frozen=True)

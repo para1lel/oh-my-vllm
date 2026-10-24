@@ -22,6 +22,7 @@ use axum::{
 };
 use clap::Args;
 use events::Output;
+use oh_my_vllm_kv_cache::HybridCoordinator;
 use oh_my_vllm_scheduler::{Request as EngineRequest, Scheduler};
 use request::Request;
 use resources::{Budget, Lease, serialized_bytes, unix_seconds};
@@ -542,7 +543,11 @@ async fn delete(State(app): State<App>, Path(id): Path<String>) -> Response {
     }
 }
 
-pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) -> Result<()> {
+pub async fn serve(
+    client: WorkerClient,
+    scheduler: Scheduler<HybridCoordinator>,
+    args: ServeArgs,
+) -> Result<()> {
     let model_name = args
         .served_model_name
         .clone()
@@ -778,7 +783,7 @@ async fn cancel_admit(client: &mut WorkerClient, pending: PendingAdmission) -> R
 
 async fn wait_admit(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     active: &mut BTreeMap<u64, Active>,
     pending: &mut Option<PendingAdmission>,
 ) -> Result<()> {
@@ -801,7 +806,7 @@ async fn wait_admit(
 
 async fn complete_admit(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     active: &mut BTreeMap<u64, Active>,
     pending: PendingAdmission,
     prepare_result: std::result::Result<Vec<u32>, WorkerError>,
@@ -999,7 +1004,7 @@ struct EngineContext {
 
 async fn engine(
     client: WorkerClient,
-    mut scheduler: Scheduler,
+    mut scheduler: Scheduler<HybridCoordinator>,
     mut incoming: mpsc::Receiver<Submission>,
     context: EngineContext,
     mut shutdown: oneshot::Receiver<()>,
@@ -1162,7 +1167,7 @@ async fn execute(
 
 async fn run_engine(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     incoming: &mut mpsc::Receiver<Submission>,
     context: &EngineContext,
     epoch: u64,
@@ -1444,7 +1449,7 @@ async fn run_engine(
 
 fn update_resource_counts(
     health: &Mutex<Value>,
-    scheduler: &Scheduler,
+    scheduler: &Scheduler<HybridCoordinator>,
     active: usize,
     pending: usize,
 ) {

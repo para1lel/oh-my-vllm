@@ -224,13 +224,12 @@ time.sleep(300)
         .unwrap();
         std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o700)).unwrap();
         let config = WorkerConfig {
-            model_path: "stub".into(),
             socket_path: socket.clone(),
             num_gpu_blocks: Some(1608),
             mamba_blocks: Some(128),
             python_executable: launcher,
             init_timeout: Duration::from_secs(5),
-            ..Default::default()
+            ..WorkerConfig::for_model("stub".into(), ModelPolicy::for_family(ModelFamily::Stub))
         };
         for selected in [false, true] {
             let invalid = WorkerConfig {

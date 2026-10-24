@@ -1,12 +1,13 @@
 pub mod cache;
 pub mod output;
+mod planning;
 pub mod policy;
 pub mod request;
 pub mod transaction;
 
 use std::collections::VecDeque;
 
-use oh_my_vllm_kv_cache::{coordinator::HybridCoordinator, group::RequestId};
+use oh_my_vllm_kv_cache::group::RequestId;
 
 use policy::{CachePolicy, PrefixHit};
 
@@ -39,7 +40,7 @@ impl Default for SchedulerConfig {
     }
 }
 
-pub struct Scheduler<P: CachePolicy = HybridCoordinator> {
+pub struct Scheduler<P: CachePolicy> {
     config: SchedulerConfig,
     waiting: VecDeque<Request>,
     running: VecDeque<Request>,
@@ -75,33 +76,6 @@ impl<P: CachePolicy> Scheduler<P> {
             .align_prefill(request, start, count, self.config.max_num_batched_tokens)
     }
 
-    fn partial_prefill(&self, request: &Request, start: usize, count: usize) -> bool {
-        let end = request
-            .prompt_len
-            .max(request.token_ids.len().saturating_sub(1));
-        let block = self.kv.prefill_block_size().max(1);
-        count > 0 && start < end && (!start.is_multiple_of(block) || !count.is_multiple_of(block))
-    }
-
-    fn prefill_count(
-        &self,
-        request: &Request,
-        start: usize,
-        count: usize,
-        allow_partial: bool,
-    ) -> usize {
-        let count = self.aligned_prefill(request, start, count);
-        if allow_partial || !self.partial_prefill(request, start, count) {
-            return count;
-        }
-        let block = self.kv.prefill_block_size().max(1);
-        if start.is_multiple_of(block) {
-            count / block * block
-        } else {
-            0
-        }
-    }
-
     fn decode_tokens(request: &Request) -> usize {
         let end = request
             .prompt_len
@@ -113,75 +87,6 @@ impl<P: CachePolicy> Scheduler<P> {
                 .num_tokens_with_spec()
                 .saturating_sub(request.num_computed_tokens)
         }
-    }
-
-    fn prefill_quotas(&mut self) -> rustc_hash::FxHashMap<RequestId, usize> {
-        let decode = self
-            .running
-            .iter()
-            .filter(|request| !self.paused.contains(&request.id))
-            .map(Self::decode_tokens)
-            .sum::<usize>();
-        let mut budget = self.config.max_num_batched_tokens.saturating_sub(decode);
-        let mut pending = self
-            .running
-            .iter()
-            .filter(|request| {
-                !self.paused.contains(&request.id) && Self::decode_tokens(request) == 0
-            })
-            .map(|request| (request, request.num_computed_tokens))
-            .chain(
-                self.waiting
-                    .iter()
-                    .filter(|request| !self.paused.contains(&request.id))
-                    .take(self.config.max_num_seqs.saturating_sub(self.running.len()))
-                    .map(|request| (request, self.kv.find_prefix(request).length)),
-            )
-            .collect::<Vec<_>>();
-        if let Some(index) = pending
-            .iter()
-            .position(|(request, _)| Some(request.id) == self.prefill_cursor)
-        {
-            let length = pending.len();
-            pending.rotate_left((index + 1) % length);
-        }
-        let mut quotas = rustc_hash::FxHashMap::<RequestId, usize>::default();
-        let quantum = self.kv.prefill_quantum(self.config.max_num_batched_tokens);
-        let mut partial_request = None;
-        while !pending.is_empty() && budget > 0 {
-            let share = budget.div_ceil(pending.len()).max(quantum.min(budget));
-            let mut next = Vec::new();
-            let before = budget;
-            for (request, start) in pending {
-                let current = quotas.get(&request.id).copied().unwrap_or(0);
-                let count = self.prefill_count(
-                    request,
-                    start,
-                    request
-                        .num_tokens_with_spec()
-                        .saturating_sub(start)
-                        .min(current.saturating_add(share.min(budget))),
-                    partial_request.is_none() || partial_request == Some(request.id),
-                );
-                let extra = count.saturating_sub(current).min(budget);
-                quotas.insert(request.id, current + extra);
-                if extra > 0 {
-                    self.prefill_cursor = Some(request.id);
-                    if self.partial_prefill(request, start, count) {
-                        partial_request = Some(request.id);
-                    }
-                }
-                budget -= extra;
-                if count < request.num_tokens_with_spec().saturating_sub(start) {
-                    next.push((request, start));
-                }
-            }
-            if before == budget {
-                break;
-            }
-            pending = next;
-        }
-        quotas
     }
 
     pub fn new(config: SchedulerConfig, kv: P) -> Self {
@@ -260,8 +165,7 @@ impl<P: CachePolicy> Scheduler<P> {
             ..Default::default()
         };
         let mut token_budget = self.config.max_num_batched_tokens;
-        let prefill_quotas = self.prefill_quotas();
-        let mut partial_prefill_used = false;
+        let mut quotas = self.batch_quotas();
         self.running
             .make_contiguous()
             .sort_by_key(|request| usize::from(Self::decode_tokens(request) == 0));
@@ -273,18 +177,9 @@ impl<P: CachePolicy> Scheduler<P> {
                 continue;
             }
             let tokens_needed = req.num_tokens_with_spec() - req.num_computed_tokens;
-            let decode = Self::decode_tokens(&req);
-            let limit = if decode == 0 {
-                token_budget.min(prefill_quotas.get(&req.id).copied().unwrap_or(0))
-            } else {
-                token_budget
-            };
-            let to_schedule = self.prefill_count(
-                &req,
-                req.num_computed_tokens,
-                tokens_needed.min(limit),
-                !partial_prefill_used,
-            );
+            let limit = token_budget.min(quotas.get(&req.id).copied().unwrap_or(0));
+            let to_schedule =
+                self.aligned_prefill(&req, req.num_computed_tokens, tokens_needed.min(limit));
             if to_schedule == 0 {
                 still_running.push_back(req);
                 continue;
@@ -337,8 +232,6 @@ impl<P: CachePolicy> Scheduler<P> {
 
             match alloc {
                 true => {
-                    partial_prefill_used |=
-                        self.partial_prefill(&req, req.num_computed_tokens, to_schedule);
                     output.cache_hit_tokens += self.host.prefix_hits.remove(&req.id).unwrap_or(0);
                     let scheduled_tokens = req
                         .token_ids
@@ -356,6 +249,7 @@ impl<P: CachePolicy> Scheduler<P> {
                         state: self.kv.assignment(req.id),
                     });
                     token_budget -= to_schedule;
+                    self.prefill_cursor = Some(req.id);
                     req.num_in_flight_tokens = to_schedule;
                     still_running.push_back(req);
                 }
@@ -375,6 +269,10 @@ impl<P: CachePolicy> Scheduler<P> {
         }
 
         let mut deferred_waiting = VecDeque::new();
+        let mut unselected_waiting = VecDeque::new();
+        if resident_allocation_failed || !output.preempted_request_ids.is_empty() {
+            quotas = self.retry_waiting_quotas(token_budget, &mut unselected_waiting);
+        }
         while let Some(mut req) = self.waiting.pop_front() {
             if self.paused.contains(&req.id) {
                 deferred_waiting.push_back(req);
@@ -400,18 +298,17 @@ impl<P: CachePolicy> Scheduler<P> {
                 if !started {
                     deferred_waiting.push_back(req);
                 }
+                quotas = self.retry_waiting_quotas(token_budget, &mut unselected_waiting);
                 continue;
             }
 
             let total_tokens = req.num_tokens_with_spec();
             let remaining = total_tokens - hit_len;
             req.prefill_start = hit_len;
-            let limit =
-                token_budget.min(prefill_quotas.get(&req.id).copied().unwrap_or(token_budget));
-            let mut to_schedule =
-                self.prefill_count(&req, hit_len, remaining.min(limit), !partial_prefill_used);
+            let limit = token_budget.min(quotas.get(&req.id).copied().unwrap_or(0));
+            let mut to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(limit));
             if to_schedule == 0 {
-                deferred_waiting.push_back(req);
+                unselected_waiting.push_back(req);
                 continue;
             }
 
@@ -427,6 +324,7 @@ impl<P: CachePolicy> Scheduler<P> {
                 && self.writeback_host_prefix()
             {
                 deferred_waiting.push_back(req);
+                quotas = self.retry_waiting_quotas(token_budget, &mut unselected_waiting);
                 continue;
             }
             let mut alloc = self.kv.allocate(
@@ -439,12 +337,8 @@ impl<P: CachePolicy> Scheduler<P> {
             if !alloc && let Some(fallback) = self.kv.fallback_prefix(&req, hit_len) {
                 hit_len = fallback.length;
                 req.prefill_start = hit_len;
-                to_schedule = self.prefill_count(
-                    &req,
-                    hit_len,
-                    (total_tokens - hit_len).min(limit),
-                    !partial_prefill_used,
-                );
+                to_schedule =
+                    self.aligned_prefill(&req, hit_len, (total_tokens - hit_len).min(limit));
                 alloc = to_schedule > 0
                     && self.kv.allocate(
                         &req,
@@ -457,7 +351,6 @@ impl<P: CachePolicy> Scheduler<P> {
 
             match alloc {
                 true => {
-                    partial_prefill_used |= self.partial_prefill(&req, hit_len, to_schedule);
                     output.cache_hit_tokens += hit_len;
                     let computed_start = hit_len;
                     output.scheduled.push(ScheduledRequest {
@@ -470,15 +363,18 @@ impl<P: CachePolicy> Scheduler<P> {
                     });
                     token_budget -= to_schedule;
                     req.num_computed_tokens = hit_len;
+                    self.prefill_cursor = Some(req.id);
                     req.num_in_flight_tokens = to_schedule;
                     req.status = RequestStatus::Running;
                     self.running.push_back(req);
                 }
                 false => {
                     deferred_waiting.push_back(req);
+                    quotas = self.retry_waiting_quotas(token_budget, &mut unselected_waiting);
                 }
             }
         }
+        deferred_waiting.append(&mut unselected_waiting);
         deferred_waiting.append(&mut self.waiting);
         self.waiting = deferred_waiting;
 

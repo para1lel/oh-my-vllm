@@ -7,9 +7,11 @@ Qwen serves inference on one B200. DeepSeek service inference is not enabled.
 ## Current work
 
 Shared code supplies model descriptors, cache policies, typed state ownership, and rank control.
-The scheduler update follows decode-count, whole-block, residual-token, then partial-suffix priorities.
-Adapter cleanup removes implicit Qwen defaults and obsolete migration descriptions.
-Qwen numerical and HTTP validation must bind the final runtime candidate before delivery.
+Model selection supplies defaults explicitly. Qwen transfer rules stay in its adapter.
+Model selection and readiness checks share one test module.
+
+The scheduler maximizes decode requests, whole prefill blocks, then prefill residual tokens.
+It then minimizes requests with partial suffixes. Extra decode verification uses the unused budget.
 
 The [DeepSeek plan](models/deepseek_v41/plan.md) tracks the incomplete model work.
 Isolated CUDA operators, rank-owned weights, grouped projections, and the shared pinned Engram loader are implemented.
@@ -18,8 +20,9 @@ Physical state, complete inference, DSpark, feature acceptance, and the approved
 
 ## Next actions
 
-- Complete scheduler and adapter cleanup, independent review, and applicable Qwen regression.
-- Close DeepSeek numerical and allocation gates, then continue model integration.
+- Close DeepSeek numerical and allocation gates.
+- Integrate the model, physical state, and DSpark, then complete capacity and feature acceptance.
+- Run the approved DeepSeek HTTP and AgentX matrices after correctness acceptance.
 
 Use the [test scope](testing.md), [execution rules](execution.md), and [delivery procedure](../CONTRIBUTING.md#delivery).
 Keep host settings and process records in ignored `LOCAL.md`. Keep raw artifacts external.

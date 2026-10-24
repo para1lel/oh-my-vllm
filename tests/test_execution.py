@@ -418,16 +418,6 @@ class Execution(unittest.TestCase):
                         sum(len(row["token_ids"]) for row in batch), limit
                     )
                     self.assertLessEqual(len(batch), 4)
-                    self.assertLessEqual(
-                        sum(
-                            bool(
-                                row["num_computed_tokens"] % 784
-                                or len(row["token_ids"]) % 784
-                            )
-                            for row in batch
-                        ),
-                        1,
-                    )
                     for row in batch:
                         request = row["request_id"]
                         self.assertEqual(row["num_computed_tokens"], positions[request])
@@ -437,6 +427,11 @@ class Execution(unittest.TestCase):
                     self.assertEqual(restored[row["request_id"]], row["token_ids"])
                 if limit >= 784:
                     self.assertEqual(len(fragments[0][0]["token_ids"]), 32144)
+        tails = [
+            dict(request_id=i, num_computed_tokens=784, token_ids=[i] * count)
+            for i, count in enumerate((317, 450))
+        ]
+        self.assertEqual(list(worker.fragments(tails, 784, 4, block_size=784)), [tails])
 
     def test_stop_truncation_controls_accepted_slot(self):
         from oh_my_vllm.models.qwen38.cache import Cache

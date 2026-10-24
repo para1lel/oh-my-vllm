@@ -84,12 +84,16 @@ impl CachePolicy for ArenaPolicy {
 
     fn extend_hashes(&self, _: &mut Request) {}
 
-    fn prefill_quantum(&self, _: usize) -> usize {
-        1
-    }
-
     fn align_prefill(&self, _: &Request, _: usize, count: usize, _: usize) -> usize {
         count
+    }
+
+    fn prefill_ranges(&self, _: &Request, _: usize, limit: usize, _: usize) -> Vec<(usize, usize)> {
+        if limit == 0 {
+            vec![]
+        } else {
+            vec![(1, limit)]
+        }
     }
 
     fn find_prefix(&self, _: &Request) -> PrefixHit<Self::Hit> {

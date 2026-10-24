@@ -358,6 +358,30 @@ fn declined_store_preserves_progress_and_does_not_block_other_waiters() {
             .any(|r| r.request_id == 1 && r.num_computed_tokens == 8)
     );
     assert!(batch.scheduled.iter().any(|r| r.request_id == 2));
+
+    let mut pressure = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 16,
+            ..Default::default()
+        },
+        HybridCoordinator::new(8, BS, true, 0).with_mamba_capacity(128),
+    );
+    assert!(pressure.add_request(make_req(1, 16, 4)));
+    pressure.schedule();
+    apply(
+        &mut pressure,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    pressure.pause(1);
+    for (id, length) in [(2, 16), (3, 4)] {
+        let mut request = make_req(id, length, 1);
+        request.token_ids.fill(id as u32 + 100);
+        assert!(pressure.add_request(request));
+    }
+    let batch = pressure.schedule();
+    assert!(batch.scheduled.iter().any(|row| row.request_id == 3));
 }
 
 #[test]
@@ -498,7 +522,7 @@ fn make_coord(num_blocks: u32) -> HybridCoordinator {
     HybridCoordinator::new(num_blocks, BS, true, 0)
 }
 
-fn make_scheduler(num_blocks: u32, max_tokens_per_step: usize) -> Scheduler {
+fn make_scheduler(num_blocks: u32, max_tokens_per_step: usize) -> Scheduler<HybridCoordinator> {
     let config = SchedulerConfig {
         max_num_batched_tokens: max_tokens_per_step,
         max_num_seqs: 64,
@@ -522,7 +546,7 @@ fn dummy_output(rid: u64) -> RequestOutput {
     }
 }
 
-fn finish_transfer(scheduler: &mut Scheduler, transfer_id: u64) {
+fn finish_transfer(scheduler: &mut Scheduler<HybridCoordinator>, transfer_id: u64) {
     scheduler
         .complete_cache(&[crate::cache::CacheCompletion {
             transfer_id,
@@ -532,11 +556,11 @@ fn finish_transfer(scheduler: &mut Scheduler, transfer_id: u64) {
         .unwrap();
 }
 
-fn apply(scheduler: &mut Scheduler, output: WorkerOutput) -> WorkerOutput {
+fn apply(scheduler: &mut Scheduler<HybridCoordinator>, output: WorkerOutput) -> WorkerOutput {
     scheduler.update(output).expect("test output must be valid")
 }
 
-fn production_long_scheduler(max_seqs: usize) -> Scheduler {
+fn production_long_scheduler(max_seqs: usize) -> Scheduler<HybridCoordinator> {
     Scheduler::new(
         SchedulerConfig {
             max_num_batched_tokens: 32768,
@@ -748,10 +772,97 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
     );
     assert!(ending.add_request(make_req(2, 4, 1)));
     assert_eq!(ending.schedule().num_batched_tokens, 4);
+
+    let mut concurrent = make_scheduler(1024, 16);
+    concurrent.config.enable_mtp = true;
+    concurrent.config.mtp_draft_len = 2;
+    for id in 1..=2 {
+        assert!(concurrent.add_request(make_req(id, 4, 8)));
+    }
+    concurrent.schedule();
+    apply(
+        &mut concurrent,
+        WorkerOutput {
+            outputs: (1..=2)
+                .map(|id| RequestOutput {
+                    new_draft_token_ids: if id == 1 {
+                        vec![10, 11]
+                    } else {
+                        vec![]
+                    },
+                    ..dummy_output(id)
+                })
+                .collect(),
+        },
+    );
+    concurrent.config.max_num_batched_tokens = 2;
+    let batch = concurrent.schedule();
+    assert_eq!(
+        batch
+            .scheduled
+            .iter()
+            .map(|row| (row.request_id, row.token_ids.len()))
+            .collect::<Vec<_>>(),
+        vec![(1, 1), (2, 1)]
+    );
+    apply(
+        &mut concurrent,
+        WorkerOutput {
+            outputs: vec![
+                RequestOutput {
+                    new_draft_token_ids: vec![10, 11],
+                    ..dummy_output(1)
+                },
+                dummy_output(2),
+            ],
+        },
+    );
+    concurrent.pause(2);
+    concurrent.config.max_num_batched_tokens = 785;
+    let mut prefill = make_req(3, 1000, 1);
+    prefill.token_ids.fill(999);
+    assert!(concurrent.add_request(prefill));
+    let batch = concurrent.schedule();
+    assert_eq!(
+        batch
+            .scheduled
+            .iter()
+            .map(|row| (row.request_id, row.token_ids.len()))
+            .collect::<Vec<_>>(),
+        vec![(1, 1), (3, 784)]
+    );
+
+    let mut residual = make_scheduler(64, 16);
+    residual.config.enable_mtp = true;
+    residual.config.mtp_draft_len = 4;
+    assert!(residual.add_request(make_req(1, 4, 8)));
+    residual.schedule();
+    apply(
+        &mut residual,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                new_draft_token_ids: vec![10, 11, 12, 13],
+                ..dummy_output(1)
+            }],
+        },
+    );
+    let mut tail = make_req(2, 3, 1);
+    tail.record_partial_prefix = false;
+    assert!(residual.add_request(tail));
+    residual.config.max_num_batched_tokens = 5;
+    let batch = residual.schedule();
+    assert_eq!(
+        batch
+            .scheduled
+            .iter()
+            .map(|row| (row.request_id, row.token_ids.len()))
+            .collect::<Vec<_>>(),
+        vec![(1, 2), (2, 3)]
+    );
 }
 
 #[test]
-fn prefill_batches_limit_partial_work_and_make_progress() {
+fn prefill_batches_preserve_intervals_and_make_progress() {
     for budget in [1, 3, 783, 784, 785, 32768] {
         for source in ["cold", "prefix", "host", "history"] {
             let mut scheduler = production_long_scheduler(4);
@@ -798,7 +909,7 @@ fn prefill_batches_limit_partial_work_and_make_progress() {
     }
 }
 
-fn preempt_generated_history(scheduler: &mut Scheduler) {
+fn preempt_generated_history(scheduler: &mut Scheduler<HybridCoordinator>) {
     let budget = scheduler.config.max_num_batched_tokens;
     scheduler.config.max_num_batched_tokens = 32768;
     for _ in 0..32 {
@@ -846,7 +957,7 @@ fn preempt_generated_history(scheduler: &mut Scheduler) {
     scheduler.config.max_num_batched_tokens = budget;
 }
 
-fn restore_partial_prefills(scheduler: &mut Scheduler) {
+fn restore_partial_prefills(scheduler: &mut Scheduler<HybridCoordinator>) {
     let budget = scheduler.config.max_num_batched_tokens;
     scheduler.config.max_num_batched_tokens = 3;
     for _ in 0..3 {
@@ -884,30 +995,21 @@ fn restore_partial_prefills(scheduler: &mut Scheduler) {
     );
 }
 
-fn finish_prefills(scheduler: &mut Scheduler) -> bool {
+fn finish_prefills(scheduler: &mut Scheduler<HybridCoordinator>) -> bool {
     let mut history_prefill = false;
-    let mut last_progress = scheduler
-        .waiting
-        .iter()
-        .chain(&scheduler.running)
-        .map(|request| (request.id, 0))
-        .collect::<rustc_hash::FxHashMap<_, _>>();
-    let fair_window = last_progress.len()
-        * scheduler
-            .waiting
-            .iter()
-            .chain(&scheduler.running)
-            .map(|request| request.max_tokens + 2)
-            .max()
-            .unwrap_or(1);
-    for step in 1..=10000 {
+    for _ in 1..=10000 {
         if scheduler.num_waiting() + scheduler.num_running() == 0 {
             return history_prefill;
         }
         let batch = scheduler.schedule();
-        assert!(!batch.scheduled.is_empty(), "prefill must make progress");
+        assert!(
+            !batch.scheduled.is_empty(),
+            "prefill must make progress: budget {}, running {}, waiting {}",
+            scheduler.config.max_num_batched_tokens,
+            scheduler.num_running(),
+            scheduler.num_waiting()
+        );
         assert!(batch.num_batched_tokens <= scheduler.config.max_num_batched_tokens);
-        let mut partial = Vec::new();
         let outputs = batch
             .scheduled
             .iter()
@@ -920,13 +1022,19 @@ fn finish_prefills(scheduler: &mut Scheduler) -> bool {
                 let prefill_end = request.prompt_len.max(request.token_ids.len() - 1);
                 if row.num_computed_tokens < prefill_end {
                     history_prefill |= row.num_computed_tokens >= request.prompt_len;
-                    if !row.num_computed_tokens.is_multiple_of(784)
-                        || !row.token_ids.len().is_multiple_of(784)
-                    {
-                        partial.push(row.request_id);
-                    }
                 }
-                last_progress.insert(row.request_id, step);
+                assert_eq!(row.num_computed_tokens, request.num_computed_tokens);
+                assert_eq!(
+                    row.token_ids,
+                    request
+                        .token_ids
+                        .iter()
+                        .chain(&request.draft_token_ids)
+                        .skip(row.num_computed_tokens)
+                        .take(row.token_ids.len())
+                        .copied()
+                        .collect::<Vec<_>>()
+                );
                 let mut output = dummy_output(row.request_id);
                 if row.num_computed_tokens + row.token_ids.len() < request.token_ids.len() {
                     output.token_ids.clear();
@@ -934,19 +1042,7 @@ fn finish_prefills(scheduler: &mut Scheduler) -> bool {
                 output
             })
             .collect();
-        assert!(
-            partial.len() <= 1,
-            "more than one partial prefill: {partial:?}, budget {}",
-            scheduler.config.max_num_batched_tokens,
-        );
         apply(scheduler, WorkerOutput { outputs });
-        for request in scheduler.waiting.iter().chain(&scheduler.running) {
-            assert!(
-                step - last_progress[&request.id] <= fair_window,
-                "request {} did not advance within {fair_window} steps",
-                request.id,
-            );
-        }
     }
     panic!("prefill requests did not finish");
 }
@@ -1006,13 +1102,36 @@ fn short_prefill_tails_cannot_take_a_later_active_decode_budget() {
             .iter()
             .map(|row| row.request_id)
             .collect::<Vec<_>>(),
-        vec![6, 1, 2, 3]
+        vec![6, 1]
     );
+    assert_eq!(step.num_batched_tokens, 32768);
     assert!(step.preempted_request_ids.is_empty());
 }
 
 #[test]
-fn prefill_budget_is_shared_by_short_and_long_requests() {
+fn prefill_budget_prefers_blocks_then_tokens_then_fewer_suffixes() {
+    for (budget, lengths, expected) in [
+        (32768, vec![131072], vec![(1, 32768)]),
+        (1000, vec![784, 317], vec![(1, 784), (2, 216)]),
+    ] {
+        let mut scheduler = production_long_scheduler(4);
+        scheduler.config.max_num_batched_tokens = budget;
+        for (index, length) in lengths.into_iter().enumerate() {
+            let mut request = make_req(index as u64 + 1, length, 1);
+            request.token_ids.fill(index as u32 + 100);
+            request.record_partial_prefix = false;
+            assert!(scheduler.add_request(request));
+        }
+        let batch = scheduler.schedule();
+        assert_eq!(
+            batch
+                .scheduled
+                .iter()
+                .map(|row| (row.request_id, row.token_ids.len()))
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
     for (length, record_partial, fragments) in [
         (317, true, vec![316, 1]),
         (1234, true, vec![784, 449, 1]),
@@ -1046,8 +1165,8 @@ fn prefill_budget_is_shared_by_short_and_long_requests() {
         }
     }
     for (budget, lengths, expected) in [
-        (24, [20, 100, 100], vec![8, 8, 8]),
-        (24, [4, 100, 100], vec![4, 12, 8]),
+        (24, [20, 100, 100], vec![20, 4]),
+        (24, [4, 100, 100], vec![4, 20]),
         (3, [20, 100, 100], vec![3]),
     ] {
         let mut scheduler = make_scheduler(128, budget);
@@ -1076,28 +1195,19 @@ fn prefill_budget_is_shared_by_short_and_long_requests() {
         long.token_ids.truncate(length);
         long.prompt_len = length;
         assert!(scheduler.add_request(long));
-        // The fair partial turn and a whole block cannot fit in the same output.
-        for (id, count) in [(1, 316), (2, 784), (1, 1)] {
-            let batch = scheduler.schedule();
-            assert_eq!(batch.scheduled.len(), 1);
-            assert_eq!(batch.scheduled[0].request_id, id);
-            assert_eq!(batch.num_batched_tokens, count);
-            apply(
-                &mut scheduler,
-                WorkerOutput {
-                    outputs: vec![RequestOutput {
-                        token_ids: if id == 1 && count == 1 {
-                            vec![42]
-                        } else {
-                            vec![]
-                        },
-                        ..dummy_output(id)
-                    }],
-                },
-            );
-        }
-        assert_eq!(scheduler.num_running(), 1);
-        assert_eq!(scheduler.running[0].num_computed_tokens, 784);
+        let batch = scheduler.schedule();
+        assert_eq!(batch.scheduled.len(), 1);
+        assert_eq!(batch.scheduled[0].request_id, 2);
+        assert_eq!(batch.num_batched_tokens, 784);
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![RequestOutput {
+                    token_ids: vec![],
+                    ..dummy_output(2)
+                }],
+            },
+        );
         finish_prefills(&mut scheduler);
     }
     for budget in [1, 784] {
@@ -1120,6 +1230,125 @@ fn prefill_budget_is_shared_by_short_and_long_requests() {
                     }],
                 },
             );
+        }
+    }
+    for (budget, lengths, expected) in [
+        (767, vec![317, 450], vec![(1, 316), (2, 449)]),
+        (800, vec![401, 401], vec![(1, 400), (2, 400)]),
+        (784, vec![317, 450, 1000], vec![(3, 784)]),
+        (2353, vec![784, 3136], vec![(1, 784), (2, 1569)]),
+        (100, vec![51, 51, 101], vec![(3, 100)]),
+    ] {
+        let mut scheduler = production_long_scheduler(if budget == 784 {
+            1
+        } else {
+            4
+        });
+        scheduler.config.max_num_batched_tokens = budget;
+        for (index, length) in lengths.into_iter().enumerate() {
+            let mut request = make_req(index as u64 + 1, length, 1);
+            for token in &mut request.token_ids {
+                *token += index as u32 * 1000;
+            }
+            assert!(scheduler.add_request(request));
+        }
+        let batch = scheduler.schedule();
+        assert_eq!(
+            batch
+                .scheduled
+                .iter()
+                .map(|row| (row.request_id, row.token_ids.len()))
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+    for budget in 1..=12 {
+        for slots in 1..=3 {
+            let mut scheduler = make_scheduler(128, budget);
+            scheduler.config.max_num_seqs = slots;
+            for (index, length) in [3, 7, 11].into_iter().enumerate() {
+                let mut request = make_req(index as u64 + 1, length, 1);
+                request.token_ids.fill(index as u32 + 100);
+                assert!(scheduler.add_request(request));
+            }
+            let choices = scheduler
+                .waiting
+                .iter()
+                .map(|request| {
+                    let mut counts = (0..=budget.min(request.token_ids.len()))
+                        .map(|count| scheduler.kv.align_prefill(request, 0, count, budget))
+                        .collect::<Vec<_>>();
+                    counts.sort_unstable();
+                    counts.dedup();
+                    counts
+                })
+                .collect::<Vec<_>>();
+            let score = |counts: &[usize]| {
+                (
+                    counts.iter().map(|count| count / BS).sum::<usize>(),
+                    counts.iter().sum::<usize>(),
+                    std::cmp::Reverse(
+                        counts
+                            .iter()
+                            .filter(|count| !count.is_multiple_of(BS))
+                            .count(),
+                    ),
+                )
+            };
+            let mut expected = (score(&[0; 3]), [0; 3]);
+            for &first in &choices[0] {
+                for &second in &choices[1] {
+                    for &third in &choices[2] {
+                        let counts = [first, second, third];
+                        if counts.iter().sum::<usize>() <= budget
+                            && counts.iter().filter(|count| **count > 0).count() <= slots
+                        {
+                            expected = expected.max((score(&counts), counts));
+                        }
+                    }
+                }
+            }
+            let batch = scheduler.schedule();
+            let actual = [1, 2, 3].map(|id| {
+                batch
+                    .scheduled
+                    .iter()
+                    .find(|row| row.request_id == id)
+                    .map_or(0, |row| row.token_ids.len())
+            });
+            assert_eq!(
+                (score(&actual), actual),
+                expected,
+                "budget {budget}, slots {slots}"
+            );
+        }
+    }
+    let mut scheduler = production_long_scheduler(4);
+    for budget in [3, 783, 784, 785, 1568] {
+        scheduler.config.max_num_batched_tokens = budget;
+        for length in [317, 784, 1234] {
+            let mut request = make_req(1, length, 4);
+            request.token_ids.resize(1600, 42);
+            for start in [0, 3, 316, 317, 783, 784, 1233] {
+                let limit = budget.min(request.token_ids.len() - start);
+                let mut actual = scheduler
+                    .kv
+                    .prefill_ranges(&request, start, limit, budget)
+                    .into_iter()
+                    .flat_map(|(first, last)| first..=last)
+                    .collect::<Vec<_>>();
+                let mut expected = (1..=limit)
+                    .map(|count| scheduler.kv.align_prefill(&request, start, count, budget))
+                    .collect::<Vec<_>>();
+                for counts in [&mut actual, &mut expected] {
+                    counts.sort_unstable();
+                    counts.dedup();
+                }
+                assert_eq!(
+                    actual, expected,
+                    "length {length}, start {start}, budget {budget}"
+                );
+            }
         }
     }
 }

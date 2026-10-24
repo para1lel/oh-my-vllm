@@ -80,10 +80,6 @@ impl ModelPolicy {
         }
     }
 
-    pub(crate) fn legacy() -> Self {
-        Self::for_family(ModelFamily::Qwen38)
-    }
-
     pub(crate) fn for_family(family: ModelFamily) -> Self {
         Self { family }
     }
@@ -197,7 +193,7 @@ mod tests {
 
     use serde_json::json;
 
-    use super::{ModelPolicy, select_model};
+    use super::{ModelFamily, ModelPolicy, select_model};
     use crate::client::WorkerConfig;
     use crate::error::Error;
 
@@ -338,38 +334,55 @@ mod tests {
             assert!(select_model(Path::new(path)).is_err(), "{path}");
             assert!(
                 policy
-                    .validate_options(&WorkerConfig {
-                        model_path: path.into(),
-                        ..Default::default()
-                    })
+                    .validate_options(&WorkerConfig::for_model(path.into(), policy))
                     .is_err(),
                 "{path}"
             );
         }
-        assert!(
-            ModelPolicy::legacy()
-                .validate_options(&WorkerConfig {
-                    model_path: "stub".into(),
-                    ..Default::default()
-                })
-                .is_err()
-        );
-        assert!(
-            ModelPolicy::legacy()
-                .validate_options(&WorkerConfig {
-                    model_path: "".into(),
-                    ..Default::default()
-                })
-                .is_err()
-        );
+        let qwen = ModelPolicy::for_family(ModelFamily::Qwen38);
+        for path in ["stub", ""] {
+            assert!(
+                qwen.validate_options(&WorkerConfig::for_model(path.into(), qwen))
+                    .is_err(),
+                "{path}"
+            );
+        }
     }
 
     #[test]
-    fn policy_resolves_legacy_modes_and_rejects_incompatible_options() {
-        for policy in [
-            ModelPolicy::legacy(),
-            select_model(Path::new("stub")).unwrap(),
+    fn selected_configuration_preserves_defaults_modes_and_rejections() {
+        for (path, policy) in [
+            (
+                "/synthetic-qwen",
+                ModelPolicy::for_family(ModelFamily::Qwen38),
+            ),
+            ("stub", select_model(Path::new("stub")).unwrap()),
         ] {
+            let config = WorkerConfig::for_model(path.into(), policy);
+            assert_eq!(config.model_path, Path::new(path));
+            assert_eq!(
+                (
+                    config.block_size,
+                    config.tensor_parallel_size,
+                    config.max_model_len,
+                    config.max_num_batched_tokens,
+                    config.max_num_seqs,
+                    config.mamba_blocks,
+                ),
+                (784, 1, 262144, 32768, 4, Some(128))
+            );
+            assert_eq!(
+                (config.num_gpu_blocks, config.host_cache_bytes),
+                (None, None)
+            );
+            assert_eq!(
+                (
+                    config.num_speculative_tokens,
+                    config.speculative_mode.as_deref()
+                ),
+                (0, None)
+            );
+            assert!(policy.validate_options(&config).is_ok());
             for (mode, drafts, expected_name, expected_count) in [
                 (None, 0, "none", 0),
                 (None, 4, "mtp", 4),
@@ -397,18 +410,7 @@ mod tests {
             }
         }
         let policy = select_model(Path::new("stub")).unwrap();
-        let defaults = policy.defaults();
-        let config = WorkerConfig {
-            model_path: "stub".into(),
-            block_size: defaults.block_size,
-            tensor_parallel_size: defaults.tensor_parallel_size,
-            max_model_len: defaults.max_model_len,
-            max_num_batched_tokens: defaults.max_num_batched_tokens,
-            max_num_seqs: defaults.max_num_seqs,
-            mamba_blocks: Some(defaults.mamba_blocks),
-            ..Default::default()
-        };
-        assert!(policy.validate_options(&config).is_ok());
+        let config = WorkerConfig::for_model("stub".into(), policy);
         for invalid in [
             WorkerConfig {
                 block_size: 785,

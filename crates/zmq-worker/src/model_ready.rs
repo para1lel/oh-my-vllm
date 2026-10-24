@@ -33,7 +33,7 @@ mod tests {
 import json
 import msgpack
 import sys
-from tests.test_model_descriptor import sample_descriptor
+from tests.test_models import sample_descriptor
 d = sample_descriptor(num_speculative_tokens=int(sys.argv[1]))
 # The synthetic helper patches config bytes only inside its test context.
 d["config_sha256"] = "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc"
@@ -65,12 +65,14 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
 
     fn configuration(drafts: usize) -> WorkerConfig {
         WorkerConfig {
-            model_path: "/synthetic-qwen".into(),
             num_gpu_blocks: Some(1608),
             mamba_blocks: Some(128),
             max_model_len: 4096,
             num_speculative_tokens: drafts,
-            ..Default::default()
+            ..WorkerConfig::for_model(
+                "/synthetic-qwen".into(),
+                ModelPolicy::for_family(ModelFamily::Qwen38),
+            )
         }
     }
 
@@ -88,7 +90,7 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
         let policy = if config.model_path.as_os_str() == "stub" {
             ModelPolicy::for_family(ModelFamily::Stub)
         } else {
-            ModelPolicy::legacy()
+            ModelPolicy::for_family(ModelFamily::Qwen38)
         };
         validate_ready(
             policy,
@@ -118,7 +120,7 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
             };
             assert_eq!(
                 validate_ready(
-                    ModelPolicy::legacy(),
+                    ModelPolicy::for_family(ModelFamily::Qwen38),
                     &config,
                     &descriptor,
                     logical_num_blocks,
@@ -329,7 +331,13 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
                 crate::models::ModelFamily::Stub
             );
             assert!(matches!(
-                validate_ready(ModelPolicy::legacy(), &config, &descriptor, 1608, 128),
+                validate_ready(
+                    ModelPolicy::for_family(ModelFamily::Qwen38),
+                    &config,
+                    &descriptor,
+                    1608,
+                    128,
+                ),
                 Err(Error::WorkerError(_))
             ));
             for (path, value) in [

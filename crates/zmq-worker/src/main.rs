@@ -91,16 +91,15 @@ struct BenchArgs {
 
 impl Cli {
     fn worker_config(&self, model: ModelPolicy) -> Result<WorkerConfig> {
-        let defaults = model.defaults();
+        let defaults = WorkerConfig::for_model(self.model.clone(), model);
         let mode = model.resolve_speculation(
             self.speculative_mode.as_deref(),
             self.num_speculative_tokens,
         )?;
         let config = WorkerConfig {
-            model_path: self.model.clone(),
             socket_path: self.socket.clone(),
             num_gpu_blocks: self.num_gpu_blocks,
-            mamba_blocks: Some(self.mamba_blocks.unwrap_or(defaults.mamba_blocks)),
+            mamba_blocks: self.mamba_blocks.or(defaults.mamba_blocks),
             host_cache_bytes: self.host_cache_bytes,
             block_size: self.block_size.unwrap_or(defaults.block_size),
             tensor_parallel_size: self.tp.unwrap_or(defaults.tensor_parallel_size),
@@ -115,7 +114,7 @@ impl Cli {
                 Cmd::Bench(args) => args.profile_configuration()?,
                 _ => None,
             },
-            ..WorkerConfig::default()
+            ..defaults
         };
         model.validate_options(&config)?;
         Ok(config)
@@ -459,7 +458,7 @@ struct RequestPhases {
 
 async fn execute_batch(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     next_id: &mut u64,
     prompts: &[Vec<u32>],
     max_tokens: usize,

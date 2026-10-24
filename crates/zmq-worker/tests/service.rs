@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
+use oh_my_vllm_zmq_worker::models::select_model;
 
 #[tokio::test]
 async fn request_swaps_with_the_python_placeholder_preserve_all_output() {
@@ -9,7 +10,6 @@ async fn request_swaps_with_the_python_placeholder_preserve_all_output() {
     use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
 
     let config = WorkerConfig {
-        model_path: "stub".into(),
         socket_path: std::env::temp_dir().join(format!("omv-swap-{}.ipc", std::process::id())),
         num_gpu_blocks: Some(5),
         mamba_blocks: Some(16),
@@ -17,7 +17,7 @@ async fn request_swaps_with_the_python_placeholder_preserve_all_output() {
         max_num_seqs: 2,
         max_num_batched_tokens: 4096,
         init_timeout: std::time::Duration::from_secs(3),
-        ..Default::default()
+        ..WorkerConfig::for_model("stub".into(), select_model(Path::new("stub")).unwrap())
     };
     let mut client = WorkerClient::launch(config).await.unwrap();
     let mut scheduler = Scheduler::new(
@@ -109,10 +109,9 @@ async fn worker_shutdown_releases_its_socket_before_return() {
     std::fs::create_dir(&directory).unwrap();
     let socket = directory.join("worker.ipc");
     let config = WorkerConfig {
-        model_path: "stub".into(),
         socket_path: socket.clone(),
         init_timeout: std::time::Duration::from_secs(3),
-        ..Default::default()
+        ..WorkerConfig::for_model("stub".into(), select_model(Path::new("stub")).unwrap())
     };
     for _ in 0..2 {
         let mut worker = WorkerClient::launch(config.clone()).await.unwrap();

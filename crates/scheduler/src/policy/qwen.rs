@@ -113,19 +113,11 @@ impl CachePolicy for HybridCoordinator {
         }
     }
 
-    fn prefill_quantum(&self, budget: usize) -> usize {
-        if budget >= self.block_size() {
-            self.block_size()
-        } else {
-            1
-        }
-    }
-
     fn prefill_block_size(&self) -> usize {
         self.block_size()
     }
 
-    fn align_prefill(&self, request: &Request, start: usize, count: usize, budget: usize) -> usize {
+    fn align_prefill(&self, request: &Request, start: usize, count: usize, _: usize) -> usize {
         let prefill_end = request
             .prompt_len
             .max(request.token_ids.len().saturating_sub(1));
@@ -134,9 +126,6 @@ impl CachePolicy for HybridCoordinator {
         }
         let block = self.block_size();
         let mut end = start + count;
-        if end < prefill_end && budget >= block && self.partial_checkpoint(request) != Some(end) {
-            end = end / block * block;
-        }
         let last_boundary = request.token_ids.len() / block * block;
         let next_boundary = (start / block + 1) * block;
         for stop in [
@@ -153,6 +142,21 @@ impl CachePolicy for HybridCoordinator {
             }
         }
         end.saturating_sub(start).max(usize::from(count > 0))
+    }
+
+    fn prefill_ranges(
+        &self,
+        request: &Request,
+        start: usize,
+        limit: usize,
+        budget: usize,
+    ) -> Vec<(usize, usize)> {
+        let limit = self.align_prefill(request, start, limit, budget);
+        if limit == 0 {
+            vec![]
+        } else {
+            vec![(1, limit)]
+        }
     }
 
     fn find_prefix(&self, request: &Request) -> PrefixHit<Self::Hit> {

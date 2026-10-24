@@ -7,8 +7,8 @@ simulates capabilities; it does not decode media or run neural inference.
 import hashlib
 import json
 
-from ..worker.offload import completion, identifier, validate_operation
 from .descriptor import CAPABILITIES, validate_descriptor
+from .qwen38.transfers import completion, identifier, validate_operation
 
 CHECKPOINT_SHA256 = hashlib.sha256(b"oh-my-vllm/stub/checkpoint/v1").hexdigest()
 TOKENIZER_SHA256 = hashlib.sha256(b"oh-my-vllm/stub/tokenizer/v1").hexdigest()

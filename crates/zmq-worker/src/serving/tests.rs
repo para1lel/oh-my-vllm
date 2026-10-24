@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::{WorkerConfig, fixture::TestWorker};
+use crate::models::{ModelFamily, ModelPolicy};
 use crate::protocol::{ExecuteMsg, ExecuteResultMsg, RequestResultMsg, RustMessage, WorkerMessage};
 use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
 use oh_my_vllm_scheduler::SchedulerConfig;
@@ -100,16 +101,15 @@ struct Response {
 
 fn configuration() -> WorkerConfig {
     WorkerConfig {
-        model_path: "stub".into(),
         num_gpu_blocks: Some(128),
         mamba_blocks: Some(64),
         max_num_seqs: 4,
         max_num_batched_tokens: 16,
-        ..WorkerConfig::default()
+        ..WorkerConfig::for_model("stub".into(), ModelPolicy::for_family(ModelFamily::Stub))
     }
 }
 
-fn scheduler() -> Scheduler {
+fn scheduler() -> Scheduler<HybridCoordinator> {
     Scheduler::new(
         SchedulerConfig {
             max_num_seqs: 4,

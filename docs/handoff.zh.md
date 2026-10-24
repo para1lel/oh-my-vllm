@@ -7,9 +7,11 @@ Qwen 在一张 B200 上提供推理. DeepSeek 服务推理尚未启用.
 ## 当前工作
 
 共享代码提供模型描述符, 缓存策略, 类型化状态所有权和 rank 控制.
-调度器更新依次遵循 decode 请求数, 整块数, 零散 token 数和零散后缀优先级.
-适配器清理移除隐式 Qwen 默认值和过时迁移说明.
-交付前, Qwen 数值与 HTTP 验证必须绑定最终运行时候选版本.
+模型选择显式提供默认值. Qwen 传输规则保留在其适配器中.
+模型选择和就绪检查共用一个测试模块.
+
+调度器依次最大化 decode 请求数, prefill 整块数和 prefill 零散 token 数.
+随后最小化包含零散后缀的请求数. 额外 decode 验证使用剩余预算.
 
 [DeepSeek 计划](models/deepseek_v41/plan.zh.md)跟踪尚未完成的模型工作.
 已实现独立 CUDA 算子, rank 自有权重, 分组投影和共享 pinned Engram 加载器.
@@ -18,8 +20,9 @@ Qwen 在一张 B200 上提供推理. DeepSeek 服务推理尚未启用.
 
 ## 下一步
 
-- 完成调度器和适配器清理, 独立审查及适用的 Qwen 回归.
-- 闭合 DeepSeek 数值与分配门槛, 然后继续模型集成.
+- 闭合 DeepSeek 数值与分配门槛.
+- 集成模型, 物理状态和 DSpark, 然后完成容量与功能验收.
+- 正确性验收后, 运行已批准的 DeepSeek HTTP 和 AgentX 矩阵.
 
 遵循[测试范围](testing.zh.md), [执行规则](execution.zh.md)和[交付流程](../CONTRIBUTING.zh.md#交付).
 主机设置和进程记录保存在已忽略的 `LOCAL.md` 中. 原始产物保留在仓库外.

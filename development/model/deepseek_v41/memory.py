@@ -238,7 +238,7 @@ def plan_memory(config: dict, strategy: str) -> dict:
     """Return a JSON-safe four-rank plan without importing a GPU runtime.
 
     config contains model, capacities, explicit device/host reservations, and
-    optional limits. See docs/deepseek-v41/memory.md for the input contract.
+    optional limits. See docs/models/deepseek_v41/memory.md for the input contract.
     """
     limits, available = _configuration(config, strategy)
     model = config["model"]

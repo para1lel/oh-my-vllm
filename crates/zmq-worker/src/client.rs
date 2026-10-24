@@ -45,13 +45,11 @@ pub struct WorkerConfig {
     pub torch_profile: Option<crate::protocol::BenchmarkProfile>,
 }
 
-impl Default for WorkerConfig {
-    fn default() -> Self {
-        let defaults = ModelPolicy::legacy().defaults();
+impl WorkerConfig {
+    pub fn for_model(model_path: PathBuf, model: ModelPolicy) -> Self {
+        let defaults = model.defaults();
         Self {
-            model_path: std::env::var_os("OH_MY_VLLM_MODEL")
-                .map(PathBuf::from)
-                .unwrap_or_default(),
+            model_path,
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: None,
             mamba_blocks: Some(defaults.mamba_blocks),
@@ -592,7 +590,7 @@ impl WorkerClient {
 
     pub async fn cache_step(
         &mut self,
-        scheduler: &mut oh_my_vllm_scheduler::Scheduler,
+        scheduler: &mut oh_my_vllm_scheduler::Scheduler<oh_my_vllm_kv_cache::HybridCoordinator>,
     ) -> Result<()> {
         if !scheduler.cache_pending() {
             return Ok(());
