@@ -13,7 +13,8 @@ DeepSeek 服务推理尚未启用.
 阶段 3 已有使用[固定夹具和数值限值](fixtures.zh.md)的独立 CUDA 算子.
 完整 Engram 表加载到一个 sealed 共享存储中.
 Rank 权重使用有界加载, 精确启动转换和 native 投影布局的对齐存储.
-模型集成仍待完成.
+尚未启用的 rank 本地 [MoE 计算](../../../python/oh_my_vllm/models/deepseek_v41/moe.py)支持目标层和预测层.
+Collective 和完整模型集成仍待完成.
 完整模型计算与阶段 4-8 尚待完成.
 
 ## 约束

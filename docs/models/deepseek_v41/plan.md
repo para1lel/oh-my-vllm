@@ -13,7 +13,8 @@ Phase 0 reference and allocation work continues.
 Phase 3 has isolated CUDA operators with [fixed fixtures and numerical limits](fixtures.md).
 Complete Engram tables load into one sealed shared store.
 Rank weights use bounded loading, exact startup conversions, and aligned storage for native projection layouts.
-Model integration is pending.
+Disabled rank-local [MoE computation](../../../python/oh_my_vllm/models/deepseek_v41/moe.py) supports target and prediction layers.
+Collectives and full-model integration are pending.
 Full-model computation and Phases 4-8 are pending.
 
 ## Constraints

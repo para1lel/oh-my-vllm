@@ -15,12 +15,13 @@ It then minimizes requests with partial suffixes. Extra decode verification uses
 
 The [DeepSeek plan](models/deepseek_v41/plan.md) tracks the incomplete model work.
 Isolated CUDA operators, rank-owned weights, shared expert inputs, text rotary tables, and the shared pinned Engram loader are implemented.
+Disabled rank-local MoE computation supports target and prediction layers.
 Compound numerical limits and complete allocation bounds must close before public inference is enabled.
 Physical state, complete inference, DSpark, feature acceptance, and the approved measurement matrices are pending.
 
 ## Next actions
 
-- Implement disabled DeepSeek target computation while numerical and allocation checks continue.
+- Complete disabled DeepSeek target computation while numerical and allocation checks continue.
 - Integrate physical state and DSpark, then complete capacity and feature acceptance.
 - Run the approved DeepSeek HTTP and AgentX matrices after correctness acceptance.
 
