@@ -81,12 +81,9 @@ __global__ void collapse_kernel(const __nv_bfloat16 *residual, const float *inco
   output[row * width + column] = __float2bfloat16_rn(value);
 }
 
-__global__ void expand_kernel(const __nv_bfloat16 *residual, const __nv_bfloat16 *branch,
-                              const float *post, const float *comb, __nv_bfloat16 *output) {
-  int row = blockIdx.x, column = blockIdx.y * blockDim.x + threadIdx.x;
-  if (column >= width)
-    return;
-  float value = __bfloat162float(branch[row * width + column]);
+__device__ __forceinline__ void expand(const __nv_bfloat16 *residual, float value,
+                                       const float *post, const float *comb, __nv_bfloat16 *output,
+                                       int row, int column) {
   for (int destination = 0; destination < copies; ++destination) {
     float result = post[row * copies + destination] * value;
     for (int source = 0; source < copies; ++source)
@@ -94,6 +91,36 @@ __global__ void expand_kernel(const __nv_bfloat16 *residual, const __nv_bfloat16
                 __bfloat162float(residual[row * flat_width + source * width + column]);
     output[row * flat_width + destination * width + column] = __float2bfloat16_rn(result);
   }
+}
+
+__global__ void expand_kernel(const __nv_bfloat16 *residual, const __nv_bfloat16 *branch,
+                              const float *post, const float *comb, __nv_bfloat16 *output) {
+  int row = blockIdx.x, column = blockIdx.y * blockDim.x + threadIdx.x;
+  if (column < width)
+    expand(residual, __bfloat162float(branch[row * width + column]), post, comb, output, row,
+           column);
+}
+
+__device__ __forceinline__ float rounded_shared(float value) {
+  return __bfloat162float(__float2bfloat16_rn(value));
+}
+
+__device__ __forceinline__ float rounded_shared(__nv_bfloat16 value) {
+  return __bfloat162float(value);
+}
+
+template <typename Shared>
+__global__ void expand_moe_kernel(const __nv_bfloat16 *residual, const float *routed,
+                                  const Shared *shared, const float *post, const float *comb,
+                                  __nv_bfloat16 *output) {
+  int row = blockIdx.x, column = blockIdx.y * blockDim.x + threadIdx.x;
+  if (column >= width)
+    return;
+  int index = row * width + column;
+  // Keep both BF16 boundaries without materializing the merged branch.
+  float merged = __fadd_rn(routed[index], rounded_shared(shared[index]));
+  float value = __bfloat162float(__float2bfloat16_rn(merged));
+  expand(residual, value, post, comb, output, row, column);
 }
 
 int rows_contract(TensorView residual) {
@@ -174,5 +201,34 @@ void hc_expand(TensorView residual, TensorView branch, TensorView post, TensorVi
       static_cast<const __nv_bfloat16 *>(branch.data_ptr()),
       static_cast<const float *>(post.data_ptr()), static_cast<const float *>(comb.data_ptr()),
       static_cast<__nv_bfloat16 *>(expanded.data_ptr()));
+  check_cuda(cudaGetLastError());
+}
+
+void hc_expand_moe(TensorView residual, TensorView routed, TensorView shared, TensorView post,
+                   TensorView comb, TensorView expanded) {
+  int rows = rows_contract(residual);
+  bool shared_bf16 = shared.dtype().code == kDLBfloat;
+  tensor_contract(routed, residual, kDLFloat, 32, {rows, width});
+  tensor_contract(shared, residual, shared_bf16 ? kDLBfloat : kDLFloat, shared_bf16 ? 16 : 32,
+                  {rows, width});
+  tensor_contract(post, residual, kDLFloat, 32, {rows, copies});
+  tensor_contract(comb, residual, kDLFloat, 32, {rows, copies, copies});
+  tensor_contract(expanded, residual, kDLBfloat, 16, {rows, copies, width});
+  separate({residual, routed, shared, post, comb, expanded});
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(residual.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, residual.device().device_id));
+  auto launch = [&](auto *shared_data) {
+    expand_moe_kernel<<<dim3(rows, (width + 255) / 256), 256, 0, stream>>>(
+        static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+        static_cast<const float *>(routed.data_ptr()), shared_data,
+        static_cast<const float *>(post.data_ptr()), static_cast<const float *>(comb.data_ptr()),
+        static_cast<__nv_bfloat16 *>(expanded.data_ptr()));
+  };
+  if (shared_bf16)
+    launch(static_cast<const __nv_bfloat16 *>(shared.data_ptr()));
+  else
+    launch(static_cast<const float *>(shared.data_ptr()));
   check_cuda(cudaGetLastError());
 }

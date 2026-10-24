@@ -66,6 +66,19 @@ class Workspace:
         )
         return self.outputs.expanded
 
+    def finish_moe(self, residual, routed_complete, shared_complete):
+        self.check_open()
+        storage = self.storage
+        self.module.hc_expand_moe(
+            residual,
+            routed_complete,
+            shared_complete,
+            storage.post,
+            storage.comb,
+            storage.expanded,
+        )
+        return self.outputs.expanded
+
     def run(self, inputs):
         self.begin(inputs.residual, inputs.incoming_pre)
         self.finish(inputs.residual, inputs.branch)

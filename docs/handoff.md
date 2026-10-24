@@ -17,6 +17,8 @@ The [DeepSeek plan](models/deepseek_v41/plan.md) tracks the incomplete model wor
 Isolated CUDA operators, rank-owned weights, shared expert inputs, text rotary tables, and the shared pinned Engram loader are implemented.
 Disabled rank-local computation supports MoE and selected-row attention for target and prediction layers.
 DEP4 MoE keeps gate and shared-expert computation local to each request owner.
+
+MoE output merging and HC expansion share one kernel with explicit rounding boundaries.
 Compound numerical limits and complete allocation bounds must close before public inference is enabled.
 Physical state, complete inference, DSpark, feature acceptance, and the approved measurement matrices are pending.
 

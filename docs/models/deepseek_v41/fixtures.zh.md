@@ -74,6 +74,10 @@ Lookup 和投影是独立边界.
 [检查器](../../../development/operators/check_deepseek_hc.py) 还置换通道, 以检测寻址错误.
 `Workspace.collapse()` 为最终 head 提供输入, 无需计算新的混合系数.
 
+`Workspace.finish_moe()` 在同一个 kernel 中合并已完成的 MoE 输出并执行 HC 展开, 不使用中间 branch 张量.
+其 [API 契约](../../../python/oh_my_vllm/operators/hyperconnection/api.py) 保留两个 BF16 舍入边界.
+同一检查器使用精确字面量检查舍入, 抵消和带符号零用例.
+
 ## 路由
 
 `load_routing()` 从已存储的 FP32 logits 和原始文本/图像偏置开始.
