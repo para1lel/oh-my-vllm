@@ -14,7 +14,7 @@ The scheduler maximizes decode requests, whole prefill blocks, then prefill resi
 It then minimizes requests with partial suffixes. Extra decode verification uses the unused budget.
 
 The [DeepSeek plan](models/deepseek_v41/plan.md) tracks the incomplete model work.
-Isolated CUDA operators, rank-owned weights, grouped projections, and the shared pinned Engram loader are implemented.
+Isolated CUDA operators, rank-owned weights, shared expert inputs, text rotary tables, and the shared pinned Engram loader are implemented.
 Compound numerical limits and complete allocation bounds must close before full-model integration.
 Physical state, complete inference, DSpark, feature acceptance, and the approved measurement matrices are pending.
 

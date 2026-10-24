@@ -4,14 +4,16 @@ import argparse
 import hashlib
 import importlib.util
 import json
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 
 import numpy as np
 
 from development.model.deepseek_v41.fixtures import (
     CHECKPOINT_MANIFEST_SHA256,
+    EXACT_OPERATORS_SHA256,
     ROUTING_SHA256,
+    load_exact_operators,
     load_routing,
     load_startup_promotion,
 )
@@ -25,10 +27,14 @@ from .check_deepseek_exact import (
     execute_modes,
     native_identity,
     rejected,
+    repeated_case,
     require,
 )
 from .check_deepseek_hc import source_identity as common_sources
+from .check_deepseek_projection import prepared_group_values
+from .fixtures import Fixture
 from .numerics import compare
+from .performance_inputs import bf16
 from .storage import decode, equal_bits, storage_dtype
 
 DISPATCH_POLICY_SHA256 = (
@@ -154,10 +160,11 @@ COMBINE_BITS = {
 def source_identity():
     repository = Path(__file__).resolve().parents[2]
     sources = common_sources()
-    for path in (repository / "python/oh_my_vllm/operators/routing").rglob("*.py"):
-        sources[str(path.relative_to(repository))] = hashlib.sha256(
-            path.read_bytes()
-        ).hexdigest()
+    for family in ("routing", "projection"):
+        for path in (repository / "python/oh_my_vllm/operators" / family).rglob("*.py"):
+            sources[str(path.relative_to(repository))] = hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
     path = repository / "tests/test_collectives.py"
     sources[str(path.relative_to(repository))] = hashlib.sha256(
         path.read_bytes()
@@ -166,11 +173,18 @@ def source_identity():
 
 
 def check_dispatch_plans():
-    from oh_my_vllm.operators.routing import plan
+    from inspect import signature
+
+    from oh_my_vllm.operators.routing import api, plan
 
     require(
         callable(getattr(plan, "make_dispatch_plan", None)),
         "expert dispatch is not implemented",
+    )
+    require(
+        hasattr(api, "EncodedDispatchInputs")
+        and "encoded" in signature(plan.make_dispatch_plan).parameters,
+        "encoded expert dispatch is not implemented",
     )
     for rows in (0, 1, 128, 384):
         for experts in (128, 384):
@@ -194,6 +208,19 @@ def check_dispatch_plans():
                     and value.scratch == ((capacity,), "int32"),
                     "dispatch capacity or output schema differs",
                 )
+                encoded = plan.make_dispatch_plan(
+                    rows=rows, experts=experts, expert_count=count, encoded=True
+                )
+                require(
+                    encoded.storage
+                    == (
+                        ((capacity, 5120), "uint8"),
+                        ((((capacity + 127) // 128 + count) * 128 * 160,), "uint8"),
+                        *value.storage[1:],
+                    )
+                    and encoded.reuse_key != value.reuse_key,
+                    "encoded dispatch storage or reuse key differs",
+                )
     for options in (
         {"rows": -1},
         {"rows": 385},
@@ -207,6 +234,7 @@ def check_dispatch_plans():
         {"expert_start": 384},
         {"expert_start": 1, "expert_count": 96},
         {"expert_start": 96, "expert_count": 384},
+        {"encoded": 1},
     ):
         rejected(
             lambda options=options: plan.make_dispatch_plan(
@@ -227,8 +255,10 @@ def check_dispatch_plans():
     )
 
 
-def dispatch_sample(fixture, rows, experts, start, count, state="valid"):
-    from oh_my_vllm.operators.routing.api import DispatchOutputs
+def dispatch_sample(
+    fixture, rows, experts, start, count, state="valid", quantized=None
+):
+    from oh_my_vllm.operators.routing.api import DispatchOutputs, EncodedDispatchOutputs
 
     topk = 6 if experts == 384 else 3
     capacity = rows * topk
@@ -241,7 +271,18 @@ def dispatch_sample(fixture, rows, experts, start, count, state="valid"):
         ),
         (rows, topk),
     ).view(np.float32)
-    values = np.resize(fixture["bf16_words"], (rows, 5120))
+    values = (
+        np.resize(fixture["bf16_words"], (rows, 5120))
+        if quantized is None
+        else quantized.expected["encoded"]
+    )
+    quantization_status = np.zeros((rows, 160), np.uint8)
+    input_scales = None if quantized is None else quantized.expected["scales"]
+    if state == "quantization":
+        quantization_status[(0, 1, 2), (0, 159, 71)] = 1
+        values, input_scales = values.copy(), input_scales.copy()
+        values.reshape(rows, 160, 32)[quantization_status != 0] = 0
+        input_scales[quantization_status != 0] = 0
     if state in ("invalid", "invalid_other"):
         ids[0, 0] = experts if state == "invalid" else -1
         duplicate = count if start == 0 and count < experts else 0
@@ -258,13 +299,15 @@ def dispatch_sample(fixture, rows, experts, start, count, state="valid"):
         ],
         dtype=bool,
     )
+    valid &= ~quantization_status.any(axis=1)
     edges = sorted(
         (int(ids[r, j]), r, j)
         for r in range(rows)
         for j in range(topk)
         if valid[r] and start <= ids[r, j] < start + count
     )
-    packed = np.zeros((capacity, 5120), np.uint16)
+    packed = np.zeros((capacity, 5120), values.dtype)
+    compact_scales = np.zeros((capacity, 160), np.uint8)
     coefficients = np.zeros(capacity, np.float32)
     counts = np.zeros(count, np.int32)
     source_map = np.full((rows, topk), -1, np.int32)
@@ -272,6 +315,8 @@ def dispatch_sample(fixture, rows, experts, start, count, state="valid"):
     patterns = np.asarray(COMBINE_PATTERNS, np.uint16)
     for position, (expert, row, slot) in enumerate(edges):
         packed[position] = values[row]
+        if quantized is not None:
+            compact_scales[position] = input_scales[row]
         coefficients[position] = routes[row, slot]
         counts[expert - start] += 1
         source_map[row, slot] = position
@@ -293,11 +338,20 @@ def dispatch_sample(fixture, rows, experts, start, count, state="valid"):
     expected = DispatchOutputs(
         packed, coefficients, counts, offsets, source_map, (~valid).astype(np.uint8)
     )
+    if quantized is not None:
+        encoded, scales = prepared_group_values(packed, compact_scales, counts, offsets)
+        return (
+            (values, input_scales, quantization_status, ids, routes),
+            EncodedDispatchOutputs(encoded, scales, *expected[1:]),
+            down,
+            combined,
+        )
     return (values, ids, routes), expected, down, combined
 
 
 def check_dispatch_literals():
     fixture = load_startup_promotion()
+    quantized = dispatch_quantization(load_exact_operators()[1]["activation_fp8"], 4)
     for experts in (128, 384):
         _, expected, _, combined = dispatch_sample(fixture, 4, experts, 0, experts)
         order = np.argsort(expected.source_map.ravel()).tolist()
@@ -307,69 +361,153 @@ def check_dispatch_literals():
             and np.all(combined[:, 2::5] == 0x10000),
             "literal capacity or subnormal anchor differs",
         )
+        _, encoded, _, _ = dispatch_sample(
+            fixture, 4, experts, 0, experts, quantized=quantized
+        )
+        topk = 6 if experts == 384 else 3
+        require(
+            equal_bits(encoded.source_map, expected.source_map)
+            and equal_bits(
+                encoded.encoded[: len(order)],
+                quantized.expected["encoded"][
+                    np.array(DISPATCH_EDGES[experts]) // topk
+                ],
+            ),
+            "encoded dispatch differs from literal permutation",
+        )
 
 
-def check_dispatch_case(device, fixture, rows, experts, start, count):
-    from oh_my_vllm.operators.routing.api import DispatchInputs
+def dispatch_quantization(fixture, rows):
+    expanded = repeated_case(fixture, rows, 5120)
+    row, group = np.indices((rows, 160))
+    # Keep complete frozen groups; make row-32/128 and scale-atom swaps observable.
+    index = (row + row // 32 + row // 128 + group + group // 4) % 4
+
+    def permute(value):
+        return value.reshape(4, -1)[index].reshape(rows, 160 * (value.size // 4))
+
+    return Fixture(
+        expanded.manifest,
+        {"values": permute(fixture.inputs["values"])},
+        {},
+        {name: permute(value) for name, value in fixture.expected.items()},
+    )
+
+
+def check_dispatch_case(device, fixture, rows, experts, start, count, quantized=None):
+    from oh_my_vllm.operators.quantization.api import Inputs as QuantizationInputs
+    from oh_my_vllm.operators.quantization.plan import make_plan
+    from oh_my_vllm.operators.quantization.workspace import prepare
+    from oh_my_vllm.operators.routing.api import DispatchInputs, EncodedDispatchInputs
     from oh_my_vllm.operators.routing.plan import make_dispatch_plan
     from oh_my_vllm.operators.routing.workspace import prepare_dispatch
 
     states = ["valid"]
     if rows == 4:
         states += ["invalid", "valid", "invalid_other", "valid"]
+        if quantized is not None:
+            states += ["quantization", "valid"]
         if count != experts:
             states += ["empty", "valid"]
     samples = [
-        dispatch_sample(fixture, rows, experts, start, count, state) for state in states
+        dispatch_sample(fixture, rows, experts, start, count, state, quantized)
+        for state in states
     ]
     plan = make_dispatch_plan(
-        rows=rows, experts=experts, expert_start=start, expert_count=count
+        rows=rows,
+        experts=experts,
+        expert_start=start,
+        expert_count=count,
+        encoded=quantized is not None,
     )
     workspace = prepare_dispatch(plan, device)
-    inputs = DispatchInputs(
-        device.empty((rows, 5120), "bfloat16"),
+    quantizer = (
+        prepare(make_plan(rows=rows, width=5120, mode="fp8_ue8m0"), device)
+        if quantized is not None
+        else None
+    )
+    source = device.empty((rows, 5120), "bfloat16")
+    payload = (
+        (source,)
+        if quantizer is None
+        else (
+            quantizer.outputs.encoded,
+            quantizer.outputs.scales,
+            quantizer.outputs.status,
+        )
+    )
+    inputs = (DispatchInputs if quantized is None else EncodedDispatchInputs)(
+        *payload,
         device.empty((rows, plan.topk), "int32"),
         device.empty((rows, plan.topk), "float32"),
     )
     down = device.empty((rows * plan.topk, 5120), "bfloat16")
+    source_hosts = []
+    for sample in samples:
+        value = sample[0][0] if quantized is None else bf16(quantized.inputs["values"])
+        if quantized is not None:
+            row, group = np.nonzero(sample[0][2])
+            value[row, group * 32] = 0x7FC0
+        source_hosts.append((value, *sample[0][-2:], sample[2]))
+    upload_targets = source, inputs.expert_ids, inputs.coefficients, down
     uploads = [
         tuple(
             device.upload(value, dtype)
             for value, dtype in zip(
-                (*sample[0], sample[2]),
+                host,
                 ("bfloat16", "int32", "float32", "bfloat16"),
                 strict=True,
             )
         )
-        for sample in samples
+        for host in source_hosts
     ]
-    outputs = (*workspace.outputs, *workspace.combined, workspace.source_rows)
+    outputs = (
+        *(quantizer.outputs if quantizer else ()),
+        *workspace.outputs,
+        *workspace.combined,
+        workspace.source_rows,
+    )
     sentinels = [
         device.upload(np.full(t.shape, 0x5A, storage_dtype(str(t.dtype))), str(t.dtype))
         for t in outputs
     ]
 
     def operation():
+        if quantizer is not None:
+            quantizer.run(QuantizationInputs(source))
         workspace.run(inputs)
         return workspace.combine(down)
 
     try:
         for mode in ("eager", "graph"):
-            with (
-                workspace.graph_lease(),
-                (
+            with ExitStack() as resources:
+                for owner in (workspace, quantizer):
+                    if owner is not None:
+                        resources.enter_context(owner.graph_lease())
+                invoke = resources.enter_context(
                     device.graph(operation)
                     if mode == "graph"
                     else nullcontext(operation)
-                ) as invoke,
-            ):
-                for sample, upload in zip(samples, uploads, strict=True):
-                    for target, source in zip((*inputs, down), upload, strict=True):
-                        device.module.copy_bytes(target, source)
+                )
+                for sample, host, upload in zip(
+                    samples, source_hosts, uploads, strict=True
+                ):
+                    for target, uploaded in zip(upload_targets, upload, strict=True):
+                        device.module.copy_bytes(target, uploaded)
                     source_rows = np.full(rows * plan.topk, -1, np.int32)
                     row_ids, slots = np.where(sample[1].source_map >= 0)
                     source_rows[sample[1].source_map[row_ids, slots]] = row_ids
+                    quantization_expected = ()
+                    if quantizer is not None:
+                        roundtrip = quantized.expected["dequantized_bf16_bits"].copy()
+                        roundtrip.reshape(rows, 160, 32)[sample[0][2] != 0] = 0
+                        quantization_expected = (
+                            *sample[0][:2],
+                            roundtrip,
+                            sample[0][2],
+                        )
                     expected = (
+                        *quantization_expected,
                         *sample[1],
                         sample[3],
                         sample[1].status,
@@ -390,13 +528,27 @@ def check_dispatch_case(device, fixture, rows, experts, start, count):
                             all(
                                 equal_bits(device.download(tensor, host.dtype), host)
                                 for tensor, host in zip(
-                                    (*inputs, down),
-                                    (*sample[0], sample[2]),
+                                    upload_targets,
+                                    host,
                                     strict=True,
                                 )
                             ),
                             "dispatch/combine changed an input",
                         )
+                if mode == "graph" and quantizer is not None:
+                    quantizer.close()
+                    workspace.close()
+                    rejected(lambda: operation())
+                    for output, sentinel in zip(outputs, sentinels, strict=True):
+                        device.module.copy_bytes(output, sentinel)
+                    invoke()
+                    require(
+                        all(
+                            equal_bits(device.download(t, value.dtype), value)
+                            for t, value in zip(outputs, expected, strict=True)
+                        ),
+                        "composed graph lost closed producer storage",
+                    )
         return dict(
             rows=rows,
             experts=experts,
@@ -406,39 +558,93 @@ def check_dispatch_case(device, fixture, rows, experts, start, count):
             exact=True,
             modes=["eager", "graph"],
             native=native_identity(workspace),
+            encoded=quantized is not None,
+            quantization_native=native_identity(quantizer) if quantizer else None,
+            live_quantization=quantizer is not None,
         )
     finally:
         device.synchronize()
         workspace.close()
+        if quantizer is not None:
+            quantizer.close()
 
 
-def check_dispatch_failures(device, fixture):
-    from oh_my_vllm.operators.routing.api import DispatchInputs
+def check_dispatch_failures(device, fixture, encoded=False):
+    from oh_my_vllm.operators.routing.api import DispatchInputs, EncodedDispatchInputs
     from oh_my_vllm.operators.routing.plan import make_dispatch_plan
     from oh_my_vllm.operators.routing.workspace import prepare_dispatch
 
-    workspace = prepare_dispatch(make_dispatch_plan(rows=4, experts=128), device)
-    host, expected, down_host, result = dispatch_sample(fixture, 4, 128, 0, 128)
-    inputs = DispatchInputs(
-        *(
-            device.upload(v, dtype)
-            for v, dtype in zip(host, ("bfloat16", "int32", "float32"), strict=True)
-        )
+    workspace = prepare_dispatch(
+        make_dispatch_plan(rows=4, experts=128, encoded=encoded), device
+    )
+    quantized = (
+        dispatch_quantization(load_exact_operators()[1]["activation_fp8"], 4)
+        if encoded
+        else None
+    )
+    host, expected, down_host, result = dispatch_sample(
+        fixture, 4, 128, 0, 128, quantized=quantized
+    )
+    dtypes = (
+        ("uint8", "uint8", "uint8", "int32", "float32")
+        if encoded
+        else ("bfloat16", "int32", "float32")
+    )
+    inputs = (EncodedDispatchInputs if encoded else DispatchInputs)(
+        *(device.upload(v, dtype) for v, dtype in zip(host, dtypes, strict=True))
     )
     down = device.upload(down_host, "bfloat16")
+    value_field, value_dtype = (
+        ("encoded", "uint8") if encoded else ("values", "bfloat16")
+    )
+    dispatch_native = (
+        workspace.module.dispatch_encoded if encoded else workspace.module.dispatch
+    )
     try:
         for invalid in (
-            inputs._replace(values=device.empty((4, 5120), "float32")),
-            inputs._replace(values=device.empty((4, 256), "bfloat16")),
+            inputs._replace(**{value_field: device.empty((4, 5120), "float32")}),
+            inputs._replace(**{value_field: device.empty((4, 256), value_dtype)}),
             inputs._replace(expert_ids=device.empty((4, 3), "int64")),
             inputs._replace(coefficients=device.empty((4, 3), "bfloat16")),
             inputs._replace(
-                values=device.view(
-                    device.empty((4 * 5120 + 1,), "bfloat16"), (4, 5120), 1
-                )
+                **{
+                    value_field: device.view(
+                        device.empty((4 * 5120 + 1,), value_dtype), (4, 5120), 1
+                    )
+                }
             ),
         ):
             rejected(lambda invalid=invalid: workspace.run(invalid))
+        if encoded:
+            for field in ("scales", "status"):
+                for invalid in (
+                    device.empty((4, 159), "uint8"),
+                    device.empty((4, 160), "float32"),
+                ):
+                    rejected(
+                        lambda field=field, invalid=invalid: workspace.run(
+                            inputs._replace(**{field: invalid})
+                        )
+                    )
+            rejected(
+                lambda: dispatch_native(
+                    *inputs,
+                    *workspace.outputs._replace(
+                        packed_scales=device.empty((1,), "uint8")
+                    ),
+                    workspace.source_rows,
+                    128,
+                    0,
+                    128,
+                )
+            )
+            rejected(
+                lambda: workspace.run(
+                    DispatchInputs(
+                        inputs.encoded, inputs.expert_ids, inputs.coefficients
+                    )
+                )
+            )
         for output in (
             workspace.outputs._replace(source_map=inputs.expert_ids),
             workspace.outputs._replace(
@@ -450,7 +656,7 @@ def check_dispatch_failures(device, fixture):
             workspace.outputs._replace(offsets=device.empty((128,), "int32")),
         ):
             rejected(
-                lambda output=output: workspace.module.dispatch(
+                lambda output=output: dispatch_native(
                     *inputs, *output, workspace.source_rows, 128, 0, 128
                 )
             )
@@ -460,7 +666,7 @@ def check_dispatch_failures(device, fixture):
             device.view(workspace.outputs.source_map, (12,)),
         ):
             rejected(
-                lambda scratch=scratch: workspace.module.dispatch(
+                lambda scratch=scratch: dispatch_native(
                     *inputs, *workspace.outputs, scratch, 128, 0, 128
                 )
             )
@@ -473,7 +679,7 @@ def check_dispatch_failures(device, fixture):
                 **options,
             )
             rejected(
-                lambda invalid=invalid: workspace.module.dispatch(
+                lambda invalid=invalid: dispatch_native(
                     *inputs,
                     *workspace.outputs._replace(status=invalid),
                     workspace.source_rows,
@@ -590,6 +796,7 @@ def check_dispatch_failures(device, fixture):
         device.synchronize()
         workspace.close()
     return dict(
+        encoded=encoded,
         invalid_arguments=True,
         invalid_combine_isolation=True,
         finite_invalid_finite=True,
@@ -600,6 +807,7 @@ def check_dispatch_failures(device, fixture):
 def check_dispatch(device):
     check_dispatch_literals()
     fixture = load_startup_promotion()
+    _, exact = load_exact_operators()
     configurations = [
         (4, experts, start, count)
         for experts in (128, 384)
@@ -617,8 +825,23 @@ def check_dispatch(device):
     return dict(
         policy_sha256=DISPATCH_POLICY_SHA256,
         scalar_table_sha256=DISPATCH_SUBSETS_SHA256,
-        cases=[check_dispatch_case(device, fixture, *case) for case in configurations],
-        contracts=check_dispatch_failures(device, fixture),
+        exact_quantization_sha256=EXACT_OPERATORS_SHA256,
+        cases=[
+            check_dispatch_case(
+                device,
+                fixture,
+                *case,
+                dispatch_quantization(exact["activation_fp8"], case[0])
+                if encoded
+                else None,
+            )
+            for case in configurations
+            for encoded in (False, True)
+        ],
+        contracts=[
+            check_dispatch_failures(device, fixture, encoded)
+            for encoded in (False, True)
+        ],
     )
 
 

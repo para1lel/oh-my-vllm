@@ -11,7 +11,7 @@ from contextlib import contextmanager
 import numpy as np
 
 from ..runtime.native import load
-from .api import FUNCTIONS, GroupedOutputs
+from .api import FUNCTIONS, GroupedInputs, GroupedOutputs, PreparedGroupedInputs
 from .plan import scale_bytes
 from .workspace import require_eager
 
@@ -32,8 +32,10 @@ def disjoint(left, right):
 
 
 class Workspace:
-    def __init__(self, plan, device, weights, allocate):
+    def __init__(self, plan, device, weights, allocate, prepared):
         require_eager(device)
+        if type(prepared) is not bool:
+            raise ValueError("prepared mode must be a boolean")
         if len(weights) != plan.groups:
             raise ValueError("grouped weight count differs")
         self.weights = tuple(weights)
@@ -56,7 +58,7 @@ class Workspace:
             ):
                 raise ValueError("invalid grouped weight storage")
         self.module, self.source_id, self.library = load("projection", FUNCTIONS)
-        self.plan, self.device = plan, device
+        self.plan, self.device, self.prepared = plan, device, prepared
         metadata, scratch, self.sm_count = self.module.grouped_sizes(plan.groups)
         self.outputs = GroupedOutputs(
             allocate((plan.capacity, plan.outputs), "bfloat16"),
@@ -72,16 +74,26 @@ class Workspace:
                 np.uint64,
             )
         )
-        self.padded_input = allocate((plan.capacity, plan.padded_width), "uint8")
-        self.packed_scales = allocate((plan.scale_capacity,), "uint8")
+        self.padded_input = (
+            allocate((plan.capacity, plan.padded_width), "uint8")
+            if not prepared and plan.width != plan.padded_width
+            else None
+        )
+        self.packed_scales = (
+            None if prepared else allocate((plan.scale_capacity,), "uint8")
+        )
         self.metadata = allocate((metadata,), "uint8")
         self.scratch = allocate((scratch,), "uint8")
-        self._writes = (
-            *self.outputs,
-            self.padded_input,
-            self.packed_scales,
-            self.metadata,
-            self.scratch,
+        self._writes = tuple(
+            t
+            for t in (
+                *self.outputs,
+                self.padded_input,
+                self.packed_scales,
+                self.metadata,
+                self.scratch,
+            )
+            if t is not None
         )
         self._reads = (
             self.addresses,
@@ -97,9 +109,9 @@ class Workspace:
             raise RuntimeError("grouped projection workspace is closed")
 
     @contextmanager
-    def graph_lease(self):
+    def graph_lease(self, inputs=None):
         self.check_open()
-        owners = self.weights, self._reads, self._writes, self.module
+        owners = self.weights, self._reads, self._writes, self.module, inputs
         try:
             yield
         finally:
@@ -110,15 +122,30 @@ class Workspace:
 
     def run(self, inputs):
         self.check_open()
+        expected = PreparedGroupedInputs if self.prepared else GroupedInputs
+        if not isinstance(inputs, expected):
+            raise ValueError("grouped input layout differs from the workspace")
         for value in inputs:
             for other in self._writes:
                 disjoint(value, other)
-        self.module.project_grouped(
+        operation = (
+            self.module.project_grouped_prepared
+            if self.prepared
+            else self.module.project_grouped
+        )
+        conversion = (
+            ()
+            if self.prepared
+            else (
+                inputs.encoded if self.padded_input is None else self.padded_input,
+                self.packed_scales,
+            )
+        )
+        operation(
             *inputs,
             self.addresses,
             *self.outputs,
-            self.padded_input,
-            self.packed_scales,
+            *conversion,
             self.metadata,
             self.scratch,
             self.plan.width,
@@ -127,7 +154,11 @@ class Workspace:
         return self.outputs
 
 
-def prepare(plan, device, packed_weights, *, allocate=None):
+def prepare(plan, device, packed_weights, *, allocate=None, prepared=False):
     return Workspace(
-        plan, device, packed_weights, device.empty if allocate is None else allocate
+        plan,
+        device,
+        packed_weights,
+        device.empty if allocate is None else allocate,
+        prepared,
     )

@@ -1,7 +1,16 @@
 from contextlib import contextmanager
 
 from ..runtime.native import load
-from .api import FUNCTIONS, CombineOutputs, DispatchOutputs, Outputs, Weights
+from .api import (
+    FUNCTIONS,
+    CombineOutputs,
+    DispatchInputs,
+    DispatchOutputs,
+    EncodedDispatchInputs,
+    EncodedDispatchOutputs,
+    Outputs,
+    Weights,
+)
 
 
 class Workspace:
@@ -46,7 +55,8 @@ class DispatchWorkspace(Workspace):
     def __init__(self, plan, device, allocate):
         self.module, self.source_id, self.library = load("routing", FUNCTIONS)
         self.plan, self.device, self.weights = plan, device, ()
-        self.outputs = DispatchOutputs(*(allocate(*field) for field in plan.storage))
+        outputs = EncodedDispatchOutputs if plan.encoded else DispatchOutputs
+        self.outputs = outputs(*(allocate(*field) for field in plan.storage))
         self.combined = CombineOutputs(
             *(allocate(*field) for field in plan.combine_storage)
         )
@@ -56,7 +66,13 @@ class DispatchWorkspace(Workspace):
 
     def run(self, inputs):
         self.check_open()
-        self.module.dispatch(
+        expected = EncodedDispatchInputs if self.plan.encoded else DispatchInputs
+        if not isinstance(inputs, expected):
+            raise ValueError("dispatch input layout differs from the plan")
+        operation = (
+            self.module.dispatch_encoded if self.plan.encoded else self.module.dispatch
+        )
+        operation(
             *inputs,
             *self.outputs,
             self.source_rows,

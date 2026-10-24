@@ -32,16 +32,33 @@ def make_plan(*, rows, experts):
 class DispatchPlan(Plan):
     expert_start: int
     expert_count: int
+    encoded: bool = False
 
     @property
     def reuse_key(self):
-        return self.rows, self.experts, self.expert_start, self.expert_count
+        return (
+            self.rows,
+            self.experts,
+            self.expert_start,
+            self.expert_count,
+            self.encoded,
+        )
+
+    @property
+    def scale_capacity(self):
+        capacity = self.rows * self.topk
+        return ((capacity + 127) // 128 + self.expert_count) * 128 * 160
 
     @property
     def storage(self):
         capacity = self.rows * self.topk
+        values = (
+            (((capacity, 5120), "uint8"), ((self.scale_capacity,), "uint8"))
+            if self.encoded
+            else (((capacity, 5120), "bfloat16"),)
+        )
         return (
-            ((capacity, 5120), "bfloat16"),
+            *values,
             ((capacity,), "float32"),
             ((self.expert_count,), "int32"),
             ((self.expert_count + 1,), "int32"),
@@ -58,8 +75,12 @@ class DispatchPlan(Plan):
         return ((self.rows * self.topk,), "int32")
 
 
-def make_dispatch_plan(*, rows, experts, expert_start=0, expert_count=None):
+def make_dispatch_plan(
+    *, rows, experts, expert_start=0, expert_count=None, encoded=False
+):
     plan = make_plan(rows=rows, experts=experts)
+    if type(encoded) is not bool:
+        raise ValueError("encoded dispatch mode must be a boolean")
     count = experts if expert_count is None else expert_count
     if type(count) is not int or count not in (experts, experts // 4):
         raise ValueError("dispatch owns all experts or one quarter")
@@ -69,4 +90,4 @@ def make_dispatch_plan(*, rows, experts, expert_start=0, expert_count=None):
         or expert_start % count
     ):
         raise ValueError("dispatch expert interval is not aligned")
-    return DispatchPlan(plan.rows, plan.experts, expert_start, count)
+    return DispatchPlan(plan.rows, plan.experts, expert_start, count, encoded)

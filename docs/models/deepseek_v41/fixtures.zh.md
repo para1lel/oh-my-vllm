@@ -91,6 +91,10 @@ Lookup 和投影是独立边界.
 
 分组 A8W4 [执行](../../../python/oh_my_vllm/operators/projection/grouped.py) 在 GPU 上读取专家行数与偏移.
 它支持 384 组, 每组 384 行, 总计 2304 行.
+编码 dispatch 直接将量化 token 行和 scales 打包为分组投影的输入.
+
+两个专家输入投影可以共享这份只读的准备结果. 非法源行不进入压紧后的分组.
+紧凑输入保留 scale 转换路径. 对齐的输入宽度使用原始激活存储.
 在状态提交前拒绝非零元数据状态.
 检查器通过重复行, 输出排列和反转权重符号复用固定乘积.
 
@@ -120,7 +124,11 @@ Eager 和 Graph 检查覆盖输出替换及状态重置.
 `load_norm_rope()` 使用无偏移的原始 BF16 RMS 权重.
 文本 epsilon 为 `1e-20`. 视觉 epsilon 为 `1e-6`.
 RoPE 使用传入的 FP32 余弦/正弦系数处理最后 64 个通道中的相邻通道对. 前缀位保持不变.
-相位生成和二维视觉位置是独立边界.
+
+[适配器](../../../python/oh_my_vllm/models/deepseek_v41/rotary.py) 让所有层共享两张文本系数表.
+启动时使用 FP64 频率和相位, 然后存储 FP32 系数.
+检查器将生成系数与截至位置 1048575 的固定输入比较, 绝对容差为 `2^-20`, 然后检查旋转.
+二维视觉位置是独立边界.
 
 `load_swiglu()` 提供 BF16 gate/up 输入和完整 FP64 输出.
 [API](../../../python/oh_my_vllm/operators/activation/api.py) 规定文本截断范围和可选 FP32 路由权重.

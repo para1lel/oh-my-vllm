@@ -76,9 +76,10 @@ CUTLASS_DEVICE int scale_start(int offset, int group, int width) {
 }
 
 __global__ void prepare_metadata(const int32_t *counts, const int32_t *offsets,
-                                 const uint64_t *weights, const uint8_t *input, uint8_t *scales,
-                                 cutlass::bfloat16_t *output, uint8_t *status, Metadata meta,
-                                 int capacity, int groups, int outputs, int width) {
+                                 const uint64_t *weights, const uint8_t *input,
+                                 const uint8_t *scales, cutlass::bfloat16_t *output,
+                                 uint8_t *status, Metadata meta, int capacity, int groups,
+                                 int outputs, int width) {
   int invalid = offsets[0] != 0;
   for (int group = threadIdx.x; group < groups; group += blockDim.x) {
     int64_t first = offsets[group], last = offsets[group + 1];
@@ -144,10 +145,12 @@ tvm::ffi::Array<int64_t> grouped_sizes(int64_t groups) {
           sm_count};
 }
 
-void project_grouped(TensorView encoded, TensorView scales, TensorView counts, TensorView offsets,
-                     TensorView weights, TensorView output, TensorView status,
-                     TensorView padded_input, TensorView packed_scales, TensorView metadata,
-                     TensorView scratch, int64_t width, int64_t sm_count) {
+template <bool Prepared>
+void project_grouped_impl(TensorView encoded, TensorView scales, TensorView counts,
+                          TensorView offsets, TensorView weights, TensorView output,
+                          TensorView status, TensorView padded_input, TensorView packed_scales,
+                          TensorView metadata, TensorView scratch, int64_t width,
+                          int64_t sm_count) {
   namespace gp = grouped_projection;
   TVM_FFI_ICHECK(encoded.ndim() == 2 && output.ndim() == 2 && counts.ndim() == 1);
   int64_t capacity = encoded.size(0), outputs = output.size(1), groups = counts.size(0);
@@ -156,22 +159,27 @@ void project_grouped(TensorView encoded, TensorView scales, TensorView counts, T
                  capacity <= groups * 384 && sm_count > 0 && sm_count <= 1024);
   int padded = encoded_projection::round128(width);
   gp::Metadata meta(metadata.data_ptr(), groups);
-  tensor_contract(encoded, encoded, kDLUInt, 8, {capacity, width});
-  tensor_contract(scales, encoded, kDLUInt, 8, {capacity, width / 32});
+  int scale_capacity = (encoded_projection::round128(capacity) + groups * 128) * (padded / 32);
+  tensor_contract(encoded, encoded, kDLUInt, 8, {capacity, Prepared ? padded : width});
+  if constexpr (Prepared)
+    tensor_contract(scales, encoded, kDLUInt, 8, {scale_capacity});
+  else {
+    tensor_contract(scales, encoded, kDLUInt, 8, {capacity, width / 32});
+    tensor_contract(padded_input, encoded, kDLUInt, 8, {capacity, padded});
+    tensor_contract(packed_scales, encoded, kDLUInt, 8, {scale_capacity});
+  }
   tensor_contract(counts, encoded, kDLInt, 32, {groups});
   tensor_contract(offsets, encoded, kDLInt, 32, {groups + 1});
   tensor_contract(weights, encoded, kDLUInt, 64, {groups, 2});
   tensor_contract(output, encoded, kDLBfloat, 16, {capacity, outputs});
   tensor_contract(status, encoded, kDLUInt, 8, {groups});
-  tensor_contract(padded_input, encoded, kDLUInt, 8, {capacity, padded});
-  tensor_contract(packed_scales, encoded, kDLUInt, 8,
-                  {(encoded_projection::round128(capacity) + groups * 128) * (padded / 32)});
   tensor_contract(metadata, encoded, kDLUInt, 8, {meta.bytes});
   tvm::ffi::CUDADeviceGuard guard(encoded.device().device_id);
   auto args = gp::arguments(meta, groups, sm_count);
   tensor_contract(scratch, encoded, kDLUInt, 8, {int64_t(gp::Gemm::get_workspace_size(args))});
-  TensorView writes[] = {output, status, padded_input, packed_scales, metadata, scratch};
-  for (int i = 0; i < 6; ++i) {
+  TensorView writes[] = {output, status, metadata, scratch, packed_scales, padded_input};
+  int write_count = Prepared ? 4 : (width == padded ? 5 : 6);
+  for (int i = 0; i < write_count; ++i) {
     for (auto input : {encoded, scales, counts, offsets, weights})
       encoded_projection::separate(writes[i], input);
     for (int j = 0; j < i; ++j)
@@ -179,29 +187,51 @@ void project_grouped(TensorView encoded, TensorView scales, TensorView counts, T
   }
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, encoded.device().device_id));
   check_cuda(cudaMemsetAsync(output.data_ptr(), 0, tvm::ffi::GetDataSize(output), stream));
-  check_cuda(
-      cudaMemsetAsync(packed_scales.data_ptr(), 127, tvm::ffi::GetDataSize(packed_scales), stream));
+  if constexpr (!Prepared)
+    check_cuda(cudaMemsetAsync(packed_scales.data_ptr(), 127, tvm::ffi::GetDataSize(packed_scales),
+                               stream));
+  auto input = Prepared || width == padded ? encoded : padded_input;
+  auto input_scales = Prepared ? scales : packed_scales;
   gp::prepare_metadata<<<1, 256, 0, stream>>>(static_cast<const int32_t *>(counts.data_ptr()),
                                               static_cast<const int32_t *>(offsets.data_ptr()),
                                               static_cast<const uint64_t *>(weights.data_ptr()),
-                                              static_cast<const uint8_t *>(padded_input.data_ptr()),
-                                              static_cast<uint8_t *>(packed_scales.data_ptr()),
+                                              static_cast<const uint8_t *>(input.data_ptr()),
+                                              static_cast<const uint8_t *>(input_scales.data_ptr()),
                                               static_cast<cutlass::bfloat16_t *>(output.data_ptr()),
                                               static_cast<uint8_t *>(status.data_ptr()), meta,
                                               capacity, groups, outputs, padded);
   check_cuda(cudaGetLastError());
   if (!capacity)
     return;
-  encoded_projection::launch_padding(encoded, padded_input, capacity, width, padded, stream);
-  gp::pack_group_scales<<<groups, 256, 0, stream>>>(
-      static_cast<const uint8_t *>(scales.data_ptr()),
-      static_cast<const int32_t *>(counts.data_ptr()),
-      static_cast<const int32_t *>(offsets.data_ptr()),
-      static_cast<const uint8_t *>(status.data_ptr()), meta, width);
+  if constexpr (!Prepared) {
+    if (width != padded)
+      encoded_projection::launch_padding(encoded, padded_input, capacity, width, padded, stream);
+    gp::pack_group_scales<<<groups, 256, 0, stream>>>(
+        static_cast<const uint8_t *>(scales.data_ptr()),
+        static_cast<const int32_t *>(counts.data_ptr()),
+        static_cast<const int32_t *>(offsets.data_ptr()),
+        static_cast<const uint8_t *>(status.data_ptr()), meta, width);
+  }
   check_cuda(cudaGetLastError());
   encoded_projection::check_cutlass(gp::Gemm::can_implement(args));
   encoded_projection::check_cutlass(
       gp::Kernel::initialize_workspace(args, scratch.data_ptr(), stream));
   auto params = gp::Kernel::to_underlying_arguments(args, scratch.data_ptr());
   encoded_projection::check_cutlass(gp::Gemm::run(params, stream));
+}
+
+void project_grouped(TensorView encoded, TensorView scales, TensorView counts, TensorView offsets,
+                     TensorView weights, TensorView output, TensorView status,
+                     TensorView padded_input, TensorView packed_scales, TensorView metadata,
+                     TensorView scratch, int64_t width, int64_t sm_count) {
+  project_grouped_impl<false>(encoded, scales, counts, offsets, weights, output, status,
+                              padded_input, packed_scales, metadata, scratch, width, sm_count);
+}
+
+void project_grouped_prepared(TensorView encoded, TensorView packed_scales, TensorView counts,
+                              TensorView offsets, TensorView weights, TensorView output,
+                              TensorView status, TensorView metadata, TensorView scratch,
+                              int64_t width, int64_t sm_count) {
+  project_grouped_impl<true>(encoded, packed_scales, counts, offsets, weights, output, status,
+                             encoded, packed_scales, metadata, scratch, width, sm_count);
 }

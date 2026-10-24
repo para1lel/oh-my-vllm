@@ -13,7 +13,9 @@ The caller retains down inputs and rejects nonzero status before state commit.
 
 from typing import NamedTuple
 
-FUNCTIONS = ("route", "dispatch", "combine")
+from ..projection.api import PreparedGroupedInputs
+
+FUNCTIONS = ("route", "dispatch", "combine", "dispatch_encoded")
 
 
 class Weights(NamedTuple):
@@ -44,6 +46,37 @@ class DispatchOutputs(NamedTuple):
     offsets: object
     source_map: object
     status: object
+
+
+class EncodedDispatchInputs(NamedTuple):
+    """Exact FP8/UE8M0 outputs: encoded[rows,5120], scales/status[rows,160].
+
+    Any group status rejects its whole row before expert ownership filtering.
+    Codes/scales come from the finite quantizer; dispatch does not re-quantize.
+    Reuse outputs.grouped read-only for both w1/w3 before the next dispatch.
+    """
+
+    encoded: object
+    scales: object
+    status: object
+    expert_ids: object
+    coefficients: object
+
+
+class EncodedDispatchOutputs(NamedTuple):
+    encoded: object
+    packed_scales: object
+    coefficients: object
+    counts: object
+    offsets: object
+    source_map: object
+    status: object
+
+    @property
+    def grouped(self):
+        return PreparedGroupedInputs(
+            self.encoded, self.packed_scales, self.counts, self.offsets
+        )
 
 
 class CombineOutputs(NamedTuple):

@@ -14,7 +14,7 @@ Qwen 在一张 B200 上提供推理. DeepSeek 服务推理尚未启用.
 随后最小化包含零散后缀的请求数. 额外 decode 验证使用剩余预算.
 
 [DeepSeek 计划](models/deepseek_v41/plan.zh.md)跟踪尚未完成的模型工作.
-已实现独立 CUDA 算子, rank 自有权重, 分组投影和共享 pinned Engram 加载器.
+已实现独立 CUDA 算子, rank 自有权重, 共享专家输入, 文本旋转系数表和共享 pinned Engram 加载器.
 全模型集成前必须闭合复合数值限值和完整分配边界.
 物理状态, 完整推理, DSpark, 功能验收和已批准测量矩阵仍待完成.
 

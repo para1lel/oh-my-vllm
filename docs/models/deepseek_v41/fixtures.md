@@ -91,6 +91,10 @@ Activation quantization and collective reduction are separate boundaries.
 
 Grouped A8W4 [execution](../../../python/oh_my_vllm/operators/projection/grouped.py) reads expert counts and offsets on the GPU.
 It supports 384 groups, 384 rows per group, and 2304 total rows.
+Encoded dispatch packs quantized token rows and scales directly for grouped projection.
+
+The two expert input projections can share this read-only prepared output. Invalid source rows do not enter compacted groups.
+Compact inputs keep their scale conversion path. Aligned input widths use the original activation storage.
 Reject nonzero metadata status before state commit.
 The checker reuses fixed products with repeated rows, output permutations, and reversed weight signs.
 
@@ -120,7 +124,11 @@ The [checker](../../../development/operators/check_deepseek_linear.py) covers gr
 `load_norm_rope()` uses original BF16 RMS weights without an offset.
 Text epsilon is `1e-20`. Vision epsilon is `1e-6`.
 RoPE uses supplied FP32 cosine/sine coefficients for adjacent pairs in the last 64 channels. Prefix bits do not change.
-Phase generation and two-dimensional vision positions are separate boundaries.
+
+The [adapter](../../../python/oh_my_vllm/models/deepseek_v41/rotary.py) shares two text coefficient tables across layers.
+Startup uses FP64 frequencies and phases, then stores FP32 coefficients.
+The checker compares generated coefficients with fixed inputs through position 1048575, with absolute tolerance `2^-20`, then checks rotation.
+Two-dimensional vision positions are a separate boundary.
 
 `load_swiglu()` supplies BF16 gate/up inputs and complete FP64 outputs.
 The [API](../../../python/oh_my_vllm/operators/activation/api.py) specifies text clamps and optional FP32 routing weights.

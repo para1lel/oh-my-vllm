@@ -60,13 +60,15 @@ __device__ int warp_prefix(int value) {
   return value;
 }
 
-__global__ void dispatch_metadata(const int32_t *ids, const float *routes, float *coefficients,
+__global__ void dispatch_metadata(const int32_t *ids, const float *routes,
+                                  const uint8_t *quantization_status, float *coefficients,
                                   int32_t *counts, int32_t *offsets, int32_t *map, uint8_t *status,
                                   int32_t *source_rows, int rows, int experts, int topk, int start,
                                   int groups) {
   __shared__ uint32_t members[384][12];
   __shared__ uint16_t earlier[384][12];
   __shared__ int starts[384], warp_sums[16];
+  __shared__ bool quantized_valid[384];
   int thread = threadIdx.x, lane = thread & 31, warp = thread / 32;
   for (int i = thread; i < groups * 12; i += blockDim.x)
     members[i / 12][i % 12] = 0;
@@ -75,8 +77,19 @@ __global__ void dispatch_metadata(const int32_t *ids, const float *routes, float
     source_rows[edge] = -1;
     coefficients[edge] = 0.f;
   }
+  if (quantization_status)
+    for (int row = warp; row < rows; row += blockDim.x / 32) {
+      bool bad = false;
+      for (int group = lane; group < 160; group += 32)
+        bad |= quantization_status[row * 160 + group] != 0;
+      bool valid = !__any_sync(0xffffffffU, bad);
+      if (!lane)
+        quantized_valid[row] = valid;
+    }
+  __syncthreads();
   bool valid = thread < rows;
   if (valid) {
+    valid = !quantization_status || quantized_valid[thread];
     for (int slot = 0; slot < topk; ++slot) {
       int edge = thread * topk + slot, expert = ids[edge];
       valid = valid && expert >= 0 && expert < experts && isfinite(routes[edge]);
@@ -141,6 +154,33 @@ __global__ void dispatch_gather(const uint16_t *values, const int32_t *source_ro
   for (int column = threadIdx.x; column < 640; column += blockDim.x)
     target[destination * 640 + column] =
         row < 0 ? make_uint4(0, 0, 0, 0) : source[row * 640 + column];
+}
+
+__global__ void dispatch_encoded_gather(const uint8_t *encoded, const uint8_t *scales,
+                                        const int32_t *source_rows, const int32_t *counts,
+                                        const int32_t *offsets, uint8_t *packed,
+                                        uint8_t *packed_scales, int capacity, int groups) {
+  int block = blockIdx.x;
+  if (block < capacity) {
+    int row = source_rows[block];
+    auto source = reinterpret_cast<const uint4 *>(encoded);
+    auto target = reinterpret_cast<uint4 *>(packed);
+    for (int column = threadIdx.x; column < 320; column += blockDim.x)
+      target[block * 320 + column] = row < 0 ? make_uint4(0, 0, 0, 0) : source[row * 320 + column];
+  }
+  if (block < groups) {
+    int first = offsets[block];
+    int begin = ((first + 127) / 128 + block) * 128 * 160;
+    int end = block + 1 == groups ? ((capacity + 127) / 128 + groups) * 128 * 160
+                                  : ((offsets[block + 1] + 127) / 128 + block + 1) * 128 * 160;
+    // Each expert owns its whole scale slab, including padding and unused tail.
+    for (int i = threadIdx.x; i < end - begin; i += blockDim.x) {
+      int row = (i / 20480) * 128 + (i % 512) / 16 + ((i % 16) / 4) * 32;
+      int column = ((i / 512) % 40) * 4 + i % 4;
+      packed_scales[begin + i] =
+          row < counts[block] ? scales[source_rows[first + row] * 160 + column] : 127;
+    }
+  }
 }
 
 __global__ void combine_kernel(const uint16_t *down, const int32_t *map, const uint8_t *status,
@@ -225,30 +265,44 @@ void route(TensorView logits, TensorView bias, TensorView bias_vl, TensorView im
   check_cuda(cudaGetLastError());
 }
 
-void dispatch(TensorView values, TensorView expert_ids, TensorView routes, TensorView packed,
-              TensorView coefficients, TensorView counts, TensorView offsets, TensorView source_map,
-              TensorView status, TensorView source_rows, int64_t experts, int64_t expert_start,
-              int64_t expert_count) {
+template <bool Encoded>
+void dispatch_impl(TensorView values, TensorView scales, TensorView quantization_status,
+                   TensorView expert_ids, TensorView routes, TensorView packed,
+                   TensorView packed_scales, TensorView coefficients, TensorView counts,
+                   TensorView offsets, TensorView source_map, TensorView status,
+                   TensorView source_rows, int64_t experts, int64_t expert_start,
+                   int64_t expert_count) {
   TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 384);
   TVM_FFI_ICHECK(experts == 128 || experts == 384);
   TVM_FFI_ICHECK(expert_count == experts || expert_count == experts / 4);
   TVM_FFI_ICHECK(expert_start >= 0 && expert_start <= experts - expert_count &&
                  expert_start % expert_count == 0);
   int rows = values.size(0), topk = experts == 384 ? 6 : 3, capacity = rows * topk;
-  tensor_contract(values, values, kDLBfloat, 16, {rows, 5120});
+  tensor_contract(values, values, Encoded ? kDLUInt : kDLBfloat, Encoded ? 8 : 16, {rows, 5120});
+  if constexpr (Encoded) {
+    tensor_contract(scales, values, kDLUInt, 8, {rows, 160});
+    tensor_contract(quantization_status, values, kDLUInt, 8, {rows, 160});
+    tensor_contract(packed_scales, values, kDLUInt, 8,
+                    {((capacity + 127) / 128 + expert_count) * 128 * 160});
+  }
   tensor_contract(expert_ids, values, kDLInt, 32, {rows, topk});
   tensor_contract(routes, values, kDLFloat, 32, {rows, topk});
-  tensor_contract(packed, values, kDLBfloat, 16, {capacity, 5120});
+  tensor_contract(packed, values, Encoded ? kDLUInt : kDLBfloat, Encoded ? 8 : 16,
+                  {capacity, 5120});
   tensor_contract(coefficients, values, kDLFloat, 32, {capacity});
   tensor_contract(counts, values, kDLInt, 32, {expert_count});
   tensor_contract(offsets, values, kDLInt, 32, {expert_count + 1});
   tensor_contract(source_map, values, kDLInt, 32, {rows, topk});
   tensor_contract(status, values, kDLUInt, 8, {rows});
   tensor_contract(source_rows, values, kDLInt, 32, {capacity});
-  TensorView outputs[] = {packed, coefficients, counts, offsets, source_map, status, source_rows};
-  for (int i = 0; i < 7; ++i) {
+  TensorView outputs[] = {packed,     coefficients, counts,      offsets,
+                          source_map, status,       source_rows, packed_scales};
+  for (int i = 0; i < (Encoded ? 8 : 7); ++i) {
     for (auto input : {values, expert_ids, routes})
       disjoint(outputs[i], input);
+    if constexpr (Encoded)
+      for (auto input : {scales, quantization_status})
+        disjoint(outputs[i], input);
     for (int j = 0; j < i; ++j)
       disjoint(outputs[i], outputs[j]);
   }
@@ -256,17 +310,47 @@ void dispatch(TensorView values, TensorView expert_ids, TensorView routes, Tenso
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
   dispatch_metadata<<<1, 512, 0, stream>>>(
       static_cast<const int32_t *>(expert_ids.data_ptr()),
-      static_cast<const float *>(routes.data_ptr()), static_cast<float *>(coefficients.data_ptr()),
-      static_cast<int32_t *>(counts.data_ptr()), static_cast<int32_t *>(offsets.data_ptr()),
-      static_cast<int32_t *>(source_map.data_ptr()), static_cast<uint8_t *>(status.data_ptr()),
-      static_cast<int32_t *>(source_rows.data_ptr()), rows, experts, topk, expert_start,
-      expert_count);
-  if (rows)
+      static_cast<const float *>(routes.data_ptr()),
+      Encoded ? static_cast<const uint8_t *>(quantization_status.data_ptr()) : nullptr,
+      static_cast<float *>(coefficients.data_ptr()), static_cast<int32_t *>(counts.data_ptr()),
+      static_cast<int32_t *>(offsets.data_ptr()), static_cast<int32_t *>(source_map.data_ptr()),
+      static_cast<uint8_t *>(status.data_ptr()), static_cast<int32_t *>(source_rows.data_ptr()),
+      rows, experts, topk, expert_start, expert_count);
+  if constexpr (Encoded) {
+    int blocks = capacity > expert_count ? capacity : expert_count;
+    dispatch_encoded_gather<<<blocks, 256, 0, stream>>>(
+        static_cast<const uint8_t *>(values.data_ptr()),
+        static_cast<const uint8_t *>(scales.data_ptr()),
+        static_cast<const int32_t *>(source_rows.data_ptr()),
+        static_cast<const int32_t *>(counts.data_ptr()),
+        static_cast<const int32_t *>(offsets.data_ptr()), static_cast<uint8_t *>(packed.data_ptr()),
+        static_cast<uint8_t *>(packed_scales.data_ptr()), capacity, expert_count);
+  } else if (rows)
     dispatch_gather<<<capacity, 256, 0, stream>>>(
         static_cast<const uint16_t *>(values.data_ptr()),
         static_cast<const int32_t *>(source_rows.data_ptr()),
         static_cast<uint16_t *>(packed.data_ptr()));
   check_cuda(cudaGetLastError());
+}
+
+void dispatch(TensorView values, TensorView expert_ids, TensorView routes, TensorView packed,
+              TensorView coefficients, TensorView counts, TensorView offsets, TensorView source_map,
+              TensorView status, TensorView source_rows, int64_t experts, int64_t expert_start,
+              int64_t expert_count) {
+  dispatch_impl<false>(values, values, values, expert_ids, routes, packed, packed, coefficients,
+                       counts, offsets, source_map, status, source_rows, experts, expert_start,
+                       expert_count);
+}
+
+void dispatch_encoded(TensorView encoded, TensorView scales, TensorView quantization_status,
+                      TensorView expert_ids, TensorView routes, TensorView packed,
+                      TensorView packed_scales, TensorView coefficients, TensorView counts,
+                      TensorView offsets, TensorView source_map, TensorView status,
+                      TensorView source_rows, int64_t experts, int64_t expert_start,
+                      int64_t expert_count) {
+  dispatch_impl<true>(encoded, scales, quantization_status, expert_ids, routes, packed,
+                      packed_scales, coefficients, counts, offsets, source_map, status, source_rows,
+                      experts, expert_start, expert_count);
 }
 
 void combine(TensorView down, TensorView source_map, TensorView status, TensorView output,

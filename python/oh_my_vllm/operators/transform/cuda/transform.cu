@@ -3,6 +3,15 @@
 
 namespace {
 
+__global__ void rope_table_kernel(const double *frequencies, float2 *output, int count) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index >= count)
+    return;
+  double sine, cosine;
+  sincos(double(index / 32) * frequencies[index % 32], &sine, &cosine);
+  output[index] = make_float2(__double2float_rn(cosine), __double2float_rn(sine));
+}
+
 __global__ void widen_kernel(const uint16_t *values, uint32_t *output, uint8_t *status) {
   int row = blockIdx.x, invalid = 0;
   for (int column = threadIdx.x; column < 5120; column += blockDim.x) {
@@ -71,6 +80,24 @@ void values_contract(TensorView values, TensorView output) {
 }
 
 } // namespace
+
+void rope_table(TensorView frequencies, TensorView output) {
+  TVM_FFI_ICHECK(output.ndim() == 3 && output.size(0) > 0 && output.size(0) <= 1048576);
+  int length = output.size(0);
+  tensor_contract(frequencies, frequencies, kDLFloat, 64, {32});
+  tensor_contract(output, frequencies, kDLFloat, 32, {length, 32, 2});
+  disjoint(frequencies, output);
+  tvm::ffi::CUDADeviceGuard guard(frequencies.device().device_id);
+  auto stream =
+      static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, frequencies.device().device_id));
+  cudaStreamCaptureStatus capture;
+  check_cuda(cudaStreamIsCapturing(stream, &capture));
+  TVM_FFI_ICHECK(capture == cudaStreamCaptureStatusNone) << "prepare rotary tables outside capture";
+  rope_table_kernel<<<(length * 32 + 255) / 256, 256, 0, stream>>>(
+      static_cast<const double *>(frequencies.data_ptr()), static_cast<float2 *>(output.data_ptr()),
+      length * 32);
+  check_cuda(cudaGetLastError());
+}
 
 void widen(TensorView values, TensorView output, TensorView status) {
   TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 384);
