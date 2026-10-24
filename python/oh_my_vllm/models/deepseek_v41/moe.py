@@ -6,9 +6,6 @@ Eager completion or graph destruction. Preparation and closure are Eager-only;
 close invalidates Python execution, not existing graph leases.
 """
 
-import math
-from bisect import bisect_left
-from contextlib import ExitStack, contextmanager
 from typing import NamedTuple
 
 from ...operators.activation import api as activation
@@ -24,9 +21,6 @@ from ...operators.projection.plan import make_plan as projection_plan
 from ...operators.projection.workspace import (
     prepare as prepare_projection,
 )
-from ...operators.projection.workspace import (
-    require_eager,
-)
 from ...operators.quantization import api as quantization
 from ...operators.quantization.plan import make_plan as quantization_plan
 from ...operators.quantization.workspace import prepare as prepare_quantization
@@ -35,31 +29,13 @@ from ...operators.routing.plan import make_dispatch_plan
 from ...operators.routing.plan import make_plan as routing_plan
 from ...operators.routing.workspace import prepare as prepare_routing
 from ...operators.routing.workspace import prepare_dispatch
-
-_FAILED_PREPARATIONS = []
-_ELEMENT_BYTES = {"uint8": 1, "bfloat16": 2, "float32": 4, "int32": 4, "uint64": 8}
+from .workspace import Workspace as RankWorkspace
 
 
 class Outputs(NamedTuple):
     routed: object
     shared: object
     status: tuple
-
-
-def _span(value):
-    first = value.data_ptr()
-    return first, first + value.numel() * _ELEMENT_BYTES[str(value.dtype)]
-
-
-def _disjoint(span, intervals):
-    first, last = span
-    if first == last:
-        return
-    index = bisect_left(intervals, (first,))
-    if (index and intervals[index - 1][1] > first) or (
-        index < len(intervals) and intervals[index][0] < last
-    ):
-        raise ValueError("MoE writable storage overlaps another tensor")
 
 
 def _configuration(owner, name, rows):
@@ -135,62 +111,16 @@ def _weights(owner, name, count, start):
     return dense, routed, shared, width, shared_width, reads
 
 
-class Workspace:
+class Workspace(RankWorkspace):
     def __init__(self, owner, name, rows, allocate, byte_limit):
-        self.owner, self.device = owner, owner.device
         self.plan, count, start = _configuration(owner, name, rows)
-        if type(byte_limit) is not int or byte_limit <= 0:
-            raise ValueError("MoE requires a positive workspace byte limit")
-        require_eager(self.device)
-        self.closed, self.parts = False, []
-        self.allocated_bytes, self.byte_limit = count * 16 * 3, byte_limit
-        self._writes = []
         dense, routed, shared, width, shared_width, reads = _weights(
             owner, name, count, start
         )
-        self._tensor_device = dense[0].device
-        if any(
-            tensor.device != self._tensor_device or not tensor.is_contiguous()
-            for tensor in reads
-        ):
-            raise ValueError("MoE weight device or layout differs")
-        self._allocations = []
-        # Read-only aliases are legal. Merge them before checking allocations.
-        self._reads = []
-        for first, last in sorted(set(map(_span, reads))):
-            if self._reads and first <= self._reads[-1][1]:
-                self._reads[-1] = (self._reads[-1][0], max(last, self._reads[-1][1]))
-            else:
-                self._reads.append((first, last))
-
-        def reserve(shape, dtype):
-            size = math.prod(shape) * _ELEMENT_BYTES[dtype]
-            if self.allocated_bytes + size > byte_limit:
-                raise ValueError("MoE workspace exceeds its byte limit")
-            value = allocate(shape, dtype)
-            if (
-                tuple(value.shape) != tuple(shape)
-                or str(value.dtype) != dtype
-                or not value.is_contiguous()
-                or value.device != self._tensor_device
-            ):
-                raise ValueError("MoE allocator returned invalid storage")
-            self._allocations.append(value)
-            span = _span(value)
-            _disjoint(span, self._reads)
-            _disjoint(span, self._writes)
-            if span[0] != span[1]:
-                self._writes.insert(bisect_left(self._writes, span), span)
-            self.allocated_bytes += size
-            return value
-
-        def part(factory, *args, **kwargs):
-            workspace = factory(*args, **kwargs, allocate=reserve)
-            self.parts.append(workspace)
-            return workspace
-
+        super().__init__(owner, reads, allocate, byte_limit, extra_bytes=count * 48)
+        part = self.part
         capacity = rows * self.plan.topk
-        try:
+        with self.preparing():
             self.gate = part(
                 prepare_linear,
                 linear_plan(
@@ -279,31 +209,6 @@ class Workspace:
                     self.dispatch.combined.status,
                 ),
             )
-        except BaseException as error:
-            try:
-                self.device.synchronize_compute()
-            except BaseException as completion:
-                _FAILED_PREPARATIONS.append(self)
-                error.add_note(f"MoE preparation completion also failed: {completion}")
-            self.close()
-            raise
-
-    def check_open(self):
-        if self.closed or self.owner.closed or self.owner._retained:
-            raise RuntimeError("MoE workspace or rank weights are closed")
-
-    @contextmanager
-    def graph_lease(self):
-        self.check_open()
-        with ExitStack() as resources:
-            for part in self.parts:
-                resources.enter_context(part.graph_lease())
-            yield
-
-    def close(self):
-        self.closed = True
-        for part in reversed(self.parts):
-            part.close()
 
     def run(self, value, image_mask):
         self.check_open()
@@ -311,14 +216,7 @@ class Workspace:
             (value, (self.plan.rows, 5120), "bfloat16"),
             (image_mask, (self.plan.rows,), "uint8"),
         ):
-            if (
-                tuple(tensor.shape) != shape
-                or str(tensor.dtype) != dtype
-                or not tensor.is_contiguous()
-                or tensor.device != self.outputs.routed.device
-            ):
-                raise ValueError("MoE input shape, dtype, layout, or device differs")
-            _disjoint(_span(tensor), self._writes)
+            self.check_input(tensor, shape, dtype)
         logits = self.gate.run(linear.Inputs(value)).value
         routes = self.route.run(routing.Inputs(logits, image_mask))
         quantized = self.input_quantization.run(quantization.Inputs(value))

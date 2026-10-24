@@ -21,7 +21,11 @@ from development.serving.device import device_identity, selected_uuid
 
 def source_identity():
     root = Path(__file__).resolve().parents[3]
-    paths = [Path(__file__), root / "python/oh_my_vllm/models/deepseek_v41/moe.py"]
+    paths = [
+        Path(__file__),
+        root / "python/oh_my_vllm/models/deepseek_v41/moe.py",
+        root / "python/oh_my_vllm/models/deepseek_v41/workspace.py",
+    ]
     for family in (
         "activation",
         "linear",
