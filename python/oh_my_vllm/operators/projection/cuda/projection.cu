@@ -237,3 +237,5 @@ void project(TensorView encoded, TensorView scales, TensorView packed_weight,
     launch_projection<8>(encoded, scales, packed_weight, weight_scales, output, padded_input,
                          packed_input_scales, scratch, rows, outputs, width, stream);
 }
+
+#include "grouped.cuh"

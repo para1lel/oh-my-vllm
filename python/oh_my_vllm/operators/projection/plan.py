@@ -37,3 +37,32 @@ def make_plan(*, rows, outputs, width, bits):
     ):
         raise ValueError("invalid encoded projection dimensions or weight bits")
     return Plan(rows, outputs, width, bits)
+
+
+@dataclass(frozen=True)
+class GroupedPlan:
+    capacity: int
+    groups: int
+    outputs: int
+    width: int
+
+    @property
+    def padded_width(self):
+        return round128(self.width)
+
+    @property
+    def scale_capacity(self):
+        return (round128(self.capacity) + self.groups * 128) * (self.padded_width // 32)
+
+
+def make_grouped_plan(*, capacity, groups, outputs, width):
+    make_plan(rows=0, outputs=outputs, width=width, bits=4)
+    if (
+        type(capacity) is not int
+        or not 0 <= capacity <= 2304
+        or type(groups) is not int
+        or not 1 <= groups <= 384
+        or capacity > groups * 384
+    ):
+        raise ValueError("invalid grouped projection capacity or group count")
+    return GroupedPlan(capacity, groups, outputs, width)

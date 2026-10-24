@@ -27,7 +27,7 @@
 | [编码投影](../../development/model/deepseek_v41/projection/index.json) | 五个 A8W8 和五个 A8W4 矩阵乘积 |
 | [Rank 自有投影](../../development/model/deepseek_v41/rank-encoded-projection/index.json) | 1, 128 和 384 行的精确量化及完整 FP64 乘积 |
 | [未量化投影](../../development/model/deepseek_v41/unquantized-projection/index.json) | 七个包含完整 FP64 乘积的 BF16/FP32 用例 |
-| [启动转换](../../development/model/deepseek_v41/startup-promotion.npz) | 精确的 FP8 到 BF16 及 BF16 到 F32 转换 |
+| [精确转换](../../development/model/deepseek_v41/startup-promotion.npz) | FP8 到 BF16 和 BF16 到 F32 值 |
 | [归一化和旋转](../../development/model/deepseek_v41/norm-rope/index.json) | 四个 RMS 和三个 RoPE 用例 |
 | [激活](../../development/model/deepseek_v41/swiglu/index.json) | 四个 SwiGLU 用例 |
 | [Ratio2 池化](../../development/model/deepseek_v41/pooling/index.json) | 四个完整成对用例 |
@@ -88,6 +88,11 @@ Lookup 和投影是独立边界.
 原始权重保存在外部. 合成 FP4 用例包含自身权重.
 [检查器](../../development/operators/check_deepseek_projection.py) 覆盖打包, K=576 和最大 15360 的宽度.
 激活量化和 collective 归约是独立边界.
+
+分组 A8W4 [执行](../../python/oh_my_vllm/operators/projection/grouped.py) 在 GPU 上读取专家行数与偏移.
+它支持 384 组, 每组 384 行, 总计 2304 行.
+在状态提交前拒绝非零元数据状态.
+检查器通过重复行, 输出排列和反转权重符号复用固定乘积.
 
 `load_rank_encoded_projection()` 使用原始 rank 自有 `wq_a` 权重检查[量化与投影](../../python/oh_my_vllm/models/deepseek_v41/linear.py).
 其 FP64 乘积使用量化后的激活.

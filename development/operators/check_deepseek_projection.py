@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+from contextlib import nullcontext
 from pathlib import Path
 from types import MappingProxyType
 
@@ -39,6 +40,7 @@ def source_identity():
     sources = common_sources()
     paths = list((repository / "python/oh_my_vllm/operators/projection").rglob("*.py"))
     paths.extend((repository / "python/oh_my_vllm/models/deepseek_v41").glob("*.py"))
+    paths.append(repository / "tests/test_collectives.py")
     for path in paths:
         sources[str(path.relative_to(repository))] = hashlib.sha256(
             path.read_bytes()
@@ -84,6 +86,282 @@ def packed_scales(scales, rows, width, bits):
     n, g = np.indices((rows, width // 32))
     result[scale_offsets(rows, width)] = scales[n if bits == 4 else n // 32, g]
     return result
+
+
+def check_grouped_plans():
+    from oh_my_vllm.operators.projection import plan
+
+    require(hasattr(plan, "make_grouped_plan"), "grouped projection is not implemented")
+    base = dict(capacity=2304, groups=384, outputs=5120, width=576)
+    selected = plan.make_grouped_plan(**base)
+    require(selected.padded_width == 640, "grouped K padding differs")
+    for change in (
+        dict(capacity=-1),
+        dict(capacity=2305),
+        dict(capacity=True),
+        dict(groups=0),
+        dict(groups=385),
+        dict(groups=True),
+        dict(outputs=33),
+        dict(width=31),
+    ):
+        rejected(lambda change=change: plan.make_grouped_plan(**(base | change)))
+
+
+def check_grouped_case(device, case, limits, values, groups, repeats):
+    from oh_my_vllm.operators.projection.api import GroupedInputs, Weights
+    from oh_my_vllm.operators.projection.grouped import prepare
+    from oh_my_vllm.operators.projection.plan import make_grouped_plan
+    from oh_my_vllm.operators.projection.workspace import prepare_weights
+
+    shape = case.manifest["case"]["shape"]
+    rows, width, outputs = (shape[key] for key in ("rows", "width", "outputs"))
+    capacity = rows * repeats
+    raw, scale = values[0].view(np.uint8), values[1]
+    variants = (
+        (raw, scale),
+        (raw[::-1].copy(), scale[::-1].copy()),
+        (raw ^ np.uint8(0x88), scale),
+    )
+    weights = [
+        prepare_weights(device, Weights(device.upload(w), device.upload(s)), bits=4)
+        for w, s in variants
+    ]
+    encoded = np.tile(case.inputs["encoded"], (repeats, 1))
+    scales = np.tile(case.inputs["scales"], (repeats, 1))
+    inputs = GroupedInputs(
+        device.upload(encoded),
+        device.upload(scales),
+        device.empty((groups,), "int32"),
+        device.empty((groups + 1,), "int32"),
+    )
+    workspace = prepare(
+        make_grouped_plan(
+            capacity=capacity, groups=groups, outputs=outputs, width=width
+        ),
+        device,
+        [weights[g % 3] for g in range(groups)],
+    )
+    dense = np.zeros(groups, np.int32)
+    for row in range(capacity):
+        dense[row // 384] += 1
+    uneven = np.zeros(groups, np.int32)
+    for row in range(capacity):
+        uneven[(row * 37) % groups] += 1
+    partial = np.zeros(groups, np.int32)
+    for row in range(rows * (repeats // 2)):
+        partial[row // 384] += 1
+    require(max(dense.max(), uneven.max()) <= 384, "fixture exceeds expert row bound")
+    states = []
+    for counts, invalid in (
+        (dense, False),
+        (uneven, False),
+        (partial, False),
+        (np.zeros(groups, np.int32), False),
+        (dense, True),
+        (uneven, False),
+    ):
+        offsets = np.concatenate(
+            (np.zeros(1, np.int32), np.cumsum(counts, dtype=np.int32))
+        )
+        if invalid:
+            offsets[-1] = capacity + 1
+        states.append(
+            (counts, offsets, invalid, device.upload(counts), device.upload(offsets))
+        )
+    originals = [
+        (tensor, device.download(tensor, np.uint8))
+        for weight in weights
+        for tensor in (weight.encoded, weight.scales)
+    ]
+
+    def operation():
+        return workspace.run(inputs)
+
+    try:
+        for mode in ("eager", "graph"):
+            with (
+                workspace.graph_lease(),
+                device.graph(operation)
+                if mode == "graph"
+                else nullcontext(operation) as invoke,
+            ):
+                for counts, offsets, invalid, count_tensor, offset_tensor in states:
+                    device.module.copy_bytes(inputs.counts, count_tensor)
+                    device.module.copy_bytes(inputs.offsets, offset_tensor)
+                    invoke()
+                    actual = decode(
+                        device.download(workspace.outputs.value, np.uint16), "bfloat16"
+                    )
+                    status = device.download(workspace.outputs.status, np.uint8)
+                    require(
+                        bool(status.any()) == invalid, "grouped metadata status differs"
+                    )
+                    if invalid or not counts.any():
+                        require(
+                            not actual.any(), "empty or invalid groups retained outputs"
+                        )
+                        continue
+                    require(
+                        not actual[offsets[-1] :].any(),
+                        "unused grouped output retained data",
+                    )
+                    for group in range(groups):
+                        first, last = offsets[group : group + 2]
+                        if group % 3 == 1:
+                            actual[first:last] = actual[first:last, ::-1]
+                        elif group % 3 == 2:
+                            actual[first:last] *= -1
+                    for start in range(0, int(offsets[-1]), rows):
+                        compared = compare(
+                            {"value": actual[start : start + rows]}, case, limits
+                        )
+                        require(
+                            compared.passed,
+                            f"grouped projection differs: {compared.failures}",
+                        )
+        for tensor, original in originals:
+            require(
+                equal_bits(device.download(tensor, np.uint8), original),
+                "grouped weight changed",
+            )
+        for tensor, original in ((inputs.encoded, encoded), (inputs.scales, scales)):
+            require(
+                equal_bits(device.download(tensor, np.uint8), original),
+                "grouped input changed",
+            )
+        return dict(
+            case=case.manifest["case"]["id"],
+            groups=groups,
+            capacity=capacity,
+            modes=["eager", "graph"],
+            dynamic_replay=True,
+            native=native_identity(workspace),
+        )
+    finally:
+        device.synchronize()
+        workspace.close()
+
+
+def check_grouped_contracts(device):
+    from oh_my_vllm.operators.projection.api import GroupedInputs, Weights
+    from oh_my_vllm.operators.projection.grouped import prepare
+    from oh_my_vllm.operators.projection.plan import make_grouped_plan
+    from oh_my_vllm.operators.projection.workspace import prepare_weights
+
+    from tests.test_collectives import metadata_tensor
+
+    weights = prepare_weights(
+        device,
+        Weights(
+            device.zeros((128, 64), "uint8"),
+            device.upload(np.full((128, 4), 127, np.uint8)),
+        ),
+        bits=4,
+    )
+
+    def check(capacity, groups):
+        workspace = prepare(
+            make_grouped_plan(capacity=capacity, groups=groups, outputs=128, width=128),
+            device,
+            [weights] * groups,
+        )
+        inputs = GroupedInputs(
+            device.zeros((capacity, 128), "uint8"),
+            device.upload(np.full((capacity, 4), 127, np.uint8)),
+            device.zeros((groups,), "int32"),
+            device.zeros((groups + 1,), "int32"),
+        )
+        try:
+            with (
+                workspace.graph_lease(),
+                device.graph(lambda: workspace.run(inputs)) as replay,
+            ):
+                for bad in (None, "negative", "too_many", "overflow", None):
+                    counts = np.zeros(groups, np.int32)
+                    offsets = np.zeros(groups + 1, np.int32)
+                    if bad == "negative":
+                        counts[0] = -1
+                    elif bad == "too_many":
+                        counts[0] = 385
+                        offsets[1:] = 385
+                    elif bad == "overflow":
+                        offsets[0], offsets[1] = (
+                            np.iinfo(np.int32).min,
+                            np.iinfo(np.int32).max,
+                        )
+                    uploaded = device.upload(counts), device.upload(offsets)
+                    for target, source in zip(inputs[2:], uploaded, strict=True):
+                        device.module.copy_bytes(target, source)
+                    replay()
+                    require(
+                        np.all(
+                            device.download(workspace.outputs.status, np.uint8)
+                            == (bad is not None)
+                        )
+                        and not device.download(
+                            workspace.outputs.value, np.uint16
+                        ).any(),
+                        "grouped metadata guard failed",
+                    )
+            if capacity:
+                rejected(
+                    lambda: workspace.run(
+                        inputs._replace(encoded=workspace.padded_input)
+                    )
+                )
+                rejected(
+                    lambda: workspace.run(
+                        inputs._replace(counts=device.empty((groups,), "float32"))
+                    )
+                )
+                rejected(
+                    lambda: workspace.run(
+                        inputs._replace(offsets=device.empty((groups,), "int32"))
+                    )
+                )
+                for options in (
+                    [dict(stride=2), dict(device=1)] if groups > 1 else [dict(device=1)]
+                ):
+                    invalid, guards = metadata_tensor(
+                        groups,
+                        pointer=inputs.counts.data_ptr(),
+                        code=0,
+                        bits=32,
+                        **options,
+                    )
+                    rejected(
+                        lambda invalid=invalid: workspace.run(
+                            inputs._replace(counts=invalid)
+                        )
+                    )
+                    del invalid, guards
+            with (
+                workspace.graph_lease(),
+                device.graph(lambda: workspace.run(inputs)) as replay,
+            ):
+                workspace.close()
+                rejected(lambda: workspace.run(inputs))
+                rejected(lambda: workspace.graph_lease().__enter__())
+                replay()
+                require(
+                    not device.download(workspace.outputs.status, np.uint8).any(),
+                    "closed workspace graph failed",
+                )
+        finally:
+            device.synchronize()
+            workspace.close()
+
+    for capacity, groups in ((0, 1), (1, 1), (384, 32)):
+        check(capacity, groups)
+    return dict(
+        empty=True,
+        invalid_metadata=True,
+        overlap=True,
+        stride=True,
+        device=True,
+        closed_workspace_graph=True,
+    )
 
 
 def composed_values(device, workspace):
@@ -536,6 +814,7 @@ def main():
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--checkpoint-manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--grouped-only", action="store_true")
     args = parser.parse_args()
     require(
         importlib.util.find_spec("oh_my_vllm.operators.projection") is not None,
@@ -543,6 +822,7 @@ def main():
     )
     from oh_my_vllm.operators.runtime.device import Device
 
+    check_grouped_plans()
     sources = source_identity()
     raw = args.checkpoint_manifest.read_bytes()
     require(
@@ -557,19 +837,41 @@ def main():
     metadata, cases = load_projection()
     identity = device_identity(selected_uuid())
     device = Device()
+    checks, contracts, composition = [], None, None
     try:
         with caller_stream(device):
-            checks = [
-                check_case(
-                    device,
-                    case,
-                    metadata["cases"][name]["limits"],
-                    weight_values(reader, case),
+            if not args.grouped_only:
+                checks = [
+                    check_case(
+                        device,
+                        case,
+                        metadata["cases"][name]["limits"],
+                        weight_values(reader, case),
+                    )
+                    for name, case in cases.items()
+                ]
+                contracts = check_contracts(device)
+                composition = check_rank_composition(
+                    device, args.model, json.loads(raw)
                 )
-                for name, case in cases.items()
+            grouped = [
+                check_grouped_case(
+                    device,
+                    cases[name],
+                    metadata["cases"][name]["limits"],
+                    weight_values(reader, cases[name]),
+                    groups,
+                    repeats,
+                )
+                for name, groups, repeats in (
+                    ("fp4_decode", 1, 1),
+                    ("fp4_prefill", 96, 1),
+                    ("fp4_verification", 384, 6),
+                    ("fp4_draft", 128, 1),
+                    ("fp4_decisions", 32, 1),
+                )
             ]
-            contracts = check_contracts(device)
-            composition = check_rank_composition(device, args.model, json.loads(raw))
+            grouped_contracts = check_grouped_contracts(device)
         reader._verify_states()
         require(
             source_identity() == sources, "projection sources changed during execution"
@@ -581,11 +883,14 @@ def main():
         json.dump(
             dict(
                 passed=True,
+                grouped_only=args.grouped_only,
                 device=identity,
                 fixture_sha256=PROJECTION_SHA256,
                 checks=checks,
                 contracts=contracts,
                 rank_composition=composition,
+                grouped=grouped,
+                grouped_contracts=grouped_contracts,
                 sources=sources,
             ),
             output,

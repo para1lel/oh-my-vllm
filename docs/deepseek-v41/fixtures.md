@@ -27,7 +27,7 @@ Use the [validation plan](validation.md) for those separate gates.
 | [Encoded projections](../../development/model/deepseek_v41/projection/index.json) | Five A8W8 and five A8W4 matrix products |
 | [Rank-owned projection](../../development/model/deepseek_v41/rank-encoded-projection/index.json) | Exact quantization and complete FP64 products for 1, 128, and 384 rows |
 | [Unquantized projections](../../development/model/deepseek_v41/unquantized-projection/index.json) | Seven BF16/FP32 cases with complete FP64 products |
-| [Startup conversion](../../development/model/deepseek_v41/startup-promotion.npz) | Exact FP8-to-BF16 and BF16-to-F32 conversion |
+| [Exact conversions](../../development/model/deepseek_v41/startup-promotion.npz) | FP8-to-BF16 and BF16-to-F32 values |
 | [Normalization and rotation](../../development/model/deepseek_v41/norm-rope/index.json) | Four RMS and three RoPE cases |
 | [Activation](../../development/model/deepseek_v41/swiglu/index.json) | Four SwiGLU cases |
 | [Ratio2 pooling](../../development/model/deepseek_v41/pooling/index.json) | Four complete-pair cases |
@@ -88,6 +88,11 @@ Synthetic ties use identical logits and biases.
 Original weights stay external. The synthetic FP4 case includes its weights.
 The [checker](../../development/operators/check_deepseek_projection.py) covers packing, K=576, and widths up to 15360.
 Activation quantization and collective reduction are separate boundaries.
+
+Grouped A8W4 [execution](../../python/oh_my_vllm/operators/projection/grouped.py) reads expert counts and offsets on the GPU.
+It supports 384 groups, 384 rows per group, and 2304 total rows.
+Reject nonzero metadata status before state commit.
+The checker reuses fixed products with repeated rows, output permutations, and reversed weight signs.
 
 `load_rank_encoded_projection()` checks [quantization and projection](../../python/oh_my_vllm/models/deepseek_v41/linear.py) with original rank-owned `wq_a` weights.
 Its FP64 products use quantized activations.
