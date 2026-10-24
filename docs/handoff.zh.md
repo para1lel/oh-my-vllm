@@ -20,7 +20,7 @@ Qwen 在一张 B200 上提供推理. DeepSeek 服务推理尚未启用.
 
 ## 下一步
 
-- 闭合 DeepSeek 数值与分配门槛.
+- 完成独立的短上下文精度参考, 然后闭合 DeepSeek 数值与分配门槛.
 - 集成模型, 物理状态和 DSpark, 然后完成容量与功能验收.
 - 正确性验收后, 运行已批准的 DeepSeek HTTP 和 AgentX 矩阵.
 

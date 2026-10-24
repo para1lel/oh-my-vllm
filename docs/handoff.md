@@ -20,7 +20,7 @@ Physical state, complete inference, DSpark, feature acceptance, and the approved
 
 ## Next actions
 
-- Close DeepSeek numerical and allocation gates.
+- Complete the separate short-context precision reference, then close DeepSeek numerical and allocation gates.
 - Integrate the model, physical state, and DSpark, then complete capacity and feature acceptance.
 - Run the approved DeepSeek HTTP and AgentX matrices after correctness acceptance.
 

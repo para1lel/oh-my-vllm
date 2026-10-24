@@ -59,6 +59,9 @@ Completed prerequisites:
 
 Next work:
 
+- Build a separate short-context reference with explicit quantization and rounding, from fixed inputs and checkpoint weights.
+  Do not use captured model intermediates or change existing FP64 fixtures and limits.
+  This reference does not replace model acceptance or long-context checks.
 - Freeze compound numerical limits and operator latency limits before tuning.
 - Close the [allocation plan's open bounds](memory.md#6-allocation-caps-and-open-bounds) for 64 requests at the context limit.
 
