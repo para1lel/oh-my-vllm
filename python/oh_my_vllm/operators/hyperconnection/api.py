@@ -6,7 +6,7 @@ to the following sublayer. Expansion consumes the current sublayer's output.
 
 from typing import NamedTuple
 
-FUNCTIONS = ("hc_prepare", "hc_expand")
+FUNCTIONS = ("hc_prepare", "hc_expand", "hc_collapse")
 
 
 class Weights(NamedTuple):

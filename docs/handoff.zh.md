@@ -13,7 +13,8 @@ Qwen 保留单 worker 路径, 已修复 prefill 分派, 块调度和主机缓存
 
 阶段 3 已有使用[固定夹具和数值限值](deepseek-v41/fixtures.zh.md)的独立 CUDA 算子.
 [Engram 加载器](deepseek-v41/memory.zh.md#4-权重字节与格式)在一个共享存储中提供完整编码表.
-Rank 权重使用有界加载, 精确启动转换和 native 投影布局的对齐存储.
+Rank 自有投影将激活量化与编码权重连接.
+HC 为最终 head 提供独立的折叠操作.
 模型集成仍待完成.
 
 [参考工具](deepseek-v41/reference.zh.md)区分 FP64 数学, 源精度量化和发布源码诊断.

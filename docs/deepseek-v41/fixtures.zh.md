@@ -25,6 +25,7 @@
 | [Hyper-connections](../../development/model/deepseek_v41/hyperconnection/index.json) | 五个包含完整输出和字段限值的用例 |
 | [路由](../../development/model/deepseek_v41/routing/index.json) | 五个包含精确专家 ID 和 FP64 系数的用例 |
 | [编码投影](../../development/model/deepseek_v41/projection/index.json) | 五个 A8W8 和五个 A8W4 矩阵乘积 |
+| [Rank 自有投影](../../development/model/deepseek_v41/rank-encoded-projection/index.json) | 1, 128 和 384 行的精确量化及完整 FP64 乘积 |
 | [未量化投影](../../development/model/deepseek_v41/unquantized-projection/index.json) | 七个包含完整 FP64 乘积的 BF16/FP32 用例 |
 | [启动转换](../../development/model/deepseek_v41/startup-promotion.npz) | 精确的 FP8 到 BF16 及 BF16 到 F32 转换 |
 | [归一化和旋转](../../development/model/deepseek_v41/norm-rope/index.json) | 四个 RMS 和三个 RoPE 用例 |
@@ -71,6 +72,7 @@ Lookup 和投影是独立边界.
 [Workspace](../../python/oh_my_vllm/operators/hyperconnection/workspace.py) 将子层前的准备与子层后的展开分开.
 折叠使用传入系数. `next_pre` 属于下一个子层.
 [检查器](../../development/operators/check_deepseek_hc.py) 还置换通道, 以检测寻址错误.
+`Workspace.collapse()` 为最终 head 提供输入, 无需计算新的混合系数.
 
 ## 路由
 
@@ -86,6 +88,10 @@ Lookup 和投影是独立边界.
 原始权重保存在外部. 合成 FP4 用例包含自身权重.
 [检查器](../../development/operators/check_deepseek_projection.py) 覆盖打包, K=576 和最大 15360 的宽度.
 激活量化和 collective 归约是独立边界.
+
+`load_rank_encoded_projection()` 使用原始 rank 自有 `wq_a` 权重检查[量化与投影](../../python/oh_my_vllm/models/deepseek_v41/linear.py).
+其 FP64 乘积使用量化后的激活.
+在状态提交前拒绝非零量化状态.
 
 `load_startup_promotion()` 包含全部有限 FP8/UE8M0 组合和全部有限 BF16 位模式.
 它还包含溢出输入, 非法 BF16 位模式, 以及原始和合成 dense32 scales.

@@ -153,6 +153,46 @@ class FrozenFixtures(unittest.TestCase):
                 self.assertEqual(case.inputs["weight"].dtype, np.uint16)
 
     def test_projections_and_pooling_keep_full_outputs_and_cancellation(self):
+        loader = getattr(fixtures, "load_rank_encoded_projection", None)
+        self.assertTrue(callable(loader), "rank-compose fixture loader is missing")
+        metadata, composed = loader()
+        master = composed["wq_a"]
+        self.assertEqual(master.inputs["value"].shape, (384, 5120))
+        self.assertEqual(master.inputs["value"].dtype, np.uint16)
+        self.assertEqual(master.expected["value"].shape, (384, 1280))
+        self.assertEqual(master.expected["value"].dtype, np.float64)
+        for field in ("encoded", "roundtrip"):
+            self.assertEqual(master.expected[field].shape, (384, 5120))
+        for field in ("scales", "status"):
+            self.assertEqual(master.expected[field].shape, (384, 160))
+        self.assertFalse(master.expected["status"].any())
+        for value in master.expected.values():
+            self.assertFalse(value.flags.writeable)
+        for rows in (1, 128, 384):
+            view = metadata["views"][str(rows)]
+            self.assertEqual(view["master_rows"], [0, rows])
+            self.assertEqual(view["case"]["shape"]["rows"], rows)
+            self.assertEqual(len(view["limits"]["fields"]["value"]["max_abs"]), rows)
+        np.testing.assert_array_equal(
+            master.expected["value"][2], -master.expected["value"][3]
+        )
+        self.assertFalse(master.expected["value"][[1, 128, 383]].any())
+        self.assertEqual(master.expected["value"][4, 0], 0)
+        from importlib.util import find_spec
+
+        self.assertIsNotNone(
+            find_spec("oh_my_vllm.models.deepseek_v41.linear"),
+            "rank-owned encoded projection is missing",
+        )
+        from oh_my_vllm.models.deepseek_v41.linear import prepare
+        from oh_my_vllm.models.deepseek_v41.weights import RankWeights
+
+        owner = RankWeights(None, None, 0, 0)
+        with self.assertRaises(ValueError):
+            prepare(owner, "missing.weight", rows=1)
+        owner.closed = True
+        with self.assertRaises(RuntimeError):
+            prepare(owner, "missing.weight", rows=1)
         loader = getattr(fixtures, "load_projection", None)
         self.assertTrue(callable(loader), "projection fixture loader is missing")
         _, cases = loader()

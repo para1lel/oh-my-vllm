@@ -38,6 +38,11 @@ class Workspace:
     def close(self):
         self.closed = True
 
+    def collapse(self, residual, incoming_pre):
+        self.check_open()
+        self.module.hc_collapse(residual, incoming_pre, self.outputs.collapsed)
+        return self.outputs.collapsed
+
     def begin(self, residual, incoming_pre):
         self.check_open()
         storage = self.storage

@@ -111,6 +111,22 @@ void separate(std::initializer_list<TensorView> values) {
 
 } // namespace
 
+void hc_collapse(TensorView residual, TensorView incoming, TensorView collapsed) {
+  int rows = rows_contract(residual);
+  tensor_contract(incoming, residual, kDLFloat, 32, {rows, copies});
+  tensor_contract(collapsed, residual, kDLBfloat, 16, {rows, width});
+  separate({residual, incoming, collapsed});
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(residual.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, residual.device().device_id));
+  collapse_kernel<<<dim3(rows, (width + 255) / 256), 256, 0, stream>>>(
+      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+      static_cast<const float *>(incoming.data_ptr()),
+      static_cast<__nv_bfloat16 *>(collapsed.data_ptr()));
+  check_cuda(cudaGetLastError());
+}
+
 void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, TensorView scale,
                 TensorView base, TensorView mixed, TensorView post, TensorView comb,
                 TensorView collapsed, TensorView next_pre) {
@@ -138,11 +154,7 @@ void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, Ten
       static_cast<const float *>(base.data_ptr()), static_cast<float *>(next_pre.data_ptr()),
       static_cast<float *>(post.data_ptr()), static_cast<float *>(comb.data_ptr()));
   check_cuda(cudaGetLastError());
-  collapse_kernel<<<dim3(rows, (width + 255) / 256), 256, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-      static_cast<const float *>(incoming.data_ptr()),
-      static_cast<__nv_bfloat16 *>(collapsed.data_ptr()));
-  check_cuda(cudaGetLastError());
+  hc_collapse(residual, incoming, collapsed);
 }
 
 void hc_expand(TensorView residual, TensorView branch, TensorView post, TensorView comb,

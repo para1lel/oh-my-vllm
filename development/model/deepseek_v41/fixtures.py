@@ -51,6 +51,10 @@ ROUTING_PATH = Path(__file__).with_name("routing")
 ROUTING_SHA256 = "bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28"
 PROJECTION_PATH = Path(__file__).with_name("projection")
 PROJECTION_SHA256 = "db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6"
+RANK_ENCODED_PROJECTION_PATH = Path(__file__).with_name("rank-encoded-projection")
+RANK_ENCODED_PROJECTION_SHA256 = (
+    "8e43e74b6b69cd84be5377c1910e0196d080eb006d99324d2f053139e254e723"
+)
 UNQUANTIZED_PROJECTION_PATH = Path(__file__).with_name("unquantized-projection")
 UNQUANTIZED_PROJECTION_SHA256 = (
     "1cdf38800461929bb00c088caba8fd32a0ca406cb443274088e31b171dfaa613"
@@ -138,6 +142,10 @@ def load_routing(path=ROUTING_PATH):
 
 def load_projection(path=PROJECTION_PATH):
     return _load_operator_bundle(path, PROJECTION_SHA256)
+
+
+def load_rank_encoded_projection(path=RANK_ENCODED_PROJECTION_PATH):
+    return _load_operator_bundle(path, RANK_ENCODED_PROJECTION_SHA256)
 
 
 def load_unquantized_projection(path=UNQUANTIZED_PROJECTION_PATH):

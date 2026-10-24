@@ -13,7 +13,8 @@ Qwen keeps its single-worker path, with prefill dispatch, block scheduling, and 
 
 Phase 3 has isolated CUDA operators with [fixed fixtures and numerical limits](deepseek-v41/fixtures.md).
 The [Engram loader](deepseek-v41/memory.md#4-weight-bytes-and-formats) supplies complete encoded tables in one shared store.
-Rank weights use bounded loading, exact startup conversions, and aligned storage for native projection layouts.
+Rank-owned projection joins activation quantization with encoded weights.
+HC supplies a separate collapse for the final head.
 Model integration is pending.
 
 The [reference tools](deepseek-v41/reference.md) separate FP64 mathematics, source-precision quantization, and released-source diagnostics.

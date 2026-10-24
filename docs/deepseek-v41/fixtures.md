@@ -25,6 +25,7 @@ Use the [validation plan](validation.md) for those separate gates.
 | [Hyper-connections](../../development/model/deepseek_v41/hyperconnection/index.json) | Five cases with complete outputs and field limits |
 | [Routing](../../development/model/deepseek_v41/routing/index.json) | Five cases with exact expert IDs and FP64 coefficients |
 | [Encoded projections](../../development/model/deepseek_v41/projection/index.json) | Five A8W8 and five A8W4 matrix products |
+| [Rank-owned projection](../../development/model/deepseek_v41/rank-encoded-projection/index.json) | Exact quantization and complete FP64 products for 1, 128, and 384 rows |
 | [Unquantized projections](../../development/model/deepseek_v41/unquantized-projection/index.json) | Seven BF16/FP32 cases with complete FP64 products |
 | [Startup conversion](../../development/model/deepseek_v41/startup-promotion.npz) | Exact FP8-to-BF16 and BF16-to-F32 conversion |
 | [Normalization and rotation](../../development/model/deepseek_v41/norm-rope/index.json) | Four RMS and three RoPE cases |
@@ -71,6 +72,7 @@ Lookup and projection are separate boundaries.
 The [workspace](../../python/oh_my_vllm/operators/hyperconnection/workspace.py) separates preparation from expansion around the sublayer.
 Collapse uses incoming coefficients. `next_pre` belongs to the next sublayer.
 The [checker](../../development/operators/check_deepseek_hc.py) also permutes channels to detect addressing errors.
+`Workspace.collapse()` supplies the final head without calculating new mixing coefficients.
 
 ## Routing
 
@@ -86,6 +88,10 @@ Synthetic ties use identical logits and biases.
 Original weights stay external. The synthetic FP4 case includes its weights.
 The [checker](../../development/operators/check_deepseek_projection.py) covers packing, K=576, and widths up to 15360.
 Activation quantization and collective reduction are separate boundaries.
+
+`load_rank_encoded_projection()` checks [quantization and projection](../../python/oh_my_vllm/models/deepseek_v41/linear.py) with original rank-owned `wq_a` weights.
+Its FP64 products use quantized activations.
+Reject nonzero quantization status before state commit.
 
 `load_startup_promotion()` contains all finite FP8/UE8M0 pairs and all finite BF16 words.
 It also contains overflow inputs, invalid BF16 words, and original and synthetic dense32 scales.

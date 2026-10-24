@@ -75,6 +75,13 @@ def check_contracts(device, parameters):
                 residual,
             )
         )
+        rejected(lambda: workspace.collapse(branch, incoming))
+        rejected(lambda: workspace.collapse(residual, branch))
+        rejected(
+            lambda: workspace.module.hc_collapse(
+                residual, incoming, device.view(residual, (1, 5120))
+            )
+        )
     finally:
         device.synchronize()
         workspace.close()
@@ -96,11 +103,24 @@ def check_contracts(device, parameters):
                 "empty HC changed shape",
             ),
         )
+        execute_modes(
+            device,
+            (empty,),
+            lambda: empty.collapse(inputs.residual, inputs.incoming_pre),
+            lambda: require(
+                empty.outputs.collapsed.shape[0] == 0, "empty collapse changed shape"
+            ),
+        )
     finally:
         device.synchronize()
         empty.close()
     rejected(lambda: empty.run(inputs))
-    return {"invalid_arguments": 7, "empty_eager_graph": True, "closed_workspace": True}
+    rejected(lambda: empty.collapse(inputs.residual, inputs.incoming_pre))
+    return {
+        "invalid_arguments": 10,
+        "empty_eager_graph": True,
+        "closed_workspace": True,
+    }
 
 
 def check_case(device, case, limits, parameters, *, permute=False):
@@ -141,23 +161,43 @@ def check_case(device, case, limits, parameters, *, permute=False):
         def operation():
             workspace.run(values)
 
-        def check():
+        def check(*, standalone=False):
+            selected = (
+                {"collapsed": workspace.outputs.collapsed}
+                if standalone
+                else workspace.outputs._asdict()
+            )
             actual = {
                 name: decode(
                     device.download(tensor, storage_dtype(str(tensor.dtype))),
                     str(tensor.dtype),
                 )
-                for name, tensor in workspace.outputs._asdict().items()
+                for name, tensor in selected.items()
             }
-            compared = compare(actual, fixture, limits)
+            selected_fixture = Fixture(
+                fixture.manifest,
+                inputs,
+                {},
+                {name: expected[name] for name in selected},
+            )
+            selected_limits = dict(
+                limits, fields={name: limits["fields"][name] for name in selected}
+            )
+            compared = compare(actual, selected_fixture, selected_limits)
             require(compared.passed, f"HC boundary differs: {compared.failures}")
             for tensor, original in originals:
                 require(
                     equal_bits(device.download(tensor, original.dtype), original),
                     "HC changed an input or weight tensor",
                 )
-            result.update(metrics=compared.metrics)
+            result["collapse_metrics" if standalone else "metrics"] = compared.metrics
 
+        execute_modes(
+            device,
+            (workspace,),
+            lambda: workspace.collapse(values.residual, values.incoming_pre),
+            lambda: check(standalone=True),
+        )
         execute_modes(device, (workspace,), operation, check)
         result.update(
             case=case.manifest["case"]["id"],
