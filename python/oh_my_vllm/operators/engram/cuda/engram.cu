@@ -1,4 +1,5 @@
 #include "../../runtime/cuda/contracts.cuh"
+#include "blend.cuh"
 #include "lookup.cuh"
 #include "shared_weights.cuh"
 

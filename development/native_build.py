@@ -23,6 +23,7 @@ from oh_my_vllm.operators.runtime.native import (
     collectives_vendor_dependencies,
     source_digest,
     verify_collectives_vendor_images,
+    verify_vendor_images,
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
@@ -44,6 +45,7 @@ def optional_modules():
     from oh_my_vllm.operators.compression.api import FUNCTIONS as COMPRESSION_FUNCTIONS
     from oh_my_vllm.operators.engram.api import FUNCTIONS as ENGRAM_FUNCTIONS
     from oh_my_vllm.operators.hyperconnection.api import FUNCTIONS as HC_FUNCTIONS
+    from oh_my_vllm.operators.linear.api import FUNCTIONS as LINEAR_FUNCTIONS
     from oh_my_vllm.operators.projection.api import FUNCTIONS as PROJECTION_FUNCTIONS
     from oh_my_vllm.operators.quantization.api import (
         FUNCTIONS as QUANTIZATION_FUNCTIONS,
@@ -62,6 +64,7 @@ def optional_modules():
         "hyperconnection": HC_FUNCTIONS,
         "routing": ROUTING_FUNCTIONS,
         "projection": PROJECTION_FUNCTIONS,
+        "linear": LINEAR_FUNCTIONS,
         "transform": TRANSFORM_FUNCTIONS,
         "activation": ACTIVATION_FUNCTIONS,
         "compression": COMPRESSION_FUNCTIONS,
@@ -103,7 +106,7 @@ def build(name, functions):
         include_paths += [str(cutlass / "include"), str(cutlass / "tools/util/include")]
         if name == "vision":
             include_paths.append(str(cutlass / "examples/77_blackwell_fmha"))
-    vendor = vision_vendor_dependencies() if name == "vision" else None
+    vendor = vision_vendor_dependencies() if name in ("vision", "linear") else None
     if name == "collectives":
         vendor = collectives_vendor_dependencies()
         flags += ("--compiler-bindir", vendor["host_compiler"])
@@ -168,6 +171,12 @@ def build(name, functions):
     module = load_module(str(immutable_library))
     if name == "vision":
         verify_vision_vendor_images(module, vendor)
+    elif name == "linear":
+        verify_vendor_images(
+            tuple(str(path) for path in module.linear_images()),
+            vendor["images"],
+            "Linear",
+        )
     elif name == "collectives":
         verify_collectives_vendor_images(module, vendor)
     return module, source_id, immutable_library

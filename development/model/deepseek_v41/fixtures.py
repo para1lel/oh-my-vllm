@@ -41,6 +41,8 @@ ENGRAM_CHECKPOINT_SHA256 = (
 ENGRAM_CHECKPOINT_METADATA_SHA256 = (
     "90b9b52d5e371c375d13d4c4a4fae397cc393689aee0123961fde355dee4550a"
 )
+ENGRAM_BLEND_PATH = Path(__file__).with_name("engram-blend")
+ENGRAM_BLEND_SHA256 = "efb7238adbdafd0ae83247b7f7afcb083bbfe06b1b8f1b51812214d49f67abf4"
 HYPERCONNECTION_PATH = Path(__file__).with_name("hyperconnection")
 HYPERCONNECTION_SHA256 = (
     "933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47"
@@ -49,6 +51,10 @@ ROUTING_PATH = Path(__file__).with_name("routing")
 ROUTING_SHA256 = "bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28"
 PROJECTION_PATH = Path(__file__).with_name("projection")
 PROJECTION_SHA256 = "db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6"
+UNQUANTIZED_PROJECTION_PATH = Path(__file__).with_name("unquantized-projection")
+UNQUANTIZED_PROJECTION_SHA256 = (
+    "1cdf38800461929bb00c088caba8fd32a0ca406cb443274088e31b171dfaa613"
+)
 NORM_ROPE_PATH = Path(__file__).with_name("norm-rope")
 NORM_ROPE_SHA256 = "67d7400846ae0ce81fc4a4174d281e500ebfeff21faa82d303e34b1593a2c47a"
 SWIGLU_PATH = Path(__file__).with_name("swiglu")
@@ -134,6 +140,10 @@ def load_projection(path=PROJECTION_PATH):
     return _load_operator_bundle(path, PROJECTION_SHA256)
 
 
+def load_unquantized_projection(path=UNQUANTIZED_PROJECTION_PATH):
+    return _load_operator_bundle(path, UNQUANTIZED_PROJECTION_SHA256)
+
+
 def load_norm_rope(path=NORM_ROPE_PATH):
     return _load_operator_bundle(path, NORM_ROPE_SHA256)
 
@@ -171,6 +181,10 @@ def load_engram_checkpoint(path=ENGRAM_CHECKPOINT_PATH):
     return _load_engram(
         path, ENGRAM_CHECKPOINT_SHA256, ENGRAM_CHECKPOINT_METADATA_SHA256
     )
+
+
+def load_engram_blend(path=ENGRAM_BLEND_PATH):
+    return _load_operator_bundle(path, ENGRAM_BLEND_SHA256)
 
 
 def _load_engram(path, digest, metadata_digest):

@@ -173,6 +173,52 @@ class FrozenFixtures(unittest.TestCase):
                 self.assertFalse((value if column < 0 else value[:, column]).any())
         self.assertEqual(cases["fp4_verification"].inputs["scales"].shape[1], 18)
         self.assertTrue(cases["fp4_decisions"].expected["value"][4:].any())
+        loader = getattr(fixtures, "load_unquantized_projection", None)
+        self.assertTrue(
+            callable(loader), "unquantized projection fixture loader is missing"
+        )
+        metadata, cases = loader()
+        self.assertEqual(len(cases), 7)
+        for name, case in cases.items():
+            for value in case.expected.values():
+                self.assertTrue(np.isfinite(value).all())
+                self.assertFalse(value.flags.writeable)
+            self.assertEqual(
+                set(metadata["cases"][name]["limits"]["fields"]), set(case.expected)
+            )
+        self.assertEqual(cases["heads-decode"].expected["logits"].shape, (1, 129280))
+        decisions = cases["rounding-cancellation-decisions"].expected
+        np.testing.assert_array_equal(
+            decisions["router_bits"],
+            [[0x3F808080, 0x3F808000, 0x35800000, 0xBF808080]],
+        )
+        np.testing.assert_array_equal(
+            decisions["bf16_bits"], [[0x3F81, 0x3F80, 0x3580, 0xBF81]]
+        )
+        from oh_my_vllm.operators.linear.plan import make_plan
+
+        grouped = make_plan(rows=128, outputs=1024, width=4096, groups=2)
+        self.assertEqual(grouped.input_shape, (128, 2, 4096))
+        self.assertEqual(grouped.output_shape, (128, 2, 1024))
+        self.assertEqual(
+            make_plan(
+                rows=0,
+                outputs=1,
+                width=5376,
+                input_dtype="float32",
+                output_dtype="float32",
+            ).output_shape,
+            (0, 1),
+        )
+        for change in (
+            {"rows": True},
+            {"rows": 385},
+            {"groups": 4},
+            {"input_dtype": "float32"},
+            {"width": 0},
+        ):
+            with self.assertRaises(ValueError):
+                make_plan(**({"rows": 1, "outputs": 32, "width": 32} | change))
         loader = getattr(fixtures, "load_pooling", None)
         self.assertTrue(callable(loader), "ratio2 pooling fixture loader is missing")
         metadata, cases = loader()
@@ -732,6 +778,28 @@ class FrozenFixtures(unittest.TestCase):
             )
             self.assertIn(rows - 1, checkpoint[prefix + ".indices"])
         self.assertTrue(all(not value.flags.writeable for value in checkpoint.values()))
+        blend_metadata, blend = fixtures.load_engram_blend()
+        self.assertEqual(
+            blend_metadata["checkpoint_manifest_sha256"],
+            fixtures.CHECKPOINT_MANIFEST_SHA256,
+        )
+        self.assertEqual(set(blend), {"decode", "prefill", "verification", "decisions"})
+        for case in blend.values():
+            rows = case.manifest["case"]["shape"]["rows"]
+            self.assertEqual(case.expected["value"].shape, (rows, 4, 5120))
+            self.assertEqual(case.expected["gate"].shape, (rows, 4))
+            self.assertTrue(
+                all(
+                    value.dtype == np.float64
+                    and np.isfinite(value).all()
+                    and not value.flags.writeable
+                    for value in case.expected.values()
+                )
+            )
+            self.assertFalse(case.expected["gate"][case.inputs["mask"] == 0].any())
+        decision_gate = blend["decisions"].expected["gate"]
+        self.assertGreater(decision_gate[6, 0], 0.5)
+        self.assertLess(decision_gate[7, 0], 0.5)
         with TemporaryDirectory() as directory:
             path = Path(directory) / "lookup.npz"
             path.write_bytes(fixtures.ENGRAM_CHECKPOINT_PATH.read_bytes() + b"extra")

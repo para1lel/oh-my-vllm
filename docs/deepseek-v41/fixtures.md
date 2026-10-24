@@ -2,60 +2,53 @@
 
 ## Scope and identity
 
-The [fixture reader](../../development/model/deepseek_v41/fixtures.py) binds fixed artifacts by SHA256.
-Ordinary checks load them without PyTorch, GPU execution, or checkpoint access.
-They are reference inputs and expected outputs, not service performance results.
-Do not replace them with runtime outputs.
-Model and operator numerical limits are separate gates in the [validation plan](validation.md).
+The [fixture reader](../../development/model/deepseek_v41/fixtures.py) checks SHA256 identities, metadata, and complete arrays.
+The linked indexes contain the fixed numerical limits and source identities.
+Ordinary checks load these artifacts without PyTorch, GPU execution, or checkpoint access.
+Do not regenerate expected values during acceptance or replace them with candidate outputs.
 
-| Fixture | Content | SHA256 |
-|---|---|---|
-| [Short text](../../development/model/deepseek_v41/reference.npz) | Two full FP64 vocabulary vectors | `3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0` |
-| [Long text](../../development/model/deepseek_v41/long-context.npz) | Four full FP64 vectors at 16385 and 65537 tokens | `001cc434d3adb106fc490286d3a9625b18326b83d5fcca7deb83a553b11ea474` |
-| [Prompt codec](../../development/model/deepseek_v41/codec.json) | Twenty encoding cases with complete token IDs | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
-| [DSpark continuation](../../development/model/deepseek_v41/dspark.npz) | Eighteen full FP64 vocabulary rows and two confidence vectors | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
-| [Media endpoints](../../development/model/deepseek_v41/media.npz) | Two full FP64 vocabulary vectors after still and video-frame images | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
-| [Exact operators](../../development/model/deepseek_v41/exact-operators.npz) | Four synthetic quantization and Engram cases | `a422c1f4cadeeb4ef918a18253834eae848c32b5173b0b88398e9bf0ede23e79` |
-| [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | FP8 table, scales, indices, and 49152 BF16 output bit patterns | `930cee947ae1ee8bcdd3d15571732713305d849c18df8c4d98418dc309e40c2c` |
-| [Engram checkpoint](../../development/model/deepseek_v41/engram-checkpoint.npz) | Original bytes and exact BF16 outputs for 32 selected rows from each table | `967109d7d713191212dc37fc18335c926fa3e2420a79e9fe03f5f2bbe365efce` |
-| [Hyper-connection index](../../development/model/deepseek_v41/hyperconnection/index.json) | Five cases with complete FP64 outputs and fixed field limits | `933323bf315a75806e9dc8f66b0da47777622cd36c8b98f262f29b3978afdb47` |
-| [Routing index](../../development/model/deepseek_v41/routing/index.json) | Five post-logit cases with exact expert IDs and FP64 coefficients | `bbb8538a912bede95a6d4364f52a63a026b04385de2e34cad5030109d305bf28` |
-| [Projection index](../../development/model/deepseek_v41/projection/index.json) | Five A8W8 and five A8W4 cases with complete FP64 outputs | `db9c81bb0dd4a2f10aa3fdd289349dfb9162ede223a7ceb5cbe0e80444646fc6` |
-| [Startup conversion](../../development/model/deepseek_v41/startup-promotion.npz) | Exact FP8-to-BF16 and BF16-to-F32 conversions | `0235b26faaeb799ba13ae0388f0fb0396c76aca5a43684d6df738da381efca51` |
-| [Ratio2 pooling index](../../development/model/deepseek_v41/pooling/index.json) | Four complete-pair cases with FP64 outputs and fixed limits | `878e5a00b671191bbd8081118217d0f0dfad790e9d345a9cd802afeafcf1fe08` |
-| [Sparse-attention index](../../development/model/deepseek_v41/sparse-attention/index.json) | Five packed-cache cases with full FP64 outputs and request-specific limits | `65480d5f378455ce128018013121cdd4d784c49796e1cedfe066fde273295e4d` |
+Operator fixtures cover isolated boundaries. They do not prove model, state, capacity, or performance acceptance.
+Their engineering limits are not worst-case error proofs.
+Use the [validation plan](validation.md) for those separate gates.
 
-The artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
-Full-model artifacts contain the manifest, generator identities, fixed inputs, array shapes, and digests.
-The exact-operator bundle binds the manifest digest.
-Codec cases contain rendered text, complete token IDs, and media records.
-Readers check the applicable metadata and complete outputs.
-Normal tests never regenerate expected values.
+| Fixture | Content |
+|---|---|
+| [Short text](../../development/model/deepseek_v41/reference.npz) | Two complete FP64 vocabulary vectors |
+| [Long text](../../development/model/deepseek_v41/long-context.npz) | Four complete FP64 vectors at 16385 and 65537 tokens |
+| [Prompt codec](../../development/model/deepseek_v41/codec.json) | Twenty cases with complete token IDs and media order |
+| [DSpark continuation](../../development/model/deepseek_v41/dspark.npz) | Eighteen vocabulary rows and two confidence vectors |
+| [Media endpoints](../../development/model/deepseek_v41/media.npz) | FP64 prefill and continuation after still and frame images |
+| [Exact operators](../../development/model/deepseek_v41/exact-operators.npz) | Quantization bytes, Engram hashes, and continuation history |
+| [Engram lookup](../../development/model/deepseek_v41/engram-lookup.npz) | Synthetic encoded table and exact BF16 outputs |
+| [Engram checkpoint](../../development/model/deepseek_v41/engram-checkpoint.npz) | Original samples and exact outputs from the two tables |
+| [Engram blend](../../development/model/deepseek_v41/engram-blend/index.json) | Four cases with complete FP64 gates and residuals |
+| [Hyper-connections](../../development/model/deepseek_v41/hyperconnection/index.json) | Five cases with complete outputs and field limits |
+| [Routing](../../development/model/deepseek_v41/routing/index.json) | Five cases with exact expert IDs and FP64 coefficients |
+| [Encoded projections](../../development/model/deepseek_v41/projection/index.json) | Five A8W8 and five A8W4 matrix products |
+| [Unquantized projections](../../development/model/deepseek_v41/unquantized-projection/index.json) | Seven BF16/FP32 cases with complete FP64 products |
+| [Startup conversion](../../development/model/deepseek_v41/startup-promotion.npz) | Exact FP8-to-BF16 and BF16-to-F32 conversion |
+| [Normalization and rotation](../../development/model/deepseek_v41/norm-rope/index.json) | Four RMS and three RoPE cases |
+| [Activation](../../development/model/deepseek_v41/swiglu/index.json) | Four SwiGLU cases |
+| [Ratio2 pooling](../../development/model/deepseek_v41/pooling/index.json) | Four complete-pair cases |
+| [Sparse attention](../../development/model/deepseek_v41/sparse-attention/index.json) | Five packed-cache cases with complete FP64 outputs |
+
+The reader binds the local checkpoint manifest. Full-model artifacts also contain fixed inputs, generator identities, shapes, and array digests.
+Float comparisons use separate request limits. Integer decisions and encoded fields use exact limits where specified.
 
 ## Exact operators
 
-`load_exact_operators()` supplies four existing operator `Fixture` objects.
-The cases cover FP8/UE8M0 group32, FP4/UE8M0 group32, FP4/E4M3 group16, and Engram chunk continuation with dead tokens.
-Expected values come from hand-checked literals, not candidate outputs.
-Compare encoded bytes, scale bytes, BF16 roundtrip bits, hashes, and history with each case's exact limits.
-These synthetic cases do not set compound numerical or performance limits.
+`load_exact_operators()` covers FP8/UE8M0 group32, FP4/UE8M0 group32, FP4/E4M3 group16, and Engram chunk continuation with dead tokens.
+Expected values come from hand-checked literals.
+Compare encoded values, scales, BF16 roundtrip bits, hashes, and history.
 
-`load_engram_lookup()` supplies fixed inputs and independently computed BF16 output bits.
-Its 16-row table covers repeated indices, signed zeros, subnormal ties, and distinct scale groups.
+`load_engram_lookup()` covers repeated indices, signed zeros, subnormal ties, and distinct scale groups in a synthetic 16-row table.
+`load_engram_checkpoint()` supplies 32 original rows from each table, with exact BF16 outputs.
+The [lookup checker](../../development/operators/check_engram_lookup.py) uses these samples against the full shared store.
 
-`load_engram_checkpoint()` supplies original table samples, row IDs, scales, and independently decoded outputs.
-All selected values have exact BF16 representations.
-The [checkpoint check](../../development/operators/check_engram_lookup.py) uses these fixed outputs against the full shared store.
+Quantization callers must reject nonzero group status. Lookup callers must reject nonzero row status.
+Engram hashing returns private continuation history without changing its input history.
 
-The optional native modules supply quantization, integer Engram hashes, and lookup through a shared pinned-host mapping.
-They do not supply service integration.
-The quantization caller must reject any nonzero group status.
-The lookup caller must reject any nonzero row status.
-Engram returns private continuation history without changing its input history.
-
-Set `EXACT_REPORT` to a new external JSON path.
-Build the modules.
-Run the shared Eager and CUDA Graph check:
+Set `EXACT_REPORT` to a new external JSON path. Build and check the modules:
 
 ```bash
 scripts/with-env.sh python -m development.native_build \
@@ -64,166 +57,123 @@ OH_MY_VLLM_GPU_COUNT=1 scripts/with-env.sh scripts/with-gpu.sh \
   python -m development.operators.check_deepseek_exact --output "$EXACT_REPORT"
 ```
 
+## Engram blend
+
+`load_engram_blend()` covers 1, 128, and 384 rows, plus synthetic decision cases.
+Inputs contain BF16 residuals, four projected keys, a shared value, two normalization weights, and token masks.
+The [boundary](../../python/oh_my_vllm/operators/engram/blend.py) normalizes each residual copy separately and applies the signed-square-root gate.
+The [checker](../../development/operators/check_engram_blend.py) compares all gates and residuals, for tiny signed dots and masked rows.
+Lookup and projection are separate boundaries.
+
 ## Hyper-connections
 
-`load_hyperconnection()` supplies decode, prefill, verification, zero, and cancellation cases.
-They use original F32 weights, four residual copies, width 5120, and 1, 128, or 384 rows.
-The index binds all arrays and the `deepseek-hc-precision-v1` policy.
-
-| Output | Normalized L2 limit | Maximum absolute error |
-|---|---:|---|
-| `collapsed`, `expanded` | `2^-8` | `max(1e-7, 2^-8 * P)` |
-| `next_pre` | `2^-16` | `max(1e-7, 2^-16 * P)` |
-
-`P` is the FP64 peak for each field and request.
-The RMS floor is `1e-6`. The near-zero absolute limit is `1e-6`.
-These engineering limits do not prove full-model accuracy.
-
-The [native workspace](../../python/oh_my_vllm/operators/hyperconnection/workspace.py) separates preparation from expansion around the sublayer.
+`load_hyperconnection()` covers decode, prefill, verification, zero, and cancellation cases with original F32 weights.
+The [workspace](../../python/oh_my_vllm/operators/hyperconnection/workspace.py) separates preparation from expansion around the sublayer.
 Collapse uses incoming coefficients. `next_pre` belongs to the next sublayer.
 The [checker](../../development/operators/check_deepseek_hc.py) also permutes channels to detect addressing errors.
-It checks Eager and Graph execution, invalid arguments, empty inputs, and input immutability.
-Performance limits and model integration are pending.
 
 ## Routing
 
-`load_routing()` supplies target decode, prefill, verification, draft, and synthetic decision cases.
-The boundary starts with stored FP32 logits. Original checkpoint biases control text and image selection.
-The cases cover 384 experts with top-6 and 128 experts with top-3.
+`load_routing()` starts with stored FP32 logits and original text/image biases.
+Cases cover 384 experts with top-6 and 128 experts with top-3.
 The [model contract](model.md) specifies unbiased coefficients and stable global expert IDs.
-
-The coefficient normalized L2 limit is `2^-19`.
-Its absolute-error limit is `max(1e-7, 2^-19 * P)`, with `P` equal to each request's FP64 peak.
-The RMS floor and near-zero absolute limit are the same as for hyper-connections.
-Expert IDs must match exactly.
-
-The index binds the independent score-error policy.
-Non-tied selection and order must pass its interval checks before implementation.
-Synthetic ties use identical stored logits and biases.
-This gate excludes projection rounding, expert dispatch, latency, and full-model accuracy.
+Expert IDs must match exactly. Non-tied selections must pass the index's score-interval checks.
+Synthetic ties use identical logits and biases.
 
 ## Encoded projections
 
-`load_projection()` supplies encoded FP8 activations, UE8M0 scales, and complete FP64 matrix products.
-Original checkpoint weights stay external. The synthetic FP4 case stores its weights.
-The [checker](../../development/operators/check_deepseek_projection.py) covers weight packing, K=576, and widths up to 15360.
+`load_projection()` supplies encoded activations, UE8M0 scales, and complete FP64 products.
+Original weights stay external. The synthetic FP4 case includes its weights.
+The [checker](../../development/operators/check_deepseek_projection.py) covers packing, K=576, and widths up to 15360.
+Activation quantization and collective reduction are separate boundaries.
 
-Each request uses normalized L2 `2^-7` and maximum absolute error `max(1e-7, 2^-6 * P)`.
-`P` is that request's FP64 peak. The RMS floor and near-zero absolute limit are `1e-6`.
-Constructed zero endpoints also have a `1e-6` absolute limit.
-These engineering limits exclude activation quantization error, promoted weight formats, collectives, latency, and full-model accuracy.
-
-`load_startup_promotion()` covers all 64770 finite FP8/UE8M0 input pairs and rejects 560 overflow cases.
-It supplies exact output bits for the 64210 accepted pairs and all 65280 finite BF16 words.
-It also supplies invalid BF16 words and original and synthetic dense32 scale cases.
+`load_startup_promotion()` contains all finite FP8/UE8M0 pairs and all finite BF16 words.
+It also contains overflow inputs, invalid BF16 words, and original and synthetic dense32 scales.
 Conversion uses ties-to-even rounding, keeps signed zero, and rejects nonfinite outputs.
 External generation metadata has SHA256 `b341dd5dcf26691c104757b29b7cd6d1ea1eecf0f5429f3f7638e5f29d7e0dcb`.
 
+## Unquantized projections
+
+`load_unquantized_projection()` supplies seven BF16/FP32 cases with complete FP64 matrix products.
+The [workspace](../../python/oh_my_vllm/operators/linear/workspace.py) supports BF16-to-BF16, BF16-to-FP32, and FP32-to-FP32 products.
+Grouped `wo_a` uses the full input and output row strides.
+Router logits stay FP32. Accumulation uses FP32 without TF32 or intermediate BF16 conversion.
+The [checker](../../development/operators/check_deepseek_linear.py) covers grouping, full vocabulary outputs, cancellation, and exact rounding decisions.
+
 ## Normalization, rotation, and activation
 
-`load_norm_rope()` supplies four RMS cases and three RoPE cases.
-RMS uses original BF16 weights without an offset, with text epsilon `1e-20` and vision epsilon `1e-6`.
-RoPE rotates adjacent pairs in the last 64 channels, with supplied FP32 cosine/sine coefficients and unchanged prefix bits.
+`load_norm_rope()` uses original BF16 RMS weights without an offset.
+Text epsilon is `1e-20`. Vision epsilon is `1e-6`.
+RoPE uses supplied FP32 cosine/sine coefficients for adjacent pairs in the last 64 channels. Prefix bits do not change.
+Phase generation and two-dimensional vision positions are separate boundaries.
 
-The normalized L2 limit is `2^-8 + 64*2^-24`.
-The absolute limit is `max(1e-7, (2^-8 + 64*2^-24)*P)`.
-Each request has its own peak `P`, RMS floor `1e-6`, and near-zero absolute limit `1e-6`.
-These cases exclude phase generation, two-dimensional vision positions, and full-model acceptance.
-
-`load_swiglu()` supplies four cases with BF16 gate/up inputs and complete FP64 outputs.
-Text gates have only an upper limit of 10. Text up values have limits of -10 and 10.
-Optional FP32 route weights multiply each row before the final BF16 conversion.
-Vision uses width 2816 without these limits or route weights.
-
-SwiGLU uses the same error limits as RMS and RoPE, separately for each request.
-The [checker](../../development/operators/check_deepseek_activation.py) covers the bounded inputs in the [API](../../python/oh_my_vllm/operators/activation/api.py).
-Projection, dispatch, quantization, and full-model acceptance are separate.
+`load_swiglu()` supplies BF16 gate/up inputs and complete FP64 outputs.
+The [API](../../python/oh_my_vllm/operators/activation/api.py) specifies text clamps and optional FP32 routing weights.
+The [plan](../../python/oh_my_vllm/operators/activation/plan.py) specifies vision width.
+The [checker](../../development/operators/check_deepseek_activation.py) applies fixed limits separately to each request.
 
 ## Ratio2 pooling
 
 `load_pooling()` supplies complete FP32 KV and gate pairs with width 512.
 For each channel, softmax acts across the pair. The weighted sum converts once to BF16 before RMS.
-The fixed limits include final BF16 rounding and an FP32 allowance that accounts for cancellation.
-The [checker](../../development/operators/check_deepseek_pooling.py) covers Eager and Graph execution, empty inputs, input immutability, and invalid arguments.
-This boundary excludes projections, RMS, RoPE, partial-group state, performance, and full-model accuracy.
+The fixed limits include rounding and cancellation allowances.
+The [checker](../../development/operators/check_deepseek_pooling.py) excludes partial-group state, projection, RMS, and RoPE.
 
 ## Packed sparse attention
 
 `load_sparse_attention()` supplies BF16 queries, original F32 sinks, encoded cache rows, and explicit slot IDs.
 The [API](../../python/oh_my_vllm/operators/sparse_attention/api.py) defines formats, masks, repeated IDs, and error status.
 Only selected cache tiles are decoded. The full logical cache is not expanded.
-
-The normalized L2 limit is `2^-6`.
-The index fixes one absolute-error limit per request and channel.
-The RMS floor and near-zero absolute limit are `1e-6`.
-The [checker](../../development/operators/check_deepseek_sparse_attention.py) uses all outputs, exact zero guards, Eager/Graph execution, and invalid-ID checks.
-Projection, index selection, state restoration, latency, and full-model acceptance are separate.
+Reject nonzero status before state commit.
+The [checker](../../development/operators/check_deepseek_sparse_attention.py) compares all outputs, exact zero guards, and invalid-ID behavior.
 
 ## Short text
 
-The [construction guide](reference.md) specifies the FP64 equations and fixed prompt.
+The [reference guide](reference.md) specifies the equations and fixed 16-token prompt.
 The artifact contains all 129280 prefill logits and all 129280 continuation logits.
-The prefill argmax selects token 16 as the fixed continuation input.
-The continuation consumes the same prefill state, not a fresh model state.
-
-Metadata records all 16 prompt token IDs, array hashes, checkpoint identity, source hashes, and the CPU execution settings.
-Weight decoding and all subsequent model arithmetic use FP64 without activation quantization.
-This artifact does not cover DSpark endpoints, media, long contexts, or native rounding.
-Its existence does not prove runtime numerical acceptance.
+The prefill argmax selects token 16 for continuation from the same state.
+Weight decoding and model arithmetic use FP64 without activation quantization.
 
 ## DSpark continuation
 
-`load_dspark()` supplies eighteen full FP64 vocabulary rows and two five-value confidence vectors.
+`load_dspark()` supplies eighteen complete FP64 vocabulary rows and two five-value confidence vectors.
 The 129-token prefix repeats the short prompt eight times, then adds its first token.
-The arrays cover prefill, five proposals, six verification inputs, restored continuation, and five subsequent proposals.
+Arrays cover prefill, five proposals, six verification inputs, restored continuation, and five subsequent proposals.
+The case selects two verification inputs, equivalent to one accepted draft, and independently recomputes that prefix without rejected state.
 
-The case selects two verification inputs, equivalent to one accepted draft.
-It independently recomputes that prefix, without rejected state.
-The next draft block uses only accepted features.
-This forced selection is not a sampled rejection event.
-The [construction guide](reference.md#dspark-reference) gives the generator and source checks.
+Subsequent proposals use only accepted features. This forced selection is not a sampled rejection event.
+See the [construction procedure](reference.md#dspark-reference).
 
 ## Media endpoints
 
-`load_media()` supplies full FP64 prefill and continuation logits for one synthetic still image and two decoded video frames.
-The 37-token placeholder prompt expands to 624 tokens.
-The prefill argmax selects token 9544 for continuation from accepted state.
-Metadata binds the complete prompt, ordered images, patches, vision embeddings, and token map.
-
-The [reference guide](reference.md#media-reference) specifies generation.
-This fixture does not prove decoder, service, performance, or capacity acceptance.
+`load_media()` supplies complete FP64 prefill and continuation logits for one synthetic still image and two decoded video frames.
+The 37-token placeholder prompt expands to 624 tokens. Token 9544 continues from accepted state.
+Metadata binds the prompt, ordered images, patches, vision embeddings, and token map.
+See the [reference procedure](reference.md#media-reference).
 
 ## Prompt codec
 
 The [codec generator](../../development/model/deepseek_v41/codec_reference.py) executes verified local encoder and tokenizer bytes.
-It checks input and source identities before exclusive publication, without hashing weight payloads again.
-Automatic special-token insertion, padding, and truncation are disabled.
-The Python encoder supplies BOS where applicable.
-Cases store inputs, rendered text, complete IDs, and ordered media records.
-The generator does not fetch or preprocess images.
+It disables automatic special-token insertion, padding, and truncation. The Python encoder supplies BOS where applicable.
+Cases keep rendered text, complete IDs, and ordered media records. The generator does not fetch or preprocess images.
 
-The cases cover chat, effort aliases and numbers, reasoning removal, reasoning preservation, tools, system messages, assistant continuation, and images.
-Tool conversations keep earlier reasoning as specified by the local rule.
-With explicit context, the encoder returns only the continuation text and its new images.
-The caller keeps the preceding context and media separately.
-Jinja equivalence is not proved by these fixtures.
-The identified Python encoder stays authoritative.
+Cases cover chat, reasoning effort, reasoning removal and preservation, tools, system messages, assistant continuation, and images.
+With explicit context, the encoder returns only new text and images. The caller keeps preceding context and media separately.
+The identified Python encoder is authoritative. These fixtures do not prove Jinja equivalence.
 
 ### Tool-image order correction
 
 `tool-result-images` records a source defect: images are collected before tool results are sorted into call order.
-Reversed results then misalign placeholders and images.
-This is diagnostic behavior, not approved service behavior.
+Reversed results misalign placeholders and images. This is diagnostic behavior.
 
-`tool-result-images-canonical` orders complete result records before encoding and keeps the correct image order.
-The service adapter must apply this ordering before media extraction.
-It must reject missing, duplicate, or unknown call identities.
+`tool-result-images-canonical` sorts complete result records before encoding.
+The service adapter must apply this order before media extraction and reject missing, duplicate, or unknown call identities.
 Moving image records alone is not sufficient.
 
 ## Upstream checkpoint boundary
 
 Use the local checkpoint for weights and references.
-The compared [upstream checkpoint](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/1bae0e1088993b9b82de08f59de5be5a34e42170) has matching layouts but different whole-file hashes for all 48 shards.
+The [compared upstream checkpoint](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/1bae0e1088993b9b82de08f59de5be5a34e42170) has matching layouts but different whole-file hashes for all 48 shards.
 Do not substitute its weights or numerical results.
 
 ## Commands
@@ -247,4 +197,3 @@ scripts/with-env.sh python -m development.model.deepseek_v41.codec_reference \
 ```
 
 Review source changes and generated identities before a deliberate fixture replacement.
-Do not regenerate fixtures as part of numerical acceptance.

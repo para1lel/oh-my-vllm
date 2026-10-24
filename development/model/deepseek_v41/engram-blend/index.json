@@ -1,0 +1,342 @@
+{
+  "version": "deepseek-engram-blend-numerics-v1",
+  "policy_sha256": "8cb7d570e12049c0bfb36c839dde2dab11ad0336d5a230cd372f6038e77eac2e",
+  "checkpoint_manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+  "generator_sha256": "2a45b62df608d296b0bd1fe873cd68c955c351dc8953e4d65c624115cd138f66",
+  "precision_policy": {
+    "scope": "Isolated post-projection Engram normalization, signed-square-root gate, token mask and residual blend. No lookup, hash, quantization, projection, state, collectives, latency or full-model acceptance.",
+    "contract": {
+      "rows": [
+        0,
+        384
+      ],
+      "copies": 4,
+      "width": 5120,
+      "epsilon": 1e-20,
+      "clamp": 1e-06,
+      "inputs": "BF16 residual[rows,4,5120], projected[rows,5,5120], q_weight/k_weight[4,5120], uint8 token mask[rows] in {0,1}. Projected first4 copies are keys and last copy is shared value. Fixed finite bounded operands. No implicit extra BF16 product rounding.",
+      "formula": "Each copy: w=q_weight*k_weight; h2=mean(h*h); k2=mean(key*key); dot=sum(h*w*key)*rsqrt(h2+eps)*rsqrt(k2+eps)/sqrt(5120); gate=sigmoid(copysign(sqrt(max(abs(dot),1e-6)),dot)); mask0 sets gate0; output=h+gate*value. FP32 arithmetic, gate FP32 and final output BF16.",
+      "reference": "Complete CPU Torch FP64 gate and residual output from exact BF16 operands. Check residual equivalence against unchanged reference_model.engram with injected fixed embedding/projection inputs."
+    },
+    "precision": {
+      "u16": 0.00390625,
+      "u32": 5.960464477539063e-08,
+      "gate_normalized_l2": 6.103515625e-05,
+      "gate_max_abs": 3.0517578125e-05,
+      "output_normalized_l2": 0.0078125,
+      "absolute_floor": 1e-07,
+      "rms_floor": 1e-06,
+      "near_zero_max_abs": 1e-06,
+      "output_max_abs": "Per request max(1e-7,2*u16*max(abs(output64))+gate_max_abs*max(abs(projected_value))).",
+      "guard": "Exact masked gate zeros; for masked rows positive finite residual values are unchanged. Exact zero-value residual passthrough where arithmetic has positive zero.",
+      "limits_policy": "Engineering limits frozen before candidate, not worst-case proofs. Never widen limits or replace expected data against candidate results."
+    },
+    "inputs": {
+      "seed": 33377335,
+      "rule": "Deterministic BF16 dyadic patterns. Copy amplitudes 2**(copy-2), independent key phase and per-row sign. One quarter of rows masked; include zero residual, zero key, positive/negative correlated keys, orthogonal cancellation, tiny +/- dots and saturated gates. Synthetic decision case uses exact power-of-two weights; real cases use both original Engram q/k parameter pairs.",
+      "residual_key_value_abs_max": 32,
+      "weight_abs_max": 32
+    }
+  },
+  "reference_sources": {
+    "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+    "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+    "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+    "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+    "development/model/deepseek_v41/fixtures.py": "95d95f3849bd9697f863fca6012397b860ad5de72e00822547b0a4ac24b234a0",
+    "development/model/deepseek_v41/reference_attention.py": "6fdb87eed47dde8dc7ae7d6cd9edfb35b35b506b9aa093da18f06afa944b71bd",
+    "development/model/deepseek_v41/reference_model.py": "f80b5ace539b134aaf6e722f6c63e4801822ead75b59bdb17617c6979d678e8a",
+    "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+    "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+    "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+    "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+    "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+    "python/oh_my_vllm/models/deepseek_v41/checkpoint.py": "1c72f4eecabd7f4eab0ac8d92403848b1327a7c00f844e722382eb85f0574ea9",
+    "python/oh_my_vllm/models/deepseek_v41/placement.py": "4e682a6df55e469a6c6ec90b311854f2b9a416f44e38e367251a71b15164f03e",
+    "requirements/deepseek-reference.lock": "1518daf7fb58a27bfd21dbc33f69e3ae3fe9a1f15d21939eeaa3a16ad67f0642",
+    "development/model/deepseek_v41/engram.py": "23a9c6f40cdd74630ce47eea9ae1d503cd0f92a13958d11a5964b997b908e13b",
+    "development/model/deepseek_v41/reference.py": "a22e95910451e521bd8d849956592618dd91e4da5d13a7ab819683ecdbb0813f",
+    "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+    "requirements/model-reference.txt": "f3f57bea0d2bbce7fba78b0093f5025d57a8081d75308cbc0467a504815725ce",
+    "requirements/model-reference.lock": "b26c3c4e3b3810a425742be3276baf52d921c0253827e490ff91799d172068d6",
+    "requirements/deepseek-reference.txt": "596d700265833eee29b3fcce085a9433144c4186fa342036179c68818fffbde8",
+    "development/model/deepseek_v41/reference_long_case.py": "5e15187a869aecc6097d7bbfe9a569988bd86521c41440ad16cd662a522185ad",
+    "development/model/deepseek_v41/reference_long_checkpoint.py": "965434b7020b6c7cf85a1e5a67d8b45727c76fa5b96f635b1120b42a1e7a4567",
+    "development/model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/reference/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "external/generate-engram-blend-v2.py": "2a45b62df608d296b0bd1fe873cd68c955c351dc8953e4d65c624115cd138f66"
+  },
+  "cases": {
+    "decode": {
+      "case": {
+        "id": "deepseek.engram-blend.numerics.decode",
+        "boundary": "deepseek.engram-blend",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 1,
+          "batch": 1,
+          "queries": 1
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.1.engram.q_weight",
+          "layers.1.engram.k_weight"
+        ],
+        "options": {
+          "copies": 4,
+          "width": 5120,
+          "epsilon": 1e-20,
+          "clamp": 1e-06
+        },
+        "outputs": [
+          "gate",
+          "value"
+        ]
+      },
+      "fixture_sha256": "193bb12c1d8125b0242ccf7a88b0fccbd4d6a8633b68ed98763a86e536c3760c",
+      "limits": {
+        "case_sha256": "5657de9e929ac30a4a7399805ace1029e856040ec01cdc14cc8a961ca0a3f80d",
+        "fields": {
+          "gate": {
+            "kind": "float",
+            "normalized_l2": 6.103515625e-05,
+            "max_abs": 3.0517578125e-05,
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.034500374070864356
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "193bb12c1d8125b0242ccf7a88b0fccbd4d6a8633b68ed98763a86e536c3760c"
+      }
+    },
+    "prefill": {
+      "case": {
+        "id": "deepseek.engram-blend.numerics.prefill",
+        "boundary": "deepseek.engram-blend",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 128,
+          "batch": 4,
+          "queries": 32
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.1.engram.q_weight",
+          "layers.1.engram.k_weight"
+        ],
+        "options": {
+          "copies": 4,
+          "width": 5120,
+          "epsilon": 1e-20,
+          "clamp": 1e-06
+        },
+        "outputs": [
+          "gate",
+          "value"
+        ]
+      },
+      "fixture_sha256": "273dcc08208166093c75da1989a3fdd179f78c2569fc070d5f522d901ac224f3",
+      "limits": {
+        "case_sha256": "075c4bd54bb92287a75d4aeb8c5a5991c51c2b2a18e5adf3a0dae281c73ab3c7",
+        "fields": {
+          "gate": {
+            "kind": "float",
+            "normalized_l2": 6.103515625e-05,
+            "max_abs": 3.0517578125e-05,
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.03528384945932281,
+              0.0354433820227938,
+              0.03548484212897916,
+              0.035437230758338295
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "273dcc08208166093c75da1989a3fdd179f78c2569fc070d5f522d901ac224f3"
+      }
+    },
+    "verification": {
+      "case": {
+        "id": "deepseek.engram-blend.numerics.verification",
+        "boundary": "deepseek.engram-blend",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 384,
+          "batch": 64,
+          "queries": 6
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.14.engram.q_weight",
+          "layers.14.engram.k_weight"
+        ],
+        "options": {
+          "copies": 4,
+          "width": 5120,
+          "epsilon": 1e-20,
+          "clamp": 1e-06
+        },
+        "outputs": [
+          "gate",
+          "value"
+        ]
+      },
+      "fixture_sha256": "0af83e75e9793349b2ff020f0f495fe270185a5c065412d5121b17d471767a61",
+      "limits": {
+        "case_sha256": "34b8dad905ccf541d6ccdea980e571fdea93e73986f2ea3966ce6ef125c4a825",
+        "fields": {
+          "gate": {
+            "kind": "float",
+            "normalized_l2": 6.103515625e-05,
+            "max_abs": 3.0517578125e-05,
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.035382400630623284,
+              0.035356587227126444,
+              0.03303729121683081,
+              0.035398225015077056,
+              0.03534949644104112,
+              0.035374133902636606,
+              0.033006926352110444,
+              0.035369375782350804,
+              0.03535946988909607,
+              0.035399449093069364,
+              0.033035775584836696,
+              0.035350849288695745,
+              0.03538168898922004,
+              0.03535767841438778,
+              0.033054302078491755,
+              0.035363034981425664,
+              0.03539234863819288,
+              0.03535366578973609,
+              0.033042116385761836,
+              0.03538890794636688,
+              0.03535089500289761,
+              0.03536786015035669,
+              0.03301624342082062,
+              0.035382400630623284,
+              0.035356587227126444,
+              0.035398225015077056,
+              0.033022750736564216,
+              0.03534949644104112,
+              0.035374133902636606,
+              0.035369375782350804,
+              0.03305565492614638,
+              0.03535946988909607,
+              0.035399449093069364,
+              0.035350849288695745,
+              0.03304568147809143,
+              0.03538168898922004,
+              0.03535767841438778,
+              0.035363034981425664,
+              0.03302346237796746,
+              0.03539234863819288,
+              0.03535366578973609,
+              0.03538890794636688,
+              0.03301280272899462,
+              0.03535089500289761,
+              0.03536786015035669,
+              0.035382400630623284,
+              0.03305425636428989,
+              0.035356587227126444,
+              0.035398225015077056,
+              0.03534949644104112,
+              0.033048564140061056,
+              0.035374133902636606,
+              0.035369375782350804,
+              0.03535946988909607,
+              0.033031017464550894,
+              0.035399449093069364,
+              0.035350849288695745,
+              0.03538168898922004,
+              0.033005702274118136,
+              0.03535767841438778,
+              0.035363034981425664,
+              0.03539234863819288,
+              0.03304747295279972,
+              0.03535366578973609
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "0af83e75e9793349b2ff020f0f495fe270185a5c065412d5121b17d471767a61"
+      }
+    },
+    "decisions": {
+      "case": {
+        "id": "deepseek.engram-blend.numerics.decisions",
+        "boundary": "deepseek.engram-blend",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 8,
+          "batch": 8,
+          "queries": 1
+        },
+        "mode": "graph",
+        "weights": [],
+        "options": {
+          "copies": 4,
+          "width": 5120,
+          "epsilon": 1e-20,
+          "clamp": 1e-06
+        },
+        "outputs": [
+          "gate",
+          "value"
+        ]
+      },
+      "fixture_sha256": "977ebdb3d70bfc433d89d88a33963c110e88b8cbf6513ff39ac6c1228be0022a",
+      "limits": {
+        "case_sha256": "9ecd4db71f1a7e37804048d98fa295147d0137ca9ea20a6e2d413614d744d708",
+        "fields": {
+          "gate": {
+            "kind": "float",
+            "normalized_l2": 6.103515625e-05,
+            "max_abs": 3.0517578125e-05,
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.03224945068359375,
+              0.0029540405272216793,
+              0.03420404052722168,
+              0.03713226292027415,
+              0.03127288844691335,
+              0.01564788818359375,
+              0.01857904052722168,
+              0.01857611083996582
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "977ebdb3d70bfc433d89d88a33963c110e88b8cbf6513ff39ac6c1228be0022a"
+      }
+    }
+  }
+}

@@ -26,6 +26,7 @@ OPTIONAL_MODULE_SOURCES = {
     "hyperconnection": SOURCES / "hyperconnection/cuda/hyperconnection.cu",
     "routing": SOURCES / "routing/cuda/routing.cu",
     "projection": SOURCES / "projection/cuda/projection.cu",
+    "linear": SOURCES / "linear/cuda/linear.cu",
     "transform": SOURCES / "transform/cuda/transform.cu",
     "activation": SOURCES / "activation/cuda/activation.cu",
     "compression": SOURCES / "compression/cuda/compression.cu",
@@ -206,7 +207,7 @@ def load(name, functions):
     if metadata["ffi_version"] != importlib.metadata.version("apache-tvm-ffi"):
         raise RuntimeError("native module uses a different FFI version")
     vendor = None
-    if name == "vision":
+    if name in ("vision", "linear"):
         vendor = vision_vendor_dependencies()
     elif name == "collectives":
         vendor = collectives_vendor_dependencies()
@@ -237,6 +238,12 @@ def load(name, functions):
     module = load_module(str(library))
     if name == "vision":
         verify_vision_vendor_images(module, vendor)
+    elif name == "linear":
+        verify_vendor_images(
+            tuple(str(path) for path in module.linear_images()),
+            vendor["images"],
+            "Linear",
+        )
     elif name == "collectives":
         verify_collectives_vendor_images(module, vendor)
     return module, metadata["source_id"], library

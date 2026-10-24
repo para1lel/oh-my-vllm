@@ -1,0 +1,1332 @@
+{
+  "version": "deepseek-unquantized-projection-numerics-v1",
+  "policy_sha256": "117e4a6976faf7595b9f96793bdee021a63e31da50f9b0c785aebd4955fa7c0a",
+  "precision_policy": {
+    "version": "deepseek-unquantized-projection-policy-proposal-v1",
+    "scope": "Isolated unquantized matrix products, including block-diagonal grouped wo_a. No normalization, bias, routing selection, pooling, activation quantization, collectives, sampling, performance, or model-composition acceptance.",
+    "contracts": {
+      "bf16_bf16": "Exact BF16 inputs and prepared BF16 weights; FP32 accumulation and one final BF16 RN-even result. No activation quantization.",
+      "bf16_f32": "Exact BF16 inputs and BF16 gate weights; FP32 results directly. The released Gate.forward widens operands to FP32. Never round logits to BF16 before post-logit routing.",
+      "f32_f32": "FP32 inputs and FP32 weights, FP32 results. Real compressor/head/confidence weights are exact widenings of original BF16. Keep the current promoted storage, without a second narrowed persistent copy.",
+      "wo_a": "Y[r,g,n]=sum_k X[r,g,k]*W[g,n,k]. G=2 for TP4/TEP4 and G=8 for DEP4. Input is physically [rows,G,4096], output [rows,G,1024]. Group views have row strides G*4096 and G*1024 elements, not packed row strides.",
+      "reference": "CPU Torch FP64 matrix multiplication of exact boundary operand values. Store complete unrounded FP64 outputs, including every group, expert logit, and vocabulary entry. BF16/F32 casts are diagnostic outputs, not expected mathematical arrays.",
+      "wo_a_promotion": "Use the already accepted startup-promotion code/scale lookup table, bound by its NPZ SHA, to obtain BF16 bits from original E4M3 and dense32 UE8M0. Do not use candidate promote_fp8 or assume original FP64 dequantization is the prepared BF16 value.",
+      "finite_scope": "Fixed finite, bounded-amplitude operands; reject nonfinite source values and promotion overflow. This proposal does not accept arbitrary finite operands whose dot products overflow. No NaN saturation or subnormal flushing.",
+      "head_partition": "Store one complete global-vocabulary row. Checker may view its four contiguous 32320-entry slices for TP4/TEP4 or the full 129280 entries for DEP4; no extra golden or collective acceptance.",
+      "no_new_embedding_gate": "Embedding/gather and encoded Engram wkv are outside this unquantized gate."
+    },
+    "precision": {
+      "u16": 0.00390625,
+      "u32": 5.960464477539063e-08,
+      "bf16_normalized_l2": 0.0078125,
+      "f32_normalized_l2": 1.52587890625e-05,
+      "absolute_formula_bf16": "max(1e-7, 2*u16*P + 64*u32*A)",
+      "absolute_formula_f32": "max(1e-7, 256*u32*P + 64*u32*A)",
+      "definitions": "For each stored output field and request: P=max(abs(Y64)); S[r,n]=sum_k abs(X64[r,k]*W64[n,k]); A=max(S). For grouped wo_a compute budgets and comparisons separately for every request and group.",
+      "rms_floor": 1e-06,
+      "near_zero_max_abs": 1e-06,
+      "absolute_floor": 1e-07,
+      "rationale": "Two BF16 unit roundoffs allow final RN-even rounding and engineering headroom. The separate FP32 normalized cap is 256*u32; 64*u32 times the absolute-product sum accounts for cancellation in the absolute cap. These fixed engineering caps are not a worst-case K-term reduction proof or borrowed Qwen limits.",
+      "conditions": "Both normalized L2 and maximum absolute checks must pass. Zero/tiny requests are separate; larger requests cannot dilute them. Exact selected-zero and dyadic-bit guards are additional requirements, not relaxed by conditioning.",
+      "independence": "These formulas precede generation and candidate code. Freeze realized P/A budgets with the FP64 fixtures, before native work. If an independent CPU source-precision diagnostic fails, record the failure and stop for policy review; never widen limits against a candidate."
+    },
+    "inputs": {
+      "construction": "BF16 code palette in fixed order: [0x0000,0x8000,0x3a80,0xba80,0x3e00,0xbe00,0x3f00,0xbf00,0x3f80,0xbf80,0x4000,0xc000]. Normal input[r,g,k] uses palette[((k%97)+7*r+23*g)%12], multiplied by the exact power2^(-(request%4)). Use g=0 for dense inputs and row order within each request; real F32 inputs widen these BF16 values exactly. Zero/tiny/cancellation overrides have the declared case scope.",
+      "zero_tiny": "Only the multi-request cases explicitly marked zero/tiny use request0 identically zero and request1 normal-pattern times2^-20. Single-row grouped and head cases use nonzero normal patterns. Keep request comparisons independent.",
+      "real_cancellation": "In a fixed selected real output row, find the first lexicographic pair of nonzero equal BF16/promoted-BF16 weight values. Put opposite dyadic inputs at those columns, all other columns zero. Store column IDs, exact zero coordinate and full real-weight output. Add a second row with a tiny third contribution. If a pair is absent, stop; do not alter weights, seeds, or limits silently.",
+      "g2_groups": "Construct each group independently. A zero guard for one group is never inferred for the other group.",
+      "row0": "Use empty slices of each frozen input and preallocated empty outputs in the future checker. No new zero-row golden, checkpoint generation, or generic Case-catalog change."
+    }
+  },
+  "generator_sha256": "dc36b0988142b231f15de788f62dffbd78e7fe9ca6b6909b283aa24010094a0f",
+  "checkpoint_manifest_sha256": "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+  "reference_sources": {
+    "development/model/deepseek_v41/identity.py": "e595b9ba8ff0ff5e545a0adaae1c6a3bc65c517c1ae09fa25b6ce0a10a3006ac",
+    "development/model/deepseek_v41/layout.py": "6a1c21d123a8b2f64a0a77282309103302f3a3bca8417e13a7019e937dcf394f",
+    "development/model/deepseek_v41/quantization.py": "a466fac4beaee6598ac971c8d756caa963d171afc4deceb691946d0fc6fc84a0",
+    "development/model/deepseek_v41/weights.py": "81bf79fca55b085d6eb27d05f78d2f0cccc0ffca9d3d04bc5a73e4340a872cda",
+    "development/model/deepseek_v41/fixtures.py": "95d95f3849bd9697f863fca6012397b860ad5de72e00822547b0a4ac24b234a0",
+    "development/model/deepseek_v41/reference_attention.py": "6fdb87eed47dde8dc7ae7d6cd9edfb35b35b506b9aa093da18f06afa944b71bd",
+    "development/model/deepseek_v41/reference_model.py": "f80b5ace539b134aaf6e722f6c63e4801822ead75b59bdb17617c6979d678e8a",
+    "development/operators/cases.py": "a58fb53f92e62967100f0417eca317bcf07b7c633c8eafb9862a96fe94b48d8c",
+    "development/operators/fixtures.py": "3cea30357dd2eb40f9a8ccff4cd146e8a3d9f3085bf298ba16d3a95fc541e0d4",
+    "development/operators/numerics.py": "949d5d8cae7482b673ffb95ebb0ca90c27c1db3a4abc1b094cc022a02c9175bd",
+    "development/operators/storage.py": "c451d5bfaaca25d409930e891c718ef713dc29d0505569a7efe25c02b1285a6a",
+    "development/operators/reference/shards.py": "5f4c72e07e0fb3f59267d5f579eb6028048d1aedb052672552cb2fbb0078ad4e",
+    "python/oh_my_vllm/models/deepseek_v41/checkpoint.py": "1c72f4eecabd7f4eab0ac8d92403848b1327a7c00f844e722382eb85f0574ea9",
+    "python/oh_my_vllm/models/deepseek_v41/placement.py": "4e682a6df55e469a6c6ec90b311854f2b9a416f44e38e367251a71b15164f03e",
+    "requirements/deepseek-reference.lock": "1518daf7fb58a27bfd21dbc33f69e3ae3fe9a1f15d21939eeaa3a16ad67f0642",
+    "development/model/deepseek_v41/engram.py": "23a9c6f40cdd74630ce47eea9ae1d503cd0f92a13958d11a5964b997b908e13b",
+    "development/model/deepseek_v41/reference.py": "a22e95910451e521bd8d849956592618dd91e4da5d13a7ab819683ecdbb0813f",
+    "development/model/deepseek_v41/reference_math.py": "96c5a27cc3f92772b80efff89135059b08f24832ce180247fda27a3f7ca826fc",
+    "requirements/model-reference.txt": "f3f57bea0d2bbce7fba78b0093f5025d57a8081d75308cbc0467a504815725ce",
+    "requirements/model-reference.lock": "b26c3c4e3b3810a425742be3276baf52d921c0253827e490ff91799d172068d6",
+    "requirements/deepseek-reference.txt": "596d700265833eee29b3fcce085a9433144c4186fa342036179c68818fffbde8",
+    "development/model/deepseek_v41/reference_long_case.py": "5e15187a869aecc6097d7bbfe9a569988bd86521c41440ad16cd662a522185ad",
+    "development/model/deepseek_v41/reference_long_checkpoint.py": "965434b7020b6c7cf85a1e5a67d8b45727c76fa5b96f635b1120b42a1e7a4567",
+    "development/model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "development/operators/reference/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "external/generate-unquantized-projection-v1.py": "dc36b0988142b231f15de788f62dffbd78e7fe9ca6b6909b283aa24010094a0f",
+    "external/unquantized-projection-policy-proposal-v1.json": "117e4a6976faf7595b9f96793bdee021a63e31da50f9b0c785aebd4955fa7c0a"
+  },
+  "cases": {
+    "wo-a-tp-prefill": {
+      "case": {
+        "id": "deepseek.bf16-projection.numerics.wo-a-tp-prefill",
+        "boundary": "deepseek.bf16-projection",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 128,
+          "batch": 4,
+          "queries": 32,
+          "groups": 2,
+          "width": 4096,
+          "outputs": 1024
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.attn.wo_a.scale",
+          "layers.0.attn.wo_a.weight"
+        ],
+        "options": {
+          "weight_selections": {
+            "value_g0": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  6144,
+                  0
+                ],
+                "stop": [
+                  7168,
+                  4096
+                ]
+              },
+              "raw_sha256": "a0f4324246959c3271cfc16bc9c5d9627c91a1d9f009824e97f4f9a92ad42696",
+              "prepared_sha256": "8e94e7af56705afe7b332b8cf0b7ac1d631d1d8d5662129ecf5c82f141d926c8",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  192,
+                  0
+                ],
+                "stop": [
+                  224,
+                  128
+                ],
+                "sha256": "69a6ebbb5a635a6a6c4284020620403af4d0ca55a207106eb49786a062251547"
+              }
+            },
+            "value_g1": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  7168,
+                  0
+                ],
+                "stop": [
+                  8192,
+                  4096
+                ]
+              },
+              "raw_sha256": "e53f121dd56c05585e5d94f0ded28c3946fda3cf1628fde4058873ceb2f32628",
+              "prepared_sha256": "5ab36435af3336fa44bc5a3e12c77cd6b3e68a4c71901c3184df3e9085fd5f9d",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  224,
+                  0
+                ],
+                "stop": [
+                  256,
+                  128
+                ],
+                "sha256": "6ab998da2ca7ad2eaada2be51910080562c866c3c03ecdbcea129f3db3728705"
+              }
+            }
+          },
+          "zero_guards": {
+            "value_g0": {
+              "first": 64,
+              "last": 96,
+              "near_row": 65,
+              "left": 0,
+              "right": 29,
+              "third": 1,
+              "column": 0
+            },
+            "value_g1": {
+              "first": 64,
+              "last": 96,
+              "near_row": 65,
+              "left": 0,
+              "right": 46,
+              "third": 1,
+              "column": 0
+            }
+          },
+          "input_rule": "approved policy plus generator SHA",
+          "groups": 2
+        },
+        "outputs": [
+          "value_g0",
+          "value_g0_zero_nonzero",
+          "value_g1",
+          "value_g1_zero_nonzero"
+        ]
+      },
+      "fixture_sha256": "1e927af816be0e4e0028d581b98511db9d12cddd37748b13a23c807794248bc8",
+      "limits": {
+        "case_sha256": "6e569e72a3d90f08a5566b24e2c82055082a5f7231eb94a3c1f0a788cea19435",
+        "fields": {
+          "value_g0": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              0.0008243771008764611,
+              0.006152659730473076
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g0_zero_nonzero": {
+            "kind": "exact"
+          },
+          "value_g1": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              0.0006106644869046107,
+              0.00569669901670844
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g1_zero_nonzero": {
+            "kind": "exact"
+          }
+        },
+        "fixture_sha256": "1e927af816be0e4e0028d581b98511db9d12cddd37748b13a23c807794248bc8"
+      }
+    },
+    "wo-a-dep-decode": {
+      "case": {
+        "id": "deepseek.bf16-projection.numerics.wo-a-dep-decode",
+        "boundary": "deepseek.bf16-projection",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 1,
+          "batch": 1,
+          "queries": 1,
+          "groups": 8,
+          "width": 4096,
+          "outputs": 1024
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.attn.wo_a.scale",
+          "layers.0.attn.wo_a.weight"
+        ],
+        "options": {
+          "weight_selections": {
+            "value_g0": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  1024,
+                  4096
+                ]
+              },
+              "raw_sha256": "92820b2223d265ec7a7ef0b9427285b75ba7ebb3b7ff55cd94e99dfcee0da19d",
+              "prepared_sha256": "689ade21f5ac5871d6cb398ee41ca9a0902782aa1b0e1f5232ed9709844a8273",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  32,
+                  128
+                ],
+                "sha256": "04d6c26e728b3b6adb693272710032be178fb43d749936fe4192382b1b9dd05f"
+              }
+            },
+            "value_g1": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  1024,
+                  0
+                ],
+                "stop": [
+                  2048,
+                  4096
+                ]
+              },
+              "raw_sha256": "123d0f13de99bdea0892a5a540c40b765ff9c50ae5db747fea79bd127d65259c",
+              "prepared_sha256": "2f41f476c79cd7ff417f5830ca2835f87d18841eddbbb47a864de9f75214f388",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  32,
+                  0
+                ],
+                "stop": [
+                  64,
+                  128
+                ],
+                "sha256": "fb1482b7fc58bc82c2ad9a37d1023b503dbe749adbe6c3b402fa2da29ba0b7d3"
+              }
+            },
+            "value_g2": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  2048,
+                  0
+                ],
+                "stop": [
+                  3072,
+                  4096
+                ]
+              },
+              "raw_sha256": "a02aaee7e3d6afd04ad0378d26f0fe187762f558f3b1c64cbbb70dcbb2da3304",
+              "prepared_sha256": "7aa95c64e77f227fcda4a7e10800504fdef1edfba2f65ff91e7bb098b95f9f2c",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  64,
+                  0
+                ],
+                "stop": [
+                  96,
+                  128
+                ],
+                "sha256": "e8d06ef3f74a027e6bd6a0fcc23b3e0f2a2caea9e0a97adde392560fdd9c5551"
+              }
+            },
+            "value_g3": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  3072,
+                  0
+                ],
+                "stop": [
+                  4096,
+                  4096
+                ]
+              },
+              "raw_sha256": "2121dbcdd187c97f7ba43836e83197500090267c00597e0a782ce1e54f3971d0",
+              "prepared_sha256": "b77bba4bd078862bc2cb9c7f56abef7b76c8f6398910112b54a5b6444a1d97be",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  96,
+                  0
+                ],
+                "stop": [
+                  128,
+                  128
+                ],
+                "sha256": "5a2e2726a07bf3dd7d0279d268d7350d1b75d1536bdef10de8d44e93c4a8a1bd"
+              }
+            },
+            "value_g4": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  4096,
+                  0
+                ],
+                "stop": [
+                  5120,
+                  4096
+                ]
+              },
+              "raw_sha256": "7ec51fa914b608e692dd216678f9a504ef4227ca27dea001e523c319b6e13891",
+              "prepared_sha256": "f1a192c47f1b2cdf67767727ae2ee567ad893c9c1266074979aa8cbb8aae9b0c",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  128,
+                  0
+                ],
+                "stop": [
+                  160,
+                  128
+                ],
+                "sha256": "3667e32477047b3332adeec03e266bab4ae53538877e9c4810df0312274843d4"
+              }
+            },
+            "value_g5": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  5120,
+                  0
+                ],
+                "stop": [
+                  6144,
+                  4096
+                ]
+              },
+              "raw_sha256": "491d7a6725284bb62dc6ae230914c3f4126598575a14702976256c0318a0c5d1",
+              "prepared_sha256": "be19194cc67c1ab0425ed12c3721429704810c493b47be76c101fc47da780f72",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  160,
+                  0
+                ],
+                "stop": [
+                  192,
+                  128
+                ],
+                "sha256": "db7317975a32dae8a136709023e52b955d8fca7fab374557b53117b2aa0c448a"
+              }
+            },
+            "value_g6": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  6144,
+                  0
+                ],
+                "stop": [
+                  7168,
+                  4096
+                ]
+              },
+              "raw_sha256": "a0f4324246959c3271cfc16bc9c5d9627c91a1d9f009824e97f4f9a92ad42696",
+              "prepared_sha256": "8e94e7af56705afe7b332b8cf0b7ac1d631d1d8d5662129ecf5c82f141d926c8",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  192,
+                  0
+                ],
+                "stop": [
+                  224,
+                  128
+                ],
+                "sha256": "69a6ebbb5a635a6a6c4284020620403af4d0ca55a207106eb49786a062251547"
+              }
+            },
+            "value_g7": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.attn.wo_a.weight",
+              "original_dtype": "F8_E4M3",
+              "original_shape": [
+                8192,
+                4096
+              ],
+              "selection": {
+                "start": [
+                  7168,
+                  0
+                ],
+                "stop": [
+                  8192,
+                  4096
+                ]
+              },
+              "raw_sha256": "e53f121dd56c05585e5d94f0ded28c3946fda3cf1628fde4058873ceb2f32628",
+              "prepared_sha256": "5ab36435af3336fa44bc5a3e12c77cd6b3e68a4c71901c3184df3e9085fd5f9d",
+              "scale": {
+                "name": "layers.0.attn.wo_a.scale",
+                "start": [
+                  224,
+                  0
+                ],
+                "stop": [
+                  256,
+                  128
+                ],
+                "sha256": "6ab998da2ca7ad2eaada2be51910080562c866c3c03ecdbcea129f3db3728705"
+              }
+            }
+          },
+          "zero_guards": {},
+          "input_rule": "approved policy plus generator SHA",
+          "groups": 8
+        },
+        "outputs": [
+          "value_g0",
+          "value_g1",
+          "value_g2",
+          "value_g3",
+          "value_g4",
+          "value_g5",
+          "value_g6",
+          "value_g7"
+        ]
+      },
+      "fixture_sha256": "0e7b95b9f2b46f4d7ac32b44a567e379082b9f6d1770fd538482740aa137a3c8",
+      "limits": {
+        "case_sha256": "ca21348a6ebd695ee93cc3d4b0c33bfcb5589b33f449f354324d2c0f8b7cd5de",
+        "fields": {
+          "value_g0": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.035615011734876134
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g1": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.041981457227024066
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g2": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.041960043014540815
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g3": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.041571711476620976
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g4": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.03624277268214371
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g5": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.03591998763639026
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g6": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.03532059539936938
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_g7": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.032907522235426256
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "0e7b95b9f2b46f4d7ac32b44a567e379082b9f6d1770fd538482740aa137a3c8"
+      }
+    },
+    "ratio1-verification": {
+      "case": {
+        "id": "deepseek.bf16-projection.numerics.ratio1-verification",
+        "boundary": "deepseek.bf16-projection",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 384,
+          "batch": 64,
+          "queries": 6,
+          "groups": 1,
+          "width": 5120,
+          "outputs": 512
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.20.attn.compressor.wkv.weight"
+        ],
+        "options": {
+          "weight_selections": {
+            "value": {
+              "prepared_dtype": "BF16",
+              "name": "layers.20.attn.compressor.wkv.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                512,
+                5120
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  512,
+                  5120
+                ]
+              },
+              "raw_sha256": "13a422c885486ec6c02f7b97af92ba2d918037ce2a7fd5601b9d3e606e2da74b",
+              "prepared_sha256": "13a422c885486ec6c02f7b97af92ba2d918037ce2a7fd5601b9d3e606e2da74b"
+            }
+          },
+          "zero_guards": {
+            "value": {
+              "first": 12,
+              "last": 18,
+              "near_row": 13,
+              "left": 1,
+              "right": 966,
+              "third": 0,
+              "column": 0
+            }
+          },
+          "input_rule": "approved policy plus generator SHA",
+          "groups": 1
+        },
+        "outputs": [
+          "value",
+          "value_zero_nonzero"
+        ]
+      },
+      "fixture_sha256": "b3e3fbe45eff9546d13e02624556f78e7c9f6d5838bdd431b2d244d9fdbdd0be",
+      "limits": {
+        "case_sha256": "5f63b6d38d64724fe4ecf6fb6ae0d031101513a443b65af02b4c471a4160899c",
+        "fields": {
+          "value": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              0.0010743616967774372,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411,
+              0.06468512676187288,
+              0.03234256338093644,
+              0.01617128169046822,
+              0.00808564084523411
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "value_zero_nonzero": {
+            "kind": "exact"
+          }
+        },
+        "fixture_sha256": "b3e3fbe45eff9546d13e02624556f78e7c9f6d5838bdd431b2d244d9fdbdd0be"
+      }
+    },
+    "router-verification": {
+      "case": {
+        "id": "deepseek.router-projection.numerics.router-verification",
+        "boundary": "deepseek.router-projection",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 384,
+          "batch": 64,
+          "queries": 6,
+          "groups": 1,
+          "width": 5120
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.0.ffn.gate.weight",
+          "mtp.2.ffn.gate.weight"
+        ],
+        "options": {
+          "weight_selections": {
+            "target": {
+              "prepared_dtype": "BF16",
+              "name": "layers.0.ffn.gate.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                384,
+                5120
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  384,
+                  5120
+                ]
+              },
+              "raw_sha256": "1ec40d2dac31f17224554bfc47108ecbd4c8d6f748e4043276444cdef8a2a085",
+              "prepared_sha256": "1ec40d2dac31f17224554bfc47108ecbd4c8d6f748e4043276444cdef8a2a085"
+            },
+            "draft": {
+              "prepared_dtype": "BF16",
+              "name": "mtp.2.ffn.gate.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                128,
+                5120
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  128,
+                  5120
+                ]
+              },
+              "raw_sha256": "d7736cc1d56825a5e9d0236481ff047ab41deef3fb9ca12a809ca32df68241c5",
+              "prepared_sha256": "d7736cc1d56825a5e9d0236481ff047ab41deef3fb9ca12a809ca32df68241c5"
+            }
+          },
+          "zero_guards": {
+            "target": {
+              "first": 12,
+              "last": 18,
+              "near_row": 13,
+              "left": 0,
+              "right": 1710,
+              "third": 1,
+              "column": 0
+            }
+          },
+          "input_rule": "approved policy plus generator SHA",
+          "groups": 1
+        },
+        "outputs": [
+          "target",
+          "target_zero_nonzero",
+          "draft",
+          "draft_zero_nonzero"
+        ]
+      },
+      "fixture_sha256": "d5144d1ab8606cd48468413dd4c9f9e68474fd25ad8bd6da7083821450b4baa4",
+      "limits": {
+        "case_sha256": "86e4b321b6a6fcce4a74de26ac14ca2759f5f1a1e20d9f95098aaddbe5062920",
+        "fields": {
+          "target": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              6.654301829556175e-06,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085,
+              0.000996479814964868,
+              0.000498239907482434,
+              0.000249119953741217,
+              0.0001245599768706085
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "target_zero_nonzero": {
+            "kind": "exact"
+          },
+          "draft": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              4.902482478641446e-06,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254,
+              0.0013675584261907403,
+              0.0006837792130953702,
+              0.0003418896065476851,
+              0.00017094480327384254
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "draft_zero_nonzero": {
+            "kind": "exact"
+          }
+        },
+        "fixture_sha256": "d5144d1ab8606cd48468413dd4c9f9e68474fd25ad8bd6da7083821450b4baa4"
+      }
+    },
+    "ratio2-prefill": {
+      "case": {
+        "id": "deepseek.f32-projection.numerics.ratio2-prefill",
+        "boundary": "deepseek.f32-projection",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 128,
+          "batch": 4,
+          "queries": 32,
+          "groups": 1,
+          "width": 5120,
+          "outputs": 512
+        },
+        "mode": "graph",
+        "weights": [
+          "layers.2.attn.compressor.wgate.weight",
+          "layers.2.attn.compressor.wkv.weight"
+        ],
+        "options": {
+          "weight_selections": {
+            "kv": {
+              "prepared_dtype": "F32",
+              "name": "layers.2.attn.compressor.wkv.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                512,
+                5120
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  512,
+                  5120
+                ]
+              },
+              "raw_sha256": "c4c6702055bfe1f8e95edc306eb9a796fdad8d894b59ff329e2d5325a719d044",
+              "prepared_sha256": "e322889fbf35df7ff921e156b2354050e1937fefb6b1f4a128f165201e1f80be"
+            },
+            "gate": {
+              "prepared_dtype": "F32",
+              "name": "layers.2.attn.compressor.wgate.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                512,
+                5120
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  512,
+                  5120
+                ]
+              },
+              "raw_sha256": "01826cbe5db945df69b3456c884cf1eccbe47840d91aacf7583640d06a25a36e",
+              "prepared_sha256": "776404d971c4428cc1bc9342d1b712c28c341c4dc504b059f0ec804167cb3912"
+            }
+          },
+          "zero_guards": {
+            "kv": {
+              "first": 64,
+              "last": 96,
+              "near_row": 65,
+              "left": 0,
+              "right": 652,
+              "third": 1,
+              "column": 0
+            }
+          },
+          "input_rule": "approved policy plus generator SHA",
+          "groups": 1
+        },
+        "outputs": [
+          "kv",
+          "kv_zero_nonzero",
+          "gate",
+          "gate_zero_nonzero"
+        ]
+      },
+      "fixture_sha256": "3585145e7be1dbb955f8243ddeb5a942f7a987ef3117206190265bff82a60c75",
+      "limits": {
+        "case_sha256": "f23ee7be29470ff6993a9e16b09bce7eb7f1af878b700758dc099eeb7e4e9a96",
+        "fields": {
+          "kv": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              2.203509853027086e-06,
+              5.888018411613627e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "kv_zero_nonzero": {
+            "kind": "exact"
+          },
+          "gate": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1e-07,
+              1e-07,
+              2.3748725981320717e-06,
+              7.535610836459372e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "gate_zero_nonzero": {
+            "kind": "exact"
+          }
+        },
+        "fixture_sha256": "3585145e7be1dbb955f8243ddeb5a942f7a987ef3117206190265bff82a60c75"
+      }
+    },
+    "heads-decode": {
+      "case": {
+        "id": "deepseek.f32-projection.numerics.heads-decode",
+        "boundary": "deepseek.f32-projection",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 1,
+          "batch": 1,
+          "queries": 1,
+          "groups": 1,
+          "width": 5120
+        },
+        "mode": "graph",
+        "weights": [
+          "head.weight",
+          "mtp.2.confidence_head.proj.weight",
+          "mtp.2.markov_head.head.weight"
+        ],
+        "options": {
+          "weight_selections": {
+            "logits": {
+              "prepared_dtype": "F32",
+              "name": "head.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                129280,
+                5120
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  129280,
+                  5120
+                ]
+              },
+              "raw_sha256": "68f446ddda4243d5c8d57d2a9729c125f7fb8b2ee050c78ac6ff5e0cacde6789",
+              "prepared_sha256": "ea729fc899cda136019ea91bbd85502ccddcf58bab8c7482029d8834415eb8cd"
+            },
+            "markov": {
+              "prepared_dtype": "F32",
+              "name": "mtp.2.markov_head.head.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                129280,
+                256
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  129280,
+                  256
+                ]
+              },
+              "raw_sha256": "0c0e1c69aee3c39aa5819fdd6440a04dac4bea3881dc3cf0f0fd05b45889aad6",
+              "prepared_sha256": "86af87de0b04562f71268c328ef74fb4e02a0ed76d641f8650bdd27b8e3ad425"
+            },
+            "confidence": {
+              "prepared_dtype": "F32",
+              "name": "mtp.2.confidence_head.proj.weight",
+              "original_dtype": "BF16",
+              "original_shape": [
+                1,
+                5376
+              ],
+              "selection": {
+                "start": [
+                  0,
+                  0
+                ],
+                "stop": [
+                  1,
+                  5376
+                ]
+              },
+              "raw_sha256": "e08518ae78dd1fb393c71f40bfabeffcd4d391d129291978069120e8c0f40ae2",
+              "prepared_sha256": "724bce0e9d0cd6a63bd0a647be9d45e087d6151a19efd13df0310284f4e672a8"
+            }
+          },
+          "zero_guards": {},
+          "input_rule": "approved policy plus generator SHA",
+          "groups": 1
+        },
+        "outputs": [
+          "logits",
+          "markov",
+          "confidence"
+        ]
+      },
+      "fixture_sha256": "7ba7c491eddc2c9eb71037cd465680b36fc0d165f9b1674b6c19f1275f8bf900",
+      "limits": {
+        "case_sha256": "8be7fa79da2975bdb4955c5b19f214a4d7de0e5fe43c712fbe6968b58d720a6b",
+        "fields": {
+          "logits": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              0.003843364660109927
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "markov": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              0.0012840003810197231
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "confidence": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              0.0002173325227969869
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          }
+        },
+        "fixture_sha256": "7ba7c491eddc2c9eb71037cd465680b36fc0d165f9b1674b6c19f1275f8bf900"
+      }
+    },
+    "rounding-cancellation-decisions": {
+      "case": {
+        "id": "deepseek.f32-projection.numerics.rounding-cancellation-decisions",
+        "boundary": "deepseek.f32-projection",
+        "purpose": "numerics",
+        "shape": {
+          "rows": 1,
+          "batch": 1,
+          "queries": 1,
+          "groups": 1,
+          "width": 5120
+        },
+        "mode": "graph",
+        "weights": [],
+        "options": {
+          "weight_selections": {},
+          "zero_guards": {},
+          "input_rule": "approved policy plus generator SHA",
+          "groups": 1
+        },
+        "outputs": [
+          "bf16_value",
+          "router_value",
+          "low_input_value",
+          "low_weight_value",
+          "router_bits",
+          "bf16_bits",
+          "low_bits",
+          "zero_nonzero"
+        ]
+      },
+      "fixture_sha256": "2d05f5195beb23d4b1ed3606f0bdd56a604cb4979346c5f2ed45304be3b26187",
+      "limits": {
+        "case_sha256": "f59e1fbbecb075cc9968fc8a878cf99b90fea99eefc822c7f27f642307793421",
+        "fields": {
+          "bf16_value": {
+            "kind": "float",
+            "normalized_l2": 0.0078125,
+            "max_abs": [
+              0.00785076618558378
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "router_value": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              2.294802470714785e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "low_input_value": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1.907581463456154e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "low_weight_value": {
+            "kind": "float",
+            "normalized_l2": 1.52587890625e-05,
+            "max_abs": [
+              1.907581463456154e-05
+            ],
+            "rms_floor": 1e-06,
+            "near_zero_max_abs": 1e-06
+          },
+          "router_bits": {
+            "kind": "exact"
+          },
+          "bf16_bits": {
+            "kind": "exact"
+          },
+          "low_bits": {
+            "kind": "exact"
+          },
+          "zero_nonzero": {
+            "kind": "exact"
+          }
+        },
+        "fixture_sha256": "2d05f5195beb23d4b1ed3606f0bdd56a604cb4979346c5f2ed45304be3b26187"
+      }
+    }
+  }
+}
