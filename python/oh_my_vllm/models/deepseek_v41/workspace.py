@@ -52,6 +52,8 @@ class Workspace:
                 self._reads.append((first, last))
 
     def reserve(self, shape, dtype):
+        if self._allocate is None:
+            raise RuntimeError("model storage allocation requires preparation")
         size = math.prod(shape) * _ELEMENT_BYTES[dtype]
         if self.allocated_bytes + size > self.byte_limit:
             raise ValueError("model workspace exceeds its byte limit")
@@ -91,6 +93,9 @@ class Workspace:
                 )
             self.close()
             raise
+        finally:
+            # A nested allocator can retain its parent and defer CUDA frees to GC.
+            self._allocate = None
 
     def check_open(self):
         if self.closed or self.owner.closed or self.owner._retained:

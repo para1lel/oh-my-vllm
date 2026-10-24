@@ -73,12 +73,12 @@ def check_contracts(device, parameters):
     incoming = device.zeros((1, 4), "float32")
     branch = device.zeros((1, 5120), "bfloat16")
     routed = device.zeros((1, 5120), "float32")
-    fused_rejections = 0
+    fused_rejections = expand_rejections = 0
     try:
         for invalid in (
             Inputs(device.empty((1, 4, 5120), "float32"), incoming, branch),
             Inputs(residual, device.empty((1, 3), "float32"), branch),
-            Inputs(residual, incoming, device.empty((1, 5120), "float32")),
+            Inputs(residual, incoming, device.empty((1, 5120), "int32")),
         ):
             rejected(lambda invalid=invalid: workspace.run(invalid))
         rejected(
@@ -130,22 +130,33 @@ def check_contracts(device, parameters):
                         )
                     )
                     fused_rejections += 1
-            for left, right in combinations(range(6), 2):
-                value = arguments[right]
-                alias, guards = metadata_tensor(
-                    int(np.prod(value.shape)),
-                    pointer=arguments[left].data_ptr(),
-                    code=4 if str(value.dtype) == "bfloat16" else 2,
-                    bits=16 if str(value.dtype) == "bfloat16" else 32,
-                )
-                alias = device.view(alias, value.shape)
-                invalid_arguments = arguments.copy()
-                invalid_arguments[right] = alias
-                rejected(
-                    lambda args=invalid_arguments: workspace.module.hc_expand_moe(*args)
-                )
-                fused_rejections += 1
-                del invalid_arguments, alias, guards
+            for name, function, values in (
+                ("moe", workspace.module.hc_expand_moe, arguments),
+                (
+                    "expand",
+                    workspace.module.hc_expand,
+                    [arguments[index] for index in (0, 2, 3, 4, 5)],
+                ),
+            ):
+                for left, right in combinations(range(len(values)), 2):
+                    value = values[right]
+                    alias, guards = metadata_tensor(
+                        int(np.prod(value.shape)),
+                        pointer=values[left].data_ptr(),
+                        code=4 if str(value.dtype) == "bfloat16" else 2,
+                        bits=16 if str(value.dtype) == "bfloat16" else 32,
+                    )
+                    alias = device.view(alias, value.shape)
+                    invalid_arguments = values.copy()
+                    invalid_arguments[right] = alias
+                    rejected(
+                        lambda function=function, args=invalid_arguments: function(
+                            *args
+                        )
+                    )
+                    fused_rejections += name == "moe"
+                    expand_rejections += name == "expand"
+                    del invalid_arguments, alias, guards
         for invalid_routed, invalid_shared in (
             (branch, branch),
             (routed, incoming),
@@ -189,6 +200,15 @@ def check_contracts(device, parameters):
         empty_routed = device.empty((0, 5120), "float32")
         for dtype in ("bfloat16", "float32"):
             shared = device.empty((0, 5120), dtype)
+            execute_modes(
+                device,
+                (empty,),
+                partial(empty.run, inputs._replace(branch=shared)),
+                lambda: require(
+                    all(tensor.shape[0] == 0 for tensor in empty.outputs),
+                    "empty HC changed shape",
+                ),
+            )
 
             def operation(shared=shared):
                 empty.begin(inputs.residual, inputs.incoming_pre)
@@ -213,7 +233,10 @@ def check_contracts(device, parameters):
         "invalid_arguments": 10,
         "fused_invalid_arguments": fused_rejections,
         "fused_overlap_pairs_per_dtype": 15,
+        "expand_overlap_rejections": expand_rejections,
+        "expand_overlap_pairs_per_dtype": 10,
         "empty_eager_graph": True,
+        "empty_branch_dtypes": ["bfloat16", "float32"],
         "empty_shared_dtypes": ["bfloat16", "float32"],
         "closed_workspace": True,
     }
@@ -295,7 +318,7 @@ def check_case(device, case, limits, parameters, *, permute=False):
                 if fused:
                     require(
                         equal_bits(expanded, legacy_expanded),
-                        f"{label}: fused expansion differs from legacy HC",
+                        f"{label}: expansion differs from legacy HC",
                     )
                 elif legacy_expanded is None:
                     legacy_expanded = expanded
@@ -319,6 +342,13 @@ def check_case(device, case, limits, parameters, *, permute=False):
             )
             shared = device.upload(shared_host, dtype)
             originals.append((shared, shared_host))
+            if dtype == "float32":
+                execute_modes(
+                    device,
+                    (workspace,),
+                    partial(workspace.run, values._replace(branch=shared)),
+                    lambda: check(label="fp32_branch_metrics", fused=True),
+                )
 
             def fused_operation(shared=shared):
                 workspace.begin(values.residual, values.incoming_pre)
@@ -337,6 +367,7 @@ def check_case(device, case, limits, parameters, *, permute=False):
             if permute
             else None,
             native=native,
+            branch_dtypes=["bfloat16", "float32"],
             fused_shared_dtypes=["bfloat16", "float32"],
             fused_matches_legacy_bits=True,
             modes=["eager", "graph"],
@@ -442,10 +473,28 @@ def check_literals(device, parameters):
                 partial(workspace.finish_moe, residual, routed, shared),
                 check,
             )
+            completed = np.add(
+                routed_host,
+                decode(bf16(shared_values), "bfloat16").astype(np.float32),
+                dtype=np.float32,
+            )
+            for branch_dtype in ("bfloat16", "float32"):
+                branch_host = (
+                    bf16(completed) if branch_dtype == "bfloat16" else completed
+                )
+                branch = device.upload(branch_host, branch_dtype)
+                originals.append((branch, branch_host))
+                execute_modes(
+                    device,
+                    (target,),
+                    partial(workspace.finish, residual, branch),
+                    check,
+                )
             require(native_identity(workspace) == native, "HC native image changed")
             results.append(
                 dict(
                     shared_dtype=dtype,
+                    finish_branch_dtypes=["bfloat16", "float32"],
                     cases=[
                         dict(id=row[0], output_u16=f"0x{row[5]:04x}") for row in rows
                     ],

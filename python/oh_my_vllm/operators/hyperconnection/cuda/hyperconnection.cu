@@ -93,20 +93,20 @@ __device__ __forceinline__ void expand(const __nv_bfloat16 *residual, float valu
   }
 }
 
-__global__ void expand_kernel(const __nv_bfloat16 *residual, const __nv_bfloat16 *branch,
-                              const float *post, const float *comb, __nv_bfloat16 *output) {
-  int row = blockIdx.x, column = blockIdx.y * blockDim.x + threadIdx.x;
-  if (column < width)
-    expand(residual, __bfloat162float(branch[row * width + column]), post, comb, output, row,
-           column);
-}
-
-__device__ __forceinline__ float rounded_shared(float value) {
+__device__ __forceinline__ float rounded_bf16(float value) {
   return __bfloat162float(__float2bfloat16_rn(value));
 }
 
-__device__ __forceinline__ float rounded_shared(__nv_bfloat16 value) {
+__device__ __forceinline__ float rounded_bf16(__nv_bfloat16 value) {
   return __bfloat162float(value);
+}
+
+template <typename Branch>
+__global__ void expand_kernel(const __nv_bfloat16 *residual, const Branch *branch,
+                              const float *post, const float *comb, __nv_bfloat16 *output) {
+  int row = blockIdx.x, column = blockIdx.y * blockDim.x + threadIdx.x;
+  if (column < width)
+    expand(residual, rounded_bf16(branch[row * width + column]), post, comb, output, row, column);
 }
 
 template <typename Shared>
@@ -118,7 +118,7 @@ __global__ void expand_moe_kernel(const __nv_bfloat16 *residual, const float *ro
     return;
   int index = row * width + column;
   // Keep both BF16 boundaries without materializing the merged branch.
-  float merged = __fadd_rn(routed[index], rounded_shared(shared[index]));
+  float merged = __fadd_rn(routed[index], rounded_bf16(shared[index]));
   float value = __bfloat162float(__float2bfloat16_rn(merged));
   expand(residual, value, post, comb, output, row, column);
 }
@@ -187,7 +187,9 @@ void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, Ten
 void hc_expand(TensorView residual, TensorView branch, TensorView post, TensorView comb,
                TensorView expanded) {
   int rows = rows_contract(residual);
-  tensor_contract(branch, residual, kDLBfloat, 16, {rows, width});
+  bool branch_bf16 = branch.dtype().code == kDLBfloat;
+  tensor_contract(branch, residual, branch_bf16 ? kDLBfloat : kDLFloat, branch_bf16 ? 16 : 32,
+                  {rows, width});
   tensor_contract(post, residual, kDLFloat, 32, {rows, copies});
   tensor_contract(comb, residual, kDLFloat, 32, {rows, copies, copies});
   tensor_contract(expanded, residual, kDLBfloat, 16, {rows, copies, width});
@@ -196,11 +198,16 @@ void hc_expand(TensorView residual, TensorView branch, TensorView post, TensorVi
     return;
   tvm::ffi::CUDADeviceGuard guard(residual.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, residual.device().device_id));
-  expand_kernel<<<dim3(rows, (width + 255) / 256), 256, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-      static_cast<const __nv_bfloat16 *>(branch.data_ptr()),
-      static_cast<const float *>(post.data_ptr()), static_cast<const float *>(comb.data_ptr()),
-      static_cast<__nv_bfloat16 *>(expanded.data_ptr()));
+  auto launch = [&](auto *branch_data) {
+    expand_kernel<<<dim3(rows, (width + 255) / 256), 256, 0, stream>>>(
+        static_cast<const __nv_bfloat16 *>(residual.data_ptr()), branch_data,
+        static_cast<const float *>(post.data_ptr()), static_cast<const float *>(comb.data_ptr()),
+        static_cast<__nv_bfloat16 *>(expanded.data_ptr()));
+  };
+  if (branch_bf16)
+    launch(static_cast<const __nv_bfloat16 *>(branch.data_ptr()));
+  else
+    launch(static_cast<const float *>(branch.data_ptr()));
   check_cuda(cudaGetLastError());
 }
 

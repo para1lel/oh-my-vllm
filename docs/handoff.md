@@ -15,10 +15,10 @@ It then minimizes requests with partial suffixes. Extra decode verification uses
 
 The [DeepSeek plan](models/deepseek_v41/plan.md) tracks the incomplete model work.
 Isolated CUDA operators, rank-owned weights, shared expert inputs, text rotary tables, and the shared pinned Engram loader are implemented.
-Disabled rank-local computation supports MoE and selected-row attention for target and prediction layers.
+Disabled rank-local blocks compose HC, attention, normalization, and MoE with explicit collective boundaries.
 DEP4 MoE keeps gate and shared-expert computation local to each request owner.
 
-MoE output merging and HC expansion share one kernel with explicit rounding boundaries.
+HC consumes completed FP32 attention and MoE results without separate conversion kernels.
 Compound numerical limits and complete allocation bounds must close before public inference is enabled.
 Physical state, complete inference, DSpark, feature acceptance, and the approved measurement matrices are pending.
 

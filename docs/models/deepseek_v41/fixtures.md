@@ -74,9 +74,11 @@ Collapse uses incoming coefficients. `next_pre` belongs to the next sublayer.
 The [checker](../../../development/operators/check_deepseek_hc.py) also permutes channels to detect addressing errors.
 `Workspace.collapse()` supplies the final head without calculating new mixing coefficients.
 
+`Workspace.finish()` accepts completed BF16 or FP32 attention results and rounds to BF16 before HC expansion.
 `Workspace.finish_moe()` combines completed MoE outputs and HC expansion in one kernel, without an intermediate branch tensor.
 Its [API contract](../../../python/oh_my_vllm/operators/hyperconnection/api.py) keeps the two BF16 rounding boundaries.
 The same checker uses exact literals for rounding, cancellation, and signed-zero cases.
+The [block checker](../../../development/model/deepseek_v41/check_block.py) checks synthetic rank-local composition, not collectives or model acceptance.
 
 ## Routing
 
