@@ -35,7 +35,8 @@ Full-model computation and Phases 4-8 are pending.
 
 Each operator must have frozen mathematics, fixtures, and numerical limits before implementation.
 Do not tune performance before latency limits are frozen.
-Do not integrate the full model before the applicable Phase 0 gates close.
+Keep public DeepSeek inference disabled until numerical and allocation gates pass.
+Model computation can run in bounded diagnostics while these gates are open.
 
 Do not modify sources or environments used by active reference generators.
 Keep existing numerical fixtures and limits unchanged during candidate acceptance.
@@ -59,9 +60,9 @@ Completed prerequisites:
 
 Next work:
 
-- Build a separate short-context reference with explicit quantization and rounding, from fixed inputs and checkpoint weights.
+- Check compound computation with independent precision references from fixed inputs and checkpoint weights.
   Do not use captured model intermediates or change existing FP64 fixtures and limits.
-  This reference does not replace model acceptance or long-context checks.
+  Local diagnostics do not replace model acceptance or long-context checks.
 - Freeze compound numerical limits and operator latency limits before tuning.
 - Close the [allocation plan's open bounds](memory.md#6-allocation-caps-and-open-bounds) for 64 requests at the context limit.
 
@@ -102,6 +103,7 @@ Gate: Operators match their references and fit startup budgets.
 
 ## Phase 4: Ordinary inference
 
+Compose rank-owned weights and native operators in a disabled target runtime.
 Implement full short-context target computation before decoder-work reduction.
 Add TP4, then TEP4, then DEP4.
 Bind shared experts, heads, vision, and DSpark weights to the approved placement plan.
