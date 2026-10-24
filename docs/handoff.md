@@ -15,7 +15,7 @@ It then minimizes requests with partial suffixes. Extra decode verification uses
 
 The [DeepSeek plan](models/deepseek_v41/plan.md) tracks the incomplete model work.
 Isolated CUDA operators, rank-owned weights, shared expert inputs, text rotary tables, and the shared pinned Engram loader are implemented.
-Disabled rank-local blocks compose HC, attention, normalization, and MoE with explicit collective boundaries.
+Disabled blocks compose HC, attention, normalization, and MoE through prepared TP4, TEP4, and DEP4 collectives.
 DEP4 MoE keeps gate and shared-expert computation local to each request owner.
 
 HC consumes completed FP32 attention and MoE results without separate conversion kernels.

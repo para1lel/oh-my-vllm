@@ -1,14 +1,10 @@
-"""Check synthetic layer-0 composition; no model acceptance or collectives.
-
-Ranks execute sequentially. Completed inputs come from independent literals,
-and downloaded local contributions must sum to those literals. KV, exchanged
-packets, completed branches, and their row identities stay caller-owned.
-"""
+"""Check exact four-rank block composition, not full-model acceptance."""
 
 import argparse
 import hashlib
 import json
 import os
+import time
 import weakref
 from fractions import Fraction
 from pathlib import Path
@@ -18,8 +14,8 @@ import numpy as np
 from development.operators.performance_inputs import bf16
 from development.operators.storage import decode, equal_bits
 
+from .check_attention import fatal, quarter_turns, rendezvous, supervise
 from .check_attention import owner_weights as attention_weights
-from .check_attention import quarter_turns
 from .check_moe import download_packet, packet_arrays, require, selected_experts, weight
 from .check_moe import owner_weights as moe_weights
 from .reference_quantization import activation_fp8
@@ -215,272 +211,225 @@ def native_parts(workspace):
     return result
 
 
-def check_case(device, strategy, rank, counts):
-    from oh_my_vllm.models.deepseek_v41.block import prepare
-    from oh_my_vllm.operators.routing.api import EncodedDispatchInputs
+def check_case(device, strategy, rank, counts, directory, case_id):
+    from oh_my_vllm.models.deepseek_v41 import block, block_collectives
+    from oh_my_vllm.operators.runtime.collectives import Communicator
 
     from development.operators.check_deepseek_exact import rejected
+    from development.operators.collective_peer import wait_ready
 
     split = strategy == "DEP4"
     rows = counts[rank]
     total = sum(counts) if split else rows
     first = sum(counts[:rank]) if split else 0
-    last = first + rows
     masks = (np.arange(total) % 2).astype(np.uint8)
-    local_masks = masks[first:last]
+    local_masks = masks[first : first + rows]
     owner, name = owner_weights(device, strategy, rank)
-    workspace = None
-    try:
-        workspace = prepare(owner, name, rows=rows, routed_rows=total, slots=1)
-        require(
-            workspace.plan.rows == rows
-            and workspace.moe.gate.plan.rows == rows
-            and workspace.moe.dispatch.plan.rows == total,
-            "local/global preparation domains differ",
-        )
-        residual_host = np.broadcast_to(
-            np.array([1, 2, 4, 8], np.float32)[None, :, None], (rows, 4, 5120)
-        ).copy()
-        residual = device.upload(bf16(residual_host), "bfloat16")
-        incoming = device.upload(
-            np.broadcast_to(np.array([1, 0, 0, 0], np.float32), (rows, 4)).copy()
-        )
-        coefficients = device.upload(quarter_turns(np.zeros(rows, np.int32)))
-        image_mask = device.upload(local_masks)
-        indices = device.upload(np.arange(rows, dtype=np.int32).reshape(rows, 1))
-        window = device.empty((rows, 512), "uint8")
-        scales = device.empty((rows, 16), "uint8")
-        compressed = device.empty((0, 256), "uint8")
-        compressed_scales = device.empty((0, 32), "uint8")
-        complete_attention = device.upload(np.full((rows, 5120), 15, np.float32))
-        routed_host = np.broadcast_to(
-            COMPLETE_ROUTED[local_masks, None], (rows, 5120)
-        ).copy()
-        complete_routed = device.upload(routed_host)
-        shared_host = np.full((rows, 5120), 5.625, np.float32)
-        complete_shared = device.upload(bf16(shared_host), "bfloat16")
-        complete_shared_fp32 = device.upload(shared_host)
-        reference = packet_arrays(np.ones((total, 5120), np.float32), masks)
-        gathered = EncodedDispatchInputs(*(device.upload(field) for field in reference))
-        remote_check = split and rank == 1
-        if remote_check:
-            remote_row = next(row for row in range(total) if not first <= row < last)
-            bad_status_host = reference[2].copy()
-            bad_status_host[remote_row, 0] = 1
-            bad_status = device.upload(bad_status_host)
-            normal_status = device.upload(reference[2])
-        destinations = [
-            device.view(field, (rows, field.shape[1]), first * field.shape[1])
-            for field in gathered
-        ]
-        encoded = attended = packet = shared = routed = output = None
+    workspace = block.prepare(owner, name, rows=rows, routed_rows=total, slots=1)
+    communicator = Communicator(4, rank, rendezvous(directory, case_id, rank))
+    wait_ready(communicator, timeout=120)
+    exchange = block_collectives.prepare(workspace, communicator, counts=counts)
+    residual = device.upload(
+        bf16(
+            np.broadcast_to(
+                np.array([1, 2, 4, 8], np.float32)[None, :, None], (rows, 4, 5120)
+            ).copy()
+        ),
+        "bfloat16",
+    )
+    incoming = device.upload(
+        np.broadcast_to(np.array([1, 0, 0, 0], np.float32), (rows, 4)).copy()
+    )
+    coefficients = device.upload(quarter_turns(np.zeros(rows, np.int32)))
+    image_mask = device.upload(local_masks)
+    indices = device.upload(np.arange(rows, dtype=np.int32).reshape(rows, 1))
+    window = device.empty((rows, 512), "uint8")
+    scales = device.empty((rows, 16), "uint8")
+    compressed = device.empty((0, 256), "uint8")
+    compressed_scales = device.empty((0, 32), "uint8")
+    reference = packet_arrays(np.ones((total, 5120), np.float32), masks)
+    injected = np.zeros((rows, 160), np.uint8)
+    remote_row = sum(counts[:1])
+    if split and rows and rank == 1:
+        injected[0, 0] = 1
+    normal_status = device.upload(np.zeros_like(injected))
+    status = device.upload(injected)
+    output = None
 
-        def attend():
-            return workspace.attend(
-                indices, window, scales, compressed, compressed_scales
+    def operation(capture=False, reuse=False):
+        nonlocal output
+        try:
+            encoded = workspace.begin(
+                output.residual if reuse else residual,
+                output.next_pre if reuse else incoming,
+                coefficients,
             )
-
-        def operation(
-            shared_complete=complete_shared, residual_input=residual, pre_input=incoming
-        ):
-            nonlocal encoded, attended, packet, shared, routed, output
-            encoded = workspace.begin(residual_input, pre_input, coefficients)
             device.module.copy_bytes(window, encoded.window)
             device.module.copy_bytes(scales, encoded.window_scales)
-            attended = attend()
-            packet, shared = workspace.ffn(complete_attention, image_mask)
+            workspace.attend(indices, window, scales, compressed, compressed_scales)
+            workspace.ffn(exchange.attention(capture=capture), image_mask)
             if split:
-                for destination, source in zip(destinations, packet, strict=True):
-                    device.module.copy_bytes(destination, source)
-            routed = workspace.run_routed(gathered if split else packet)
-            output = workspace.finish(complete_routed, shared_complete)
+                device.module.copy_bytes(exchange.local_packet.status, normal_status)
+            workspace.run_routed(exchange.packet(capture=capture))
+            output = exchange.finish(capture=capture)
+        except BaseException as error:
+            fatal(error)
 
-        def check(reused=False, remote_bad=False):
-            constant(
-                device,
-                workspace.hc_attn.outputs.collapsed,
-                np.where(local_masks == 0, 0x431A, 0x430E) if reused else 0x3F80,
-                "initial collapse",
-            )
-            constant(device, workspace.attn_norm.outputs.value, 0x3F80, "attention RMS")
-            constant(
-                device,
-                workspace.hc_attn.outputs.next_pre,
-                ATTN_PRE,
-                "attention next-pre",
-            )
-            constant(
-                device,
-                attended.value,
-                0x4170 if split else bf16(np.float32(2**rank)),
-                "rank attention",
-            )
-            constant(
-                device,
-                workspace.hc_attn.outputs.expanded,
-                np.where(local_masks == 0, 0x4256, 0x424A) if reused else 0x4196,
-                "attention HC expansion",
-            )
-            constant(
-                device,
-                workspace.hc_ffn.outputs.collapsed,
-                np.where(local_masks == 0, 0x42D6, 0x42CA) if reused else 0x4216,
-                "FFN collapse must use attention next-pre",
-            )
-            constant(device, workspace.ffn_norm.outputs.value, 0x3F80, "FFN RMS")
-            constant(device, shared.value, 0x40B4 if split else 0x3FB4, "rank shared")
-            wanted_routed = routed_literal(strategy, rank, masks)
-            if remote_bad:
-                wanted_routed[remote_row] = 0
-            constant(device, routed.value, wanted_routed, "rank routed")
-            constant(
-                device,
-                output.residual,
-                np.where(local_masks == 0, 0x4292, 0x4287)
-                if reused
-                else FINAL_BITS[local_masks],
-                "final HC expansion",
-            )
-            constant(device, output.next_pre, FFN_PRE, "must return FFN next-pre")
+    def check(reused=False, remote_bad=False):
+        constant(device, workspace.attn_norm.outputs.value, 0x3F80, "attention RMS")
+        constant(
+            device, workspace.hc_attn.outputs.next_pre, ATTN_PRE, "attention next-pre"
+        )
+        constant(
+            device,
+            workspace.attention.outputs.value,
+            0x4170 if split else bf16(np.float32(2**rank)),
+            "rank attention",
+        )
+        constant(
+            device,
+            workspace.hc_attn.outputs.expanded,
+            np.where(local_masks == 0, 0x4256, 0x424A) if reused else 0x4196,
+            "attention collective and HC expansion",
+        )
+        constant(
+            device,
+            workspace.hc_ffn.outputs.collapsed,
+            np.where(local_masks == 0, 0x42D6, 0x42CA) if reused else 0x4216,
+            "FFN collapse uses attention next-pre",
+        )
+        constant(device, workspace.ffn_norm.outputs.value, 0x3F80, "FFN RMS")
+        expected = (
+            np.where(local_masks == 0, 0x4292, 0x4287)
+            if reused
+            else FINAL_BITS[local_masks].copy()
+        )
+        if remote_bad and rank == 1:
+            expected[0] = 0x41C3
+        constant(device, output.residual, expected, "final HC expansion")
+        constant(device, output.next_pre, FFN_PRE, "FFN next-pre")
+        require(output.residual is workspace.outputs.residual, "extra residual buffer")
+        flags = [device.download(value, np.uint8) for value in output.status]
+        bad = reference[2].copy()
+        if remote_bad:
+            bad[remote_row, 0] = 1
+        if remote_bad:
             require(
-                output.residual is workspace.hc_ffn.outputs.expanded,
-                "extra residual buffer",
+                any(equal_bits(value, bad) for value in flags),
+                "final status omitted exchanged remote packet status",
             )
+        else:
+            require(all(not value.any() for value in flags), "nonzero block status")
+        for index, (actual, wanted) in enumerate(
+            zip(download_packet(device, exchange.global_packet), reference, strict=True)
+        ):
             require(
-                output.next_pre is workspace.hc_ffn.outputs.next_pre,
-                "extra next-pre buffer",
+                equal_bits(actual, bad if index == 2 else wanted),
+                "global packet fields or owner-major row order differ",
             )
-            require(output.status, "block must expose status")
-            flags = [device.download(status, np.uint8) for status in output.status]
-            for flag in flags:
-                wanted = np.zeros_like(flag)
-                if remote_bad:
-                    if flag.shape == (total, 160):
-                        wanted = bad_status_host
-                    elif flag.shape == (total,):
-                        wanted[remote_row] = 1
-                require(equal_bits(flag, wanted), "block status differs")
-            if remote_bad:
-                require(
-                    any(equal_bits(flag, bad_status_host) for flag in flags),
-                    "final status omitted the supplied global packet status",
-                )
-            for actual, wanted in zip(
-                download_packet(device, packet), reference, strict=True
-            ):
-                require(
-                    equal_bits(actual, wanted[first:last]),
-                    "local packet or row identity",
-                )
-            if split:
-                for index, (actual, wanted) in enumerate(
-                    zip(download_packet(device, gathered), reference, strict=True)
-                ):
-                    if remote_bad and index == 2:
-                        wanted = bad_status_host
-                    require(
-                        equal_bits(actual, wanted),
-                        "global packet or remote rows changed",
-                    )
+        if not split:
+            require(
+                all(
+                    any(value is status for status in output.status)
+                    for value in exchange.widen_status
+                ),
+                "widen status omitted",
+            )
 
-        rejected(attend)
-        rejected(lambda: workspace.ffn(complete_attention, image_mask))
-        rejected(lambda: workspace.run_routed(gathered))
-        rejected(lambda: workspace.finish(complete_routed, complete_shared))
-        if rank == 0:
-            rejected(
-                lambda: prepare(
-                    owner, name, rows=rows, routed_rows=total, slots=1, byte_limit=1
-                )
+    rejected(
+        lambda: workspace.attend(indices, window, scales, compressed, compressed_scales)
+    )
+    rejected(lambda: workspace.run_routed(exchange.global_packet))
+    if total:
+        rejected(
+            lambda: block_collectives.prepare(
+                workspace,
+                communicator,
+                counts=counts,
+                byte_limit=exchange.allocated_bytes - 1,
             )
-            if rows:
-                rejected(
-                    lambda: prepare(
-                        owner,
-                        name,
-                        rows=rows,
-                        routed_rows=total,
-                        slots=1,
-                        byte_limit=workspace.allocated_bytes - 1,
-                    )
-                )
-        sizes = {"uint8": 1, "bfloat16": 2, "float32": 4, "int32": 4, "uint64": 8}
-        payload = sum(
-            value.numel() * sizes[str(value.dtype)] for value in workspace._allocations
         )
-        require(
-            workspace.allocated_bytes
-            == payload + (384 if strategy == "TP4" else 96) * 48,
-            "block bytes must include every child buffer and grouped address",
-        )
-        if rows:
-            rejected(
-                lambda: workspace.begin(
-                    workspace.hc_attn.outputs.expanded, incoming, coefficients
-                )
+    if strategy != "DEP4":
+        rejected(
+            lambda: block_collectives.prepare(
+                workspace, communicator, counts=(1, 2, 3, 4)
             )
-        operation()
-        check()
-        contributions = (
-            device.download(attended.value, np.uint16),
-            device.download(routed.value, np.float32),
-            device.download(shared.value, np.uint16),
         )
-        rejected(attend)
-        rejected(lambda: workspace.ffn(complete_attention, image_mask))
-        rejected(lambda: workspace.run_routed(gathered))
-        rejected(lambda: workspace.finish(complete_routed, complete_shared))
-        if rows:
-            operation(complete_shared, output.residual, output.next_pre)
-            check(reused=True)
-            workspace.begin(residual, incoming, coefficients)
-            attended = attend()
-            rejected(
-                lambda: workspace.ffn(workspace.hc_ffn.outputs.collapsed, image_mask)
+    rejected(
+        lambda: block_collectives.prepare(
+            workspace, communicator, counts=(0, 0, 0, 385)
+        )
+    )
+    rejected(
+        lambda: block.prepare(
+            owner, name, rows=rows, routed_rows=total, slots=1, byte_limit=1
+        )
+    )
+    if rows:
+        rejected(
+            lambda: workspace.begin(
+                workspace.hc_attn.outputs.expanded, incoming, coefficients
             )
-        if split:
-            workspace.begin(residual, incoming, coefficients)
-            attended = attend()
-            local_packet, _ = workspace.ffn(complete_attention, image_mask)
-            rejected(lambda: workspace.run_routed(local_packet))
-        operation(complete_shared_fp32)
-        check()
-        with workspace.graph_lease(), device.graph(operation) as replay:
+        )
+    operation()
+    wait_ready(communicator)
+    check()
+    operation(reuse=True)
+    wait_ready(communicator)
+    check(reused=True)
+    exchange.prepare_capture()
+    with (
+        exchange.graph_lease(),
+        device.graph(lambda: operation(capture=True)) as replay,
+    ):
+
+        def invoke():
             replay()
+            communicator.record_completion()
+            wait_ready(communicator)
+
+        try:
+            invoke()
             check()
-            if remote_check:
-                device.module.copy_bytes(gathered.status, bad_status)
-                replay()
+            if split and total:
+                # Capture binds the normal source; change its contents before replay.
+                device.module.copy_bytes(normal_status, status)
+                invoke()
                 check(remote_bad=True)
-                device.module.copy_bytes(gathered.status, normal_status)
-                replay()
+                device.module.zero(normal_status)
+                invoke()
                 check()
+            exchange.close()
             workspace.close()
             owner.close()
-            replay()
+            invoke()
             check()
-        rejected(operation)
-        rejected(lambda: prepare(owner, name, rows=rows, routed_rows=total, slots=1))
-        return (
-            dict(
-                strategy=strategy,
-                rank=rank,
-                rows=rows,
-                routed_rows=total,
-                owner_offset=first,
-                graph=True,
-                remote_status_injection=remote_check,
-                workspace_bytes=workspace.allocated_bytes,
-                native=native_parts(workspace),
-            ),
-            contributions,
-            weakref.ref(workspace),
-        )
-    finally:
-        device.synchronize_compute()
-        if workspace is not None:
-            workspace.close()
-        owner.close()
+        except BaseException as error:
+            fatal(error)
+    end = time.monotonic() + 30
+    while not communicator.abort_ready():
+        require(time.monotonic() < end, "collective Graph lease did not release")
+        time.sleep(0.001)
+    wait_ready(communicator)
+    communicator.abort()
+    require(communicator.poll() == "aborted", "communicator did not drain")
+    rejected(lambda: exchange.attention())
+    return (
+        dict(
+            strategy=strategy,
+            rank=rank,
+            rows=rows,
+            routed_rows=total,
+            owner_offset=first,
+            graph=True,
+            checkpoint_used=False,
+            workspace_bytes=workspace.allocated_bytes,
+            communication_bytes=exchange.allocated_bytes,
+            native=native_parts(workspace) + native_parts(exchange),
+        ),
+        weakref.ref(workspace),
+        weakref.ref(exchange),
+    )
 
 
 def source_identity():
@@ -508,7 +457,12 @@ def source_identity():
         )
     paths.update(
         ROOT / f"development/operators/{name}.py"
-        for name in ("performance_inputs", "storage", "check_deepseek_exact")
+        for name in (
+            "performance_inputs",
+            "storage",
+            "check_deepseek_exact",
+            "collective_peer",
+        )
     )
     paths.update(ROOT / f"development/serving/{name}.py" for name in ("device", "gpu"))
     paths.update(
@@ -521,96 +475,87 @@ def source_identity():
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cpu", "--check-cpu", action="store_true")
-    parser.add_argument(
-        "--output", type=Path, help="explicit report path for GPU checks"
-    )
-    args = parser.parse_args()
-    if args.cpu:
-        print(json.dumps(check_cpu()), flush=True)
-        return
-    if args.output is None:
-        parser.error("--output is required for GPU checks")
+def run_rank(args):
+    from oh_my_vllm.operators.runtime.collectives import local_device
     from oh_my_vllm.operators.runtime.device import Device
 
     from development.operators.check_deepseek_exact import (
         caller_stream,
         native_identity,
     )
-    from development.serving.device import device_identity, selected_uuid
+    from development.operators.collective_peer import loaded_native_identity
 
     sources = source_identity()
+    count, identity = local_device()
+    require(
+        count == 1 and identity == os.environ["CUDA_VISIBLE_DEVICES"],
+        "rank device differs",
+    )
     device = Device()
-    checks = []
-    try:
-        device_native_before = native_identity(device)
-        with caller_stream(device):
-            for strategy, counts in (
-                ("TP4", (2, 2, 2, 2)),
-                ("TEP4", (2, 2, 2, 2)),
-                ("DEP4", (0, 1, 2, 3)),
-            ):
-                contributions = []
-                for rank in range(4):
-                    report, parts, reference = check_case(
-                        device, strategy, rank, counts
-                    )
-                    require(
-                        reference() is None,
-                        "closed block workspace requires cyclic garbage collection",
-                    )
-                    checks.append(report)
-                    contributions.append(parts)
-                total = sum(counts) if strategy == "DEP4" else counts[0]
-                masks = (np.arange(total) % 2).astype(np.uint8)
-                require(
-                    equal_bits(
-                        sum(parts[1] for parts in contributions),
-                        np.broadcast_to(
-                            COMPLETE_ROUTED[masks, None], (total, 5120)
-                        ).copy(),
-                    ),
-                    "sequential routed partials do not sum to independent completion",
+    with caller_stream(device):
+        try:
+            checks = []
+            for case_id, (strategy, counts) in enumerate(
+                (
+                    ("TP4", (2, 2, 2, 2)),
+                    ("TEP4", (2, 2, 2, 2)),
+                    ("DEP4", (0, 1, 2, 3)),
+                    ("DEP4", (1, 1, 1, 1)),
+                    ("TP4", (0, 0, 0, 0)),
+                    ("DEP4", (0, 0, 0, 0)),
                 )
-                if strategy in ("TP4", "TEP4"):
-                    for index, expected in ((0, 15), (2, 5.625)):
-                        actual = sum(
-                            decode(parts[index], "bfloat16") for parts in contributions
-                        )
-                        require(
-                            np.all(actual == expected),
-                            f"{strategy} attention/shared partial completion",
-                        )
-            report, _, reference = check_case(device, "TP4", 0, (0, 0, 0, 0))
-            require(
-                reference() is None,
-                "closed empty block workspace requires cyclic garbage collection",
+            ):
+                result, block_ref, exchange_ref = check_case(
+                    device, strategy, args.rank, counts, args.output, case_id
+                )
+                require(
+                    block_ref() is None and exchange_ref() is None,
+                    "closed model workspaces require cyclic garbage collection",
+                )
+                checks.append(result)
+            require(source_identity() == sources, "block sources changed")
+            report = dict(
+                passed=True,
+                collectives_executed=True,
+                checkpoint_used=False,
+                rank=args.rank,
+                device_uuid=identity,
+                checks=checks,
+                sources=sources,
+                device_native=native_identity(device),
+                collective_native=loaded_native_identity(),
             )
-            checks.append(report)
-        require(source_identity() == sources, "block sources changed during execution")
-        device_native_after = native_identity(device)
-        require(
-            device_native_after == device_native_before,
-            "Device native identity changed during execution",
+            with (args.output / f"rank-{args.rank}.json").open("x") as output:
+                json.dump(report, output, indent=2)
+                output.write("\n")
+        except BaseException as error:
+            fatal(error)
+    device.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cpu", "--check-cpu", action="store_true")
+    parser.add_argument("--output", type=Path, help="fresh four-rank report directory")
+    parser.add_argument("--rank", type=int, choices=range(4))
+    parser.add_argument("--timeout", type=float, default=600)
+    args = parser.parse_args()
+    if args.cpu:
+        print(json.dumps(check_cpu()), flush=True)
+        return
+    require(args.output is not None, "--output is required")
+    require(
+        np.isfinite(args.timeout) and args.timeout > 0, "invalid supervisor timeout"
+    )
+    if args.rank is None:
+        supervise(
+            args,
+            module="development.model.deepseek_v41.check_block",
+            identify=source_identity,
+            scope="synthetic-exact-four-rank-block-only",
         )
-        report = dict(
-            passed=True,
-            collectives_executed=False,
-            checkpoint_used=False,
-            device=device_identity(selected_uuid()),
-            device_native=dict(before=device_native_before, after=device_native_after),
-            checks=checks,
-            sources=sources,
-        )
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        with args.output.open("x") as stream:
-            json.dump(report, stream, indent=2)
-            stream.write("\n")
-    finally:
-        device.synchronize_compute()
-        device.close()
+    else:
+        run_rank(args)
 
 
 if __name__ == "__main__":

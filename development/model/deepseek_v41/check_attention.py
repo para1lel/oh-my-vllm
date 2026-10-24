@@ -210,9 +210,11 @@ def rendezvous(directory, rows, rank):
 
 def fatal(error):
     # Never unwind CUDA capture or destroy buffers while NCCL may be pending.
-    traceback.print_exception(error, file=sys.stderr)
-    sys.stderr.flush()
-    os._exit(32)
+    try:
+        traceback.print_exception(error, file=sys.stderr)
+        sys.stderr.flush()
+    finally:
+        os._exit(32)
 
 
 def check_case(device, owner, rank, rows, directory, expected, prefix):
@@ -450,7 +452,13 @@ def lease_descriptors(identities):
     return tuple(found.values())
 
 
-def supervise(args):
+def supervise(
+    args,
+    *,
+    module="development.model.deepseek_v41.check_attention",
+    identify=source_identity,
+    scope="synthetic-exact-TP4-composition-only",
+):
     from development.serving.gpu import (
         Settings,
         candidate_devices,
@@ -464,8 +472,7 @@ def supervise(args):
     devices = candidate_devices(settings, read_inventory())
     require(len(devices) == 4, "four permitted B200 GPUs are required")
     descriptors = lease_descriptors(identities)
-    sources = source_identity()
-    expectations()
+    sources = identify()
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "devices.json").write_text(json.dumps(identities) + "\n")
     children, logs = [], []
@@ -495,7 +502,7 @@ def supervise(args):
                         sys.executable,
                         "-B",
                         "-m",
-                        "development.model.deepseek_v41.check_attention",
+                        module,
                         "--rank",
                         str(rank),
                         "--output",
@@ -518,7 +525,7 @@ def supervise(args):
             )
             if all(status == 0 for status in statuses):
                 break
-            require(time.monotonic() < end, "four-rank attention deadline exceeded")
+            require(time.monotonic() < end, "four-rank model deadline exceeded")
             time.sleep(0.05)
         reports = [
             json.loads((args.output / f"rank-{rank}.json").read_text())
@@ -534,12 +541,12 @@ def supervise(args):
             ),
             "rank reports disagree with supervisor",
         )
-        require(source_identity() == sources, "attention sources changed")
+        require(identify() == sources, "model sources changed")
         with (args.output / "report.json").open("x") as output:
             json.dump(
                 dict(
                     passed=True,
-                    scope="synthetic-exact-TP4-composition-only",
+                    scope=scope,
                     ranks=4,
                     devices=[
                         dict(index=device.index, uuid=device.uuid) for device in devices
@@ -600,6 +607,7 @@ def main():
         np.isfinite(args.timeout) and args.timeout > 0, "invalid supervisor timeout"
     )
     if args.rank is None:
+        expectations()
         supervise(args)
     else:
         run_rank(args)

@@ -15,7 +15,7 @@ Qwen 在一张 B200 上提供推理. DeepSeek 服务推理尚未启用.
 
 [DeepSeek 计划](models/deepseek_v41/plan.zh.md)跟踪尚未完成的模型工作.
 已实现独立 CUDA 算子, rank 自有权重, 共享专家输入, 文本旋转系数表和共享 pinned Engram 加载器.
-尚未启用的 rank 本地块组合 HC, attention, 归一化和 MoE, 并保留显式 collective 边界.
+尚未启用的块通过预先准备的 TP4, TEP4 和 DEP4 collective 组合 HC, attention, 归一化和 MoE.
 DEP4 MoE 的 gate 和共享专家仅在各请求所有者本地计算.
 
 HC 直接使用已完成的 FP32 attention 和 MoE 结果, 无需单独的转换 kernel.
