@@ -15,11 +15,13 @@ Rust 在发布结果前验证输出, 状态, 传输和 worker 生命周期.
 
 DSV4.1 模型和 checkpoint 事实记录在[模型契约研究](research/dsv41-model-checkpoint-contract.zh.md)中.
 报告保留 CED, tokenizer, pad-token, DSpark, cache, Engram residency 和并行方式决策待定.
+[DEP4 负载均衡研究](research/dep4-load-balancing-research.zh.md)定义了稳定的 step ownership, multi-signal load estimate, hot-expert replication 和慢速 control loop, 以及 quiescent map change.
+它是设计契约, 不是实现或 measured result.
 
 ## 下一步
 
 - 共享运行时代码变更后, 运行 Qwen HTTP 和 AgentX 回归矩阵.
-- 实现前, 解决 DSV4.1 模型, cache, 并行方式, DSpark 和验收决策.
+- 实现前, 解决 DSV4.1 并行方式, physical cache, state ownership, DSpark 和验收决策.
 - 模型专属规则放在 `python/oh_my_vllm/models/qwen38/` 和 `crates/zmq-worker/src/models/qwen38/`.
 - 原始报告, 主机设置和临时进程记录保留在仓库外.
 

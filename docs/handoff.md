@@ -15,11 +15,13 @@ Rust validates output, state, transfers, and worker lifecycle before it publishe
 
 The DSV4.1 model and checkpoint facts are recorded in the [model contract research](research/dsv41-model-checkpoint-contract.md).
 The report keeps CED, tokenizer, pad-token, DSpark, cache, Engram residency, and parallelism decisions open.
+The [DEP4 load-balancing research](research/dep4-load-balancing-research.md) defines stable step ownership, multi-signal load estimates, replicated hot experts with a slow control loop, and quiescent map changes.
+It is a design contract, not an implementation or a measured result.
 
 ## Next work
 
 - Run the Qwen HTTP and AgentX regression matrices after changes to shared runtime code.
-- Resolve the open DSV4.1 model, cache, parallelism, DSpark, and acceptance decisions before implementation.
+- Resolve the open DSV4.1 parallelism, physical cache, state ownership, DSpark, and acceptance decisions before implementation.
 - Keep model-specific rules in `python/oh_my_vllm/models/qwen38/` and `crates/zmq-worker/src/models/qwen38/`.
 - Keep raw reports, host settings, and temporary process records in external locations.
 
