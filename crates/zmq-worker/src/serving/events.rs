@@ -1,4 +1,5 @@
-use super::{parser::Delta, request::Request};
+use super::request::Request;
+use crate::models::output::Delta;
 use serde_json::{Value, json};
 
 pub struct Output {

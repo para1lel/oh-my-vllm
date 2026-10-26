@@ -19,6 +19,9 @@ MODULE_SOURCES = {
         ("vision", "vision"),
     )
 }
+OPTIONAL_MODULE_SOURCES = {
+    "collectives": SOURCES / "runtime/cuda/collectives.cu",
+}
 
 
 def source_files(source):
@@ -44,7 +47,8 @@ def source_digest(source, root=None):
 
 
 def source_fingerprint(name):
-    return source_digest(MODULE_SOURCES[name])
+    sources = MODULE_SOURCES | OPTIONAL_MODULE_SOURCES
+    return source_digest(sources[name])
 
 
 def cache_directory():
@@ -102,6 +106,66 @@ def vision_vendor_dependencies():
     )
 
 
+def collectives_vendor_dependencies():
+    import shutil
+    import subprocess
+
+    cuda = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")).resolve()
+    include = Path(os.environ.get("OH_MY_VLLM_NCCL_INCLUDE", "/usr/include")).resolve()
+    host_compiler = Path(shutil.which("c++") or "c++").resolve(strict=True)
+    library = os.environ.get("OH_MY_VLLM_NCCL_LIBRARY")
+    if library is None:
+        library = subprocess.check_output(
+            [str(host_compiler), "-print-file-name=libnccl.so"], text=True
+        ).strip()
+    nccl = Path(library).resolve(strict=True)
+    runtime = (cuda / "lib64/libcudart.so").resolve(strict=True)
+    headers = [
+        include / "nccl.h",
+        *(
+            cuda / "include" / name
+            for name in (
+                "cuda_runtime.h",
+                "cuda_runtime_api.h",
+                "cuda_fp16.h",
+                "cuda_bf16.h",
+                "cuda_fp8.h",
+            )
+        ),
+    ]
+    compilers = [
+        Path(shutil.which("nvcc") or cuda / "bin/nvcc").resolve(strict=True),
+        host_compiler,
+    ]
+    return {
+        "images": [
+            {"path": str(path), "sha256": file_sha256(path)} for path in (nccl, runtime)
+        ],
+        "headers": {str(path.resolve()): file_sha256(path) for path in headers},
+        "compilers": {str(path): file_sha256(path) for path in compilers},
+        "host_compiler": str(host_compiler),
+        "include_directory": str(include),
+        "ldflags": [
+            str(nccl),
+            str(runtime),
+            f"-Wl,-rpath,{nccl.parent}",
+            f"-Wl,-rpath,{runtime.parent}",
+            "-ldl",
+        ],
+    }
+
+
+def verify_collectives_vendor_images(module, vendor):
+    verify_vendor_images(
+        tuple(str(path) for path in module.collective_images()),
+        vendor["images"],
+        "NCCL",
+    )
+    header, runtime = module.collective_versions()
+    if header != runtime:
+        raise RuntimeError("NCCL header and runtime versions differ")
+
+
 def verify_vendor_images(paths, images, name):
     if len(paths) != len(images):
         raise RuntimeError(f"the loaded {name} vendor image set differs")
@@ -132,10 +196,14 @@ def load(name, functions):
         )
     if metadata["ffi_version"] != importlib.metadata.version("apache-tvm-ffi"):
         raise RuntimeError("native module uses a different FFI version")
-    vendor = vision_vendor_dependencies() if name == "vision" else None
-    if vendor is not None and metadata.get("vision_vendor") != vendor:
-        raise RuntimeError("native vision vendor dependencies are stale")
-    if name in ("vision", "ffn", "gdn", "fa"):
+    vendor = None
+    if name == "vision":
+        vendor = vision_vendor_dependencies()
+    elif name == "collectives":
+        vendor = collectives_vendor_dependencies()
+    if vendor is not None and metadata.get(f"{name}_vendor") != vendor:
+        raise RuntimeError(f"native {name} vendor dependencies are stale")
+    if name in ("vision", "ffn", "gdn", "fa", *OPTIONAL_MODULE_SOURCES):
         identity = build_digest(
             metadata["source_fingerprint"],
             metadata["compiler"],
@@ -158,6 +226,8 @@ def load(name, functions):
     from tvm_ffi import load_module
 
     module = load_module(str(library))
-    if vendor is not None:
+    if name == "vision":
         verify_vision_vendor_images(module, vendor)
+    elif name == "collectives":
+        verify_collectives_vendor_images(module, vendor)
     return module, metadata["source_id"], library

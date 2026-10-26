@@ -25,6 +25,7 @@ def source_identity():
         root / "storage.py",
         root.parents[0] / "model/reference.py",
         repository / "python/oh_my_vllm/worker/checkpoint.py",
+        repository / "python/oh_my_vllm/models/qwen38/checkpoint.py",
         repository / "python/oh_my_vllm/operators/specification.py",
     ]
     digest = hashlib.sha256()

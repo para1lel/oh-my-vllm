@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 oh-my-vllm-kv-cache.workspace = true
+oh-my-vllm-model-contract = { path = "../model-contract" }
 rustc-hash.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

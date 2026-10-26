@@ -4,12 +4,15 @@
 
 Rust controls requests, scheduling, logical KV identities, and state commit.
 Python executes the model through CUDA operators and the existing ZMQ DEALER and msgpack boundary.
-The [operator boundaries](operators/fusion.md) specify computation and private state ownership.
+The [operator design](operators/design.md#serving-boundaries) specifies computation boundaries and private state ownership.
 
-The worker selects execution once for each Execute message.
-If any scheduled row contains prefill, all fragments of that Execute use Eager execution.
-A decode-only Execute uses CUDA Graph recording and replay.
-This rule also controls sampling, MTP context, proposals, and acceptance.
+The adapter selects execution after workspace preparation and input binding.
+A mixed Execute can use different execution modes for its fragments.
+The selected target mode controls sampling, speculative context, proposals, and acceptance.
+All captured operations must satisfy their own Graph conditions.
+
+The [Qwen adapter](models/qwen38/README.md#execution) specifies adaptive fragment selection.
+The [rank protocol](distributed.md#transactions-and-publication) keeps one mode across participating ranks.
 Vision and weight preparation use Eager execution.
 
 Eager and CUDA Graph execution use the same native operators.
@@ -18,11 +21,8 @@ CUDA kernels can fuse operations and use matrix tiles internally.
 
 ## Dependent kernel launch
 
-Small FFN and GDN operations use [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html) between normalization and input projection.
-They also use PDL between output quantization and output projection.
-FFN prefill with 65 to 1024 rows uses PDL at these boundaries.
-Its fused input projection includes activation and output quantization.
-Larger prefill operations keep serial launches.
+Use PDL only when the operator contract supports it and the complete operation benefits.
+Specific kernel boundaries and row thresholds belong in the model operator contract.
 
 Stream capture records these selected dependencies in the CUDA Graph.
 The consumer can prepare its storage and read constant weights before its producer completes execution.
@@ -38,11 +38,17 @@ PDL does not change state selection or the Eager and Graph execution rules.
 
 A workspace owns weights, cache references, metadata, and temporary tensors for its recorded operations.
 Weight preparation and workspace construction allocate storage before recording.
-Operations with deferred native setup use warmup before recording.
+Operations with deferred native setup complete preparation before recording.
+A prior successful Eager execution can supply preparation for the same thread, workspace, bindings, and execution path.
+Otherwise, use the operator's warmup.
+Wait for current compute work before recording.
+
 Sampling, MTP acceptance, and prepared draft chains record without warmup.
 Recording does not execute their RNG updates.
 
 Buffer addresses stay fixed while a graph exists.
+Close the old graph before replacing a captured input binding.
+Binding changes invalidate replay and the previous preparation.
 Metadata changes on the caller's stream before replay.
 Replay uses that same stream.
 
@@ -68,10 +74,6 @@ Cold growth, release pressure, oversized releases, and closure can wait for unre
 These cold paths do not have a guarantee of execution without stalls.
 Device metadata uses the stream-ordered temporary storage pool.
 
-MTP context graphs own fixed hidden-state input buffers.
-The worker copies target hidden states into these buffers before replay on the same stream.
-Context reuse depends on the operator plan, not the target workspace address.
-
 Recording uses a different nonblocking stream and restores the caller's stream on exit.
 A failed recording releases the resources created before failure.
 A completed recording transfers its resource leases to the workspace.
@@ -80,5 +82,5 @@ An execution failure keeps the existing worker removal and state cleanup rules.
 
 ## Numerical and state contracts
 
-Obey the [model contract](operators/model.md) and [full-model numerical evaluation](operators/evaluation.md).
+Obey the [adapter contract](adapters.md) and the selected model's [acceptance scope](testing.md#model-acceptance).
 Keep the service, graph resource, memory safety, and state ownership checks in the [test scope](testing.md).

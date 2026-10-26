@@ -1,65 +1,22 @@
 # 工作状态
 
-使用 `main` 开展工作.
-[算子包](../python/oh_my_vllm/operators) 将各算子族的接口, 计划, 工作区和 CUDA 代码放在一起.
-[结构设计](operators/design.zh.md) 定义其依赖关系和所有权.
-将共享资源机制放入 `runtime`, 将共享计算放入 `primitives`.
-native 构建器为 `development.native_build`. 它构建七个 native 模块.
+继续在 `nightly` 上工作. 仓库保留 Qwen 服务主线, 并移除未完成的模型工作.
 
-worker 使用显式层权重, 命名输出和算子计划键.
-按照[执行规则](execution.zh.md) 使用 Eager 执行, CUDA Graph 重放和资源释放.
-Rust 和 worker 控制持久状态选择.
-算子只写入调用方提供的状态位置.
+## 当前服务主线
 
-仅含 decode 的[草稿链](../python/oh_my_vllm/worker/draft_chain.py)可以将随机采样和私有 presence 历史保留在 GPU 上.
-仅第一个草稿步骤从主机元数据获取输入 token.
-后续草稿步骤使用上一步的 GPU token 输出.
-依赖前缀的 mask 和不支持的停止条件使用逐步路径.
-保持各草稿的 proposal 概率和 RNG offset 与逐步路径相同.
+Qwen 在一张 B200 上通过 Rust HTTP 服务, Rust 调度器和 Python worker 提供推理.
+worker 使用 ZMQ DEALER 和 msgpack 边界.
+服务支持 Chat 和 Responses API, 流式输出, 工具, 结构化输出, 媒体, prefix cache, MTP4 和自适应 CUDA Graph 选择.
+显式 `stub` 后端只用于服务测试.
 
-GDN prefill 按序列顺序存放 chunk workspace, 并为每个序列计算容量.
-保持打包后的 offset 与当前 schedule 和 plan 容量一致.
-[服务 cache 预算](serving.zh.md)使用固定 FA 默认值, 并检查运行时显存和文本 workspace 预留量.
-Rust 使用 worker 返回的容量.
+调度器依次选择 decode 工作, 完整 prefill block 和剩余 token.
+缓存策略负责 Qwen FA 和 GDN 存储分配.
+Rust 在发布结果前验证输出, 状态, 传输和 worker 生命周期.
 
-小规模 FFN 和 GDN 运算在执行规则规定的边界使用依赖启动.
-FFN prefill 在 65 到 1024 行时使用这些依赖.
-[前缀 cache](serving.zh.md#前缀-cache) 可以使用来自未满块的 checkpoint.
-保留源块, 直到续算结果没有校验错误.
+## 下一步
 
-修改 kernel 前使用[算子验证框架](../development/operators).
-该框架提供固定数值 fixture, 直接 PyTorch 参考实现和理论延迟倍率门槛.
-常规数值测试读取仓库 fixture, 不执行 PyTorch.
-保持[精度策略](operators/precision.zh.md)和[全模型门槛](operators/evaluation.zh.md).
-实现改变后不得自动修改门槛.
+- 共享运行时代码变更后, 运行 Qwen HTTP 和 AgentX 回归矩阵.
+- 模型专属规则放在 `python/oh_my_vllm/models/qwen38/` 和 `crates/zmq-worker/src/models/qwen38/`.
+- 原始报告, 主机设置和临时进程记录保留在仓库外.
 
-算子性能采样在不确定结果的扩展期间保留计时事件及其测量 Graph.
-计时迁移保持已批准的延迟门槛不变.
-
-FA 使用 BF16 attention 操作数和缓存状态. GDN 使用 FP32 保存循环状态.
-FP8 投影使用 checkpoint 中的 E4M3 权重和 FP32 block scales.
-[模型契约](operators/model.zh.md#中间精度)定义中间计算精度.
-
-HTTP 计费使用串行 kernel 分组和当前精度规则.
-融合或执行边界变化时, 使用[性能计算](performance.zh.md#下界计算).
-计费变化时, 算子倍率门槛保持已批准的最大延迟.
-
-共享 FP8 prefill 投影 kernel 根据输入宽度选择 tile 分组大小.
-FFN 和投影 kernel 在累加期间将 TMEM 地址保留在寄存器中.
-HTTP efficiency 不设最低交付门槛.
-保持数值门槛和算子倍率门槛.
-报告实测性能.
-
-交付前执行适用的[测试范围](testing.zh.md).
-同时执行全部 24 组 [HTTP 配置](performance.zh.md).
-
-[Host KV cache](kv-offload.zh.md) 支持被中断请求及由容量压力触发的前缀存储.
-保持传输引用直到完成, 包括已取消请求.
-部分 GDN 读取 checkpoint 与续算写入 slot 必须分开, 直到经过验证的提交.
-Pinned 存储在空闲窗口扩容. Metadata 上传使用 GPU kernel, 不进入 bulk copy 队列.
-
-[AgentX 入口](agentx.zh.md)使用四个会话树测量 MTP4.
-它通过流式 usage 和完整响应 ID 关联服务指标.
-将其获准保存的 CSV 和图片保存在 `docs/assets`.
-将原始测量产物保存在仓库外.
-将主机设置放入被忽略的 `LOCAL.md`.
+使用[测试范围](testing.zh.md), [执行规则](execution.zh.md)和[交付流程](../CONTRIBUTING.zh.md).

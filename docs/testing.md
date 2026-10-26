@@ -1,58 +1,77 @@
 # Test scope
 
-Use the [contribution procedure](../CONTRIBUTING.md) before you add tests.
-Agents do the tests for the maintainer.
-Do the hooks in the [development commands](development.md#git-hooks).
+Use the [contribution procedure](../CONTRIBUTING.md) before adding a test.
+Keep a small set of behavior checks for current contracts and failure paths.
+Prefer existing cases. Remove obsolete migration checks and duplicate assertions.
+Agents run applicable tests and [hooks](development.md#git-hooks) for the maintainer.
 
-The Rust tests include checks of the service, scheduler, logical KV, and worker lifecycle.
-The HTTP tests use the Python placeholder through the process boundary.
-They do not measure model inference or GPU performance.
+## Shared checks
 
-CPU checks cover checkpoint and native identities, full-model report validation, canonical HTTP accounting, and manifest validation.
-The constraint test checks schema masks and separate speculative grammar states.
-Rust checks streamed JSON tool frames and prefix cache isolation for media requests.
+Rust checks service behavior, scheduling, logical state, and worker lifecycle.
+HTTP service tests use the explicit Python placeholder through the process boundary.
+Their timing is not inference performance.
+CPU checks cover model selection, readiness, constraints, evidence identities, accounting, and manifests.
 
-The [execution tests](../tests/test_execution.py) check the execution decision for the full Execute message and graph resource release.
-They check recording failures, replay on the caller's stream, interruption, and closure order.
-They do not supply model numerical or performance evidence.
+The [execution checks](../tests/test_execution.py) cover adaptive selection, preparation reuse, binding changes, and Graph resource ownership.
+They check recording failure, replay stream, interruption, and closure order.
+The [worker checks](../tests/test_offload_worker.py) cover the offload worker and execution boundaries.
+Transfer checks cover cancellation and storage lifetime.
+Use Compute Sanitizer when native memory or synchronization behavior changes.
 
-The [draft sampling check](../development/operators/check_draft_chain.py) compares CUDA Graph sampling with sequential sampling.
-It checks probabilities, RNG offsets, and sampling history after each graph replay.
-Run it through the GPU wrapper:
+Document-only changes use document and whitespace hooks.
+They do not trigger GPU measurements or change recorded performance values.
+Code changes use the relevant CPU, numerical, state, memory, and performance checks.
+Do not rerun unrelated completed checks without a new concern.
+
+## Model acceptance
+
+Each model owns its mathematical reference, fixtures, limits, and workload definitions.
+Keep frozen expected arrays and numerical limits unchanged during candidate acceptance.
+Usual acceptance loads fixtures. It does not generate expected outputs.
+Compare complete endpoint vectors with independent reference computation.
+Do not use inference outputs as their own reference.
+
+| Adapter | Numerical and state scope | Performance scope |
+|---|---|---|
+| Qwen | [Full-model endpoints](models/qwen38/evaluation.md), [operator cases](models/qwen38/operators.md), applicable MTP, media, and restoration cases | [24 HTTP cases](models/qwen38/performance.md), [AgentX](models/qwen38/agentx.md) |
+
+Shared runtime changes use applicable adapter regressions.
+Qwen runtime delivery includes its 24 HTTP cases.
+Model-local changes do not trigger another model's full matrix unless a shared path changes.
+Generic descriptor or state checks do not prove numerical correctness, capacity, or performance.
+
+The existing [draft-chain check](../development/operators/check_draft_chain.py) covers Graph sampling, RNG offsets, and history against sequential sampling.
+Run GPU commands through the wrapper:
 
 ```bash
 scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_chain
 ```
 
-Use the [full-model evaluation](operators/evaluation.md) for numerical checks.
-Compare all vocabulary logits after a fixed short prompt and one decode iteration with an independent PyTorch FP64 model.
-Do not use sampled intermediate outputs or the old low-precision path as the numerical reference.
-Use the same reference artifact for subsequent changes.
+## Reporting
 
-Use the fixed MTP restoration, image/video, and long-context cases for changes to those paths.
-Their repository fixtures contain complete PyTorch FP64 endpoint logits.
-Usual tests do not run the reference generator.
-The [development commands](operators/development.md#numerical-commands) generate and compare these artifacts.
+Keep current instructions and the latest complete results for each approved workload.
+Use each model's result document and its full Chinese translation.
+Replace a table only after its new matrix completes.
+Do not create a report for each change or put result tables in README.
+Link completed reports from README. Keep raw records and unrelated test results external.
 
-Use the [operator microbench design](operators/microbench.md) for fixed operator numerical and performance cases.
-Keep numerical fixtures and expected PyTorch outputs in the repository.
-Normal numerical tests load these fixtures without reference generation.
-Performance acceptance uses frozen theoretical-latency ratio limits.
+HTTP rows identify mode, strategy, batch, input/output lengths, and measured request count.
+Report full HTTP seconds, theoretical reference seconds, efficiency percentage, and draft acceptance.
+Efficiency is theoretical reference seconds divided by full HTTP seconds, expressed as a percentage.
+Do not include Input/s, Output/s, TTFT, or old-prefill comparisons in these tables.
+Define the calculation, acceptance counters, and units with each table.
+Report failures and per-rank memory separately.
 
-Keep service contracts for state selection, constraints, media order, and request isolation.
-Keep memory safety and graph resource checks separate from model numerical checks.
-Use Compute Sanitizer for changed device memory or synchronization behavior.
+Keep source, executable, native module, checkpoint, tokenizer, topology, configuration, sampling, and command identities with the results.
+Use portable identifiers or artifact digests, not host paths.
+Each model must have a reviewed reference calculation that counts its native formats, communication, replicated work, and host transfers.
+Do not reuse another model's efficiency calculation without that review.
+A theoretical resource estimate is not proof of minimum physical latency.
 
-Use the [HTTP benchmark](performance.md#measurement-command) for full inference timing.
-It checks exact input and output lengths, uncached prefixes, and measured MTP acceptance.
-Use the GPU wrapper for GPU work.
-After each run, stop the processes that you started.
-Keep measurement artifacts external to the repository.
+AgentX reports keep one section per approved concurrency and strategy.
+Include output-rate distribution, prefix reuse, queueing, request status counts, profiling and drain durations, dataset identity, and observed HTTP concurrency.
+Do not present incomplete requests as successful samples.
+Keep raw traces and profiler records external. Approved CSV and figures belong with the model's results.
 
-Use the [AgentX procedure](agentx.md) for trace replay with prefix reuse.
-Its approved CSV and figure can be stored in the repository.
-Keep its raw records and logs external to the repository.
-CPU checks cover its fixed configuration and request data validation.
-
-Update the required performance tables in the two README files before each delivery.
-Do not put other test results in project documents.
+Follow the [document rules](AGENTS.md) and [delivery procedure](../CONTRIBUTING.md#delivery).
+Stop owned workers and temporary services after checks.

@@ -1,5 +1,6 @@
 use super::*;
 use crate::client::{WorkerConfig, fixture::TestWorker};
+use crate::models::{ModelFamily, ModelPolicy};
 use crate::protocol::{ExecuteMsg, ExecuteResultMsg, RequestResultMsg, RustMessage, WorkerMessage};
 use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
 use oh_my_vllm_scheduler::SchedulerConfig;
@@ -7,6 +8,55 @@ use std::{fmt::Debug, future::Future, pin::Pin};
 use zeromq::{DealerSocket, ZmqMessage, prelude::*};
 
 type Ready = oneshot::Receiver<std::result::Result<(), (StatusCode, String)>>;
+
+#[test]
+fn validated_model_families_preserve_incremental_output() {
+    use crate::models::{ModelFamily, output::Delta, output::Parser};
+
+    for family in [ModelFamily::Qwen38, ModelFamily::Stub] {
+        let tools = vec![json!({"function":{"name":"echo"}})];
+        let mut parser = Parser::new(family, true, tools.clone());
+        let arguments = json!({"text":"</tool_call>"});
+        let raw = format!(
+            "reason</think>answer<tool_call>{}</tool_call>",
+            json!({"name":"echo", "arguments":arguments})
+        );
+        let mut events = Vec::new();
+        for character in raw.chars() {
+            events.extend(parser.feed(&character.to_string(), false).unwrap());
+        }
+        events.extend(parser.feed("", true).unwrap());
+        let (mut reasoning, mut text, mut calls) = (String::new(), String::new(), Vec::new());
+        for event in events {
+            match event {
+                Delta::Reasoning(value) => reasoning.push_str(&value),
+                Delta::Text(value) => text.push_str(&value),
+                Delta::Tool {
+                    index,
+                    name,
+                    arguments,
+                } => {
+                    calls.push((
+                        index,
+                        name,
+                        serde_json::from_str::<Value>(&arguments).unwrap(),
+                    ));
+                }
+            }
+        }
+        assert_eq!(reasoning, "reason");
+        assert_eq!(text, "answer");
+        assert_eq!(calls, vec![(0, "echo".to_owned(), arguments)]);
+        let mut parser = Parser::new(family, false, Vec::new());
+        assert!(matches!(parser.feed_length("tail").unwrap().as_slice(),
+            [Delta::Text(text)] if text == "tail"));
+        let incomplete = "<tool_call>{\"name\":\"echo\",\"arguments\":{\"text\":\"unfinished";
+        let mut parser = Parser::new(family, false, tools.clone());
+        assert!(parser.feed(incomplete, true).is_err());
+        let mut parser = Parser::new(family, false, tools);
+        assert!(parser.feed_length(incomplete).unwrap().is_empty());
+    }
+}
 
 #[test]
 fn ignore_eos_is_boolean_and_preserves_independent_stop_and_length_options() {
@@ -51,16 +101,15 @@ struct Response {
 
 fn configuration() -> WorkerConfig {
     WorkerConfig {
-        model_path: "stub".into(),
         num_gpu_blocks: Some(128),
         mamba_blocks: Some(64),
         max_num_seqs: 4,
         max_num_batched_tokens: 16,
-        ..WorkerConfig::default()
+        ..WorkerConfig::for_model("stub".into(), ModelPolicy::for_family(ModelFamily::Stub))
     }
 }
 
-fn scheduler() -> Scheduler {
+fn scheduler() -> Scheduler<HybridCoordinator> {
     Scheduler::new(
         SchedulerConfig {
             max_num_seqs: 4,
@@ -253,43 +302,57 @@ async fn idle_cohort_is_finite_and_active_decode_does_not_wait_for_prepare() {
                 }
             };
             assert_eq!(cohort.len(), initial.min(4));
-            assert_eq!(
-                first
-                    .scheduled
-                    .iter()
-                    .map(|row| row.request_id)
-                    .collect::<Vec<_>>(),
-                cohort,
-            );
+            assert!(!first.scheduled.is_empty());
             assert!(
                 first
                     .scheduled
                     .iter()
                     .all(|row| { row.num_computed_tokens == 0 && row.prefill_token_ids.is_some() })
             );
-            executed(&mut worker.socket, &first).await;
+            let mut positions: BTreeMap<_, _> = cohort.iter().map(|id| (*id, 0)).collect();
+            let mut decoded = Vec::new();
             let mut withheld = None;
+            let mut batch = first;
             loop {
-                match next_message(&mut running, &mut worker.socket).await {
-                    RustMessage::Prepare {
-                        rpc_id, request_id, ..
-                    } => {
-                        assert!(withheld.replace((rpc_id, request_id)).is_none());
-                    }
-                    RustMessage::Execute(message) => {
-                        assert!(withheld.is_some());
-                        let decode = message
-                            .scheduled
-                            .iter()
-                            .all(|row| row.num_computed_tokens >= 8 && row.token_ids.len() == 1);
-                        executed(&mut worker.socket, &message).await;
-                        if decode {
-                            assert_eq!(message.scheduled.len(), cohort.len());
-                            break;
+                for row in &batch.scheduled {
+                    let position = positions
+                        .get_mut(&row.request_id)
+                        .expect("only the finite cohort can execute before Prepare completes");
+                    assert_eq!(row.num_computed_tokens, *position);
+                    assert!(!row.token_ids.is_empty());
+                    *position += row.token_ids.len() as u32;
+                    if row.num_computed_tokens >= 8 {
+                        assert!(
+                            withheld.is_some(),
+                            "decode must run with Prepare unanswered"
+                        );
+                        assert_eq!(row.token_ids.len(), 1);
+                        if !decoded.contains(&row.request_id) {
+                            decoded.push(row.request_id);
                         }
+                    } else {
+                        assert!(*position <= 8, "prefill must stop at the prompt endpoint");
                     }
-                    other => panic!("unexpected active message: {other:?}"),
                 }
+                executed(&mut worker.socket, &batch).await;
+                if decoded.len() == cohort.len() {
+                    break;
+                }
+                batch = loop {
+                    match next_message(&mut running, &mut worker.socket).await {
+                        RustMessage::Prepare {
+                            rpc_id, request_id, ..
+                        } => {
+                            assert!(!cohort.contains(&request_id));
+                            assert!(withheld.replace((rpc_id, request_id)).is_none());
+                        }
+                        RustMessage::Execute(message) => {
+                            assert!(withheld.is_some());
+                            break message;
+                        }
+                        other => panic!("unexpected active message: {other:?}"),
+                    }
+                };
             }
             for response in responses.iter_mut().take(cohort.len()) {
                 response.ready.take().unwrap().await.unwrap().unwrap();

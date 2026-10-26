@@ -9,8 +9,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
-from oh_my_vllm.worker.cache import Cache
-from oh_my_vllm.worker.inference import Worker
+from oh_my_vllm.models.qwen38.cache import Cache
+from oh_my_vllm.models.qwen38.inference import Worker
 from oh_my_vllm.worker.placeholder import Worker as StubWorker
 
 
@@ -90,7 +90,7 @@ class Pool:
 
 
 def worker_fixture():
-    from oh_my_vllm.worker.offload import Offload
+    from oh_my_vllm.models.qwen38.offload import Offload
 
     device = SimpleNamespace(
         view=lambda value, shape, offset=0: value.reshape(-1)[
@@ -469,9 +469,9 @@ class OffloadWorker(unittest.TestCase):
                 self.assertEqual(stats["host_cache_used_bytes"], 0)
 
     def test_graph_warmup_and_metadata_use_compute_and_reusable_uploads(self):
-        from oh_my_vllm.worker.model import Workspace
-        from oh_my_vllm.worker.sampling import Sampling
-        from oh_my_vllm.worker.speculation import GraphOperation
+        from oh_my_vllm.models.qwen38.model import Workspace
+        from oh_my_vllm.models.qwen38.sampling import Sampling
+        from oh_my_vllm.models.qwen38.speculation import GraphOperation
 
         events, upload_events, native_copies = [], [], []
 
@@ -502,6 +502,7 @@ class OffloadWorker(unittest.TestCase):
         )
         workspace = Workspace.__new__(Workspace)
         workspace.device, workspace.replay = device, None
+        workspace.runs = 0
         workspace.warmups = [lambda: events.append("warmup")]
         workspace.ffn = workspace.gdn = workspace.fa = workspace.hidden_operation = None
         workspace.resources, workspace.output = ExitStack(), object()

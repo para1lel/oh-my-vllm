@@ -1,9 +1,9 @@
 import numpy as np
+from oh_my_vllm.models.qwen38.draft_chain import DraftChain
+from oh_my_vllm.models.qwen38.speculation import Draft
 from oh_my_vllm.operators.mtp import api as mtp
 from oh_my_vllm.operators.mtp.plan import accept_plan, context_plan
 from oh_my_vllm.operators.mtp.workspace import prepare_accept, prepare_context
-from oh_my_vllm.worker.draft_chain import DraftChain
-from oh_my_vllm.worker.speculation import Draft
 
 from .fa import cache, views
 from .sampling import observe_cdf

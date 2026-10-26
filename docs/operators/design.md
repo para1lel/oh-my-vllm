@@ -1,23 +1,29 @@
-# Operator structure design
+# Operator structure
 
-This document gives the target structure for the operator refactor.
+This document gives the current operator structure.
 The [handoff](../handoff.md) gives the implementation status.
-The [runtime contracts](../requirements.md), [model contract](model.md), and [GPU execution rules](../execution.md) control behavior.
+The [runtime contracts](../requirements.md), [adapter contract](../adapters.md), and [GPU execution rules](../execution.md) control behavior.
 
 ## Purpose
 
 Keep the interface, execution plan, temporary storage, and CUDA implementation for an operator in one package.
 The model calls complete sublayers in dependency sequence.
 An operator can change its internal kernels without changes to the model call site.
-The refactor can change fusion boundaries and execution paths.
-Operator performance must meet the fixed theoretical-latency ratio limits in the [microbench contract](microbench.md).
+Operator performance must meet the fixed theoretical-latency ratio limits in the [model acceptance scope](../testing.md#model-acceptance).
+
+Use CUDA C++ and CUTLASS for this implementation.
+The [runtime contracts](../requirements.md) also allow CuTe DSL.
+CUTLASS, cuBLAS, CUB, and native CUDA libraries are permitted.
+Use only project CUDA operators and these permitted libraries.
+Do not use other external operator libraries, such as DeepGEMM or FlashInfer.
+Python can allocate tensors and launch the CUDA implementations.
 
 The design uses functions and types for each operator.
 It does not use an operator base class, a backend registry, or automatic fusion through an operation graph.
 
 ## Packages and dependencies
 
-The target package is `python/oh_my_vllm/operators`:
+The package is `python/oh_my_vllm/operators`:
 
 ```text
 operators/
@@ -109,10 +115,8 @@ New metadata must be compatible with the recorded plan's conditions.
 A change beyond those conditions causes selection or preparation of a compatible operator workspace before execution.
 The worker does not copy operator dispatch thresholds or examine implementation fields to select preparation work.
 
-Each operator gives its preparation and warmup operations.
-There is no warmup procedure that executes all operators.
-Sampling and MTP acceptance keep their existing recording and RNG behavior.
-The [GPU execution rules](../execution.md) control the full Execute message before batch division.
+Each operator supplies its preparation and warmup operations.
+Use the [GPU execution rules](../execution.md) for preparation reuse, execution selection, and recording without RNG updates.
 
 ## Output and Graph lifetimes
 
@@ -135,35 +139,16 @@ These resources include each layer's weights, persistent cache references, buffe
 Keeping only the final layer's weight binding is not sufficient.
 The [Graph resource rules](../execution.md#graph-resources) control failed recording, closure order, and release.
 
-## Model output and MTP
+## Serving boundaries
 
-FA, GDN, FFN, and vision interfaces supply complete sublayers.
-Their internal stages follow the [model contract](model.md).
-The model output and MTP interfaces have these responsibilities:
+Operator interfaces define complete computation, not separate kernel launches.
+Fuse small normalization, activation, quantization, or position work into producers or consumers when the complete operation benefits.
+Small-row and prefill shapes can select different implementations.
+Related operations can reuse prepared layouts and device metadata.
 
-| Interface | Computation |
-|---|---|
-| `output.hidden` | Final normalization and hidden-state export without vocabulary projection. |
-| `output.distribution` | Vocabulary projection, penalties, constraints, and the necessary probability distribution. |
-| `output.sample` | Distribution computation and token selection. |
-| `mtp.context` | MTP context preparation and its FA component. |
-| `mtp.draft` | A complete MTP draft computation with the shared FA, FFN, and output components. |
-| `mtp.accept` | Acceptance decisions, rejection sampling, and candidate state-slot selection. |
-
-The output interfaces share the necessary final normalization computation.
-Hidden export accepts its full input row count independently of the smaller vocabulary-projection row selection.
-The distribution interface can execute without token selection.
-These semantic interfaces can use fused physical execution.
-
-The MTP package contains its composite fusion implementation and controls its storage layout.
-Its component interfaces give compatible inputs, outputs, storage use, and lifetimes.
-It does not infer compatibility from a different operator's private buffer indices or duplicate that operator's complete scratch layout.
-
-MTP acceptance returns candidate results, not published state.
-The worker first applies request stop conditions to the returned tokens.
-The accepted count after stop handling then controls state selection through the existing state commit procedure.
-The GPU candidate slot cannot replace this decision before stop handling.
-Keep the RNG state and counter rules for each of the target, proposal, and acceptance domains.
+Keep semantic outputs, private state, and resource lifetimes explicit.
+The model adapter applies stop conditions and selects accepted state before publication.
+See the [Qwen boundaries](../models/qwen38/operators.md#serving-boundaries).
 
 ## Native builds
 
@@ -171,29 +156,18 @@ Use one source-path mapping for the development builder and runtime identity che
 Directory changes must also change include dependency discovery and source fingerprints.
 Keep complete dependency hashes, immutable binary identities, and native library identity checks.
 The inference loader does not import development tools or invoke a compiler.
+The native library count does not define public interfaces.
 
-Initially keep the existing native compilation units while their source locations change.
 Change compilation boundaries only when the implementation has a demonstrated reason.
 Source packages, semantic interfaces, native libraries, and kernel launches are different boundaries.
 
-## Migration and acceptance
+## Change acceptance
 
-1. Move sources with their build mapping and identity checks.
-2. Apply the interface and ownership design to FA and its MTP consumers.
-3. Apply the same contracts to GDN, FFN, output, and vision.
-4. Examine new fusion and execution changes independently from structural migration.
-
-Update the [stage inventory](../../python/oh_my_vllm/operators/specification.py) and [serving boundaries](fusion.md) with the related implementation changes.
-Remove direct access to private buffers and model-level copies of kernel selection rules during each operator migration.
-
-Use the [test scope](../testing.md) and [numerical procedure](evaluation.md).
-Use the [operator microbench design](microbench.md) for local numerical, state, and performance checks.
-Extend full-model inputs when a change has an effect on MTP, vision, or long contexts.
+Update the applicable model contract with implementation changes.
+Keep private buffers and kernel selection rules inside operator packages.
+Use the shared [test scope](../testing.md) and the selected model's numerical and performance limits.
+Run applicable fixed cases when speculation, media, or long contexts change.
 Use Compute Sanitizer when device memory or synchronization behavior changes.
-New tests follow the [contribution procedure](../../CONTRIBUTING.md).
 
-Run all 24 [HTTP configurations](../performance.md) with the same workload settings for integration checks.
-Apply the fixed operator performance limits without comparison to old builds or timings.
-Do more measurements when uncertainty prevents a decision against a limit.
-Check the other configurations when a new fusion makes selected workloads faster.
-Keep timing artifacts external and update the two README performance tables.
+Keep measurements external. Update model results after a complete matrix.
+New tests follow the [contribution procedure](../../CONTRIBUTING.md).

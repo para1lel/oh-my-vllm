@@ -1,75 +1,62 @@
 # Process boundary
 
-## Rust
+## Control and state
 
-The [KV crate](../crates/kv-cache/src/lib.rs) controls block identities, reference counts, LRU, and prefix reuse.
-The [scheduler](../crates/scheduler/src/lib.rs) controls request admission, decode priority, prefill chunks, preemption, and state commit for speculative tokens.
+The [service](../crates/zmq-worker/src/lib.rs) owns CLI, HTTP APIs, worker lifecycle, and transport.
+The [scheduler](../crates/scheduler/src/lib.rs) owns admission, request queues, token budgets, preemption, and validated state commit.
+The [cache policy](cache-policy.md) supplies model-specific allocation, prefix lookup, state assignments, and restoration.
+The [KV crate](../crates/kv-cache/src/lib.rs) supplies logical storage and ownership mechanisms.
 
-The [service crate](../crates/zmq-worker/src/lib.rs) controls the CLI, HTTP APIs, worker lifecycle, and transport.
+Scheduling follows the priorities in the [runtime contract](requirements.md).
+The scheduler validates all output rows before it changes accepted history or publishes a prefix.
+A transaction failure cannot publish an unvalidated prefix.
+Preemption keeps accepted history and discards new drafts.
+Physical state release also depends on device and transfer completion.
 
-The scheduler selects decode requests before prefill requests.
-It divides the available token budget between prefill requests, with adjustments for cache boundaries.
+## Model execution
 
-A scheduled step reserves FA and GDN state.
-The scheduler validates all output rows before it updates token history or publishes a prefix.
+The [bridge](../python/oh_my_vllm/worker/zmq_bridge.py) owns ZMQ DEALER and msgpack frames.
+The [registry](../python/oh_my_vllm/models/registry.py) selects a model adapter before GPU imports.
+Each adapter supplies computation, codecs, physical cache, and accepted-state selection through the [common contract](adapters.md).
+The explicit `stub` backend supplies service-test behavior only.
 
-The scheduler cannot publish an unvalidated prefix after a transaction error.
-A preempted request keeps its accepted history. Preemption removes its new drafts.
-
-## Python
-
-The [bridge](../python/oh_my_vllm/worker/zmq_bridge.py) controls the DEALER socket and msgpack frames.
-The [inference worker](../python/oh_my_vllm/worker/inference.py) supplies token preparation and model computation.
-The [placeholder](../python/oh_my_vllm/worker/placeholder.py) is used only for `--model stub`.
-
-Rust keeps logical cache ownership. Python stores tensors and private recurrent states.
-The worker selects an accepted state slot. It does not copy the full recurrent state for acceptance.
+Model weights follow the adapter's device and host placement plan.
+Temporary buffers can be reused across layers that execute in sequence.
+A recorded graph keeps all referenced buffers and resource owners.
+Large scheduler steps can use smaller native batches.
+The [execution rules](execution.md) specify fragment selection, rank coordination, and Graph resource ownership.
 
 Target and proposal distributions have separate storage until verification completes.
-The constraint state changes only with accepted tokens.
+Only accepted tokens change constraints and request history.
+A prefill chunk before the final chunk returns no output tokens.
+A completed generation step returns accepted proposals and a target token, subject to request stop conditions.
+New proposals are not accepted history.
 
-Model weights stay in GPU memory. Eager paths reuse forward buffers across language layers.
-Each recorded graph keeps the buffers referenced by its operators.
-The worker divides a large scheduler step into native batches when necessary.
-The [execution rules](execution.md) select Eager or CUDA Graph execution for the full Execute message.
-
-FA and GDN state pools have separate capacities.
-Media requests use separate prefix cache identities.
-
-The [protocol types](../crates/zmq-worker/src/protocol.rs) give the fields for Init, Register, Prepare, Execute, Abort, Stats, and Shutdown messages.
-Replies use the related RPC ID. Each scheduled request has one result row.
-
-A prefill chunk before the final chunk supplies no output tokens.
-A final prefill or decode step supplies accepted drafts plus one target token.
-
-The accepted history does not contain new drafts.
+The [single-worker protocol](../crates/zmq-worker/src/protocol.rs) pairs replies with RPC IDs and scheduled request results.
+The [rank protocol](distributed.md) adds group epochs, steps, transactions, and all-rank completion checks.
+Model-specific clients translate logical assignments into the selected wire layout.
 
 ## GPU computation
 
 | Part | Responsibility |
 |---|---|
-| Python model | Call operators in dependency order and manage tensor storage |
-| Native operators | Compute values with the model's precision and private state rules |
-| Device resources | Manage streams, CUDA Graph recording, replay, and release |
+| Python adapter | Call operators in dependency order and own model state |
+| Native operators | Compute values with the selected precision and state rules |
+| Device resources | Allocate storage and manage streams, Graphs, leases, and release |
 
-The [model](../python/oh_my_vllm/worker/model.py) calls the [operator stages](operators/fusion.md) through all language layers.
-Eager execution and CUDA Graph recording use the same native operators.
-The [device wrapper](../python/oh_my_vllm/operators/runtime/device.py) supplies graph resources.
-Each workspace keeps its weights, cache, tensors, and resource leases until graph closure.
-FP8 conversion and tensor checks are shared across operator families.
+The [operator design](operators/design.md) separates semantic interfaces from kernel and library boundaries.
+Eager execution and Graph recording use the same native operators.
+Fusion can cross internal stages when the complete operation benefits and ownership rules hold.
 
 ## Failure and resources
 
-The service reserves request count and byte capacity before it reads a body or copies stored history.
-The stream buffers and stored responses have count and byte limits.
+The service reserves request count and bytes before body reads or stored-history copies.
+Streams and stored responses have count and byte limits.
+Cancellation releases state at safe operation boundaries.
+A worker failure fails affected requests while the HTTP listener stays active.
 
-Cancellation releases the request state at operation boundaries.
-A worker failure stops the affected requests. The HTTP listener stays active.
-
-Recovery removes the worker and logical cache identities for one epoch before it admits requests for the next epoch.
-The service does not replay output or tool calls.
-
-Worker cleanup stops its process group. It removes the IPC path that it creates.
-The request, step, and shutdown deadlines have different scopes.
-
-Use [the service guide](serving.md) for commands and worker limits.
+Recovery removes old workers and logical identities before admission in a new epoch.
+It does not replay output or tool calls.
+Cleanup stops owned process groups and removes their IPC paths.
+Request, step, and shutdown deadlines have separate scopes.
+See the [service guide](serving.md) for commands and limits.

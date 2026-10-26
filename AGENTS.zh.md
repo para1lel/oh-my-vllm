@@ -1,6 +1,7 @@
 # 项目原则
 
-构建在单张 NVIDIA B200 上运行的 Qwen3.8-27B-FP8 服务.
+构建使用模型适配器的通用推理框架.
+当前支持的 Qwen 适配器与共享服务代码分离. 模型专属规则放在其[模型目录](docs/models/qwen38).
 Rust 负责服务, 调度器和逻辑 KV cache.
 
 Python 负责 GPU 计算. 使用 ZMQ DEALER socket 和 msgpack 进行进程通信.
@@ -8,17 +9,17 @@ Python 负责 GPU 计算. 使用 ZMQ DEALER socket 和 msgpack 进行进程通�
 
 工作前先查看 Git 状态, [交接](docs/handoff.zh.md)及适用的目录说明.
 遵守 [CONTRIBUTING.md](CONTRIBUTING.zh.md).
-Codex 使用 `main`.
+Codex 使用 `nightly`.
 调度和资源所有权使用 [GPU 执行规则](docs/execution.zh.md).
 
 根目录指南保持简短. 局部说明放在对应目录.
 所有英文文档遵循 ASD-STE100. 每篇英文文档都提供完整中文翻译.
 
 使用清晰名称和小函数. 仅当代码无法提供必要信息时添加注释.
-测试保持少量. 新增测试前, 向用户说明必要性.
+优先完成完整且连贯的功能, 不人为限制 diff 大小. 测试聚焦当前行为和失败路径.
 
-自行执行适用的已有测试. 更新两种语言的 README 中规定的性能表格.
-不在项目文件中记录其他测试结果.
+自行执行适用的已有测试. 性能文档使用[记录策略](docs/testing.zh.md#记录).
+不在项目文件中记录无关测试结果.
 使用[测试范围](docs/testing.zh.md).
 
 每轮交付前由另一个代理进行代码审查. 修正错误.

@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 import llguidance
 import numpy as np
-from oh_my_vllm.worker.constraints import Constraint
-from oh_my_vllm.worker.request import Request
+from oh_my_vllm.models.qwen38.request import Request
+from oh_my_vllm.models.qwen38.tool_grammar import tool_grammar
+from oh_my_vllm.worker.constraints import Constraint, batch_masks
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 
 
@@ -96,7 +97,7 @@ class ChainSample:
 
 class ChainDraft:
     def __init__(self, device, weights, batch, first):
-        from oh_my_vllm.worker.sampling import Sampling
+        from oh_my_vllm.models.qwen38.sampling import Sampling
 
         self.device, self.first = device, first
         self.hidden = device.zeros((batch, 5120), "bfloat16")
@@ -142,8 +143,58 @@ class ChainDraft:
 
 
 class Constraints(unittest.TestCase):
+    def test_tool_constraints_require_a_model_grammar(self):
+        vocabulary = {
+            value: index
+            for index, value in enumerate(sorted(pre_tokenizers.ByteLevel.alphabet()))
+        }
+        vocabulary["<eos>"] = 256
+        vocabulary["<tool_call>"] = 257
+        vocabulary["</tool_call>"] = 258
+        tokenizer = Tokenizer(models.BPE(vocabulary, []))
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
+            add_prefix_space=False, use_regex=False
+        )
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.add_special_tokens(["<eos>", "<tool_call>", "</tool_call>"])
+        grammar_tokenizer = llguidance.LLTokenizer(tokenizer.to_str(), eos_token=256)
+        tools = [{"function": {"name": "choose", "parameters": {"type": "object"}}}]
+        for choice in ("auto", "required", {"function": {"name": "choose"}}):
+            with self.subTest(choice=choice):
+                options = {"tools": tools, "tool_choice": choice}
+                with self.assertRaisesRegex(ValueError, "model tool grammar"):
+                    Constraint.for_request(grammar_tokenizer, options)
+                constraint = Constraint.for_request(
+                    grammar_tokenizer,
+                    options,
+                    tool_grammar=lambda request: (
+                        'start: "selected_'
+                        + request["tools"][0]["function"]["name"]
+                        + '"'
+                    ),
+                )
+                self.assertFalse(constraint.accepting)
+                constraint.accept(tokenizer.encode("selected_choose").ids)
+                self.assertTrue(constraint.accepting)
+        for options in ({}, {"tools": tools, "tool_choice": "none"}):
+            self.assertTrue(
+                Constraint.for_request(grammar_tokenizer, options).accepting
+            )
+        request = Request(
+            SimpleNamespace(grammar=grammar_tokenizer),
+            [],
+            {"max_tokens": 8, "tools": tools, "tool_choice": "required"},
+        )
+        self.assertFalse(request.constraint.accepting)
+        request.constraint.accept(
+            tokenizer.encode(
+                '<tool_call>{"name":"choose","arguments":{}}</tool_call>'
+            ).ids
+        )
+        self.assertTrue(request.constraint.accepting)
+
     def test_ignore_eos_keeps_sampling_masks_stop_strings_and_output_bounds(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={256, 258},
@@ -195,7 +246,7 @@ class Constraints(unittest.TestCase):
         self.assertFalse(request.mask()[256])
 
     def test_verification_distribution_does_not_reuse_sampling_graph(self):
-        from oh_my_vllm.worker.sampling import Sampling
+        from oh_my_vllm.models.qwen38.sampling import Sampling
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -217,7 +268,7 @@ class Constraints(unittest.TestCase):
                 self.outputs.probabilities[:] = 0.5
                 return self.outputs
 
-        with patch("oh_my_vllm.worker.sampling.prepare", Sample):
+        with patch("oh_my_vllm.models.qwen38.sampling.prepare", Sample):
             sample = Sampling(ChainDevice(), None, 1)
             sample.operation.outputs.hidden[:] = 3
             sample.rng[:] = 91
@@ -243,7 +294,7 @@ class Constraints(unittest.TestCase):
             sample.close()
 
     def test_repetition_mask_requires_complete_cycles(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={248319},
@@ -281,7 +332,7 @@ class Constraints(unittest.TestCase):
                 self.assertFalse(np.any(sampling_mask(inputs) == 0))
 
     def test_sampling_inputs_do_not_retain_speculative_history(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -331,7 +382,7 @@ class Constraints(unittest.TestCase):
         self.assertEqual((request.random_offset, request.proposal_offset), (13, 17))
 
     def test_sampling_mask_cache_tracks_output_and_thinking_boundaries(self):
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -383,8 +434,8 @@ class Constraints(unittest.TestCase):
     def test_draft_chain_keeps_stage_order_private_probabilities_and_fallback(
         self,
     ):
-        from oh_my_vllm.worker.draft_chain import can_chain
-        from oh_my_vllm.worker.speculation import Speculation
+        from oh_my_vllm.models.qwen38.draft_chain import can_chain
+        from oh_my_vllm.models.qwen38.speculation import Speculation
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -417,8 +468,8 @@ class Constraints(unittest.TestCase):
         )
         speculation = Speculation(d, None, cache, None, trace)
         with (
-            patch("oh_my_vllm.worker.speculation.Draft", ChainDraft),
-            patch("oh_my_vllm.worker.sampling.prepare", ChainSample),
+            patch("oh_my_vllm.models.qwen38.speculation.Draft", ChainDraft),
+            patch("oh_my_vllm.models.qwen38.sampling.prepare", ChainSample),
         ):
             first = request()
             batch = SimpleNamespace(
@@ -510,7 +561,7 @@ class Constraints(unittest.TestCase):
             speculation.close()
 
     def test_stochastic_chain_requires_prefix_independent_masks(self):
-        from oh_my_vllm.worker.draft_chain import can_chain
+        from oh_my_vllm.models.qwen38.draft_chain import can_chain
 
         tokenizer = SimpleNamespace(
             eos={256},
@@ -643,7 +694,7 @@ class Constraints(unittest.TestCase):
         )
         constraint.accept(tokenizer.encode('{"x":').ids)
         self.assertFalse(constraint.mask()[tokenizer.encode("3").ids[0]])
-        from oh_my_vllm.worker.sampling import SamplingInputs
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
 
         request = Request(
             SimpleNamespace(
@@ -742,7 +793,9 @@ class Constraints(unittest.TestCase):
             "tool_choice": "required",
             "parallel_tool_calls": False,
         }
-        tool = Constraint.for_request(grammar_tokenizer, tool_request)
+        tool = Constraint.for_request(
+            grammar_tokenizer, tool_request, tool_grammar=tool_grammar
+        )
         tool.accept(
             tokenizer.encode('<tool_call>{"name":"choose","arguments":{"x":').ids
         )
@@ -751,3 +804,137 @@ class Constraints(unittest.TestCase):
         branch.accept(tokenizer.encode("1}}</tool_call>").ids)
         self.assertTrue(branch.accepting)
         self.assertFalse(tool.accepting)
+
+        grammars = ('start: "a" | "ab" | "ac"', 'start: "ab" | "ad"')
+        self.assertTrue(
+            callable(getattr(Constraint, "all_of", None)),
+            "generic grammar intersection factory is missing",
+        )
+        single = Constraint.all_of(grammar_tokenizer, grammars[:1])
+        self.assertTrue(single.native_batch)
+        np.testing.assert_array_equal(
+            single.mask(), Constraint(grammar_tokenizer, grammars[0]).mask()
+        )
+        with self.assertRaises(ValueError):
+            Constraint.all_of(grammar_tokenizer, [])
+        with self.assertRaises(ValueError):
+            Constraint.all_of(grammar_tokenizer, [None, grammars[0]])
+        with self.assertRaises(ValueError):
+            Constraint.all_of(grammar_tokenizer, [grammars[0], "start: missing"])
+        combined = Constraint.all_of(grammar_tokenizer, grammars)
+        self.assertFalse(combined.native_batch)
+        self.assertIsNotNone(combined.matcher)
+        self.assertFalse(combined.accepting)
+        a, b, c, d = (tokenizer.encode(text).ids[0] for text in "abcd")
+        before = combined.mask()
+        self.assertEqual(np.flatnonzero(before).tolist(), [a])
+        batch_masks([combined], [[]])
+        saved_cache = dict(combined.prefix_masks)
+        for invalid in ([a, c], [a, 256], [a, b, c]):
+            with self.assertRaises(ValueError):
+                combined.accept(iter(invalid))
+            np.testing.assert_array_equal(combined.mask(), before)
+            self.assertEqual(combined.prefix_masks, saved_cache)
+            self.assertFalse(combined.accepting)
+        with combined.at_prefix([a]):
+            self.assertFalse(combined.accepting)
+            self.assertEqual(np.flatnonzero(combined.mask()).tolist(), [b])
+            self.assertFalse(combined.mask()[256])
+            with self.assertRaises(ValueError):
+                combined.accept([256])
+            with (
+                self.assertRaisesRegex(RuntimeError, "body failure"),
+                combined.at_prefix([b]),
+            ):
+                self.assertTrue(combined.accepting)
+                raise RuntimeError("body failure")
+            self.assertFalse(combined.accepting)
+            combined.accept([b])
+            self.assertTrue(combined.accepting)
+        np.testing.assert_array_equal(combined.mask(), before)
+        self.assertEqual(combined.prefix_masks, saved_cache)
+        for _ in range(2):
+            with self.assertRaises(ValueError), combined.at_prefix([a, c]):
+                self.fail("an invalid prefix entered the context")
+            np.testing.assert_array_equal(combined.mask(), before)
+            self.assertEqual(combined.prefix_masks, saved_cache)
+        proposal = combined.fork()
+        self.assertIsNot(proposal.cache_identity, combined.cache_identity)
+        self.assertEqual(proposal.prefix_masks, {})
+        self.assertIsNot(proposal.prefix_masks, combined.prefix_masks)
+        proposal.accept([a, b, 256, 256])
+        self.assertTrue(proposal.accepting)
+        self.assertTrue(proposal.mask()[256])
+        self.assertFalse(combined.accepting)
+        self.assertEqual(proposal.prefix_masks, {})
+        self.assertEqual(combined.prefix_masks, saved_cache)
+
+        # The second grammar removes c and d; native batching must not use only one.
+        prefixes = [[], [a], [a, b], [a, b, 256, 256]]
+        for _ in range(2):
+            constraints = [single, combined] * len(prefixes)
+            paths = [path for path in prefixes for _ in range(2)]
+            masks = batch_masks(constraints, paths)
+            for member, path, mask in zip(constraints, paths, masks, strict=True):
+                independent = member.fork()
+                independent.accept(path)
+                np.testing.assert_array_equal(mask, independent.mask())
+            self.assertTrue(masks[2][c])
+            self.assertFalse(masks[3][c])
+            self.assertFalse(masks[3][d])
+            np.testing.assert_array_equal(combined.mask(), before)
+        with patch(
+            "oh_my_vllm.worker.constraints.mask_executor",
+            side_effect=AssertionError("composite reached the native executor"),
+        ):
+            batch_masks([combined] * len(prefixes), prefixes)
+        with self.assertRaises(ValueError):
+            batch_masks([combined, combined], [[a], [a, c]])
+        np.testing.assert_array_equal(batch_masks([combined], [[]])[0], before)
+        branching = Constraint.all_of(
+            grammar_tokenizer,
+            ['start: "ab" | "ba" | "ac"', 'start: "ab" | "ba" | "bd"'],
+        )
+        for paths in (([a, b], [b, a]), ([a], [], [b])):
+            for path, mask in zip(
+                paths, batch_masks([branching] * len(paths), paths), strict=True
+            ):
+                independent = branching.fork()
+                independent.accept(path)
+                np.testing.assert_array_equal(mask, independent.mask())
+        self.assertEqual(np.flatnonzero(branching.mask()).tolist(), [a, b])
+        unicode_tokens = tokenizer.encode("\u4e2da").ids
+        unicode_constraint = Constraint.all_of(
+            grammar_tokenizer,
+            ['start: "\u4e2da" | "\u4e2db"', 'start: "\u4e2da" | "\u4e2dc"'],
+        )
+        for index, mask in enumerate(
+            batch_masks(
+                [unicode_constraint] * (len(unicode_tokens) + 1),
+                [unicode_tokens[:index] for index in range(len(unicode_tokens) + 1)],
+            )
+        ):
+            self.assertEqual(
+                np.flatnonzero(mask).tolist(),
+                [unicode_tokens[index]] if index < len(unicode_tokens) else [256],
+            )
+        self.assertFalse(unicode_constraint.accepting)
+
+        repeated = Constraint.all_of(
+            grammar_tokenizer, ['start: "a"* "b"', 'start: "a"* ("b" | "c")']
+        )
+        paths = [[a] * count for count in range(70)]
+        for mask in batch_masks([repeated] * len(paths), paths):
+            self.assertEqual(np.flatnonzero(mask).tolist(), [a, b])
+        self.assertLessEqual(len(repeated.prefix_masks), 64)
+        masks = batch_masks([repeated, repeated], [[a] * 300, []])
+        for mask in masks:
+            self.assertEqual(np.flatnonzero(mask).tolist(), [a, b])
+        self.assertTrue(all(len(path) <= 256 for path in repeated.prefix_masks))
+        masks[1][:] = 0
+        self.assertEqual(
+            np.flatnonzero(batch_masks([repeated], [[]])[0]).tolist(), [a, b]
+        )
+        repeated.accept([a, b])
+        self.assertEqual(repeated.prefix_masks, {})
+        self.assertTrue(repeated.accepting)

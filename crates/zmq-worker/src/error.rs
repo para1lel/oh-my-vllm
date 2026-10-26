@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("invalid model configuration: {0}")]
+    ModelConfiguration(String),
+
     #[error("ZMQ error: {0}")]
     Zmq(#[from] zeromq::ZmqError),
 

@@ -5,7 +5,7 @@ import random
 import string
 from dataclasses import dataclass
 
-from .offload import StubOffload
+from ..models.stub import StubOffload, build_descriptor
 
 
 def token_id(character):
@@ -219,11 +219,13 @@ class Worker:
         self.offload = StubOffload(self.config, self.requests)
 
     def ready(self):
+        fa_blocks = self.config["num_gpu_blocks"]
+        gdn_blocks = self.config["mamba_blocks"] or fa_blocks
         return {
             "type": "ready",
-            "logical_num_blocks": self.config["num_gpu_blocks"],
-            "mamba_blocks": self.config["mamba_blocks"]
-            or self.config["num_gpu_blocks"],
+            "descriptor": build_descriptor(fa_blocks, gdn_blocks),
+            "logical_num_blocks": fa_blocks,
+            "mamba_blocks": gdn_blocks,
             "host_cache_bytes": self.offload.limit,
         }
 

@@ -1,5 +1,4 @@
 import copy
-import json
 from contextlib import ExitStack, contextmanager
 from functools import cache
 
@@ -20,6 +19,10 @@ def batch_masks(constraints, prefixes):
     pending, fallback, rows = [], {}, 0
     for constraint, paths in groups.items():
         constraint.check()
+        if not constraint.native_batch:
+            for path in paths:
+                fallback[constraint, path] = constraint._prefix_mask(path)
+            continue
         missing = [path for path in paths if path not in constraint.prefix_masks]
         if not missing:
             continue
@@ -120,42 +123,9 @@ def tool_schema(tools):
     return {"oneOf": alternatives, "$defs": definitions}
 
 
-def tool_grammar(request):
-    choice = request.get("tool_choice", "auto")
-    tools = request["tools"]
-    if isinstance(choice, dict):
-        tools = [
-            tool
-            for tool in tools
-            if tool["function"]["name"] == choice["function"]["name"]
-        ]
-    schema = tool_schema(tools)
-    parallel = request.get("parallel_tool_calls", True)
-    if choice == "auto":
-        grammar = llguidance.StructTag.to_grammar(
-            [
-                llguidance.StructTag(
-                    trigger="<tool_call>",
-                    begin="<tool_call>",
-                    grammar=schema,
-                    end="</tool_call>",
-                )
-            ],
-            assume_special=True,
-        )
-        grammar = grammar.replace('"</tool_call>"', "</tool_call>")
-        return grammar if parallel else grammar.replace("(tag_0)*", "tag_0?")
-    count = "+" if parallel else ""
-    return (
-        "%llguidance {}\nstart: call"
-        + count
-        + "\ncall: <tool_call> %json "
-        + json.dumps(schema)
-        + " </tool_call> /[ \\t\\r\\n]*/\n"
-    )
-
-
 class Constraint:
+    native_batch = True
+
     def __init__(self, tokenizer, grammar=None):
         self.tokenizer = tokenizer
         self.cache_identity = object()
@@ -168,13 +138,27 @@ class Constraint:
         self.check()
 
     @classmethod
-    def for_request(cls, tokenizer, request):
+    def all_of(cls, tokenizer, grammars):
+        if isinstance(grammars, (str, bytes)):
+            raise ValueError("grammar intersection requires a sequence of grammars")
+        grammars = tuple(grammars)
+        if not grammars or any(grammar is None for grammar in grammars):
+            raise ValueError("grammar intersection requires nonempty grammars")
+        members = tuple(cls(tokenizer, grammar) for grammar in grammars)
+        if len(members) == 1:
+            return members[0]
+        return _AllOfConstraint(tokenizer, members)
+
+    @classmethod
+    def for_request(cls, tokenizer, request, *, tool_grammar=None):
         output = request.get("format", {"type": "text"})
         if output["type"] in {"json_object", "json_schema"}:
             schema = output.get("schema", {"type": "object"})
             grammar = llguidance.LLMatcher.grammar_from_json_schema(schema)
             return cls(tokenizer, grammar)
         if request.get("tools") and request.get("tool_choice") != "none":
+            if tool_grammar is None:
+                raise ValueError("tool constraints require a model tool grammar")
             return cls(tokenizer, tool_grammar(request))
         return cls(tokenizer)
 
@@ -226,3 +210,91 @@ class Constraint:
             if consumed and not self.matcher.rollback(consumed):
                 self.check()
                 raise ValueError("constraint rollback failed")
+
+
+class _AllOfConstraint(Constraint):
+    native_batch = False
+    _prefix_cache_limit = 64
+    _prefix_cache_tokens = 256
+
+    def __init__(self, tokenizer, members):
+        self.tokenizer = tokenizer
+        self._members = members
+        self.cache_identity = object()
+        self.prefix_masks = {}
+        self.check()
+
+    @property
+    def matcher(self):
+        # Existing consumers use this only to test whether a constraint exists.
+        return self._members[0].matcher
+
+    def check(self):
+        for member in self._members:
+            member.check()
+
+    @property
+    def accepting(self):
+        self.check()
+        return all(member.accepting for member in self._members)
+
+    def mask(self):
+        self.check()
+        result = self._members[0].mask()
+        for member in self._members[1:]:
+            result &= member.mask()
+        self.check()
+        if not self.accepting:
+            result[list(self.tokenizer.eos_tokens)] = 0
+        return result
+
+    def accept(self, tokens):
+        self.check()
+        members = tuple(member.fork() for member in self._members)
+        for token in tokens:
+            if token in self.tokenizer.eos_tokens:
+                if not all(member.accepting for member in members):
+                    raise ValueError("token violates the output constraint")
+                continue
+            for member in members:
+                member.accept([token])
+        for member in members:
+            member.check()
+        self._members = members
+        self.cache_identity = object()
+        self.prefix_masks = {}
+
+    def fork(self):
+        self.check()
+        return _AllOfConstraint(
+            self.tokenizer, tuple(member.fork() for member in self._members)
+        )
+
+    @contextmanager
+    def at_prefix(self, tokens):
+        branch = self.fork()
+        branch.accept(tokens)
+        saved = self._members, self.cache_identity, self.prefix_masks
+        self._members = branch._members
+        self.cache_identity = branch.cache_identity
+        self.prefix_masks = branch.prefix_masks
+        try:
+            yield
+        finally:
+            self._members, self.cache_identity, self.prefix_masks = saved
+
+    def _prefix_mask(self, tokens):
+        self.check()
+        if tokens in self.prefix_masks:
+            return np.unpackbits(
+                np.frombuffer(self.prefix_masks[tokens], np.uint8), bitorder="little"
+            )[: self.tokenizer.vocab_size]
+        branch = self.fork()
+        branch.accept(tokens)
+        mask = branch.mask()
+        # Long prefixes remain valid but do not occupy the bounded cache.
+        if len(tokens) <= self._prefix_cache_tokens:
+            if len(self.prefix_masks) >= self._prefix_cache_limit:
+                self.prefix_masks.pop(next(iter(self.prefix_masks)))
+            self.prefix_masks[tokens] = np.packbits(mask, bitorder="little").tobytes()
+        return mask

@@ -1,11 +1,11 @@
 import json
 from dataclasses import replace
 
+from oh_my_vllm.models.qwen38.checkpoint import Checkpoint
+from oh_my_vllm.models.qwen38.weights import Weights
 from oh_my_vllm.operators.mtp.api import InputWeights
 from oh_my_vllm.operators.output.api import Weights as OutputWeights
 from oh_my_vllm.operators.vision.api import Weights as VisionWeights
-from oh_my_vllm.worker.checkpoint import Checkpoint
-from oh_my_vllm.worker.weights import Weights
 
 from .bindings import VISION_BLOCK, VISION_MERGER, weight_names
 

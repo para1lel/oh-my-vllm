@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/kv-cache",
+    "crates/model-contract",
     "crates/scheduler",
     "crates/zmq-worker",
 ]

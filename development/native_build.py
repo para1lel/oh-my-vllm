@@ -16,10 +16,13 @@ from oh_my_vllm.operators.output.api import FUNCTIONS as SAMPLE_FUNCTIONS
 from oh_my_vllm.operators.runtime.device import FUNCTIONS as DEVICE_FUNCTIONS
 from oh_my_vllm.operators.runtime.native import (
     MODULE_SOURCES,
+    OPTIONAL_MODULE_SOURCES,
     SOURCES,
     build_digest,
     cache_directory,
+    collectives_vendor_dependencies,
     source_digest,
+    verify_collectives_vendor_images,
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
@@ -36,6 +39,12 @@ MODULES = {
 }
 
 
+def optional_modules():
+    from oh_my_vllm.operators.runtime.collectives import FUNCTIONS
+
+    return {"collectives": FUNCTIONS}
+
+
 @functools.cache
 def build(name, functions):
     from tvm_ffi import load_module
@@ -48,12 +57,12 @@ def build(name, functions):
         cuda = os.environ.get("CUDA_HOME", "/usr/local/cuda")
         nvcc = str(Path(cuda) / "bin/nvcc")
     flags = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a", "-lineinfo")
-    source = MODULE_SOURCES[name]
+    source = (MODULE_SOURCES | OPTIONAL_MODULE_SOURCES)[name]
     source_fingerprint = source_digest(source)
     compiler = subprocess.check_output([nvcc, "--version"]).decode()
     include_paths = [str(source.parent), str(SOURCES)]
     commit = None
-    if name != "device":
+    if name in MODULES and name != "device":
         cutlass = Path(os.environ["OH_MY_VLLM_CUTLASS"])
         commit = (
             subprocess.check_output(["git", "-C", str(cutlass), "rev-parse", "HEAD"])
@@ -71,6 +80,9 @@ def build(name, functions):
         if name == "vision":
             include_paths.append(str(cutlass / "examples/77_blackwell_fmha"))
     vendor = vision_vendor_dependencies() if name == "vision" else None
+    if name == "collectives":
+        vendor = collectives_vendor_dependencies()
+        flags += ("--compiler-bindir", vendor["host_compiler"])
     build_options = {}
     if vendor is not None:
         include_paths.append(vendor["include_directory"])
@@ -118,7 +130,7 @@ def build(name, functions):
         "cutlass": commit,
     }
     if vendor is not None:
-        metadata["vision_vendor"] = vendor
+        metadata[f"{name}_vendor"] = vendor
     encoded = json.dumps(metadata, indent=2) + "\n"
     immutable_manifest = binary_directory / "manifest.json"
     if immutable_manifest.exists() and immutable_manifest.read_text() != encoded:
@@ -130,15 +142,25 @@ def build(name, functions):
     temporary.write_text(encoded)
     temporary.replace(cache / f"{name}.json")
     module = load_module(str(immutable_library))
-    if vendor is not None:
+    if name == "vision":
         verify_vision_vendor_images(module, vendor)
+    elif name == "collectives":
+        verify_collectives_vendor_images(module, vendor)
     return module, source_id, immutable_library
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.parse_args()
-    for name, functions in MODULES.items():
+    parser.add_argument(
+        "--module", action="append", choices=(*MODULES, *OPTIONAL_MODULE_SOURCES)
+    )
+    options = parser.parse_args()
+    selected = (
+        MODULES
+        if options.module is None
+        else {name: (MODULES | optional_modules())[name] for name in options.module}
+    )
+    for name, functions in selected.items():
         _, identity, _ = build(name, functions)
         print(f"{name}: {identity}")
 

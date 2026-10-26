@@ -9,6 +9,9 @@ Do not use general words as new technical terms.
 Put each fact in one location. Use links from other locations.
 README gives user information. CONTRIBUTING gives the contribution procedure.
 
+Keep implementation information that applies and the last completed results for each approved workload.
+Remove instructions, results, and files that no longer apply. Update their links in the same change.
+
 The root AGENTS gives rules for all directories. A child AGENTS gives rules for its directory tree.
 Add a child guide only when a directory has local rules.
 
@@ -32,7 +35,8 @@ Use a text anchor that occurs only once in the source file for each source line 
 The documentation hook updates the line numbers.
 Put host paths and addresses in ignored local configuration.
 
-Do not add test results, logs, or delivery histories.
+Use the [reporting policy](testing.md#reporting) for approved performance documents.
+Do not add unrelated test results, raw logs, or delivery histories.
 
 Get a document review from another agent. Examine the word meanings, parts of speech, and translation.
 Use the official standard. The automated checks do not examine all STE rules.

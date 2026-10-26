@@ -53,3 +53,37 @@ A hook has no work if there are no applicable files. The documentation hook alwa
 
 Use the [test policy](../CONTRIBUTING.md) before you add tests.
 Agents do the tests in the repository for the maintainer.
+
+## Native modules
+
+Use CUDA 13.1. Keep host paths in ignored `LOCAL.md`.
+Set `CUDA_HOME` to the CUDA installation directory.
+Install the kernel development packages:
+
+```bash
+scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/kernel-development.txt
+```
+
+The inference bindings are in `requirements/kernels.txt`.
+Development packages are not worker dependencies.
+Set `CUTLASS_ROOT` to an external dependency directory.
+Get the specified headers:
+
+```bash
+git clone --depth 1 --branch v4.8.0 https://github.com/NVIDIA/cutlass.git "$CUTLASS_ROOT"
+export OH_MY_VLLM_CUTLASS="$CUTLASS_ROOT"
+```
+
+The build accepts only clean Git revision `098de2a652cf8f00fd70b2df54051c7eccbb855a`.
+Set `OH_MY_VLLM_KERNEL_CACHE` to an external build directory.
+Build the native modules:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.native_build
+```
+
+The inference loader does not use development imports or a compiler.
+It checks source and binary identities against the build manifest.
+Each binary has an immutable copy and manifest in the external cache.
+
+For model commands, use [Qwen validation](models/qwen38/README.md).

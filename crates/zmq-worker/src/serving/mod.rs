@@ -1,13 +1,12 @@
 mod events;
 mod media;
-mod parser;
 mod request;
 mod resources;
 mod sampling;
 #[cfg(all(test, unix))]
 mod tests;
 
-use crate::{client::WorkerClient, error::Error as WorkerError};
+use crate::{client::WorkerClient, error::Error as WorkerError, models::output::Parser};
 use anyhow::{Context, Result};
 use axum::{
     Extension, Json, Router,
@@ -23,8 +22,8 @@ use axum::{
 };
 use clap::Args;
 use events::Output;
+use oh_my_vllm_kv_cache::HybridCoordinator;
 use oh_my_vllm_scheduler::{Request as EngineRequest, Scheduler};
-use parser::Parser;
 use request::Request;
 use resources::{Budget, Lease, serialized_bytes, unix_seconds};
 use serde_json::{Value, json};
@@ -56,8 +55,8 @@ struct ClientDisconnected;
 pub struct ServeArgs {
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub listen: SocketAddr,
-    #[arg(long, default_value = "qwen3.8-27b-fp8")]
-    pub served_model_name: String,
+    #[arg(long)]
+    pub served_model_name: Option<String>,
     #[arg(long, default_value_t = 3600)]
     pub response_ttl_seconds: u64,
     #[arg(long, default_value_t = 1000)]
@@ -544,7 +543,15 @@ async fn delete(State(app): State<App>, Path(id): Path<String>) -> Response {
     }
 }
 
-pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) -> Result<()> {
+pub async fn serve(
+    client: WorkerClient,
+    scheduler: Scheduler<HybridCoordinator>,
+    args: ServeArgs,
+) -> Result<()> {
+    let model_name = args
+        .served_model_name
+        .clone()
+        .unwrap_or_else(|| client.model_policy().served_model_name().to_owned());
     let sampling_defaults = sampling::service_defaults(&args.override_generation_config)?;
     anyhow::ensure!(
         args.response_capacity > 0
@@ -593,7 +600,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
     let app = App {
         submit: tx,
         store: store.clone(),
-        model: args.served_model_name.clone(),
+        model: model_name.clone(),
         thinking_token_budget: args.thinking_token_budget,
         sampling_defaults,
         budget: budget.clone(),
@@ -610,7 +617,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
         .layer(DefaultBodyLimit::max(resources::HTTP_BODY_BYTES))
         .layer(middleware::from_fn_with_state(app.clone(), reserve_http))
         .with_state(app);
-    info!(listen = %args.listen, model = %args.served_model_name, "HTTP service ready");
+    info!(listen = %args.listen, model = %model_name, "HTTP service ready");
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let mut engine = tokio::spawn(engine(
         client,
@@ -776,7 +783,7 @@ async fn cancel_admit(client: &mut WorkerClient, pending: PendingAdmission) -> R
 
 async fn wait_admit(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     active: &mut BTreeMap<u64, Active>,
     pending: &mut Option<PendingAdmission>,
 ) -> Result<()> {
@@ -799,7 +806,7 @@ async fn wait_admit(
 
 async fn complete_admit(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     active: &mut BTreeMap<u64, Active>,
     pending: PendingAdmission,
     prepare_result: std::result::Result<Vec<u32>, WorkerError>,
@@ -845,6 +852,7 @@ async fn complete_admit(
     }
     let max_tokens = request.normalized["max_tokens"].as_u64().unwrap() as usize;
     let parser = Parser::new(
+        client.model_family(),
         request.normalized["effort"] != "off",
         if request.normalized["tool_choice"] == "none"
             || request.normalized["format"]["type"] != "text"
@@ -996,7 +1004,7 @@ struct EngineContext {
 
 async fn engine(
     client: WorkerClient,
-    mut scheduler: Scheduler,
+    mut scheduler: Scheduler<HybridCoordinator>,
     mut incoming: mpsc::Receiver<Submission>,
     context: EngineContext,
     mut shutdown: oneshot::Receiver<()>,
@@ -1009,6 +1017,7 @@ async fn engine(
         client.mamba_blocks,
         client.host_cache_bytes,
     );
+    let model_policy = client.model_policy();
     let template = scheduler.empty_like();
     let mut client = Some(client);
     let mut epoch = 1u64;
@@ -1094,7 +1103,7 @@ async fn engine(
             config.socket_path = socket.into();
             let launched = tokio::select! {
                 _ = &mut shutdown => return,
-                result = WorkerClient::launch(config) => result,
+                result = WorkerClient::launch_with_model(config, model_policy) => result,
             };
             match launched {
                 Ok(mut worker) => {
@@ -1158,7 +1167,7 @@ async fn execute(
 
 async fn run_engine(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     incoming: &mut mpsc::Receiver<Submission>,
     context: &EngineContext,
     epoch: u64,
@@ -1440,7 +1449,7 @@ async fn run_engine(
 
 fn update_resource_counts(
     health: &Mutex<Value>,
-    scheduler: &Scheduler,
+    scheduler: &Scheduler<HybridCoordinator>,
     active: usize,
     pending: usize,
 ) {

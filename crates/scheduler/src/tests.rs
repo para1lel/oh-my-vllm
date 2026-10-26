@@ -3,6 +3,7 @@ use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
 use crate::{
     Scheduler, SchedulerConfig,
     output::{RequestOutput, WorkerOutput},
+    policy::CachePolicy,
     request::Request,
 };
 
@@ -200,7 +201,7 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
     let store = scheduler.cache_operations().remove(0);
     assert_eq!(store.kind, CacheKind::Store);
     assert_eq!(store.request_id, Some(2));
-    assert!(store.mamba_blocks.contains(&read));
+    assert!(store.state.mamba_blocks.contains(&read));
     finish_transfer(&mut scheduler, store.transfer_id);
     while scheduler.running.iter().any(|r| r.id == 6) {
         let batch = scheduler.schedule();
@@ -229,7 +230,7 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
         let store = scheduler.cache_operations().remove(0);
         assert_eq!(store.kind, CacheKind::Store);
         assert_eq!(store.request_id, Some(2));
-        assert!(store.mamba_blocks.contains(&read));
+        assert!(store.state.mamba_blocks.contains(&read));
         scheduler
             .complete_cache(&[CacheCompletion {
                 transfer_id: store.transfer_id,
@@ -241,7 +242,10 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
         assert!(scheduler.schedule().scheduled.is_empty());
         let load = scheduler.cache_operations().remove(0);
         assert_eq!(load.kind, CacheKind::Load);
-        assert_eq!(load.mamba_blocks.len(), store.mamba_blocks.len());
+        assert_eq!(
+            load.state.mamba_blocks.len(),
+            store.state.mamba_blocks.len()
+        );
         scheduler
             .complete_cache(&[CacheCompletion {
                 transfer_id: load.transfer_id,
@@ -264,8 +268,8 @@ fn host_prefix_restores_partial_endpoint_after_gpu_eviction() {
     let batch = scheduler.schedule();
     assert_eq!(batch.scheduled[0].num_computed_tokens, 1566);
     assert_eq!(batch.scheduled[0].token_ids.len(), 2);
-    let read = batch.scheduled[0].prefix_state_slot.unwrap();
-    assert_ne!(batch.scheduled[0].mamba_block_table[1], read);
+    let read = batch.scheduled[0].state.prefix_state_slot.unwrap();
+    assert_ne!(batch.scheduled[0].state.mamba_block_table[1], read);
     let before_commit = scheduler.cache_resource_counts().4;
     assert!(
         scheduler
@@ -354,6 +358,30 @@ fn declined_store_preserves_progress_and_does_not_block_other_waiters() {
             .any(|r| r.request_id == 1 && r.num_computed_tokens == 8)
     );
     assert!(batch.scheduled.iter().any(|r| r.request_id == 2));
+
+    let mut pressure = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 16,
+            ..Default::default()
+        },
+        HybridCoordinator::new(8, BS, true, 0).with_mamba_capacity(128),
+    );
+    assert!(pressure.add_request(make_req(1, 16, 4)));
+    pressure.schedule();
+    apply(
+        &mut pressure,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    pressure.pause(1);
+    for (id, length) in [(2, 16), (3, 4)] {
+        let mut request = make_req(id, length, 1);
+        request.token_ids.fill(id as u32 + 100);
+        assert!(pressure.add_request(request));
+    }
+    let batch = pressure.schedule();
+    assert!(batch.scheduled.iter().any(|row| row.request_id == 3));
 }
 
 #[test]
@@ -454,9 +482,16 @@ fn insufficient_host_capacity_fails_one_request_instead_of_deadlocking() {
             })
             .collect();
         apply(&mut scheduler, WorkerOutput { outputs });
+        for request in &scheduler.running {
+            if request.num_computed_tokens == 8 {
+                scheduler.paused.insert(request.id);
+            }
+        }
     }
     assert_eq!(scheduler.running.len(), 2);
     assert!(scheduler.running.iter().all(|r| r.num_computed_tokens == 8));
+    scheduler.resume(1);
+    scheduler.resume(2);
     let mut failed = vec![];
     for _ in 0..4 {
         let batch = scheduler.schedule();
@@ -487,7 +522,7 @@ fn make_coord(num_blocks: u32) -> HybridCoordinator {
     HybridCoordinator::new(num_blocks, BS, true, 0)
 }
 
-fn make_scheduler(num_blocks: u32, max_tokens_per_step: usize) -> Scheduler {
+fn make_scheduler(num_blocks: u32, max_tokens_per_step: usize) -> Scheduler<HybridCoordinator> {
     let config = SchedulerConfig {
         max_num_batched_tokens: max_tokens_per_step,
         max_num_seqs: 64,
@@ -511,7 +546,7 @@ fn dummy_output(rid: u64) -> RequestOutput {
     }
 }
 
-fn finish_transfer(scheduler: &mut Scheduler, transfer_id: u64) {
+fn finish_transfer(scheduler: &mut Scheduler<HybridCoordinator>, transfer_id: u64) {
     scheduler
         .complete_cache(&[crate::cache::CacheCompletion {
             transfer_id,
@@ -521,11 +556,11 @@ fn finish_transfer(scheduler: &mut Scheduler, transfer_id: u64) {
         .unwrap();
 }
 
-fn apply(scheduler: &mut Scheduler, output: WorkerOutput) -> WorkerOutput {
+fn apply(scheduler: &mut Scheduler<HybridCoordinator>, output: WorkerOutput) -> WorkerOutput {
     scheduler.update(output).expect("test output must be valid")
 }
 
-fn production_long_scheduler(max_seqs: usize) -> Scheduler {
+fn production_long_scheduler(max_seqs: usize) -> Scheduler<HybridCoordinator> {
     Scheduler::new(
         SchedulerConfig {
             max_num_batched_tokens: 32768,
@@ -737,6 +772,279 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
     );
     assert!(ending.add_request(make_req(2, 4, 1)));
     assert_eq!(ending.schedule().num_batched_tokens, 4);
+
+    let mut concurrent = make_scheduler(1024, 16);
+    concurrent.config.enable_mtp = true;
+    concurrent.config.mtp_draft_len = 2;
+    for id in 1..=2 {
+        assert!(concurrent.add_request(make_req(id, 4, 8)));
+    }
+    concurrent.schedule();
+    apply(
+        &mut concurrent,
+        WorkerOutput {
+            outputs: (1..=2)
+                .map(|id| RequestOutput {
+                    new_draft_token_ids: if id == 1 {
+                        vec![10, 11]
+                    } else {
+                        vec![]
+                    },
+                    ..dummy_output(id)
+                })
+                .collect(),
+        },
+    );
+    concurrent.config.max_num_batched_tokens = 2;
+    let batch = concurrent.schedule();
+    assert_eq!(
+        batch
+            .scheduled
+            .iter()
+            .map(|row| (row.request_id, row.token_ids.len()))
+            .collect::<Vec<_>>(),
+        vec![(1, 1), (2, 1)]
+    );
+    apply(
+        &mut concurrent,
+        WorkerOutput {
+            outputs: vec![
+                RequestOutput {
+                    new_draft_token_ids: vec![10, 11],
+                    ..dummy_output(1)
+                },
+                dummy_output(2),
+            ],
+        },
+    );
+    concurrent.pause(2);
+    concurrent.config.max_num_batched_tokens = 785;
+    let mut prefill = make_req(3, 1000, 1);
+    prefill.token_ids.fill(999);
+    assert!(concurrent.add_request(prefill));
+    let batch = concurrent.schedule();
+    assert_eq!(
+        batch
+            .scheduled
+            .iter()
+            .map(|row| (row.request_id, row.token_ids.len()))
+            .collect::<Vec<_>>(),
+        vec![(1, 1), (3, 784)]
+    );
+
+    let mut residual = make_scheduler(64, 16);
+    residual.config.enable_mtp = true;
+    residual.config.mtp_draft_len = 4;
+    assert!(residual.add_request(make_req(1, 4, 8)));
+    residual.schedule();
+    apply(
+        &mut residual,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                new_draft_token_ids: vec![10, 11, 12, 13],
+                ..dummy_output(1)
+            }],
+        },
+    );
+    let mut tail = make_req(2, 3, 1);
+    tail.record_partial_prefix = false;
+    assert!(residual.add_request(tail));
+    residual.config.max_num_batched_tokens = 5;
+    let batch = residual.schedule();
+    assert_eq!(
+        batch
+            .scheduled
+            .iter()
+            .map(|row| (row.request_id, row.token_ids.len()))
+            .collect::<Vec<_>>(),
+        vec![(1, 2), (2, 3)]
+    );
+}
+
+#[test]
+fn prefill_batches_preserve_intervals_and_make_progress() {
+    for budget in [1, 3, 783, 784, 785, 32768] {
+        for source in ["cold", "prefix", "host", "history"] {
+            let mut scheduler = production_long_scheduler(4);
+            scheduler.config.max_num_batched_tokens = budget;
+            let requests = [317, 1234, 1569].map(|length| make_req(length as u64, length, 4));
+            if source == "prefix" {
+                for request in &requests {
+                    let mut seed = request.clone();
+                    seed.id += 10000;
+                    seed.max_tokens = 1;
+                    assert!(scheduler.add_request(seed));
+                    finish_prefills(&mut scheduler);
+                }
+            }
+            if source == "host" {
+                scheduler.enable_host_cache(1 << 30);
+            }
+            for request in requests {
+                assert!(scheduler.add_request(request));
+            }
+            if source == "prefix" {
+                assert!(scheduler.waiting.iter().any(|request| {
+                    !scheduler.kv.find_prefix(request).length.is_multiple_of(784)
+                }));
+            }
+            if source == "host" {
+                restore_partial_prefills(&mut scheduler);
+            }
+            if source == "history" {
+                preempt_generated_history(&mut scheduler);
+            }
+            let history_prefill = finish_prefills(&mut scheduler);
+            if source == "history" && budget == 1 {
+                assert!(
+                    history_prefill,
+                    "recompute must reach beyond the original prompt"
+                );
+            }
+            for operation in scheduler.cache_operations() {
+                finish_transfer(&mut scheduler, operation.transfer_id);
+            }
+            assert!(!scheduler.cache_pending());
+        }
+    }
+}
+
+fn preempt_generated_history(scheduler: &mut Scheduler<HybridCoordinator>) {
+    let budget = scheduler.config.max_num_batched_tokens;
+    scheduler.config.max_num_batched_tokens = 32768;
+    for _ in 0..32 {
+        if scheduler.num_waiting() == 0
+            && scheduler
+                .running
+                .iter()
+                .all(|request| request.num_generated_tokens() == 2)
+        {
+            break;
+        }
+        let batch = scheduler.schedule();
+        let outputs = batch
+            .scheduled
+            .iter()
+            .map(|row| {
+                let request = scheduler
+                    .running
+                    .iter()
+                    .find(|request| request.id == row.request_id)
+                    .unwrap();
+                let mut output = dummy_output(row.request_id);
+                if row.num_computed_tokens + row.token_ids.len() < request.token_ids.len() {
+                    output.token_ids.clear();
+                }
+                output
+            })
+            .collect();
+        apply(scheduler, WorkerOutput { outputs });
+        for request in &scheduler.running {
+            if request.num_generated_tokens() == 2 {
+                scheduler.paused.insert(request.id);
+            }
+        }
+    }
+    let mut output = crate::SchedulerOutput::default();
+    while let Some(request) = scheduler.running.pop_front() {
+        assert_eq!(request.num_generated_tokens(), 2);
+        assert_eq!(request.num_computed_tokens, request.token_ids.len() - 1);
+        scheduler.resume(request.id);
+        scheduler.preempt_request(request, &mut output);
+    }
+    assert_eq!(output.preempted_request_ids.len(), 3);
+    assert!(scheduler.kv.reset_prefix_cache());
+    scheduler.config.max_num_batched_tokens = budget;
+}
+
+fn restore_partial_prefills(scheduler: &mut Scheduler<HybridCoordinator>) {
+    let budget = scheduler.config.max_num_batched_tokens;
+    scheduler.config.max_num_batched_tokens = 3;
+    for _ in 0..3 {
+        let batch = scheduler.schedule();
+        assert_eq!(batch.scheduled.len(), 1);
+        assert_eq!(batch.scheduled[0].num_computed_tokens, 0);
+        apply(
+            scheduler,
+            WorkerOutput {
+                outputs: vec![RequestOutput {
+                    token_ids: vec![],
+                    ..dummy_output(batch.scheduled[0].request_id)
+                }],
+            },
+        );
+    }
+    for id in [317, 1234, 1569] {
+        assert!(scheduler.swap_out(id));
+        let store = scheduler.cache_operations().remove(0);
+        finish_transfer(scheduler, store.transfer_id);
+    }
+    scheduler.config.max_num_batched_tokens = budget;
+    assert!(scheduler.schedule().scheduled.is_empty());
+    let loads = scheduler.cache_operations();
+    assert_eq!(loads.len(), 3);
+    for load in loads {
+        finish_transfer(scheduler, load.transfer_id);
+    }
+    assert_eq!(scheduler.num_running(), 3);
+    assert!(
+        scheduler
+            .running
+            .iter()
+            .all(|request| request.num_computed_tokens == 3)
+    );
+}
+
+fn finish_prefills(scheduler: &mut Scheduler<HybridCoordinator>) -> bool {
+    let mut history_prefill = false;
+    for _ in 1..=10000 {
+        if scheduler.num_waiting() + scheduler.num_running() == 0 {
+            return history_prefill;
+        }
+        let batch = scheduler.schedule();
+        assert!(
+            !batch.scheduled.is_empty(),
+            "prefill must make progress: budget {}, running {}, waiting {}",
+            scheduler.config.max_num_batched_tokens,
+            scheduler.num_running(),
+            scheduler.num_waiting()
+        );
+        assert!(batch.num_batched_tokens <= scheduler.config.max_num_batched_tokens);
+        let outputs = batch
+            .scheduled
+            .iter()
+            .map(|row| {
+                let request = scheduler
+                    .running
+                    .iter()
+                    .find(|request| request.id == row.request_id)
+                    .unwrap();
+                let prefill_end = request.prompt_len.max(request.token_ids.len() - 1);
+                if row.num_computed_tokens < prefill_end {
+                    history_prefill |= row.num_computed_tokens >= request.prompt_len;
+                }
+                assert_eq!(row.num_computed_tokens, request.num_computed_tokens);
+                assert_eq!(
+                    row.token_ids,
+                    request
+                        .token_ids
+                        .iter()
+                        .chain(&request.draft_token_ids)
+                        .skip(row.num_computed_tokens)
+                        .take(row.token_ids.len())
+                        .copied()
+                        .collect::<Vec<_>>()
+                );
+                let mut output = dummy_output(row.request_id);
+                if row.num_computed_tokens + row.token_ids.len() < request.token_ids.len() {
+                    output.token_ids.clear();
+                }
+                output
+            })
+            .collect();
+        apply(scheduler, WorkerOutput { outputs });
+    }
+    panic!("prefill requests did not finish");
 }
 
 #[test]
@@ -794,13 +1102,36 @@ fn short_prefill_tails_cannot_take_a_later_active_decode_budget() {
             .iter()
             .map(|row| row.request_id)
             .collect::<Vec<_>>(),
-        vec![6, 1, 2, 3, 4, 5]
+        vec![6, 1]
     );
+    assert_eq!(step.num_batched_tokens, 32768);
     assert!(step.preempted_request_ids.is_empty());
 }
 
 #[test]
-fn prefill_budget_is_shared_by_short_and_long_requests() {
+fn prefill_budget_prefers_blocks_then_tokens_then_fewer_suffixes() {
+    for (budget, lengths, expected) in [
+        (32768, vec![131072], vec![(1, 32768)]),
+        (1000, vec![784, 317], vec![(1, 784), (2, 216)]),
+    ] {
+        let mut scheduler = production_long_scheduler(4);
+        scheduler.config.max_num_batched_tokens = budget;
+        for (index, length) in lengths.into_iter().enumerate() {
+            let mut request = make_req(index as u64 + 1, length, 1);
+            request.token_ids.fill(index as u32 + 100);
+            request.record_partial_prefix = false;
+            assert!(scheduler.add_request(request));
+        }
+        let batch = scheduler.schedule();
+        assert_eq!(
+            batch
+                .scheduled
+                .iter()
+                .map(|row| (row.request_id, row.token_ids.len()))
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
     for (length, record_partial, fragments) in [
         (317, true, vec![316, 1]),
         (1234, true, vec![784, 449, 1]),
@@ -834,9 +1165,9 @@ fn prefill_budget_is_shared_by_short_and_long_requests() {
         }
     }
     for (budget, lengths, expected) in [
-        (24, [20, 100, 100], vec![8, 8, 8]),
-        (24, [4, 100, 100], vec![4, 12, 8]),
-        (3, [20, 100, 100], vec![1, 1, 1]),
+        (24, [20, 100, 100], vec![20, 4]),
+        (24, [4, 100, 100], vec![4, 20]),
+        (3, [20, 100, 100], vec![3]),
     ] {
         let mut scheduler = make_scheduler(128, budget);
         for (id, length) in lengths.into_iter().enumerate() {
@@ -855,6 +1186,29 @@ fn prefill_budget_is_shared_by_short_and_long_requests() {
                 .collect::<Vec<_>>(),
             expected
         );
+    }
+    for length in [1568, 131072] {
+        let mut scheduler = production_long_scheduler(2);
+        scheduler.config.max_num_batched_tokens = 784;
+        assert!(scheduler.add_request(make_req(1, 317, 1)));
+        let mut long = unique_long_request(2);
+        long.token_ids.truncate(length);
+        long.prompt_len = length;
+        assert!(scheduler.add_request(long));
+        let batch = scheduler.schedule();
+        assert_eq!(batch.scheduled.len(), 1);
+        assert_eq!(batch.scheduled[0].request_id, 2);
+        assert_eq!(batch.num_batched_tokens, 784);
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![RequestOutput {
+                    token_ids: vec![],
+                    ..dummy_output(2)
+                }],
+            },
+        );
+        finish_prefills(&mut scheduler);
     }
     for budget in [1, 784] {
         let mut scheduler = production_long_scheduler(4);
@@ -876,6 +1230,125 @@ fn prefill_budget_is_shared_by_short_and_long_requests() {
                     }],
                 },
             );
+        }
+    }
+    for (budget, lengths, expected) in [
+        (767, vec![317, 450], vec![(1, 316), (2, 449)]),
+        (800, vec![401, 401], vec![(1, 400), (2, 400)]),
+        (784, vec![317, 450, 1000], vec![(3, 784)]),
+        (2353, vec![784, 3136], vec![(1, 784), (2, 1569)]),
+        (100, vec![51, 51, 101], vec![(3, 100)]),
+    ] {
+        let mut scheduler = production_long_scheduler(if budget == 784 {
+            1
+        } else {
+            4
+        });
+        scheduler.config.max_num_batched_tokens = budget;
+        for (index, length) in lengths.into_iter().enumerate() {
+            let mut request = make_req(index as u64 + 1, length, 1);
+            for token in &mut request.token_ids {
+                *token += index as u32 * 1000;
+            }
+            assert!(scheduler.add_request(request));
+        }
+        let batch = scheduler.schedule();
+        assert_eq!(
+            batch
+                .scheduled
+                .iter()
+                .map(|row| (row.request_id, row.token_ids.len()))
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+    for budget in 1..=12 {
+        for slots in 1..=3 {
+            let mut scheduler = make_scheduler(128, budget);
+            scheduler.config.max_num_seqs = slots;
+            for (index, length) in [3, 7, 11].into_iter().enumerate() {
+                let mut request = make_req(index as u64 + 1, length, 1);
+                request.token_ids.fill(index as u32 + 100);
+                assert!(scheduler.add_request(request));
+            }
+            let choices = scheduler
+                .waiting
+                .iter()
+                .map(|request| {
+                    let mut counts = (0..=budget.min(request.token_ids.len()))
+                        .map(|count| scheduler.kv.align_prefill(request, 0, count, budget))
+                        .collect::<Vec<_>>();
+                    counts.sort_unstable();
+                    counts.dedup();
+                    counts
+                })
+                .collect::<Vec<_>>();
+            let score = |counts: &[usize]| {
+                (
+                    counts.iter().map(|count| count / BS).sum::<usize>(),
+                    counts.iter().sum::<usize>(),
+                    std::cmp::Reverse(
+                        counts
+                            .iter()
+                            .filter(|count| !count.is_multiple_of(BS))
+                            .count(),
+                    ),
+                )
+            };
+            let mut expected = (score(&[0; 3]), [0; 3]);
+            for &first in &choices[0] {
+                for &second in &choices[1] {
+                    for &third in &choices[2] {
+                        let counts = [first, second, third];
+                        if counts.iter().sum::<usize>() <= budget
+                            && counts.iter().filter(|count| **count > 0).count() <= slots
+                        {
+                            expected = expected.max((score(&counts), counts));
+                        }
+                    }
+                }
+            }
+            let batch = scheduler.schedule();
+            let actual = [1, 2, 3].map(|id| {
+                batch
+                    .scheduled
+                    .iter()
+                    .find(|row| row.request_id == id)
+                    .map_or(0, |row| row.token_ids.len())
+            });
+            assert_eq!(
+                (score(&actual), actual),
+                expected,
+                "budget {budget}, slots {slots}"
+            );
+        }
+    }
+    let mut scheduler = production_long_scheduler(4);
+    for budget in [3, 783, 784, 785, 1568] {
+        scheduler.config.max_num_batched_tokens = budget;
+        for length in [317, 784, 1234] {
+            let mut request = make_req(1, length, 4);
+            request.token_ids.resize(1600, 42);
+            for start in [0, 3, 316, 317, 783, 784, 1233] {
+                let limit = budget.min(request.token_ids.len() - start);
+                let mut actual = scheduler
+                    .kv
+                    .prefill_ranges(&request, start, limit, budget)
+                    .into_iter()
+                    .flat_map(|(first, last)| first..=last)
+                    .collect::<Vec<_>>();
+                let mut expected = (1..=limit)
+                    .map(|count| scheduler.kv.align_prefill(&request, start, count, budget))
+                    .collect::<Vec<_>>();
+                for counts in [&mut actual, &mut expected] {
+                    counts.sort_unstable();
+                    counts.dedup();
+                }
+                assert_eq!(
+                    actual, expected,
+                    "length {length}, start {start}, budget {budget}"
+                );
+            }
         }
     }
 }

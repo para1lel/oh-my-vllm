@@ -163,6 +163,7 @@ def source_identity():
             "development/operators/fixtures.py",
             "development/operators/storage.py",
             "python/oh_my_vllm/worker/checkpoint.py",
+            "python/oh_my_vllm/models/qwen38/checkpoint.py",
             "python/oh_my_vllm/operators/specification.py",
         )
     ]

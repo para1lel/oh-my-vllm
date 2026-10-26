@@ -18,7 +18,7 @@ scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requir
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 ```
 
-按[算子环境配置](operators/development.zh.md#工具)构建原生模块.
+按[算子环境配置](development.zh.md#原生模块)构建原生模块.
 将 `MODEL_ROOT` 设为 checkpoint 目录.
 启动服务:
 
@@ -26,55 +26,16 @@ scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-env.sh scripts/with-gpu.sh target/release/oh-my-vllm-zmq-worker --model "$MODEL_ROOT" --socket /tmp/oh-my-vllm.ipc serve
 ```
 
-使用 `--max-num-batched-tokens` 设置每个调度步骤的 token 预算. 默认为 `32768`.
-使用 `--max-num-seqs` 设置运行中请求的最大数量. 默认为 `4`.
-将这些选项放在 `serve`, `run` 或 `bench` 前面.
+使用 `--max-num-batched-tokens` 设置步骤 token 预算, 使用 `--max-num-seqs` 设置准入请求上限.
+将这些选项放在 `serve`, `run` 或 `bench` 前.
+默认值和缓存容量由所选[模型适配器](adapters.zh.md)提供.
+调度优先级见[运行时契约](requirements.zh.md).
 
-调度器优先选择 decode 请求.
-它将剩余 token 预算分配给 prefill 请求.
-它按 cache 边界调整 prefill 数量, 并将未使用的 token 分配给其他 prefill 请求.
-
-每个服务进程使用不同的 `--socket` 路径.
+使用不同的 `--socket` 路径.
 使用 `serve --listen` 设置地址. 默认地址为 `127.0.0.1:8000`.
 
 服务没有身份认证. 主机地址保存在被忽略的本地配置中.
 使用 Ctrl-C 或 SIGTERM 停止服务及其 worker.
-
-## Cache 内存
-
-FA cache 容量使用固定默认值: 普通解码为 `1824` 个 block, MTP4 为 `1608` 个 block.
-这些默认值针对单张 B200 和默认调度设置, 目标是文本推理时总显存占用达到 85% 至 88%.
-Worker 不会根据可用显存计算 block 数量.
-
-使用 `--num-gpu-blocks` 或 `OH_MY_VLLM_NUM_GPU_BLOCKS` 修改容量.
-如果提供命令参数, 服务会使用该参数.
-否则, 服务会使用已设置的环境变量. 如果环境变量也未设置, 则使用模式默认值.
-将参数放在 `serve`, `run` 或 `bench` 之前.
-
-启动时, worker 按 88% 的张量预算检查所选容量.
-检查包含已用内存, FA 和 GDN 存储, prefill, 以及保留的 decode 和采样 workspace.
-内存快照已包含加载的权重, 检查不会重复计入权重.
-容量不足时, worker 会拒绝启动, 不会减小指定或默认的 block 数量.
-
-额外媒体存储会单独报告, 不会减小默认文本 cache 容量.
-媒体, CUDA Graph 和 runtime 分配使用剩余显存.
-较大的媒体工作负载可能超出可用显存. 此时应减小 block 数量.
-启动检查不是进程总显存的严格上限.
-
-[Host 缓存](kv-offload.zh.md)在 pinned 内存中保留被中断的请求和可复用前缀.
-请求恢复保留递推状态, 媒体, 待验证 draft 和采样 offset.
-其他已驻留请求可以在缓存传输期间执行.
-
-使用 `--host-cache-bytes` 设置以字节为单位的 host 存储上限.
-默认上限在运行时计算. 物理 host 存储仅在安全空闲点扩容.
-使用零上限关闭 host 卸载以进行比较.
-
-默认逻辑 GDN 容量为 `128` 个槽位.
-请求私有状态和临时 checkpoint 使用额外的物理槽位.
-使用 `--mamba-blocks` 更改逻辑 GDN 容量.
-Worker 在 Ready, 服务日志和执行 trace 的身份记录中报告实际容量和内存计算.
-Rust 在 Ready 后创建逻辑池和调度器.
-替换 worker 必须提供相同容量, 并满足当前内存预算.
 
 ## HTTP API
 
@@ -87,7 +48,8 @@ Rust 在 Ready 后创建逻辑池和调度器.
 | `DELETE /v1/responses/{id}` | 删除已存储的 response |
 | `GET /diagnostics` | 服务, 资源, cache 和 worker 状态 |
 
-请求使用模型 ID `qwen3.8-27b-fp8`.
+使用 `GET /v1/models` 返回的模型 ID.
+`serve --served-model-name` 只改变公开名称.
 每条请求返回一个 completion.
 
 User 消息可按输入顺序包含文本, 图片和视频.
@@ -99,14 +61,7 @@ Data URI 的媒体类型必须与图片或视频类型一致.
 图片 detail 可为 `auto`, `low` 或 `high`.
 每条请求历史最多包含 16 个媒体项.
 
-Worker 下载并解码媒体. 每个编码后的媒体项上限为 64 MiB.
-每张图片的解码像素上限为 67108864. 视频抽样帧的总大小上限为 512 MiB.
-源高度和宽度分别不超过 65536 像素.
-视频以每秒 2 帧抽样, 最多 768 帧.
-
-每对时间帧在 prompt 中有一个时间戳.
-
-媒体 token 使用三轴 RoPE 位置. 媒体请求具有独立的前缀 cache 标识.
+媒体处理和位置规则由所选适配器定义. 参见 [Qwen 媒体规则](models/qwen38/README.zh.md#媒体).
 
 服务对不接受的字段和输入类型返回校验错误.
 使用 `previous_response_id` 续接已存储的 Responses 历史.
@@ -119,26 +74,6 @@ Responses 默认存储 response, `store=false` 时不存储.
 curl http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/json'   -d '{"model":"qwen3.8-27b-fp8","messages":[{"role":"user","content":"Hello"}],"max_tokens":64,"reasoning_effort":"off"}'
 ```
 
-## 前缀 cache
-
-请求可以使用已缓存的完整块, 以及最后一块不完整的前缀.
-对于最后一块不完整的提示, 调度器可以在最后一个 token 之前记录 checkpoint.
-该 checkpoint 包含同一位置的 FA, GDN, 卷积和 MTP hidden state.
-只有对 worker 输出的检查未发现错误时, 调度器才使 checkpoint 对其他请求可用.
-
-对于媒体请求, 调度器只记录完整块 checkpoint.
-
-具有相同提示的请求可以从该 checkpoint 继续计算, 并重新计算最后一个 token.
-更长的提示可以从同一个已记录位置继续计算.
-Cache 不能从没有 GDN checkpoint 的位置继续计算.
-
-继续计算之前, worker 将共享的 FA 尾部复制到私有块.
-复制内容包括目标层和 MTP 层的 K 与 V.
-GDN 读取 checkpoint, 并写入另一个 slot.
-调度器保留源块, 直到它对 worker 结果的检查未发现错误.
-
-没有足够容量分配这些私有块时, cache 使用完整块.
-
 ## 离线命令
 
 ```bash
@@ -149,8 +84,7 @@ scripts/with-env.sh target/release/oh-my-vllm-zmq-worker bench --input-len 785 -
 Run 和 Bench 使用固定输出长度.
 在子命令前增加 `--model "$MODEL_ROOT"` 可执行模型计算.
 
-在子命令前使用 `--speculative-mode mtp --num-speculative-tokens 4` 可启用 MTP4.
-使用 `--speculative-mode none` 可启用普通解码.
+推测模式由所选适配器定义. 参见 [Qwen 模式](models/qwen38/README.zh.md).
 
 ## 输出控制
 
@@ -169,14 +103,8 @@ Tool choice 可为 `auto`, `none`, `required` 或指定函数名.
 Worker 对 target 和 proposal 分布应用 grammar mask.
 只有已接受的 token 才会修改请求的 grammar 状态.
 
-[执行规则](execution.zh.md)为含 prefill 的 Execute 消息选择 Eager, 为仅含 decode 的消息选择 CUDA Graph 重放.
-选定的 FFN 和 GDN kernel 使用这些规则规定的依赖启动.
-推理性能测量使用[端到端流程](performance.zh.md).
-
-模型临时缓冲区使用 [CUDA 内存池](../python/oh_my_vllm/operators/runtime/cuda/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
-Worker 在报告就绪前准备存储.
-存储大小根据 token 预算确定, 且最多使用空闲 GPU 显存的一半.
-内存池保留这些存储供后续计算使用. `gpu_reserved_bytes` 统计值包含这些存储.
+模型执行方式选择和 Graph 资源所有权遵循[执行规则](execution.zh.md).
+使用所选模型的[测量范围](testing.zh.md#模型验收)进行性能检查.
 
 ## 占位实现
 

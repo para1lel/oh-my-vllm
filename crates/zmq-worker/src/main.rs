@@ -7,6 +7,7 @@ use clap::{Args, Parser, Subcommand};
 use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
 use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
 use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
+use oh_my_vllm_zmq_worker::models::{ModelPolicy, select_model};
 use tracing::{Instrument, info};
 use tracing_subscriber::EnvFilter;
 
@@ -18,26 +19,25 @@ struct Cli {
     socket: PathBuf,
     #[arg(long, env = "OH_MY_VLLM_NUM_GPU_BLOCKS",
         value_parser = clap::value_parser!(u32).range(2..),
-        help = "FA cache blocks (default: ordinary 1824, MTP4 1608)")]
+        help = "Cache blocks (default depends on model and speculative mode)")]
     num_gpu_blocks: Option<u32>,
-    #[arg(long, default_value = "128")]
+    #[arg(long)]
     mamba_blocks: Option<u32>,
     #[arg(long)]
     host_cache_bytes: Option<u64>,
-    #[arg(long, default_value_t = 32768, value_parser = clap::value_parser!(u32).range(1..))]
-    max_num_batched_tokens: u32,
-    #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(1..))]
-    max_num_seqs: u32,
-    #[arg(long, default_value_t = 784)]
-    block_size: u32,
-    #[arg(long, default_value_t = 1)]
-    tp: u32,
-    #[arg(long, default_value_t = 262144,
-        value_parser = clap::value_parser!(u32).range(1..=262144))]
-    max_model_len: u32,
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+    max_num_batched_tokens: Option<u32>,
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+    max_num_seqs: Option<u32>,
+    #[arg(long)]
+    block_size: Option<u32>,
+    #[arg(long)]
+    tp: Option<u32>,
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+    max_model_len: Option<u32>,
     #[arg(long, default_value_t = 0)]
     num_speculative_tokens: usize,
-    #[arg(long, value_parser = ["none", "mtp"])]
+    #[arg(long)]
     speculative_mode: Option<String>,
     #[arg(long)]
     scheduler_blocks: Option<u32>,
@@ -89,6 +89,49 @@ struct BenchArgs {
     torch_profile_steps: usize,
 }
 
+impl Cli {
+    fn worker_config(&self, model: ModelPolicy) -> Result<WorkerConfig> {
+        let defaults = WorkerConfig::for_model(self.model.clone(), model);
+        let mode = model.resolve_speculation(
+            self.speculative_mode.as_deref(),
+            self.num_speculative_tokens,
+        )?;
+        let config = WorkerConfig {
+            socket_path: self.socket.clone(),
+            num_gpu_blocks: self.num_gpu_blocks,
+            mamba_blocks: self.mamba_blocks.or(defaults.mamba_blocks),
+            host_cache_bytes: self.host_cache_bytes,
+            block_size: self.block_size.unwrap_or(defaults.block_size),
+            tensor_parallel_size: self.tp.unwrap_or(defaults.tensor_parallel_size),
+            max_model_len: self.max_model_len.unwrap_or(defaults.max_model_len),
+            max_num_batched_tokens: self
+                .max_num_batched_tokens
+                .unwrap_or(defaults.max_num_batched_tokens),
+            max_num_seqs: self.max_num_seqs.unwrap_or(defaults.max_num_seqs),
+            num_speculative_tokens: mode.num_tokens,
+            speculative_mode: Some(mode.name.to_owned()),
+            torch_profile: match &self.cmd {
+                Cmd::Bench(args) => args.profile_configuration()?,
+                _ => None,
+            },
+            ..defaults
+        };
+        model.validate_options(&config)?;
+        Ok(config)
+    }
+}
+
+fn validate_prompt_tokens(prompts: &[Vec<u32>], model: ModelPolicy) -> Result<()> {
+    ensure!(
+        prompts
+            .iter()
+            .flatten()
+            .all(|&token| token < model.vocabulary_size()),
+        "prompt token is outside the model vocabulary"
+    );
+    Ok(())
+}
+
 impl BenchArgs {
     fn profile_configuration(
         &self,
@@ -113,9 +156,9 @@ impl BenchArgs {
         }))
     }
 
-    fn prompts(&self, max_model_len: usize) -> Result<Vec<Vec<u32>>> {
+    fn prompts(&self, max_model_len: usize, model: ModelPolicy) -> Result<Vec<Vec<u32>>> {
         ensure!(
-            (1..=32).contains(&self.batch_size)
+            (1..=model.max_offline_batch_size()).contains(&self.batch_size)
                 && self.input_len > 0
                 && self.output_len > 0
                 && self.repetitions > 0,
@@ -126,18 +169,23 @@ impl BenchArgs {
             "workload exceeds context limit"
         );
         if let Some(path) = &self.prompt_file {
-            return self.parse_prompts(&std::fs::read_to_string(path)?);
+            return self.parse_prompts(&std::fs::read_to_string(path)?, model);
         }
+        let token_cycle = model.vocabulary_size().saturating_sub(1).min(32000) as usize;
+        ensure!(
+            token_cycle > 0,
+            "synthetic prompts require a nonzero token range"
+        );
         Ok((0..self.batch_size)
             .map(|request| {
                 (0..self.input_len)
-                    .map(|i| ((i + request * 997) % 32000 + 1) as u32)
+                    .map(|i| ((i + request * 997) % token_cycle + 1) as u32)
                     .collect()
             })
             .collect())
     }
 
-    fn parse_prompts(&self, text: &str) -> Result<Vec<Vec<u32>>> {
+    fn parse_prompts(&self, text: &str, model: ModelPolicy) -> Result<Vec<Vec<u32>>> {
         let prompts = text
             .lines()
             .map(|line| line.split_whitespace().map(str::parse::<u32>).collect())
@@ -147,10 +195,7 @@ impl BenchArgs {
                 && prompts.iter().all(|tokens| tokens.len() == self.input_len),
             "prompt file must match benchmark batch size and input length"
         );
-        ensure!(
-            prompts.iter().flatten().all(|&token| token < 248_320),
-            "prompt token is outside the model vocabulary"
-        );
+        validate_prompt_tokens(&prompts, model)?;
         Ok(prompts)
     }
 }
@@ -173,27 +218,13 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let cli = Cli::parse();
-    ensure!(
-        cli.block_size == 784 && cli.tp == 1,
-        "requires block_size=784 and TP=1"
-    );
-    let mode = cli.speculative_mode.clone().unwrap_or_else(|| {
-        if cli.num_speculative_tokens == 4 {
-            "mtp"
-        } else {
-            "none"
-        }
-        .to_owned()
-    });
-    let speculative_tokens = match mode.as_str() {
-        "none" => 0,
-        "mtp" => 4,
-        _ => unreachable!("Clap validates the explicit mode"),
-    };
-    ensure!(
-        cli.num_speculative_tokens == 0 || cli.num_speculative_tokens == speculative_tokens,
-        "speculative token count disagrees with mode"
-    );
+    let model = select_model(&cli.model)?;
+    let config = cli.worker_config(model)?;
+    let speculative_tokens = config.num_speculative_tokens;
+    let mode = config
+        .speculative_mode
+        .clone()
+        .expect("resolved speculative mode");
     let run_prompts = if let Cmd::Run {
         tokens,
         prompt_file,
@@ -211,75 +242,54 @@ async fn run() -> Result<()> {
         };
         ensure!(
             !prompts.is_empty()
-                && prompts.len() <= 32
+                && prompts.len() <= model.max_offline_batch_size()
                 && prompts.iter().all(|tokens| !tokens.is_empty())
                 && *max_tokens > 0,
             "nonempty input and positive output required"
         );
         ensure!(
-            prompts.iter().all(
-                |tokens| tokens.len().saturating_add(*max_tokens) <= cli.max_model_len as usize
-            ),
+            prompts
+                .iter()
+                .all(|tokens| tokens.len().saturating_add(*max_tokens)
+                    <= config.max_model_len as usize),
             "request exceeds context limit"
         );
-        ensure!(
-            prompts.iter().flatten().all(|&token| token < 248_320),
-            "prompt token is outside the model vocabulary"
-        );
+        validate_prompt_tokens(&prompts, model)?;
         Some(prompts)
     } else {
         None
     };
     let bench_prompts = if let Cmd::Bench(args) = &cli.cmd {
-        Some(args.prompts(cli.max_model_len as usize)?)
+        Some(args.prompts(config.max_model_len as usize, model)?)
     } else {
         None
     };
-    let torch_profile = if let Cmd::Bench(args) = &cli.cmd {
-        args.profile_configuration()?
-    } else {
-        None
-    };
-    let mut client = WorkerClient::launch(WorkerConfig {
-        model_path: cli.model,
-        socket_path: cli.socket,
-        num_gpu_blocks: cli.num_gpu_blocks,
-        mamba_blocks: cli.mamba_blocks,
-        host_cache_bytes: cli.host_cache_bytes,
-        block_size: cli.block_size,
-        tensor_parallel_size: cli.tp,
-        max_model_len: cli.max_model_len,
-        max_num_batched_tokens: cli.max_num_batched_tokens,
-        max_num_seqs: cli.max_num_seqs,
-        num_speculative_tokens: speculative_tokens,
-        speculative_mode: Some(mode.clone()),
-        torch_profile,
-        ..WorkerConfig::default()
-    })
-    .await
-    .context("launch worker")?;
+    let mut client = WorkerClient::launch_with_model(config.clone(), model)
+        .await
+        .context("launch worker")?;
     let blocks = cli.scheduler_blocks.unwrap_or(client.logical_num_blocks);
     ensure!(
         blocks > 1 && blocks <= client.logical_num_blocks,
         "invalid scheduler pool capacity"
     );
     ensure!(client.mamba_blocks > 1, "invalid worker GDN pool capacity");
-    if let Some(capacity) = cli.mamba_blocks {
+    if let Some(capacity) = config.mamba_blocks {
         ensure!(
             capacity > 1 && capacity <= client.mamba_blocks,
             "invalid scheduler GDN pool capacity"
         );
     }
-    let mamba_blocks = cli.mamba_blocks.unwrap_or(client.mamba_blocks);
-    let mut kv = HybridCoordinator::new(blocks, 784, true, 0).with_mamba_capacity(mamba_blocks);
+    let mamba_blocks = config.mamba_blocks.unwrap_or(client.mamba_blocks);
+    let mut kv = HybridCoordinator::new(blocks, config.block_size as usize, true, 0)
+        .with_mamba_capacity(mamba_blocks);
     kv.set_speculative_blocks(speculative_tokens);
-    let sched_max_num_seqs = cli.max_num_seqs as usize;
-    let sched_max_batched = cli.max_num_batched_tokens as usize;
+    let sched_max_num_seqs = config.max_num_seqs as usize;
+    let sched_max_batched = config.max_num_batched_tokens as usize;
     info!(
         max_num_seqs = sched_max_num_seqs,
         max_num_batched_tokens = sched_max_batched,
-        block_size = cli.block_size,
-        max_model_len = cli.max_model_len,
+        block_size = config.block_size,
+        max_model_len = config.max_model_len,
         num_speculative_tokens = speculative_tokens,
         speculative_mode = mode.as_str(),
         worker_fa_pool_blocks = client.logical_num_blocks,
@@ -448,7 +458,7 @@ struct RequestPhases {
 
 async fn execute_batch(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
+    scheduler: &mut Scheduler<HybridCoordinator>,
     next_id: &mut u64,
     prompts: &[Vec<u32>],
     max_tokens: usize,
@@ -615,4 +625,97 @@ async fn execute_batch(
         accepted_draft_tokens,
         verified_draft_tokens,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oh_my_vllm_zmq_worker::models::select_model;
+
+    fn cli(flags: &[&str]) -> Cli {
+        Cli::try_parse_from(
+            ["omv", "--model", "stub"]
+                .into_iter()
+                .chain(flags.iter().copied())
+                .chain(["run", "--tokens", "1", "--max-tokens", "1"]),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn selected_model_preserves_cli_defaults_modes_and_rejections() {
+        let model = select_model(std::path::Path::new("stub")).unwrap();
+        for (flags, mode, count) in [
+            (vec![], "none", 0),
+            (vec!["--speculative-mode", "mtp"], "mtp", 4),
+            (vec!["--num-speculative-tokens", "4"], "mtp", 4),
+            (vec!["--speculative-mode", "none"], "none", 0),
+        ] {
+            let config = cli(&flags).worker_config(model).unwrap();
+            assert_eq!(config.block_size, 784);
+            assert_eq!(config.tensor_parallel_size, 1);
+            assert_eq!(config.max_model_len, 262144);
+            assert_eq!(config.max_num_batched_tokens, 32768);
+            assert_eq!(config.max_num_seqs, 4);
+            assert_eq!(config.mamba_blocks, Some(128));
+            assert_eq!(config.num_gpu_blocks, None);
+            assert_eq!(config.speculative_mode.as_deref(), Some(mode));
+            assert_eq!(config.num_speculative_tokens, count);
+        }
+        for flags in [
+            vec!["--max-model-len", "262145"],
+            vec!["--block-size", "785"],
+            vec!["--tp", "4"],
+            vec!["--num-speculative-tokens", "1"],
+            vec!["--speculative-mode", "unknown"],
+            vec![
+                "--speculative-mode",
+                "none",
+                "--num-speculative-tokens",
+                "4",
+            ],
+        ] {
+            assert!(cli(&flags).worker_config(model).is_err(), "{flags:?}");
+        }
+        let config = cli(&[
+            "--max-model-len",
+            "128",
+            "--max-num-seqs",
+            "2",
+            "--max-num-batched-tokens",
+            "32",
+            "--mamba-blocks",
+            "16",
+        ])
+        .worker_config(model)
+        .unwrap();
+        assert_eq!((config.max_model_len, config.max_num_seqs), (128, 2));
+        assert_eq!(
+            (config.max_num_batched_tokens, config.mamba_blocks),
+            (32, Some(16))
+        );
+        assert!(validate_prompt_tokens(&[vec![248319]], model).is_ok());
+        assert!(validate_prompt_tokens(&[vec![248320]], model).is_err());
+        let benchmark = Cli::try_parse_from([
+            "omv",
+            "bench",
+            "--batch-size",
+            "2",
+            "--input-len",
+            "2",
+            "--output-len",
+            "2",
+        ])
+        .unwrap();
+        let Cmd::Bench(mut args) = benchmark.cmd else {
+            panic!("expected benchmark arguments");
+        };
+        assert_eq!(
+            args.prompts(262144, model).unwrap(),
+            vec![vec![1, 2], vec![998, 999]]
+        );
+        assert!(args.parse_prompts("1 2\n3 248320", model).is_err());
+        args.batch_size = 33;
+        assert!(args.prompts(262144, model).is_err());
+    }
 }

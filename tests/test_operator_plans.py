@@ -136,21 +136,24 @@ class OperatorPlans(unittest.TestCase):
             ):
                 workspace = factory(plan, device, bindings)
             inputs = api.Inputs(object(), object())
+
+            def operation_for(binding):
+                return partial(api.run, binding, workspace, inputs, *arguments)
+
             outputs = workspace.outputs
             count = allocated
             if not fail:
                 for weights in bindings:
-                    self.assertIs(
-                        api.run(weights, workspace, inputs, *arguments), outputs
-                    )
+                    self.assertIs(operation_for(weights)(), outputs)
                 self.assertEqual(len(launches), 3)
                 self.assertEqual(allocated, count)
-            references = [weakref.ref(workspace), weakref.ref(outputs.value)]
+            result = outputs.value
+            references = [weakref.ref(workspace), weakref.ref(result)]
             references.extend(
                 weakref.ref(weight, lambda _: events.append(("weight-release",)))
                 for weight in bindings
             )
-            operation = partial(api.run, bindings[0], workspace, inputs, *arguments)
+            operation = operation_for(bindings[0])
             operation.graph_lease = workspace.graph_lease
             recording = graph_device(events).graph(operation)
             if fail:
@@ -160,7 +163,7 @@ class OperatorPlans(unittest.TestCase):
             replay = recording.__enter__()
             workspace.close()
             with self.assertRaises(RuntimeError):
-                api.run(bindings[0], workspace, inputs, *arguments)
+                operation_for(bindings[0])()
             return recording, replay, references
 
         with (

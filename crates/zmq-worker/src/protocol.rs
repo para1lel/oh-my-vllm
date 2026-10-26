@@ -1,3 +1,4 @@
+pub use oh_my_vllm_model_contract::{MODEL_DESCRIPTOR_VERSION, ModelDescriptor};
 pub use oh_my_vllm_scheduler::cache::{CacheCompletion, CacheOperation};
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +26,7 @@ pub enum RustMessage {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitMsg {
+    pub descriptor_version: u32,
     pub model_path: String,
     pub num_gpu_blocks: Option<u32>,
     pub mamba_blocks: Option<u32>,
@@ -89,8 +91,13 @@ pub struct AbortMsg {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Ready carries the required descriptor value only at startup"
+)]
 pub enum WorkerMessage {
     Ready {
+        descriptor: ModelDescriptor,
         logical_num_blocks: u32,
         mamba_blocks: u32,
         #[serde(default)]
@@ -164,4 +171,19 @@ pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, rmp_serde::encode::Error
 
 pub fn decode(bytes: &[u8]) -> Result<WorkerMessage, rmp_serde::decode::Error> {
     rmp_serde::from_slice(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ready_requires_a_descriptor() {
+        let legacy = serde_json::json!({
+            "type": "ready",
+            "logical_num_blocks": 1608,
+            "mamba_blocks": 128,
+        });
+        assert!(decode(&encode(&legacy).unwrap()).is_err());
+    }
 }

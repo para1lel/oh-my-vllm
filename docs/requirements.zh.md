@@ -1,40 +1,47 @@
 # 运行时契约
 
-构建在单张 NVIDIA B200 上运行的 Qwen3.8-27B-FP8 推理服务.
-Rust 负责服务, 调度器和逻辑 KV cache.
+Rust 负责服务, 准入, 调度, 逻辑缓存和经过验证的状态提交.
+Python 负责模型计算和物理张量.
+进程间使用 ZMQ DEALER 和 msgpack.
+开发和推理使用不同的依赖文件.
 
-Python 负责 GPU 计算. 进程间使用 ZMQ DEALER 和 msgpack.
+每个受支持的模型适配器提供配置, 能力, token 编解码器, 计算, 缓存策略和推测规则.
+不得将一个模型的维度或语法作为另一模型的默认值.
+参见[适配器契约](adapters.zh.md)和 [Qwen 适配器](models/qwen38/README.zh.md).
 
-保持块大小 784, 16 层 FA, 48 层 GDN 和 `mamba_cache_mode="align"`.
-输入与输出合计支持到 262144 tokens.
+模型算子使用 CUDA C++ 或 CuTe DSL.
+原生 CUDA 库可以提供基础设施和计算.
+不添加 DeepGEMM, FlashInfer 等外部算子库或 vLLM 依赖.
+算子接口必须允许有收益的融合和 PDL.
+优化期间保持模型专属的数值和状态规则.
 
-保留离线及 HTTP 功能和全模型数值检查.
-只使用普通解码和 MTP4.
+调度和资源所有权使用 [GPU 执行规则](execution.zh.md).
+调度器依次最大化 decode 请求数, prefill 整块数, 零散 token 数.
+在这些优先级之后, 最小化包含零散后缀的请求数.
 
-支持文本, 图片和视频输入.
-所有模型算子使用 CUDA C++ 或 CuTe DSL.
-原生 CUDA 库可以提供基础设施和算子计算.
-不使用 DeepGEMM, FlashInfer 等其他外部算子库.
-不引入 vLLM 依赖, 环境或缓存.
+## 服务功能
 
-开发工具和推理包使用不同的依赖文件.
+适配器通过共享服务实现以下功能.
+只有模型专属验收完成后才能声明支持该功能.
 
-数学和状态行为使用[模型规格](operators/model.zh.md).
-算子调度和 CUDA Graph 资源使用 [GPU 执行规则](execution.zh.md).
-包含 prefill 的 Execute 对每个分片使用 Eager 执行.
-仅含 decode 的 Execute 消息使用 CUDA Graph 录制和重放.
+| 范围 | 契约 |
+|---|---|
+| HTTP | 模型列表, Chat JSON/SSE, Responses JSON/类型化 SSE, 诊断 |
+| 已存响应 | 检索, 删除, 续接, 存储限制, `store=false` |
+| 离线 | `run`, `bench`, token/prompt 文件, 到达控制, 前缀复用, 固定输出长度 |
+| 采样 | Temperature, top-k, top-p, seed, frequency/presence/repetition penalties, 循环保护 |
+| 停止 | EOS, `ignore_eos`, 停止字符串, 最小输出, 最大输出, 上下文限制 |
+| 推理 | Effort 选择, thinking budget, 增量解析, usage 统计 |
+| 工具 | Auto/none/required/named 选择, 并行调用控制, 历史, 流式参数 |
+| 结构化输出 | JSON object/schema, token 掩码, 独立推测 grammar 状态 |
+| 媒体 | 有序文本/图片/视频, 限制, 帧时间戳, 历史, 前缀隔离 |
+| 缓存 | 整块和部分前缀, copy-on-write, 抢占, 主机换出, 恢复, 淘汰 |
+| 生命周期 | 截止时间, 断连取消, 背压, worker 失败/替换, 正常关闭 |
 
-使用 24 种 [HTTP 配置](performance.zh.md#配置)测量性能.
-使用[评估流程](operators/evaluation.zh.md)中的短输入, 单次迭代 logits 对照.
-保留适用的服务, 状态所有权和 graph 资源检查.
-每次交付前更新两种语言的 README 表格.
+每个请求只有一个 completion.
+不支持 logprobs, 后台执行和自动截断.
+启用的工具与结构化输出模式不能组合使用.
+模型专属渲染不得静默改变公共 API 语义.
 
-本文所述功能和模式的详细标准见以下历史契约:
-
-- [核心](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/core.zh.md)
-- [服务](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/service.zh.md)
-- [算子](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/kernels.zh.md)
-- [教程](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/learning.zh.md)
-
-工作流程, 文档范围和测试结果记录以[贡献流程](../CONTRIBUTING.zh.md)为准.
-历史记录不构成新代码的验收证据.
+使用[测试和记录范围](testing.zh.md)以及各模型的固定数值限值.
+[贡献流程](../CONTRIBUTING.zh.md)管理交付.

@@ -1,12 +1,9 @@
 use std::collections::BTreeSet;
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Child, Command};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::process::Command;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use oh_my_vllm_scheduler::output::{RequestOutput, ScheduledRequest, WorkerOutput};
@@ -18,9 +15,16 @@ use zeromq::prelude::{Socket, SocketRecv, SocketSend};
 use zeromq::{DealerSendHalf, DealerSocket, ZmqMessage};
 
 use crate::error::{Error, Result};
+use crate::model_ready::validate_ready;
+use crate::models::{ModelFamily, ModelPolicy, select_model};
 use crate::protocol::{
-    AbortMsg, ExecuteMsg, InitMsg, RegisterMsg, RustMessage, ScheduledRequestMsg, decode, encode,
+    AbortMsg, ExecuteMsg, InitMsg, MODEL_DESCRIPTOR_VERSION, ModelDescriptor, RegisterMsg,
+    RustMessage, ScheduledRequestMsg, decode, encode,
 };
+
+pub(crate) mod lifecycle;
+
+use lifecycle::{Binding, IpcPath, ManagedChild, PENDING_REAPS, worker_group_alive};
 
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
@@ -41,21 +45,20 @@ pub struct WorkerConfig {
     pub torch_profile: Option<crate::protocol::BenchmarkProfile>,
 }
 
-impl Default for WorkerConfig {
-    fn default() -> Self {
+impl WorkerConfig {
+    pub fn for_model(model_path: PathBuf, model: ModelPolicy) -> Self {
+        let defaults = model.defaults();
         Self {
-            model_path: std::env::var_os("OH_MY_VLLM_MODEL")
-                .map(PathBuf::from)
-                .unwrap_or_default(),
+            model_path,
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: None,
-            mamba_blocks: Some(128),
+            mamba_blocks: Some(defaults.mamba_blocks),
             host_cache_bytes: None,
-            block_size: 784,
-            tensor_parallel_size: 1,
-            max_model_len: 262144,
-            max_num_batched_tokens: 32768,
-            max_num_seqs: 4,
+            block_size: defaults.block_size,
+            tensor_parallel_size: defaults.tensor_parallel_size,
+            max_model_len: defaults.max_model_len,
+            max_num_batched_tokens: defaults.max_num_batched_tokens,
+            max_num_seqs: defaults.max_num_seqs,
             num_speculative_tokens: 0,
             speculative_mode: None,
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
@@ -69,6 +72,8 @@ impl Default for WorkerConfig {
 
 pub struct WorkerClient {
     config: WorkerConfig,
+    descriptor: ModelDescriptor,
+    model_family: ModelFamily,
     sock: DealerSendHalf,
     inbox: mpsc::Receiver<Result<crate::protocol::WorkerMessage>>,
     reader: JoinHandle<()>,
@@ -94,199 +99,8 @@ impl Drop for WorkerClient {
     }
 }
 
-struct ManagedChild {
-    child: Option<Child>,
-    group_killed: bool,
-}
-
-static PENDING_REAPS: AtomicUsize = AtomicUsize::new(0);
-
-struct IpcPath {
-    path: PathBuf,
-    identity: std::fs::Metadata,
-}
-
-struct Binding {
-    socket: Option<DealerSocket>,
-    ipc: Option<IpcPath>,
-    runtime: tokio::runtime::Handle,
-}
-
-impl Binding {
-    fn stop(&mut self) -> Option<JoinHandle<()>> {
-        let mut socket = self.socket.take()?;
-        let ipc = self.ipc.take();
-        Some(self.runtime.spawn(async move {
-            for error in socket.unbind_all().await {
-                warn!(%error, "IPC unbind failed");
-            }
-            drop(ipc);
-        }))
-    }
-
-    async fn close(&mut self) {
-        if let Some(cleanup) = self.stop() {
-            let _ = cleanup.await;
-        }
-    }
-}
-
-impl Drop for Binding {
-    fn drop(&mut self) {
-        drop(self.stop());
-    }
-}
-
-impl Drop for IpcPath {
-    fn drop(&mut self) {
-        if let Ok(current) = std::fs::symlink_metadata(&self.path) {
-            #[cfg(unix)]
-            if (current.dev(), current.ino()) == (self.identity.dev(), self.identity.ino()) {
-                let _ = std::fs::remove_file(&self.path);
-            }
-        }
-    }
-}
-
-impl ManagedChild {
-    fn new(child: Child) -> Self {
-        Self {
-            child: Some(child),
-            group_killed: false,
-        }
-    }
-
-    fn child(&mut self) -> &mut Child {
-        self.child
-            .as_mut()
-            .expect("worker child remains owned until drop")
-    }
-
-    fn kill_group(&mut self) -> std::io::Result<()> {
-        if !self.group_killed {
-            kill_worker_group(self.child())?;
-            self.group_killed = true;
-        }
-        Ok(())
-    }
-
-    fn has_exited(&mut self) -> std::io::Result<bool> {
-        #[cfg(target_os = "linux")]
-        {
-            // SAFETY: waitid writes to initialized storage for the owned, unreaped child.
-            unsafe {
-                let mut info: libc::siginfo_t = std::mem::zeroed();
-                if libc::waitid(
-                    libc::P_PID,
-                    self.child().id(),
-                    &mut info,
-                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
-                ) == -1
-                {
-                    return Err(std::io::Error::last_os_error());
-                }
-                let exited = info.si_pid() != 0;
-                if exited {
-                    warn!(
-                        worker_pid = self.child().id(),
-                        wait_code = info.si_code,
-                        wait_status = info.si_status(),
-                        "worker exit observed before process-group cleanup"
-                    );
-                }
-                Ok(exited)
-            }
-        }
-        #[cfg(not(target_os = "linux"))]
-        Ok(self.child().try_wait()?.is_some())
-    }
-}
-
-fn kill_worker_group(child: &mut Child) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        let group = i32::try_from(child.id()).map_err(std::io::Error::other)?;
-        // SAFETY: the unreaped child owns this process group; kill does not access Rust memory.
-        if unsafe { libc::kill(-group, libc::SIGKILL) } == -1 {
-            let error = std::io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::ESRCH) {
-                return Err(error);
-            }
-        }
-        Ok(())
-    }
-    #[cfg(not(unix))]
-    child.kill()
-}
-
-fn worker_group_alive(pid: u32) -> std::io::Result<bool> {
-    #[cfg(target_os = "linux")]
-    {
-        let group = pid.to_string();
-        for entry in std::fs::read_dir("/proc")? {
-            let entry = entry?;
-            if !entry
-                .file_name()
-                .to_string_lossy()
-                .bytes()
-                .all(|b| b.is_ascii_digit())
-            {
-                continue;
-            }
-            let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
-                continue;
-            };
-            let Some((_, fields)) = stat.rsplit_once(") ") else {
-                continue;
-            };
-            let mut fields = fields.split_whitespace();
-            let state = fields.next();
-            let process_group = fields.nth(1);
-            if process_group == Some(group.as_str()) && !matches!(state, Some("Z" | "X")) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = pid;
-        Ok(false)
-    }
-}
-
-impl Drop for ManagedChild {
-    fn drop(&mut self) {
-        let _ = self.kill_group();
-        if let Some(child) = self.child.take() {
-            PENDING_REAPS.fetch_add(1, Ordering::SeqCst);
-            let child = Arc::new(Mutex::new(child));
-            let waiter = Arc::clone(&child);
-            if std::thread::Builder::new()
-                .name("oh-my-vllm-worker-reap".to_owned())
-                .spawn(move || {
-                    reap_worker_group(&mut waiter.lock().unwrap());
-                    PENDING_REAPS.fetch_sub(1, Ordering::SeqCst);
-                })
-                .is_err()
-            {
-                reap_worker_group(&mut child.lock().unwrap());
-                PENDING_REAPS.fetch_sub(1, Ordering::SeqCst);
-            }
-        }
-    }
-}
-
-fn reap_worker_group(child: &mut Child) {
-    let pid = child.id();
-    let _ = child.wait();
-    while worker_group_alive(pid).unwrap_or(true) {
-        std::thread::sleep(Duration::from_millis(20));
-    }
-}
-
 impl WorkerClient {
-    pub async fn launch(mut config: WorkerConfig) -> Result<Self> {
+    pub async fn launch(config: WorkerConfig) -> Result<Self> {
         if config.model_path.as_os_str().is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -294,6 +108,22 @@ impl WorkerClient {
             )
             .into());
         }
+        let model = select_model(&config.model_path)?;
+        Self::launch_selected(config, model).await
+    }
+
+    pub async fn launch_with_model(config: WorkerConfig, model: ModelPolicy) -> Result<Self> {
+        model.validate_options(&config)?;
+        if select_model(&config.model_path)? != model {
+            return Err(Error::ModelConfiguration(
+                "model selection changed before worker startup".into(),
+            ));
+        }
+        Self::launch_selected(config, model).await
+    }
+
+    async fn launch_selected(mut config: WorkerConfig, model: ModelPolicy) -> Result<Self> {
+        model.validate_options(&config)?;
         let addr = format!("ipc://{}", config.socket_path.display());
 
         let mut sock = DealerSocket::new();
@@ -311,42 +141,18 @@ impl WorkerClient {
         };
         info!("ZMQ DEALER socket bound at {addr}");
 
-        let mut child = ManagedChild::new({
-            let mut cmd = Command::new(&config.python_executable);
-            cmd.args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
-                .env(
-                    "OH_MY_VLLM_RUN_ID",
-                    std::env::var("OH_MY_VLLM_RUN_ID")
-                        .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
-                );
-            #[cfg(unix)]
-            cmd.process_group(0);
-            // SAFETY: prctl is async-signal-safe; no Rust objects are touched.
-            #[cfg(target_os = "linux")]
-            unsafe {
-                let parent_pid = libc::getpid();
-                cmd.pre_exec(move || {
-                    if libc::prctl(
-                        libc::PR_SET_PDEATHSIG,
-                        libc::SIGKILL as libc::c_ulong,
-                        0,
-                        0,
-                        0,
-                    ) == -1
-                    {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                    if libc::getppid() != parent_pid {
-                        return Err(std::io::Error::from_raw_os_error(libc::ECHILD));
-                    }
-                    Ok(())
-                });
-            }
-            cmd.spawn()?
-        });
+        let mut cmd = Command::new(&config.python_executable);
+        cmd.args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
+            .env(
+                "OH_MY_VLLM_RUN_ID",
+                std::env::var("OH_MY_VLLM_RUN_ID")
+                    .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
+            );
+        let mut child = lifecycle::spawn(&mut cmd)?;
         info!("Worker launched (pid {})", child.child().id());
 
         let init = RustMessage::Init(InitMsg {
+            descriptor_version: MODEL_DESCRIPTOR_VERSION,
             model_path: config.model_path.to_string_lossy().into_owned(),
             num_gpu_blocks: config.num_gpu_blocks,
             mamba_blocks: config.mamba_blocks,
@@ -395,42 +201,44 @@ impl WorkerClient {
         .await
         .map_err(|_| Error::Timeout)??;
 
-        let (logical_num_blocks, mamba_blocks, host_cache_bytes) = match ready_reply {
-            crate::protocol::WorkerMessage::Ready {
-                logical_num_blocks,
-                mamba_blocks,
-                host_cache_bytes,
-                cache_memory,
-            } => {
-                info!(
+        let (model_family, descriptor, logical_num_blocks, mamba_blocks, host_cache_bytes) =
+            match ready_reply {
+                crate::protocol::WorkerMessage::Ready {
+                    descriptor,
                     logical_num_blocks,
                     mamba_blocks,
                     host_cache_bytes,
-                    ?cache_memory,
-                    "Worker is ready"
-                );
-                (logical_num_blocks, mamba_blocks, host_cache_bytes)
-            }
-            crate::protocol::WorkerMessage::Error(e) => {
-                return Err(Error::WorkerError(e.message));
-            }
-            other => {
-                return Err(Error::UnexpectedMessageType(format!("{other:?}")));
-            }
-        };
-        if logical_num_blocks < 2
-            || mamba_blocks < 2
-            || config
-                .num_gpu_blocks
-                .is_some_and(|blocks| blocks != logical_num_blocks)
-            || config
-                .mamba_blocks
-                .is_some_and(|blocks| blocks != mamba_blocks)
-        {
-            return Err(Error::WorkerError(
-                "invalid worker cache capacities".to_owned(),
-            ));
-        }
+                    cache_memory,
+                } => {
+                    let model_family = validate_ready(
+                        model,
+                        &config,
+                        &descriptor,
+                        logical_num_blocks,
+                        mamba_blocks,
+                    )?;
+                    info!(
+                        logical_num_blocks,
+                        mamba_blocks,
+                        host_cache_bytes,
+                        ?cache_memory,
+                        "Worker is ready"
+                    );
+                    (
+                        model_family,
+                        descriptor,
+                        logical_num_blocks,
+                        mamba_blocks,
+                        host_cache_bytes,
+                    )
+                }
+                crate::protocol::WorkerMessage::Error(e) => {
+                    return Err(Error::WorkerError(e.message));
+                }
+                other => {
+                    return Err(Error::UnexpectedMessageType(format!("{other:?}")));
+                }
+            };
         config.num_gpu_blocks = Some(logical_num_blocks);
         config.mamba_blocks = Some(mamba_blocks);
         if config
@@ -457,6 +265,8 @@ impl WorkerClient {
         });
         Ok(Self {
             config,
+            descriptor,
+            model_family,
             sock: send,
             inbox,
             reader,
@@ -673,11 +483,11 @@ impl WorkerClient {
                     token_ids: s.token_ids.clone(),
                     prefill_token_ids: s.prefill_token_ids.clone(),
                     num_computed_tokens: s.num_computed_tokens as u32,
-                    fa_block_table: s.fa_block_table.clone(),
-                    mamba_block_table: s.mamba_block_table.clone(),
-                    fa_block_copies: s.fa_block_copies.clone(),
-                    prefix_state_slot: s.prefix_state_slot,
-                    cache_checkpoint: s.cache_checkpoint,
+                    fa_block_table: s.state.fa_block_table.clone(),
+                    mamba_block_table: s.state.mamba_block_table.clone(),
+                    fa_block_copies: s.state.fa_block_copies.clone(),
+                    prefix_state_slot: s.state.prefix_state_slot,
+                    cache_checkpoint: s.state.cache_checkpoint,
                 })
                 .collect(),
             finished_request_ids: finished_request_ids.to_vec(),
@@ -766,9 +576,21 @@ impl WorkerClient {
         self.config.clone()
     }
 
+    pub fn model_descriptor(&self) -> &ModelDescriptor {
+        &self.descriptor
+    }
+
+    pub(crate) fn model_family(&self) -> ModelFamily {
+        self.model_family
+    }
+
+    pub fn model_policy(&self) -> ModelPolicy {
+        ModelPolicy::for_family(self.model_family)
+    }
+
     pub async fn cache_step(
         &mut self,
-        scheduler: &mut oh_my_vllm_scheduler::Scheduler,
+        scheduler: &mut oh_my_vllm_scheduler::Scheduler<oh_my_vllm_kv_cache::HybridCoordinator>,
     ) -> Result<()> {
         if !scheduler.cache_pending() {
             return Ok(());
@@ -953,7 +775,7 @@ impl WorkerClient {
         sock: &mut DealerSocket,
         child: &mut ManagedChild,
     ) -> Result<crate::protocol::WorkerMessage> {
-        let receive = Self::recv_raw(sock);
+        let receive = Self::recv_raw_with_limit(sock, Some(MAX_READY_MESSAGE_BYTES));
         tokio::pin!(receive);
         let mut heartbeat = tokio::time::interval(Duration::from_millis(100));
         loop {
@@ -983,6 +805,13 @@ impl WorkerClient {
     async fn recv_raw<S: SocketRecv + Send>(
         sock: &mut S,
     ) -> Result<crate::protocol::WorkerMessage> {
+        Self::recv_raw_with_limit(sock, None).await
+    }
+
+    async fn recv_raw_with_limit<S: SocketRecv + Send>(
+        sock: &mut S,
+        byte_limit: Option<usize>,
+    ) -> Result<crate::protocol::WorkerMessage> {
         let raw: ZmqMessage = sock.recv().await?;
         if raw.len() != 1 {
             return Err(Error::UnexpectedMessageType(
@@ -990,9 +819,16 @@ impl WorkerClient {
             ));
         }
         let bytes = raw.into_vec().into_iter().next().unwrap_or_default();
+        if byte_limit.is_some_and(|limit| bytes.len() > limit) {
+            return Err(Error::UnexpectedMessageType(
+                "oversized worker Ready message".to_owned(),
+            ));
+        }
         Ok(decode(&bytes)?)
     }
 }
+
+const MAX_READY_MESSAGE_BYTES: usize = 1 << 20;
 
 fn worker_error(error: crate::protocol::ErrorMsg) -> Error {
     use crate::protocol::WorkerErrorKind;
@@ -1050,11 +886,7 @@ mod tests {
             token_ids: vec![1],
             prefill_token_ids: None,
             num_computed_tokens: 0,
-            fa_block_table: vec![],
-            mamba_block_table: vec![],
-            fa_block_copies: vec![],
-            prefix_state_slot: None,
-            cache_checkpoint: None,
+            state: Default::default(),
         }];
         let output = |id| RequestResultMsg {
             request_id: id,

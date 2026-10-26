@@ -1,40 +1,47 @@
 # Runtime contracts
 
-Build the Qwen3.8-27B-FP8 inference service for one NVIDIA B200.
-Use Rust for the service, the scheduler, and the logical KV cache.
+Rust owns the service, admission, scheduling, logical cache, and validated state commit.
+Python owns model computation and physical tensors.
+Use ZMQ DEALER and msgpack between processes.
+Use separate dependency files for development and inference.
 
-Use Python for GPU computation. Use ZMQ DEALER and msgpack between the processes.
+Each supported model adapter supplies configuration, capabilities, token codecs, computation, cache policy, and speculation rules.
+Do not use one model's dimensions or syntax as defaults for another model.
+See the [adapter contract](adapters.md) and [Qwen adapter](models/qwen38/README.md).
 
-Keep the block size at 784, with 16 FA layers, 48 GDN layers, and `mamba_cache_mode="align"`.
-Accept an input and output total of at most 262144 tokens.
+Use CUDA C++ or CuTe DSL for model operators.
+Native CUDA libraries can supply infrastructure and computation.
+Do not add external operator libraries, such as DeepGEMM or FlashInfer, or vLLM dependencies.
+Operator interfaces must permit beneficial fusion and PDL.
+Keep model-specific numerical and state rules during optimization.
 
-Keep the offline and HTTP functions and the full-model numerical checks.
-Use ordinary decode and MTP4 only.
+Use the [GPU execution rules](execution.md) for scheduling and resource ownership.
+The scheduler maximizes decode requests, then complete prefill blocks, then residual tokens.
+After these priorities, it minimizes requests with partial suffixes.
 
-Accept text, image, and video input.
-Use CUDA C++ or CuTe DSL for all model operators.
-Native CUDA libraries can supply infrastructure and operator computation.
-Do not use other external operator libraries, such as DeepGEMM or FlashInfer.
-Do not add vLLM dependencies, environments, or caches.
+## Service functions
 
-Use different dependency files for development tools and inference packages.
+Adapters implement these functions through the shared service.
+Advertise a function only after its model-specific acceptance is complete.
 
-Use the [model specification](operators/model.md) for mathematical and state behavior.
-Use the [GPU execution rules](execution.md) for operator scheduling and CUDA Graph resources.
-Use Eager execution for each fragment of an Execute that contains prefill.
-Use CUDA Graph recording and replay for decode-only Execute messages.
+| Area | Contract |
+|---|---|
+| HTTP | Model listing, Chat JSON/SSE, Responses JSON/typed SSE, diagnostics |
+| Stored responses | Retrieval, deletion, continuation, storage limits, `store=false` |
+| Offline | `run`, `bench`, token/prompt files, arrival control, prefix reuse, fixed output lengths |
+| Sampling | Temperature, top-k, top-p, seed, frequency/presence/repetition penalties, cycle guard |
+| Stops | EOS, `ignore_eos`, stop strings, minimum output, maximum output, context limit |
+| Reasoning | Effort selection, thinking budget, incremental parsing, usage accounting |
+| Tools | Auto/none/required/named choice, parallel-call control, history, streamed arguments |
+| Structured output | JSON object/schema, token masks, independent speculative grammar state |
+| Media | Ordered text/images/video, limits, frame timestamps, history, prefix isolation |
+| Cache | Full and partial prefixes, copy-on-write, preemption, host offload, restoration, eviction |
+| Lifecycle | Deadlines, disconnect cancellation, backpressure, worker failure/replacement, graceful shutdown |
 
-Measure performance with the 24 [HTTP configurations](performance.md#configurations).
-Use the short-input, single-iteration logits comparison in the [evaluation procedure](operators/evaluation.md).
-Keep applicable service, state-ownership, and graph resource checks.
-Update the two README tables before each delivery.
+There is one completion per request.
+Logprobs, background execution, and automatic truncation are not supported.
+Enabled tools and structured-output mode cannot be combined.
+Model-specific rendering cannot change public API semantics silently.
 
-Use these archived contracts for the detailed criteria of the functions and modes in this document:
-
-- [Core](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/core.md)
-- [Service](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/service.md)
-- [Operators](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/kernels.md)
-- [Tutorial](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/learning.md)
-
-The [contribution procedure](../CONTRIBUTING.md) controls the workflow, document scope, and test reporting.
-The archived records are not acceptance evidence for new code.
+Use the [test and reporting scope](testing.md) and each model's fixed numerical limits.
+The [contribution procedure](../CONTRIBUTING.md) controls delivery.

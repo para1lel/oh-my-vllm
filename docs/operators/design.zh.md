@@ -1,23 +1,29 @@
-# 算子结构设计
+# 算子结构
 
-本文给出算子重构的目标结构.
+本文给出当前算子结构.
 [交接说明](../handoff.zh.md)给出实现状态.
-[运行时契约](../requirements.zh.md), [模型契约](model.zh.md)和 [GPU 执行规则](../execution.zh.md)规定行为.
+[运行时契约](../requirements.zh.md), [适配器契约](../adapters.zh.md)和 [GPU 执行规则](../execution.zh.md)规定行为.
 
 ## 目的
 
 将一个算子的接口, 执行计划, 临时存储和 CUDA 实现放在同一个包中.
 模型按依赖顺序调用完整子层.
 算子可以修改内部 kernel, 而无需修改模型调用处.
-重构可以改变融合边界和执行路径.
-算子性能必须满足 [microbench 契约](microbench.zh.md)中的固定理论延迟倍率门槛.
+算子性能必须满足 [模型验收范围](../testing.zh.md#模型验收)中的固定理论延迟倍率门槛.
+
+此实现使用 CUDA C++ 和 CUTLASS.
+[运行时契约](../requirements.zh.md)也允许 CuTe DSL.
+允许使用 CUTLASS, cuBLAS, CUB 及原生 CUDA 库.
+仅使用项目 CUDA 算子及这些允许的库.
+不使用其他外部算子库, 如 DeepGEMM 或 FlashInfer.
+Python 可以分配张量及启动 CUDA 实现.
 
 设计为各算子使用相应的函数和类型.
 不引入公共算子基类, backend 注册表, 或通过运算图进行自动融合.
 
 ## 包与依赖
 
-目标包是 `python/oh_my_vllm/operators`:
+包路径是 `python/oh_my_vllm/operators`:
 
 ```text
 operators/
@@ -109,10 +115,8 @@ Worker 在调用者 stream 上更新固定地址的 metadata.
 超出这些条件的变化会在执行前触发兼容算子执行存储的选择或准备.
 Worker 不复制算子分派阈值, 也不通过查看实现字段来选择准备工作.
 
-各算子规定自己的准备工作和 warmup 操作.
-不存在执行所有算子的 warmup 流程.
-采样和 MTP acceptance 保持现有的录制与 RNG 行为.
-[GPU 执行规则](../execution.zh.md)在批次划分前控制完整 Execute 消息.
+各算子提供自己的准备工作和 warmup 操作.
+准备复用, 执行方式选择及不执行 RNG 更新的录制遵循 [GPU 执行规则](../execution.zh.md).
 
 ## 输出与 Graph 生命周期
 
@@ -135,35 +139,16 @@ Worker 不复制算子分派阈值, 也不通过查看实现字段来选择准�
 只保留最后一层的权重绑定并不足够.
 [Graph 资源规则](../execution.zh.md#graph-资源)规定录制失败处理, 关闭顺序和释放行为.
 
-## 模型输出与 MTP
+## Serving 边界
 
-FA, GDN, FFN 和 vision 接口提供完整子层.
-其内部阶段遵循[模型契约](model.zh.md).
-模型输出与 MTP 接口分别承担以下职责:
+算子接口定义完整计算操作, 不强制使用独立 kernel 启动.
+完整操作有收益时, 将小规模归一化, 激活, 量化或位置计算融合到 producer 或 consumer.
+小行数与 prefill 可以选择不同实现.
+已准备的布局和设备元数据可以在相关操作之间复用.
 
-| 接口 | 计算 |
-|---|---|
-| `output.hidden` | 最终归一化及 hidden 状态导出, 不进行词表投影. |
-| `output.distribution` | 词表投影, 惩罚, 约束和所需概率分布. |
-| `output.sample` | 分布计算和 token 选择. |
-| `mtp.context` | MTP 上下文准备及其 FA 组件. |
-| `mtp.draft` | 使用共享 FA, FFN 和输出组件的完整 MTP draft 计算. |
-| `mtp.accept` | 接受判断, 拒绝采样和候选状态 slot 选择. |
-
-各输出接口共享必要的最终归一化计算.
-Hidden 导出支持其完整输入行数, 独立于词表投影所选择的较少行数.
-分布接口可以在不选择 token 的情况下执行.
-这些语义接口可以使用融合的物理执行.
-
-MTP 包包含其组合融合实现, 并控制其存储布局.
-组件接口规定兼容的输入, 输出, 存储使用方式和生命周期.
-它不根据其他算子的私有 buffer 下标推断兼容性, 也不复制该算子的完整 scratch 布局.
-
-MTP acceptance 返回候选结果, 不返回已发布状态.
-Worker 先对返回的 token 应用请求停止条件.
-随后由停止条件处理后的接受数量通过现有状态提交过程控制状态选择.
-处理停止条件前, GPU 候选 slot 不能替代这一决策.
-保持 target, proposal 和 acceptance 各域的 RNG 状态与计数器规则.
+语义输出, 私有状态和资源生命周期必须保持明确.
+模型适配器在候选状态发布前处理停止条件并选择已接受状态.
+参见 [Qwen 边界](../models/qwen38/operators.zh.md#serving-边界).
 
 ## Native 构建
 
@@ -171,29 +156,18 @@ Worker 先对返回的 token 应用请求停止条件.
 目录变化还必须同步修改 include 依赖发现和源码指纹.
 保留完整的依赖哈希, 不可变二进制身份和 native library 身份检查.
 推理加载器不导入开发工具, 也不调用编译器.
+原生库数量不定义公共接口.
 
-初期只改变源码位置, 保持现有 native 编译单元.
 仅当实现有经证实的理由时才改变编译边界.
 源码包, 语义接口, native library 和 kernel launch 是不同的边界.
 
-## 迁移与验收
+## 变更验收
 
-1. 移动源码, 同步修改构建映射和身份检查.
-2. 对 FA 及其 MTP 使用者应用接口与所有权设计.
-3. 将相同契约应用到 GDN, FFN, output 和 vision.
-4. 将新的融合与执行变更和结构迁移分开评估.
+与实现一起更新相关模型契约.
+私有缓冲区和 kernel 选择规则保留在算子包中.
+使用共享[测试范围](../testing.zh.md)和所选模型的数值与性能限值.
+涉及推测, 媒体或长上下文时执行相关固定用例.
+设备内存或同步行为改变时使用 Compute Sanitizer.
 
-随对应实现变更更新[阶段清单](../../python/oh_my_vllm/operators/specification.py)和 [serving 边界](fusion.zh.md).
-迁移各算子时, 移除对私有 buffer 的直接访问及模型层复制的 kernel 选择规则.
-
-使用[测试范围](../testing.zh.md)和[数值流程](evaluation.zh.md).
-局部数值, 状态和性能检查使用[算子 microbench 设计](microbench.zh.md).
-变更影响 MTP, vision 或长上下文时, 扩展全模型输入.
-设备内存或同步行为变化时, 使用 Compute Sanitizer.
-新增测试遵循[贡献流程](../../CONTRIBUTING.md).
-
-使用相同负载设置运行全部 24 种 [HTTP 配置](../performance.zh.md), 进行集成检查.
-应用固定算子性能门槛, 不与旧构建或旧计时比较.
-不确定性使门槛判定无法完成时, 增加测量.
-新的融合加速特定负载时, 检查其他配置.
-计时产物保存在仓库外, 并更新两个 README 性能表.
+将测量记录放在仓库外. 完整矩阵完成后更新模型结果文档.
+新增测试遵循[贡献流程](../../CONTRIBUTING.zh.md).

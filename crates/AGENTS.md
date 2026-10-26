@@ -6,7 +6,7 @@ The Python process prepares tokens and supplies worker results.
 Use the DEALER socket and msgpack protocol for process communication.
 
 Validate the request and output before the state commit.
-Publish validated prefixes only. Allocate FA and GDN state in one transaction.
+Publish validated prefixes only. Allocate related model state groups in one transaction.
 
 Cancellation and worker replacement must release the related state.
 

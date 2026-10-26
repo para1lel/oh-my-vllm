@@ -4,12 +4,15 @@
 
 Rust 负责请求, 调度, 逻辑 KV 身份和 state commit.
 Python 通过 CUDA 算子及现有 ZMQ DEALER 和 msgpack 边界执行模型.
-[算子边界](operators/fusion.zh.md)规定计算和私有状态所有权.
+[算子设计](operators/design.zh.md#serving-边界)规定计算边界和私有状态所有权.
 
-Worker 为每条 Execute 消息选择一次执行方式.
-只要任一已调度行包含 prefill, 该 Execute 的所有分片都使用 Eager 执行.
-仅含 decode 的 Execute 使用 CUDA Graph 录制和重放.
-此规则也控制采样, MTP context, proposal 和 acceptance.
+适配器在 workspace 准备和输入绑定后选择执行方式.
+混合 Execute 的不同分片可以使用不同执行方式.
+选定的 target 执行方式控制采样, 推测 context, proposal 和 acceptance.
+所有捕获操作必须满足自身的 Graph 条件.
+
+[Qwen 适配器](models/qwen38/README.zh.md#执行)规定自适应分片选择.
+[Rank 协议](distributed.zh.md#事务和发布)在参与 rank 之间保持同一执行方式.
 Vision 和权重准备使用 Eager 执行.
 
 Eager 和 CUDA Graph 执行使用相同的 native 算子.
@@ -18,11 +21,8 @@ CUDA kernel 可以融合操作并在内部使用矩阵 tile.
 
 ## 依赖 kernel 启动
 
-小规模 FFN 和 GDN 操作在归一化与输入投影之间使用 [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html).
-它们也在输出量化与输出投影之间使用 PDL.
-65 到 1024 行的 FFN prefill 在这两个边界使用 PDL.
-其融合输入投影包括激活和输出量化.
-更大的 prefill 操作保留串行启动.
+只在算子契约支持且完整操作有收益时使用 PDL.
+具体 kernel 边界和行数阈值属于模型算子契约.
 
 Stream capture 将这些选定的依赖记录在 CUDA Graph 中.
 Consumer 可以在 producer 完成执行前准备自身存储并读取固定权重.
@@ -38,11 +38,17 @@ PDL 不改变状态选择或 Eager 与 Graph 执行规则.
 
 Workspace 拥有已录制操作的权重, cache 引用, metadata 和临时 tensor.
 权重准备和 workspace 构造在录制前分配存储.
-具有延迟 native 初始化的操作在录制前执行 warmup.
+具有延迟 native 初始化的操作在录制前完成准备.
+同一线程, workspace, 绑定和执行路径上此前成功的 Eager 执行可以完成准备.
+否则, 使用算子的 warmup.
+录制前等待当前计算工作完成.
+
 采样, MTP acceptance 和已准备的 draft chain 无需 warmup 即可录制.
 录制不会执行这些操作的 RNG 更新.
 
 Graph 存在期间, 缓冲区地址保持固定.
+替换已捕获的输入绑定前, 关闭旧 graph.
+绑定变化使重放和此前的准备失效.
 Metadata 在重放前于调用者的 stream 上更新.
 重放使用同一个 stream.
 
@@ -68,10 +74,6 @@ Pinned 存储释放使用相同的空闲条件.
 这些冷路径不保证执行期间没有停顿.
 Device metadata 使用按 stream 顺序管理的临时存储池.
 
-MTP context graph 拥有固定的隐藏状态输入缓冲区.
-Worker 在同一 stream 上重放前, 将 target 隐藏状态复制到这些缓冲区.
-Context 复用取决于算子 plan, 不取决于 target workspace 地址.
-
 录制使用独立的 nonblocking stream, 并在退出时恢复调用者的 stream.
 录制失败会释放失败前创建的资源.
 录制成功后, 资源 lease 转交给 workspace.
@@ -80,5 +82,5 @@ Context 复用取决于算子 plan, 不取决于 target workspace 地址.
 
 ## 数值与状态契约
 
-遵守[模型契约](operators/model.zh.md)及[全模型数值评估](operators/evaluation.zh.md).
+遵守[适配器契约](adapters.zh.md)和所选模型的[验收范围](testing.zh.md#模型验收).
 保留[测试范围](testing.zh.md)中的服务, graph 资源, 内存安全和状态所有权检查.

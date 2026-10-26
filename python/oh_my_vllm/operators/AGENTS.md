@@ -1,20 +1,19 @@
 # CUDA operators
 
-Use CUDA C++ and CUTLASS for this implementation of the [internal stages](specification.py).
-The [runtime contracts](../../../docs/requirements.md) also allow CuTe DSL.
-Use the [GPU execution rules](../../../docs/execution.md).
-Use the checkpoint dimensions. Keep the original weight values and scales.
+Use CUDA C++ and CUTLASS, or CuTe DSL as permitted by the [runtime contracts](../../../docs/requirements.md).
+Use the [GPU execution rules](../../../docs/execution.md) and [operator design](../../../docs/operators/design.md).
+Keep model dimensions and checkpoint formats in the selected adapter's contract.
+Keep original weight values and scales.
 
-If the full operation becomes faster, fuse the small producer operations into their consumers.
-Use operator microbench checks and full HTTP timing for performance measurement.
+Fuse producer and consumer work when this improves the complete operation.
+Interfaces must permit prepared device layouts, shared quantization, and beneficial PDL.
+Measure complete operator boundaries and full inference time.
 
-Use the caller's stream. Use the same operators for Eager and CUDA Graph execution.
-Before a launch, do checks of shapes, types, strides, devices, and storage overlap.
+Use the caller's stream and the same operators for Eager and CUDA Graph execution.
+Check shapes, types, strides, devices, and storage overlap before launch.
+Keep speculative writes private until model-specific acceptance and stop handling complete.
+Follow the adapter's checkpoint, precision, and restoration rules.
 
-Keep persistent writes in private slots until the target accepts the related tokens.
-Accept tokens through state slot selection. Do not copy the full state for acceptance.
-Keep the 784-token checkpoints and FP32 recurrent storage.
-
-Use [the evaluation procedure](../../../docs/operators/evaluation.md).
-Use the PyTorch FP64 full-model logits reference.
-Use the [microbench contract](../../../docs/operators/microbench.md) for fixed operator cases, repository fixtures, and acceptance limits.
+Use the selected model's frozen numerical references, fixtures, and limits in the [test scope](../../../docs/testing.md#model-acceptance).
+Do not use inference outputs as expected values.
+Keep correctness, memory safety, and performance evidence separate.

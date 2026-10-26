@@ -37,7 +37,7 @@ def download_logits(device, tensor):
 
 
 def media_processor(device, weights, case, arrays):
-    from oh_my_vllm.worker.media import Media, MediaProcessor, rope_positions
+    from oh_my_vllm.models.qwen38.media import Media, MediaProcessor, rope_positions
 
     items = [
         Media(
@@ -65,11 +65,11 @@ def media_processor(device, weights, case, arrays):
 
 class Capture:
     def __init__(self, resources, model_path, case, fixture):
+        from oh_my_vllm.models.qwen38.cache import Cache
+        from oh_my_vllm.models.qwen38.model import Model
+        from oh_my_vllm.models.qwen38.speculation import Speculation
+        from oh_my_vllm.models.qwen38.weights import Weights
         from oh_my_vllm.operators.runtime.device import Device
-        from oh_my_vllm.worker.cache import Cache
-        from oh_my_vllm.worker.model import Model
-        from oh_my_vllm.worker.speculation import Speculation
-        from oh_my_vllm.worker.weights import Weights
 
         self.resources, self.case, self.fixture = resources, case, fixture
         self.device = Device()
@@ -136,7 +136,7 @@ class Capture:
         from oh_my_vllm.operators.output.workspace import prepare
 
         d = self.device
-        (value, residual), hidden = self.model.forward(batch, graph)
+        (value, residual), hidden, graph = self.model.forward(batch, graph)
         count = batch.rows if all_rows else 1
         if not all_rows:
             value, residual = (
@@ -157,7 +157,7 @@ class Capture:
         return logits if all_rows else logits[0], hidden
 
     def draft(self, endpoint, table, *, graph):
-        from oh_my_vllm.worker.speculation import Draft
+        from oh_my_vllm.models.qwen38.speculation import Draft
 
         d, request = self.device, self.request
         hidden = endpoint[0]
