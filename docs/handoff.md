@@ -13,9 +13,13 @@ The scheduler selects decode work, complete prefill blocks, and residual tokens 
 The cache policy owns Qwen FA and GDN storage assignments.
 Rust validates output, state, transfers, and worker lifecycle before it publishes a result.
 
+The DSV4.1 model and checkpoint facts are recorded in the [model contract research](research/dsv41-model-checkpoint-contract.md).
+The report keeps CED, tokenizer, pad-token, DSpark, cache, Engram residency, and parallelism decisions open.
+
 ## Next work
 
 - Run the Qwen HTTP and AgentX regression matrices after changes to shared runtime code.
+- Resolve the open DSV4.1 model, cache, parallelism, DSpark, and acceptance decisions before implementation.
 - Keep model-specific rules in `python/oh_my_vllm/models/qwen38/` and `crates/zmq-worker/src/models/qwen38/`.
 - Keep raw reports, host settings, and temporary process records in external locations.
 
