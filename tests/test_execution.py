@@ -30,6 +30,7 @@ class GraphOwner:
 def graph_device(events, failure=None):
     device = Device.__new__(Device)
     handles = {
+        "cudaEventCreateWithFlags": (0, 21),
         "cudaStreamCreateWithFlags": (0, 11),
         "cudaStreamEndCapture": (1, 12),
         "cudaGraphInstantiateWithFlags": (0, 13),
@@ -46,6 +47,10 @@ def graph_device(events, failure=None):
 
     names = (
         *handles,
+        "cudaEventRecord",
+        "cudaEventDestroy",
+        "cudaStreamIsCapturing",
+        "cudaStreamWaitEvent",
         "cudaStreamBeginCapture",
         "cudaStreamDestroy",
         "cudaGraphDestroy",
@@ -57,6 +62,7 @@ def graph_device(events, failure=None):
         cudaGetErrorString=lambda _: b"injected CUDA failure",
     )
     device.synchronize = lambda: events.append(("synchronize",))
+    device.transfer_engines = set()
     return device
 
 
@@ -438,6 +444,28 @@ class Execution(unittest.TestCase):
                 {row["request_id"] for row in result["outputs"]},
                 {row["request_id"] for row in rows},
             )
+
+    def test_execute_rejects_a_poisoned_device_before_model_work(self):
+        worker = Worker.__new__(Worker)
+        calls = []
+
+        def reject():
+            calls.append("health")
+            raise RuntimeError("CUDA Graph device is unusable")
+
+        worker.device = SimpleNamespace(ensure_healthy=reject)
+        worker.offload = SimpleNamespace(
+            check_execute=lambda *_: calls.append("offload")
+        )
+        with self.assertRaisesRegex(RuntimeError, "unusable"):
+            worker.execute(
+                dict(
+                    scheduled=[],
+                    finished_request_ids=[],
+                    preempted_request_ids=[],
+                )
+            )
+        self.assertEqual(calls, ["health"])
 
     def test_adaptive_prefill_reuses_only_successful_compatible_workspaces(self):
         from oh_my_vllm.models.qwen38 import model

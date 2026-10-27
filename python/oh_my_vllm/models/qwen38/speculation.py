@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from contextlib import ExitStack
 from threading import get_ident
 
@@ -9,6 +10,7 @@ from ...operators.mtp.plan import accept_plan, context_plan, draft_plan
 from ...operators.mtp.workspace import prepare_accept, prepare_context, prepare_draft
 from ...worker.metadata import Metadata
 from .draft_chain import DraftChain, can_chain
+from .model import MAX_GRAPH_WORKSPACES
 from .sampling import Sampling
 
 
@@ -241,7 +243,7 @@ class Acceptance(GraphOperation):
 class Speculation:
     def __init__(self, device, weights, cache, media, trace):
         self.device, self.weights, self.cache = device, weights, cache
-        self.context_decode = {}
+        self.context_decode = OrderedDict()
         self.context_prefill = None
         self.context_key = None
         self.drafts = {}
@@ -404,6 +406,9 @@ class Speculation:
         created = False
         if staged_decode:
             if key not in self.context_decode:
+                if len(self.context_decode) >= MAX_GRAPH_WORKSPACES:
+                    _, evicted = self.context_decode.popitem(last=False)
+                    evicted.close()
                 self.context_decode[key] = Context(
                     self.device,
                     self.weights,
@@ -414,6 +419,8 @@ class Speculation:
                     True,
                 )
                 created = True
+            else:
+                self.context_decode.move_to_end(key)
             operation = self.context_decode[key]
         else:
             if self.context_key != key:

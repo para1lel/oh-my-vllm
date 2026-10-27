@@ -94,6 +94,8 @@ class Device:
         self.runtime.cudaGetErrorString.restype = ctypes.c_char_p
         self.transfer_engines = set()
         self.upload_pool = UploadPool(self)
+        self.graph_failed = False
+        self._failed_graph_resources = ExitStack()
 
     def close(self):
         self.upload_pool.close()
@@ -160,24 +162,95 @@ class Device:
             if handle:
                 try:
                     self.checked(getattr(self.runtime, name)(handle))
+                    if isinstance(handle, ctypes.c_void_p):
+                        handle.value = None
                 except Exception as failure:
                     error = error or failure
         if error is not None and not suppress:
             raise error
+        return error
+
+    @staticmethod
+    def _pointer(value):
+        return value if isinstance(value, ctypes.c_void_p) else ctypes.c_void_p(value)
+
+    def _check_graph_health(self):
+        if getattr(self, "graph_failed", False):
+            raise RuntimeError("CUDA Graph device is unusable after cleanup failure")
+
+    @staticmethod
+    def _combine_errors(label, *errors):
+        flattened = []
+        for error in errors:
+            if error is None:
+                continue
+            if isinstance(error, BaseExceptionGroup):
+                flattened.extend(error.exceptions)
+            else:
+                flattened.append(error)
+        errors = tuple(flattened)
+        if not errors:
+            return None
+        if len(errors) == 1:
+            return errors[0]
+        return ExceptionGroup(label, errors)
+
+    def ensure_healthy(self):
+        self._check_graph_health()
+
+    def _retain_failed_graph_resources(self, resources):
+        holder = getattr(self, "_failed_graph_resources", None)
+        if holder is None:
+            holder = ExitStack()
+            self._failed_graph_resources = holder
+        holder.enter_context(resources.pop_all())
 
     def capture(self, operation):
+        self._check_graph_health()
         stream, graph, executable = (ctypes.c_void_p() for _ in range(3))
+        events = []
         temporary = (("cudaGraphDestroy", graph), ("cudaStreamDestroy", stream))
         try:
+            caller = self._pointer(tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0")))
+            capturing = ctypes.c_int()
+            self.checked(
+                self.runtime.cudaStreamIsCapturing(caller, ctypes.byref(capturing))
+            )
+            if capturing.value:
+                raise RuntimeError("caller stream is already capturing")
             self.checked(
                 self.runtime.cudaStreamCreateWithFlags(ctypes.byref(stream), 1)
             )
+            producers = [caller]
+            producers.extend(
+                self._pointer(producer)
+                for engine in self.transfer_engines
+                for producer in engine.streams.values()
+            )
+            for producer in producers:
+                event = ctypes.c_void_p()
+                events.append(event)
+                self.checked(
+                    self.runtime.cudaEventCreateWithFlags(ctypes.byref(event), 2)
+                )
+                self.checked(self.runtime.cudaEventRecord(event, producer))
+                self.checked(self.runtime.cudaStreamWaitEvent(stream, event, 0))
+            self.destroy_handles(("cudaEventDestroy", event) for event in events)
+            events.clear()
             with tvm_ffi.use_raw_stream(tvm_ffi.device("cuda:0"), stream.value):
                 self.checked(self.runtime.cudaStreamBeginCapture(stream, 1))
                 try:
                     operation()
-                except BaseException:
-                    self.runtime.cudaStreamEndCapture(stream, ctypes.byref(graph))
+                except BaseException as failure:
+                    try:
+                        self.checked(
+                            self.runtime.cudaStreamEndCapture(
+                                stream, ctypes.byref(graph)
+                            )
+                        )
+                    except BaseException as cleanup:
+                        self.graph_failed = True
+                        raise failure from cleanup
                     raise
                 self.checked(
                     self.runtime.cudaStreamEndCapture(stream, ctypes.byref(graph))
@@ -187,15 +260,39 @@ class Device:
                     ctypes.byref(executable), graph, 0
                 )
             )
-        except BaseException:
-            self.destroy_handles(
-                (("cudaGraphExecDestroy", executable), *temporary), suppress=True
+        except BaseException as failure:
+            cleanup = (
+                ("cudaGraphExecDestroy", executable),
+                *temporary,
+                *(("cudaEventDestroy", event) for event in events),
             )
+            cleanup_error = self.destroy_handles(cleanup, suppress=True)
+            retry_error = self.destroy_handles(cleanup, suppress=True)
+            cause = self._combine_errors(
+                "CUDA Graph cleanup failed",
+                failure.__cause__,
+                cleanup_error,
+                retry_error,
+            )
+            if cause is not None:
+                self.graph_failed = True
+                raise failure from cause
             raise
         try:
             self.destroy_handles(temporary)
-        except BaseException:
-            self.destroy_handles((("cudaGraphExecDestroy", executable),), suppress=True)
+        except BaseException as failure:
+            cleanup = (("cudaGraphExecDestroy", executable), *temporary)
+            cleanup_error = self.destroy_handles(cleanup, suppress=True)
+            retry_error = self.destroy_handles(cleanup, suppress=True)
+            cause = self._combine_errors(
+                "CUDA Graph cleanup failed",
+                failure.__cause__,
+                cleanup_error,
+                retry_error,
+            )
+            if cause is not None:
+                self.graph_failed = True
+                raise failure from cause
             raise
         return executable
 
@@ -205,12 +302,26 @@ class Device:
             self.synchronize()
         except BaseException as failure:
             error = failure
+        cleanup = (("cudaGraphExecDestroy", executable),)
         try:
-            self.checked(self.runtime.cudaGraphExecDestroy(executable))
-        except BaseException:
+            self.destroy_handles(cleanup)
+        except BaseException as failure:
+            retry_error = self.destroy_handles(cleanup, suppress=True)
+            destroy_error = self._combine_errors(
+                "CUDA Graph executable cleanup failed",
+                failure,
+                retry_error,
+            )
             if error is None:
-                raise
+                error = destroy_error
+            else:
+                error = self._combine_errors(
+                    "CUDA Graph cleanup failed",
+                    error,
+                    destroy_error,
+                )
         if error is not None:
+            self.graph_failed = True
             raise error
 
     @contextmanager
@@ -220,10 +331,16 @@ class Device:
         with ExitStack() as resources:
             if acquire is not None:
                 resources.enter_context(acquire())
-            executable = self.capture(operation)
+            try:
+                executable = self.capture(operation)
+            except BaseException:
+                if getattr(self, "graph_failed", False):
+                    self._retain_failed_graph_resources(resources)
+                raise
             active = True
 
             def replay():
+                self._check_graph_health()
                 if not active:
                     raise RuntimeError("CUDA Graph is closed")
                 stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
@@ -236,12 +353,19 @@ class Device:
 
             try:
                 yield replay
-            except BaseException:
-                with suppress(BaseException):
+            except BaseException as failure:
+                try:
                     self.release_graph(executable)
+                except BaseException as cleanup:
+                    self._retain_failed_graph_resources(resources)
+                    raise failure from cleanup
                 raise
             else:
-                self.release_graph(executable)
+                try:
+                    self.release_graph(executable)
+                except BaseException:
+                    self._retain_failed_graph_resources(resources)
+                    raise
             finally:
                 active = False
 
