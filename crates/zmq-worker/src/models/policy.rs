@@ -6,7 +6,7 @@ use std::path::Path;
 
 use oh_my_vllm_model_contract::ModelDescriptor;
 
-use super::{ModelFamily, qwen38, stub};
+use super::{ModelFamily, deepseek_v41, qwen38, stub};
 use crate::client::WorkerConfig;
 use crate::error::{Error, Result};
 
@@ -36,6 +36,7 @@ pub struct ModelPolicy {
 impl ModelPolicy {
     pub fn defaults(self) -> ModelDefaults {
         match self.family {
+            ModelFamily::DeepSeekV41 => deepseek_v41::policy::defaults(),
             ModelFamily::Qwen38 => qwen38::policy::defaults(),
             ModelFamily::Stub => stub::defaults(),
         }
@@ -43,6 +44,7 @@ impl ModelPolicy {
 
     pub fn vocabulary_size(self) -> u32 {
         match self.family {
+            ModelFamily::DeepSeekV41 => deepseek_v41::policy::vocabulary_size(),
             ModelFamily::Qwen38 => qwen38::policy::vocabulary_size(),
             ModelFamily::Stub => stub::vocabulary_size(),
         }
@@ -50,6 +52,7 @@ impl ModelPolicy {
 
     pub fn max_offline_batch_size(self) -> usize {
         match self.family {
+            ModelFamily::DeepSeekV41 => deepseek_v41::policy::max_offline_batch_size(),
             ModelFamily::Qwen38 => qwen38::policy::max_offline_batch_size(),
             ModelFamily::Stub => stub::max_offline_batch_size(),
         }
@@ -57,6 +60,7 @@ impl ModelPolicy {
 
     pub fn served_model_name(self) -> &'static str {
         match self.family {
+            ModelFamily::DeepSeekV41 => deepseek_v41::policy::served_model_name(),
             ModelFamily::Qwen38 => qwen38::policy::served_model_name(),
             ModelFamily::Stub => stub::served_model_name(),
         }
@@ -64,6 +68,7 @@ impl ModelPolicy {
 
     pub fn resolve_speculation(self, mode: Option<&str>, drafts: usize) -> Result<SpeculativeMode> {
         match self.family {
+            ModelFamily::DeepSeekV41 => deepseek_v41::policy::resolve_speculation(mode, drafts),
             ModelFamily::Qwen38 => qwen38::policy::resolve_speculation(mode, drafts),
             ModelFamily::Stub => stub::resolve_speculation(mode, drafts),
         }
@@ -75,6 +80,7 @@ impl ModelPolicy {
             "set OH_MY_VLLM_MODEL or WorkerConfig.model_path",
         )?;
         match self.family {
+            ModelFamily::DeepSeekV41 => deepseek_v41::policy::validate_options(config),
             ModelFamily::Qwen38 => qwen38::policy::validate_options(config),
             ModelFamily::Stub => stub::validate_options(config),
         }
@@ -92,6 +98,12 @@ impl ModelPolicy {
         mamba_blocks: u32,
     ) -> Result<ModelFamily> {
         match self.family {
+            ModelFamily::DeepSeekV41 => deepseek_v41::policy::validate_ready(
+                config,
+                descriptor,
+                logical_num_blocks,
+                mamba_blocks,
+            )?,
             ModelFamily::Qwen38 => qwen38::policy::validate_ready(
                 config,
                 descriptor,
@@ -118,6 +130,10 @@ pub fn select_model(path: &Path) -> Result<ModelPolicy> {
     if qwen38::policy::matches_config(&config) {
         qwen38::policy::validate_config(&config, &raw)?;
         return Ok(ModelPolicy::for_family(ModelFamily::Qwen38));
+    }
+    if deepseek_v41::policy::matches_config(&config) {
+        deepseek_v41::policy::validate_config(&config, &raw)?;
+        return Ok(ModelPolicy::for_family(ModelFamily::DeepSeekV41));
     }
     Err(Error::ModelConfiguration(
         "unsupported model architecture or model type".into(),
@@ -346,6 +362,40 @@ mod tests {
                     .is_err(),
                 "{path}"
             );
+        }
+    }
+
+    #[test]
+    fn selects_deepseek_and_exposes_dspark5_defaults() {
+        let directory = ModelDirectory::new();
+        directory.write(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/deepseek_v41/config.json"
+        )));
+        let policy = select_model(&directory.0).unwrap();
+        assert_eq!(policy.vocabulary_size(), 129280);
+        assert_eq!(policy.max_offline_batch_size(), 64);
+        assert_eq!(policy.served_model_name(), "deepseek-v4.1-flash");
+        let defaults = policy.defaults();
+        assert_eq!(
+            (
+                defaults.block_size,
+                defaults.tensor_parallel_size,
+                defaults.max_model_len,
+                defaults.max_num_batched_tokens,
+                defaults.max_num_seqs,
+                defaults.mamba_blocks,
+            ),
+            (128, 4, 1048576, 32768, 64, 128)
+        );
+        for (mode, drafts, expected) in [
+            (None, 0, ("none", 0)),
+            (Some("none"), 0, ("none", 0)),
+            (Some("dspark5"), 5, ("dspark5", 5)),
+            (None, 5, ("dspark5", 5)),
+        ] {
+            let resolved = policy.resolve_speculation(mode, drafts).unwrap();
+            assert_eq!((resolved.name, resolved.num_tokens), expected);
         }
     }
 

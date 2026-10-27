@@ -1,28 +1,45 @@
 # 工作状态
 
-继续在 `nightly` 上工作. 仓库保留 Qwen 服务主线, 并移除未完成的模型工作.
+继续在 `nightly` 上工作.
 
-## 当前服务主线
+## 当前服务路径
 
-Qwen 在一张 B200 上通过 Rust HTTP 服务, Rust 调度器和 Python worker 提供推理.
-worker 使用 ZMQ DEALER 和 msgpack 边界.
-服务支持 Chat 和 Responses API, 流式输出, 工具, 结构化输出, 媒体, prefix cache, MTP4 和自适应 CUDA Graph 选择.
-显式 `stub` 后端只用于服务测试.
+Qwen 保留现有的单 worker 服务路径.
+共享 Rust service, scheduler, logical cache, DEALER transport 和 msgpack protocol 保持启用.
 
-调度器依次选择 decode 工作, 完整 prefill block 和剩余 token.
-缓存策略负责 Qwen FA 和 GDN 存储分配.
-Rust 在发布结果前验证输出, 状态, 传输和 worker 生命周期.
+DeepSeek-V4.1-Flash 已有 model adapter 和四 rank Python bridge.
+adapter 使用原始 48 shard checkpoint 和 rank-local placement.
+它支持 text target execution 和 DSpark5 greedy proposal verification.
+bridge 支持 `tp4`, `tep4` 以及已明确记录的 DEP4 executor fallback.
 
-DSV4.1 模型和 checkpoint 事实记录在[模型契约研究](research/dsv41-model-checkpoint-contract.zh.md)中.
-报告保留 CED, tokenizer, pad-token, DSpark, cache, Engram residency 和并行方式决策待定.
-[DEP4 负载均衡研究](research/dep4-load-balancing-research.zh.md)定义了稳定的 step ownership, multi-signal load estimate, hot-expert replication 和慢速 control loop, 以及 quiescent map change.
-它是设计契约, 不是实现或 measured result.
+adapter 使用 DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation 和 transformer support.
+prefill row 会按 native operator row limit 切分.
+DSpark verification 保持 rejected draft 为 private state, 并输出 target correction.
+
+DeepSeek execution 当前使用 Eager.
+共享 Qwen CUDA Graph path 已有 stream handoff, bounded graph workspace 和 cleanup checks.
+DeepSeek multi-rank Graph capture 尚未接入.
+
+## 当前证据
+
+已在 GPU `4,5,6,7` 上使用 TEP4 完成短真实 checkpoint execution.
+它覆盖 readiness, ordinary decode, DSpark proposal output 和 draft rejection.
+CPU 和 Rust checks 覆盖 descriptor, model, operators, launcher cleanup, matrix scope, speculation 和 shared runtime.
+
+[DeepSeek matrix](../development/serving/deepseek_matrix.py) 中有批准的 workload definition.
+HTTP runner 定义 36 个 DSpark5 case 和 2 个 ordinary TP4 case.
+AgentX runner 定义 TP4/4, TEP4/16 和 DEP4/64 case.
+当前还没有记录完整的 approved HTTP 或 AgentX result set.
 
 ## 下一步
 
-- 共享运行时代码变更后, 运行 Qwen HTTP 和 AgentX 回归矩阵.
-- 实现前, 解决 DSV4.1 并行方式, physical cache, state ownership, DSpark 和验收决策.
-- 模型专属规则放在 `python/oh_my_vllm/models/qwen38/` 和 `crates/zmq-worker/src/models/qwen38/`.
-- 原始报告, 主机设置和临时进程记录保留在仓库外.
+- 完成真实 TP4 readiness 和 ordinary decode run.
+- 为 window, compressed KV, index keys, accepted state, prefix reuse 和 restoration 实现 physical DeepSeek cache contract.
+- 用稳定的 request ownership 和 expert dispatch 替换 DEP4 fallback.
+- 接入 native sparse attention, hyper-connections 和 transform workspace.
+- 添加 coordinated DeepSeek CUDA Graph capture 和 replay path.
+- 在 GPU 0 以外的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
+- 交付前取得 independent code review.
 
-使用[测试范围](testing.zh.md), [执行规则](execution.zh.md)和[交付流程](../CONTRIBUTING.zh.md).
+原始报告, host settings, model paths 和临时 process records 保留在 repository 外.
+host settings 放在 `LOCAL.md` 中.

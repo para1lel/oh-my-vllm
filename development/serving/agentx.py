@@ -29,11 +29,23 @@ def grace_period_seconds(value):
 
 
 def profile_command(
-    python, model, artifacts, port, duration, seed, grace_period=DEFAULT_GRACE_PERIOD
+    python,
+    model,
+    artifacts,
+    port,
+    duration,
+    seed,
+    grace_period=DEFAULT_GRACE_PERIOD,
+    *,
+    model_name="qwen3.8-27b-fp8",
+    max_context=262144,
+    concurrency=4,
 ):
     if duration < 900:
         raise ValueError("AgentX profiling must last at least 900 seconds")
     grace_period_seconds(grace_period)
+    if max_context < 1 or concurrency < 1:
+        raise ValueError("AgentX context and concurrency must be positive")
     return [
         str(python),
         "-m",
@@ -44,15 +56,15 @@ def profile_command(
         "--url",
         f"http://127.0.0.1:{port}",
         "--model",
-        "qwen3.8-27b-fp8",
+        model_name,
         "--tokenizer",
         str(model),
         "--public-dataset",
         DATASET,
         "--max-context-length",
-        "262144",
+        str(max_context),
         "--concurrency",
-        "4",
+        str(concurrency),
         "--benchmark-duration",
         str(duration),
         "--benchmark-grace-period",

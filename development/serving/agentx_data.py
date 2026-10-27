@@ -78,7 +78,7 @@ def token_count(value, name, minimum=0):
     return value
 
 
-def completed_row(record, usage, metric, profile_start):
+def completed_row(record, usage, metric, profile_start, max_context=262144):
     try:
         prompt = token_count(usage["prompt_tokens"], "prompt tokens", 1)
         output = token_count(usage["completion_tokens"], "output tokens", 1)
@@ -104,7 +104,7 @@ def completed_row(record, usage, metric, profile_start):
             or metric["prefix_hit_tokens"] != cached
             or requested != output
             or payload.get("ignore_eos") is not True
-            or prompt + requested > 262144
+            or prompt + requested > max_context
         ):
             raise ValueError("service metrics, usage, or requested lengths disagree")
         metadata = record["metadata"]
@@ -135,7 +135,7 @@ def completed_row(record, usage, metric, profile_start):
         raise ValueError(f"missing required measurement field: {error}") from error
 
 
-def collect_rows(records, metrics, profile_start):
+def collect_rows(records, metrics, profile_start, max_context=262144):
     finite_number(profile_start, "profile start")
     counts = collections.Counter(
         dict(
@@ -179,12 +179,12 @@ def collect_rows(records, metrics, profile_start):
         metric = metrics[response_id]
         if metric["response_id"] != response_id:
             raise ValueError("service metric key differs from its response ID")
-        rows.append(completed_row(record, usage, metric, profile_start))
+        rows.append(completed_row(record, usage, metric, profile_start, max_context))
         counts["completed"] += 1
     return sorted(rows, key=lambda row: row["processing_start_s"]), dict(counts)
 
 
-def export_run(artifacts, output):
+def export_run(artifacts, output, max_context=262144, service_log=None):
     artifacts, output = Path(artifacts), Path(output)
     summary = json.loads((artifacts / "profile_export_aiperf.json").read_text())
     if summary.get("metadata", {}).get("submission_valid") is not True or summary.get(
@@ -197,8 +197,13 @@ def export_run(artifacts, output):
         start = start.replace(tzinfo=datetime.UTC)
     rows, counts = collect_rows(
         read_jsonl(artifacts / "profile_export_raw.jsonl"),
-        service_metrics(artifacts.parent / "mtp4-service.log"),
+        service_metrics(
+            artifacts.parent / "mtp4-service.log"
+            if service_log is None
+            else service_log
+        ),
         start.timestamp(),
+        max_context,
     )
     if not rows:
         raise ValueError("no completed profiling requests")

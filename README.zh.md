@@ -14,6 +14,7 @@ Python 模型适配器通过 ZMQ DEALER 和 msgpack 调用原生 CUDA 算子.
 | 适配器 | 执行 | 状态和文档 |
 |---|---|---|
 | Qwen3.8-27B-FP8 | 单张 B200, 普通解码和 MTP4, 总计 262144 tokens | [已实现的适配器](docs/models/qwen38/README.zh.md), [最新 HTTP 结果](docs/models/qwen38/results.zh.md) |
+| DeepSeek-V4.1-Flash | 四张显卡, text target decode 和 DSpark5 | [适配器](docs/models/deepseek_v41/README.zh.md), [HTTP 流程](docs/models/deepseek_v41/performance.zh.md), [AgentX 流程](docs/models/deepseek_v41/agentx.zh.md) |
 只有表中的适配器可以启动模型服务. 未知模型会在启动时失败.
 
 ## 开发

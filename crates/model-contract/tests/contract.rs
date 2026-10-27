@@ -215,3 +215,30 @@ fn validates_cache_parallel_and_speculation_rules() {
     }
     assert!(decode(value).cache_schema.validate().is_err());
 }
+
+#[test]
+fn accepts_deepseek_weight_formats_and_dspark5() {
+    let mut value = descriptor();
+    value["architecture"] = json!("DeepseekV41ForCausalLM");
+    value["model_type"] = json!("deepseek_v41");
+    value["weight_formats"] = json!([
+        "bf16",
+        "f32",
+        "deepseek_fp4",
+        "deepseek_fp8_e4m3_block32_ue8m0"
+    ]);
+    value["parallel_plan"] = json!({
+        "strategy": "tep4",
+        "world_size": 4,
+        "ranks": [0, 1, 2, 3],
+        "request_placement": "replicated"
+    });
+    value["speculation"] = json!([{
+        "method": "dspark5",
+        "predictor_stages": 3,
+        "max_draft_tokens": 5,
+        "max_verification_rows": 6
+    }]);
+    let contract = decode(value);
+    contract.validate().unwrap();
+}

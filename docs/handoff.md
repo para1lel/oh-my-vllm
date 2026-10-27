@@ -1,28 +1,45 @@
 # Work state
 
-Work continues on `nightly`. The repository keeps the Qwen service path and removes incomplete model work.
+Work continues on `nightly`.
 
-## Current service path
+## Current service paths
 
-Qwen serves inference on one B200 through the Rust HTTP service, the Rust scheduler, and the Python worker.
-The worker uses the ZMQ DEALER and msgpack boundary.
-The service supports Chat and Responses APIs, streaming, tools, structured output, media, prefix cache, MTP4, and adaptive CUDA Graph selection.
-The explicit `stub` backend is used only by service tests.
+Qwen keeps its existing single-worker service path.
+The shared Rust service, scheduler, logical cache, DEALER transport, and msgpack protocol stay active.
 
-The scheduler selects decode work, complete prefill blocks, and residual tokens in that order.
-The cache policy owns Qwen FA and GDN storage assignments.
-Rust validates output, state, transfers, and worker lifecycle before it publishes a result.
+DeepSeek-V4.1-Flash has a model adapter and a four-rank Python bridge.
+The adapter loads the original 48-shard checkpoint with rank-local placement.
+It supports text target execution and DSpark5 greedy proposal verification.
+The bridge supports `tp4`, `tep4`, and a documented DEP4 executor fallback.
 
-The DSV4.1 model and checkpoint facts are recorded in the [model contract research](research/dsv41-model-checkpoint-contract.md).
-The report keeps CED, tokenizer, pad-token, DSpark, cache, Engram residency, and parallelism decisions open.
-The [DEP4 load-balancing research](research/dep4-load-balancing-research.md) defines stable step ownership, multi-signal load estimates, replicated hot experts with a slow control loop, and quiescent map changes.
-It is a design contract, not an implementation or a measured result.
+The adapter uses the DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, and transformer support.
+Prefill rows are split at the native operator row limit.
+DSpark verification keeps rejected drafts private and emits the target correction.
+
+DeepSeek execution is currently Eager.
+The shared Qwen CUDA Graph path has stream handoff, bounded graph workspaces, and cleanup tests.
+DeepSeek multi-rank Graph capture is not connected.
+
+## Current evidence
+
+Short checkpoint execution has completed on GPUs `4,5,6,7` with TEP4.
+It covers readiness, ordinary decode, DSpark proposal output, and draft rejection.
+CPU and Rust checks cover the descriptor, model, operators, launcher cleanup, matrix scope, speculation, and shared runtime.
+
+The approved DeepSeek workload definitions are available in [deepseek matrix](../development/serving/deepseek_matrix.py).
+The HTTP runner defines 36 DSpark5 cases and 2 ordinary TP4 cases.
+The AgentX runner defines TP4/4, TEP4/16, and DEP4/64 cases.
+No complete approved HTTP or AgentX result set is recorded yet.
 
 ## Next work
 
-- Run the Qwen HTTP and AgentX regression matrices after changes to shared runtime code.
-- Resolve the open DSV4.1 parallelism, physical cache, state ownership, DSpark, and acceptance decisions before implementation.
-- Keep model-specific rules in `python/oh_my_vllm/models/qwen38/` and `crates/zmq-worker/src/models/qwen38/`.
-- Keep raw reports, host settings, and temporary process records in external locations.
+- Complete a TP4 readiness and ordinary decode run.
+- Implement a physical DeepSeek cache contract for window, compressed KV, index keys, accepted state, prefix reuse, and restoration.
+- Replace the DEP4 fallback with stable request ownership and expert dispatch.
+- Connect native sparse attention, hyper-connections, and transform workspaces.
+- Add a coordinated DeepSeek CUDA Graph capture and replay path.
+- Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
+- Get an independent code review before delivery.
 
-Use the [test scope](testing.md), [execution rules](execution.md), and [delivery procedure](../CONTRIBUTING.md).
+Keep raw reports, host settings, model paths, and temporary process records in a separate location.
+Use `LOCAL.md` for host settings.

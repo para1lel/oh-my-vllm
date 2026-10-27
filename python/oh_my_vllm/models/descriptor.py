@@ -28,6 +28,8 @@ WEIGHT_FORMATS = frozenset(
         "bf16",
         "f32",
         "qwen_fp8_e4m3_block128x128_fp32_scales",
+        "deepseek_fp4",
+        "deepseek_fp8_e4m3_block32_ue8m0",
     )
 )
 CACHE_KINDS = frozenset(
@@ -221,7 +223,7 @@ def _speculation(specs):
             "speculation",
         )
         method = spec["method"]
-        _enum(method, ("mtp",), "speculation.method")
+        _enum(method, ("mtp", "dspark5"), "speculation.method")
         _require(method not in methods, "speculation duplicate method")
         methods.add(method)
         for field in ("predictor_stages", "max_draft_tokens", "max_verification_rows"):

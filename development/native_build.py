@@ -8,11 +8,17 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from oh_my_vllm.operators.activation.api import FUNCTIONS as ACTIVATION_FUNCTIONS
 from oh_my_vllm.operators.fa.api import FUNCTIONS as FA_FUNCTIONS
 from oh_my_vllm.operators.ffn.api import FUNCTIONS as FFN_FUNCTIONS
 from oh_my_vllm.operators.gdn.api import FUNCTIONS as GDN_FUNCTIONS
+from oh_my_vllm.operators.hyperconnection.api import (
+    FUNCTIONS as HYPERCONNECTION_FUNCTIONS,
+)
 from oh_my_vllm.operators.mtp.api import FUNCTIONS as MTP_FUNCTIONS
 from oh_my_vllm.operators.output.api import FUNCTIONS as SAMPLE_FUNCTIONS
+from oh_my_vllm.operators.projection.api import FUNCTIONS as PROJECTION_FUNCTIONS
+from oh_my_vllm.operators.routing.api import FUNCTIONS as ROUTING_FUNCTIONS
 from oh_my_vllm.operators.runtime.device import FUNCTIONS as DEVICE_FUNCTIONS
 from oh_my_vllm.operators.runtime.native import (
     MODULE_SOURCES,
@@ -26,15 +32,25 @@ from oh_my_vllm.operators.runtime.native import (
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
+from oh_my_vllm.operators.sparse_attention.api import (
+    FUNCTIONS as SPARSE_ATTENTION_FUNCTIONS,
+)
+from oh_my_vllm.operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
 from oh_my_vllm.operators.vision.api import FUNCTIONS as VISION_FUNCTIONS
 
 MODULES = {
+    "activation": ACTIVATION_FUNCTIONS,
     "device": DEVICE_FUNCTIONS,
     "ffn": FFN_FUNCTIONS,
     "fa": FA_FUNCTIONS,
     "gdn": GDN_FUNCTIONS,
+    "hyperconnection": HYPERCONNECTION_FUNCTIONS,
     "mtp": MTP_FUNCTIONS,
+    "projection": PROJECTION_FUNCTIONS,
+    "routing": ROUTING_FUNCTIONS,
     "sample": SAMPLE_FUNCTIONS,
+    "sparse_attention": SPARSE_ATTENTION_FUNCTIONS,
+    "transform": TRANSFORM_FUNCTIONS,
     "vision": VISION_FUNCTIONS,
 }
 

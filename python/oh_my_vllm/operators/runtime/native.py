@@ -11,11 +11,17 @@ MODULE_SOURCES = {
     name: SOURCES / family / "cuda" / (name + ".cu")
     for name, family in (
         ("device", "runtime"),
+        ("activation", "activation"),
         ("sample", "output"),
         ("fa", "fa"),
         ("gdn", "gdn"),
+        ("hyperconnection", "hyperconnection"),
         ("ffn", "ffn"),
         ("mtp", "mtp"),
+        ("projection", "projection"),
+        ("routing", "routing"),
+        ("sparse_attention", "sparse_attention"),
+        ("transform", "transform"),
         ("vision", "vision"),
     )
 }
@@ -203,7 +209,19 @@ def load(name, functions):
         vendor = collectives_vendor_dependencies()
     if vendor is not None and metadata.get(f"{name}_vendor") != vendor:
         raise RuntimeError(f"native {name} vendor dependencies are stale")
-    if name in ("vision", "ffn", "gdn", "fa", *OPTIONAL_MODULE_SOURCES):
+    if name in (
+        "activation",
+        "fa",
+        "ffn",
+        "gdn",
+        "hyperconnection",
+        "projection",
+        "routing",
+        "sparse_attention",
+        "transform",
+        "vision",
+        *OPTIONAL_MODULE_SOURCES,
+    ):
         identity = build_digest(
             metadata["source_fingerprint"],
             metadata["compiler"],

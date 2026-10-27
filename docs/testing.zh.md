@@ -34,6 +34,7 @@ CPU 检查涵盖模型选择, readiness, 约束, 证据身份, 计算口径和 m
 | 适配器 | 数值和状态范围 | 性能范围 |
 |---|---|---|
 | Qwen | [全模型端点](models/qwen38/evaluation.zh.md), [算子用例](models/qwen38/operators.zh.md), 适用的 MTP, 媒体和恢复用例 | [24 组 HTTP 用例](models/qwen38/performance.zh.md), [AgentX](models/qwen38/agentx.zh.md) |
+| DeepSeek V4.1 | text target, DSpark5 verification, four-rank readiness 和 model-local operator contract | [38 组 HTTP 用例](models/deepseek_v41/performance.zh.md), [AgentX](models/deepseek_v41/agentx.zh.md) |
 
 共享运行时变更执行适用的适配器回归.
 Qwen 运行时交付包含其 24 组 HTTP 用例.
