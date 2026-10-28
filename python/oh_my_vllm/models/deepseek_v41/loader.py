@@ -1,5 +1,6 @@
 """Stream original DeepSeek checkpoint tensors into one rank-local model."""
 
+import hashlib
 import json
 import math
 import mmap
@@ -65,11 +66,12 @@ def converted_name(source_name):
 
 
 def source_index(root):
-    index = json.loads((Path(root) / "model.safetensors.index.json").read_text())
+    raw_index = (Path(root) / "model.safetensors.index.json").read_bytes()
+    index = json.loads(raw_index)
     weight_map = index.get("weight_map")
     if not isinstance(weight_map, dict):
         raise ValueError("checkpoint index has no weight map")
-    return weight_map
+    return weight_map, hashlib.sha256(raw_index).hexdigest()
 
 
 def _parameter_specs(config, layout, rank, strategy):
@@ -129,7 +131,7 @@ def _fp8_to_bf16(raw, scales):
 class RankLoader:
     """Load only the tensors owned by one rank and keep source reads bounded."""
 
-    def __init__(self, root, config, rank, *, strategy="TEP4", tile_rows=256):
+    def __init__(self, root, config, rank, *, strategy="TEP4", tile_rows=2048):
         if type(rank) is not int or rank not in range(4):
             raise ValueError("rank must be between zero and three")
         if type(tile_rows) is not int or tile_rows < 1:
@@ -139,7 +141,7 @@ class RankLoader:
         self.rank = rank
         self.strategy = strategy
         self.tile_rows = tile_rows
-        self.index = source_index(self.root)
+        self.index, self.index_sha256 = source_index(self.root)
         self.layout = tensor_layout(config)
         self.specs = _parameter_specs(config, self.layout, rank, strategy)
         self.sources = {}
@@ -167,7 +169,7 @@ class RankLoader:
 
     def _read_tile(self, name, spec, first, count):
         shape = self.layout[name]["shape"]
-        source_first = first + spec["start"] if spec["axis"] == 0 else 0
+        source_first = first + spec["start"] if spec["axis"] == 0 else first
         source_stop = min(source_first + count, shape[0])
         slices = [slice(source_first, source_stop)] + [slice(None)] * (len(shape) - 1)
         if spec["axis"] == 1:

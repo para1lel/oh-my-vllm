@@ -4,7 +4,8 @@ import copy
 import hashlib
 import json
 import os
-import re
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import torch
@@ -13,7 +14,7 @@ import torch.distributed as dist
 from ...worker.trace import Trace
 from .adapter import INFERENCE_CONFIG_SHA256, MAX_CONTEXT_TOKENS, validate_config
 from .cache import DeepSeekCache
-from .descriptor import build_descriptor
+from .descriptor import build_descriptor, checkpoint_metadata_identity
 from .loader import RankLoader
 from .model import ModelArgs, Transformer
 from .request import Request
@@ -22,6 +23,40 @@ from .tokenizer import Tokenization
 
 DEFAULT_CACHE_CONTEXT = 65536
 MAX_NATIVE_ROWS = 384
+
+
+class _StartupTrace:
+    def __init__(self, rank):
+        template = os.environ.get("OH_MY_VLLM_STARTUP_TRACE")
+        self.output = None
+        if template:
+            path = Path(template.format(rank=rank)).expanduser().resolve()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.output = path.open("w")
+
+    def record(self, phase, **values):
+        if self.output is None:
+            return
+        record = {
+            "phase": phase,
+            "monotonic_s": time.monotonic(),
+            **values,
+        }
+        self.output.write(json.dumps(record) + "\n")
+        self.output.flush()
+
+    @contextmanager
+    def measure(self, phase):
+        started = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.record(phase, duration_s=time.perf_counter() - started)
+
+    def close(self):
+        if self.output is not None:
+            self.output.close()
+            self.output = None
 
 
 class Worker:
@@ -52,12 +87,16 @@ class Worker:
         self.strategy = strategy
         self.dspark = config["num_speculative_tokens"] == 5
         self.rank = dist.get_rank()
-        self.tokenizer = Tokenization(root)
+        self.startup_trace = _StartupTrace(self.rank)
+        self.startup_trace.record("process_group_ready")
+        with self.startup_trace.measure("tokenizer"):
+            self.tokenizer = Tokenization(root)
         self.device = torch.device("cuda", 0)
         torch.cuda.set_device(self.device)
         torch.set_default_device(self.device)
         torch.set_default_dtype(torch.bfloat16)
-        args = ModelArgs(**inference_config)
+        with self.startup_trace.measure("model_args"):
+            args = ModelArgs(**inference_config)
         args.max_batch_size = config["max_num_seqs"]
         cache_context = int(
             os.environ.get("OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT", DEFAULT_CACHE_CONTEXT)
@@ -71,70 +110,77 @@ class Worker:
         args.temperature = 0
         args.parallel_strategy = model_strategy.upper()
         self.args = args
-        with torch.device(self.device):
+        with self.startup_trace.measure("model_construct"), torch.device(self.device):
             self.model = Transformer(args, self.tokenizer.tokenizer)
-        self.weights = RankLoader(
-            root,
-            parsed,
-            self.rank,
-            strategy=model_strategy.upper(),
-        )
-        self.weight_info = self.weights.load_into(self.model)
+        with self.startup_trace.measure("loader_construct"):
+            self.weights = RankLoader(
+                root,
+                parsed,
+                self.rank,
+                strategy=model_strategy.upper(),
+            )
+        with self.startup_trace.measure("checkpoint_metadata"):
+            self.checkpoint_identity = checkpoint_metadata_identity(
+                root,
+                raw_config=raw_config,
+                weight_map=self.weights.index,
+                index_sha256=self.weights.index_sha256,
+            )
+        with self.startup_trace.measure("weight_load"):
+            self.weight_info = self.weights.load_into(self.model)
         self.model.eval()
         self.requests = {}
         self.slots = set(range(config["max_num_seqs"]))
-        self.cache = DeepSeekCache(
-            self.model,
-            block_tokens=config["block_size"],
-            max_seq_len=args.max_seq_len,
-            host_limit=int(config.get("host_cache_bytes") or 0),
-            fa_capacity=config.get("num_gpu_blocks") or 2048,
-            mamba_capacity=config.get("mamba_blocks") or 128,
-            requests=self.requests,
-            free_slots=self.slots,
-        )
-        # All ranks load the same immutable checkpoint root before rank zero hashes it.
-        identity = [checkpoint_identity(root) if self.rank == 0 else None]
-        dist.broadcast_object_list(identity, src=0)
-        if not isinstance(identity[0], dict):
-            raise ValueError("DeepSeek checkpoint identity broadcast was invalid")
-        self.checkpoint_identity = identity[0]
-        self.descriptor = build_descriptor(
-            parsed,
-            raw_config=raw_config,
-            checkpoint_identity=self.checkpoint_identity,
-            tokenizer_identity=self.tokenizer.identity,
-            strategy=model_strategy,
-            cache_capacities={
-                "window": config.get("num_gpu_blocks") or 2048,
-                "compressed_kv": config.get("num_gpu_blocks") or 2048,
-                "index_keys": config.get("num_gpu_blocks") or 2048,
-                "accepted_state": config.get("mamba_blocks") or 128,
-            },
-        )
+        with self.startup_trace.measure("cache_construct"):
+            self.cache = DeepSeekCache(
+                self.model,
+                block_tokens=config["block_size"],
+                max_seq_len=args.max_seq_len,
+                host_limit=int(config.get("host_cache_bytes") or 0),
+                fa_capacity=config.get("num_gpu_blocks") or 2048,
+                mamba_capacity=config.get("mamba_blocks") or 128,
+                requests=self.requests,
+                free_slots=self.slots,
+            )
+        with self.startup_trace.measure("descriptor"):
+            self.descriptor = build_descriptor(
+                parsed,
+                raw_config=raw_config,
+                checkpoint_identity=self.checkpoint_identity,
+                tokenizer_identity=self.tokenizer.identity,
+                strategy=model_strategy,
+                cache_capacities={
+                    "window": config.get("num_gpu_blocks") or 2048,
+                    "compressed_kv": config.get("num_gpu_blocks") or 2048,
+                    "index_keys": config.get("num_gpu_blocks") or 2048,
+                    "accepted_state": config.get("mamba_blocks") or 128,
+                },
+            )
         self.logical_num_blocks = self.descriptor["cache_schema"]["groups"][0][
             "capacity_blocks"
         ]
         self.mamba_blocks = self.descriptor["cache_schema"]["groups"][-1][
             "capacity_blocks"
         ]
-        self.trace = Trace(
-            config,
-            self.checkpoint_identity,
-            tokenizer=self.tokenizer.identity,
-            cache_memory={
-                "model": "deepseek_v41",
-                "rank": self.rank,
-                "cache_context": args.max_seq_len,
-                "strategy": strategy,
-                "effective_strategy": model_strategy,
-            },
-            execution={
-                "prefill": "eager",
-                "decode_only": "eager",
-                "mixed": "eager",
-            },
-        )
+        with self.startup_trace.measure("execution_trace"):
+            self.trace = Trace(
+                config,
+                self.checkpoint_identity,
+                tokenizer=self.tokenizer.identity,
+                cache_memory={
+                    "model": "deepseek_v41",
+                    "rank": self.rank,
+                    "cache_context": args.max_seq_len,
+                    "strategy": strategy,
+                    "effective_strategy": model_strategy,
+                },
+                execution={
+                    "prefill": "eager",
+                    "decode_only": "eager",
+                    "mixed": "eager",
+                },
+            )
+        self.startup_trace.record("ready")
 
     def ready(self):
         return {
@@ -505,27 +551,11 @@ class Worker:
                 raise ValueError("unsupported worker message")
 
     def close(self):
-        self.trace.close()
-        self.cache.close()
-        del self.model
-        self.weights.close()
-        torch.cuda.empty_cache()
-
-
-def checkpoint_identity(root):
-    index_path = root / "model.safetensors.index.json"
-    index_digest = hashlib.file_digest(index_path.open("rb"), "sha256").hexdigest()
-    index = json.loads(index_path.read_text())["weight_map"]
-    names = sorted(set(index.values()))
-    result = {
-        "config": hashlib.file_digest(
-            (root / "config.json").open("rb"), "sha256"
-        ).hexdigest(),
-        "index": index_digest,
-    }
-    for name in names:
-        if re.fullmatch(r"model-\d{5}-of-\d{5}\.safetensors", name) is None:
-            raise ValueError("invalid DeepSeek checkpoint shard name")
-        with (root / name).open("rb") as source:
-            result[name] = hashlib.file_digest(source, "sha256").hexdigest()
-    return result
+        try:
+            self.trace.close()
+            self.cache.close()
+            del self.model
+            self.weights.close()
+            torch.cuda.empty_cache()
+        finally:
+            self.startup_trace.close()

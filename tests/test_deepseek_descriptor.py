@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,7 +10,10 @@ from oh_my_vllm.models.deepseek_v41.adapter import (
     SPEC,
     validate_config,
 )
-from oh_my_vllm.models.deepseek_v41.descriptor import build_descriptor
+from oh_my_vllm.models.deepseek_v41.descriptor import (
+    build_descriptor,
+    checkpoint_metadata_identity,
+)
 from oh_my_vllm.models.descriptor import validate_descriptor
 from oh_my_vllm.models.registry import select
 
@@ -24,10 +28,6 @@ def checkpoint_identity():
     return {
         "config": CONFIG_SHA256,
         "index": "b" * 64,
-        **{
-            f"model-{index:05d}-of-00048.safetensors": "a" * 64
-            for index in range(1, 49)
-        },
     }
 
 
@@ -41,6 +41,29 @@ def tokenizer_identity():
 
 
 class DeepSeekDescriptor(unittest.TestCase):
+    def test_runtime_identity_reads_metadata_without_reading_weight_shards(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "config.json").write_bytes(RAW_CONFIG)
+            index = {
+                "weight_map": {
+                    f"tensor.{index}": (f"model-{index + 1:05d}-of-00048.safetensors")
+                    for index in range(48)
+                }
+            }
+            raw_index = json.dumps(index, separators=(",", ":")).encode()
+            (root / "model.safetensors.index.json").write_bytes(raw_index)
+
+            identity = checkpoint_metadata_identity(root, raw_config=RAW_CONFIG)
+
+        self.assertEqual(
+            identity,
+            {
+                "config": CONFIG_SHA256,
+                "index": hashlib.sha256(raw_index).hexdigest(),
+            },
+        )
+
     def test_config_validation_accepts_the_released_checkpoint_contract(self):
         validate_config(MODEL_CONFIG)
         self.assertEqual(hashlib.sha256(RAW_CONFIG).hexdigest(), CONFIG_SHA256)
@@ -125,7 +148,7 @@ class DeepSeekDescriptor(unittest.TestCase):
             validate_config(config)
 
         identity = checkpoint_identity()
-        identity["model-00001-of-00048.safetensors"] = "0" * 64
+        identity["index"] = "0" * 64
         original = build_descriptor(
             MODEL_CONFIG,
             raw_config=RAW_CONFIG,

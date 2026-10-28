@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from pathlib import Path
 
 from ...models.descriptor import identity_digest, validate_descriptor
 from .adapter import (
@@ -72,12 +73,50 @@ def _verified_config(config, raw_config):
 def _verified_checkpoint_identity(identity):
     if type(identity) is not dict or identity.get("config") != CONFIG_SHA256:
         raise ValueError("checkpoint identity requires the verified DeepSeek config")
-    expected = {"config", "index", *CHECKPOINT_SHARDS}
+    expected = {"config", "index"}
     if identity.keys() != expected:
-        raise ValueError("checkpoint identity requires config, index, and all shards")
+        raise ValueError("checkpoint identity requires config and index metadata")
     for _name, digest in identity.items():
         if type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
             raise ValueError("checkpoint identity contains an invalid digest")
+
+
+def checkpoint_metadata_identity(
+    root,
+    *,
+    raw_config,
+    weight_map=None,
+    index_sha256=None,
+):
+    """Build the startup identity from small checkpoint metadata files."""
+    if (
+        type(raw_config) is not bytes
+        or hashlib.sha256(raw_config).hexdigest() != CONFIG_SHA256
+    ):
+        raise ValueError("checkpoint metadata requires the verified DeepSeek config")
+    root = Path(root)
+    config = (root / "config.json").read_bytes()
+    if config != raw_config:
+        raise ValueError("checkpoint config changed before worker startup")
+    if (weight_map is None) != (index_sha256 is None):
+        raise ValueError("checkpoint metadata requires its index digest and map")
+    if weight_map is None:
+        raw_index = (root / "model.safetensors.index.json").read_bytes()
+        index = json.loads(raw_index, object_pairs_hook=_object)
+        weight_map = index.get("weight_map") if type(index) is dict else None
+        index_sha256 = hashlib.sha256(raw_index).hexdigest()
+    names = (
+        set(weight_map.values())
+        if type(weight_map) is dict
+        and all(type(name) is str for name in weight_map.values())
+        else set()
+    )
+    if names != CHECKPOINT_SHARDS:
+        raise ValueError("checkpoint index must contain the released 48 shards")
+    return {
+        "config": CONFIG_SHA256,
+        "index": index_sha256,
+    }
 
 
 def _verified_tokenizer_identity(identity):
@@ -111,7 +150,7 @@ def build_descriptor(
     strategy,
     cache_capacities,
 ):
-    """Build a descriptor from verified checkpoint and tokenizer identities."""
+    """Build a descriptor from checkpoint metadata and tokenizer identities."""
     text = _verified_config(config, raw_config)
     _verified_checkpoint_identity(checkpoint_identity)
     _verified_tokenizer_identity(tokenizer_identity)

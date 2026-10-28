@@ -1,3 +1,5 @@
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -5,6 +7,11 @@ from queue import Empty
 from unittest.mock import patch
 
 from oh_my_vllm.models.deepseek_v41.launcher import GroupWorker
+
+from development.serving.deepseek_benchmark import (
+    checkpoint_identity,
+    checkpoint_shard_identity,
+)
 
 
 class FakeProcess:
@@ -90,6 +97,43 @@ class ExitedProcess:
 
 
 class DeepSeekLauncher(unittest.TestCase):
+    def test_checkpoint_shard_identity_partitions_match_the_complete_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            names = [f"model-{index:05d}-of-00004.safetensors" for index in range(1, 5)]
+            (root / "config.json").write_text('{"model_type":"deepseek_v41"}')
+            (root / "model.safetensors.index.json").write_text(
+                json.dumps(
+                    {
+                        "weight_map": {
+                            f"tensor.{i}": name for i, name in enumerate(names)
+                        }
+                    }
+                )
+            )
+            for index, name in enumerate(names):
+                (root / name).write_bytes(f"shard-{index}".encode())
+
+            complete = checkpoint_identity(root)
+            parts = [
+                checkpoint_shard_identity(root, rank=rank, world_size=4)
+                for rank in range(4)
+            ]
+            expected = {
+                name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+                for name in names
+            }
+
+        merged = {}
+        for part in parts:
+            self.assertTrue(set(merged).isdisjoint(part))
+            merged.update(part)
+        self.assertEqual(merged, expected)
+        self.assertEqual(
+            {name: complete[name] for name in names},
+            expected,
+        )
+
     def test_collect_fails_when_a_rank_exits_before_reply(self):
         worker = GroupWorker.__new__(GroupWorker)
         worker.results = EmptyResults()

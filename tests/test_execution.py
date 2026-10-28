@@ -54,6 +54,7 @@ def graph_device(events, failure=None):
         "cudaStreamBeginCapture",
         "cudaStreamDestroy",
         "cudaGraphDestroy",
+        "cudaGraphUpload",
         "cudaGraphExecDestroy",
         "cudaGraphLaunch",
     )

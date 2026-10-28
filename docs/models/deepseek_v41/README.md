@@ -5,7 +5,8 @@ Rust owns service control, admission, scheduling, logical state, and publication
 Python owns checkpoint loading, tensors, model computation, and DSpark state.
 The worker boundary uses the existing ZMQ DEALER and msgpack protocol.
 
-The adapter binds the public configuration, inference configuration, tokenizer assets, and checkpoint shards.
+The adapter binds the public configuration, inference configuration, tokenizer assets, and checkpoint metadata.
+It reads weight shards during load without a full startup hash pass.
 It supports the released 48-shard safetensors layout, FP8 projections, FP4 routed experts, sparse attention, Engram tables, and Hyper-Connections.
 Prefill rows are split before native operators receive them.
 

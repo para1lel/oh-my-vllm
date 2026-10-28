@@ -81,6 +81,7 @@ class Device:
                 ctypes.c_void_p,
                 ctypes.c_ulonglong,
             ],
+            "cudaGraphUpload": [ctypes.c_void_p, ctypes.c_void_p],
             "cudaGraphLaunch": [ctypes.c_void_p, ctypes.c_void_p],
             "cudaGraphDestroy": [ctypes.c_void_p],
             "cudaGraphExecDestroy": [ctypes.c_void_p],
@@ -260,6 +261,7 @@ class Device:
                     ctypes.byref(executable), graph, 0
                 )
             )
+            self.checked(self.runtime.cudaGraphUpload(executable, caller))
         except BaseException as failure:
             cleanup = (
                 ("cudaGraphExecDestroy", executable),

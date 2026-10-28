@@ -69,6 +69,7 @@ def graph_device(events):
         "cudaStreamBeginCapture",
         "cudaStreamDestroy",
         "cudaGraphDestroy",
+        "cudaGraphUpload",
         "cudaGraphExecDestroy",
         "cudaGraphLaunch",
     )
@@ -82,6 +83,21 @@ def graph_device(events):
 
 
 class GraphCapture(unittest.TestCase):
+    def test_capture_uploads_the_graph_on_the_replay_stream(self):
+        events = []
+        device = graph_device(events)
+
+        with (
+            patch("tvm_ffi.get_raw_stream", return_value=77),
+            device.graph(lambda: None),
+        ):
+            pass
+
+        self.assertEqual(
+            [event for event in events if event[0] == "cudaGraphUpload"],
+            [("cudaGraphUpload", 13, 77)],
+        )
+
     def test_capture_handoffs_caller_and_transfer_streams(self):
         events = []
         device = graph_device(events)

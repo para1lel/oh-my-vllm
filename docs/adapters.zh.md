@@ -35,7 +35,8 @@ Architecture 和 model type 选择适配器; 目录名和公开 HTTP 名称不�
 
 配置输入上限为 1 MiB.
 Python 拒绝重复 JSON 键和非对象配置值.
-各模型族验证支持的格式和 checkpoint 身份.
+各模型族验证支持的格式和声明的 checkpoint 身份.
+DeepSeek startup identity 使用 config 和 index metadata, Ready 之前不 hash 全部 weight shard.
 选定适配器提供默认值并验证显式选项.
 公开的模型别名不能改变所选模型族.
 
@@ -82,7 +83,8 @@ b"oh-my-vllm/tokenizer-identity/v1\0"
 
 文件名, 摘要或 domain 改变会改变身份.
 缓存容量不改变 checkpoint 或 tokenizer 身份.
-各加载器在 Ready 前和延迟使用权重前验证消费的文件.
+各加载器验证声明的 startup identity 所需的文件.
+DeepSeek 在 load 期间读取并验证 weight data; 完整 shard identity 保留在 measurement artifact 中.
 
 冻结的 Qwen FP64 生成器使用 `worker.checkpoint` 导入.
 它不是共享运行时 checkpoint 接口.

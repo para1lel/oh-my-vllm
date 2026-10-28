@@ -35,7 +35,8 @@ Only the literal `stub` path selects the placeholder.
 
 Configuration input has a 1 MiB limit.
 Python rejects duplicate JSON keys and non-object configuration values.
-Each family verifies its supported formats and checkpoint identity.
+Each family verifies its supported formats and its declared checkpoint identity.
+DeepSeek uses config and index metadata for startup identity and does not hash all weight shards before Ready.
 A selected adapter supplies defaults and validates explicit options.
 A public served-model alias cannot change the selected family.
 
@@ -82,7 +83,9 @@ b"oh-my-vllm/tokenizer-identity/v1\0"
 
 Changing file names, digests, or domains changes the identity.
 Cache capacity does not change checkpoint or tokenizer identity.
-Each loader verifies its consumed files before Ready and before deferred weight use.
+Each loader verifies the files required by its declared startup identity.
+DeepSeek reads and validates weight data during load.
+Full shard identity stays in measurement artifacts.
 
 The `worker.checkpoint` import is used by the frozen Qwen FP64 generator.
 It is not a shared runtime checkpoint interface.

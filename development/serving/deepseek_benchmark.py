@@ -5,6 +5,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -14,7 +15,7 @@ from pathlib import Path
 from oh_my_vllm.models.deepseek_v41.tokenizer import Tokenization
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 
-from .benchmark import ROOT, checkpoint_identity, source_identity
+from .benchmark import ROOT, source_identity
 from .deepseek_matrix import HTTP_CASES, case_id
 from .device import device_identity, selected_uuids
 
@@ -29,6 +30,69 @@ DEEPSEEK_NATIVE_MODULES = (
 )
 SHUTDOWN_GRACE_SECONDS = 35
 SERVED_MODEL = "deepseek-v4.1-flash"
+
+
+def _checkpoint_shard_manifest(root):
+    index_path = Path(root) / "model.safetensors.index.json"
+    index = index_path.read_bytes()
+    names = set(json.loads(index)["weight_map"].values())
+    if not names or any(
+        re.fullmatch(r"model-\d{5}-of-\d{5}\.safetensors", name) is None
+        for name in names
+    ):
+        raise ValueError("checkpoint index must name local safetensors shards")
+    return hashlib.sha256(index).hexdigest(), sorted(names)
+
+
+def _checkpoint_shard_assignments(root, names, world_size):
+    loads = [0] * world_size
+    assignments = {}
+    sizes = {name: (Path(root) / name).stat().st_size for name in names}
+    for name in sorted(names, key=lambda value: (-sizes[value], value)):
+        rank = min(range(world_size), key=lambda value: (loads[value], value))
+        assignments[name] = rank
+        loads[rank] += sizes[name]
+    return assignments
+
+
+def checkpoint_shard_identity(root, *, rank, world_size):
+    if type(rank) is not int or type(world_size) is not int:
+        raise ValueError("checkpoint identity rank and world size must be integers")
+    if world_size < 1 or rank < 0 or rank >= world_size:
+        raise ValueError("checkpoint identity rank is outside its world")
+    root = Path(root)
+    _, names = _checkpoint_shard_manifest(root)
+    assignments = _checkpoint_shard_assignments(root, names, world_size)
+    return {
+        name: file_sha256(root / name) for name in names if assignments[name] == rank
+    }
+
+
+def checkpoint_identity(model):
+    model = Path(model)
+    index_digest, names = _checkpoint_shard_manifest(model)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        parts = list(
+            pool.map(
+                lambda rank: checkpoint_shard_identity(
+                    model,
+                    rank=rank,
+                    world_size=4,
+                ),
+                range(4),
+            )
+        )
+    result = {
+        "config": file_sha256(model / "config.json"),
+        "index": index_digest,
+    }
+    for part in parts:
+        if set(result) & set(part):
+            raise ValueError("checkpoint identity partitions overlap")
+        result.update(part)
+    if set(result) != {"config", "index", *names}:
+        raise ValueError("checkpoint identity partitions are incomplete")
+    return result
 
 
 def post(port, body):
@@ -72,7 +136,6 @@ def request_body(messages, output, seed):
         "max_tokens": output,
         "min_tokens": output,
         "ignore_eos": True,
-        "effort": "off",
         "reasoning_effort": "off",
         "seed": seed,
     }
@@ -95,7 +158,19 @@ def topology_identity(uuids):
     return [device_identity(uuid) for uuid in uuids]
 
 
-def artifact_identity(arguments, tokenizer, uuids):
+def effective_cache_configuration(arguments):
+    blocks = arguments.blocks
+    if blocks is None:
+        value = os.environ.get("OH_MY_VLLM_NUM_GPU_BLOCKS")
+        blocks = 2048 if value is None else int(value)
+    return {
+        "blocks": blocks,
+        "mamba_blocks": arguments.mamba_blocks or 128,
+    }
+
+
+def artifact_identity(arguments, tokenizer, uuids, *, workload):
+    cache_configuration = effective_cache_configuration(arguments)
     return {
         "source": source_identity(),
         "binary": file_sha256(arguments.binary),
@@ -103,12 +178,26 @@ def artifact_identity(arguments, tokenizer, uuids):
         "checkpoint": checkpoint_identity(arguments.model),
         "tokenizer": tokenizer.identity,
         "topology": topology_identity(uuids),
+        "workload": workload,
         "configuration": {
             "cache_context": arguments.cache_context,
+            **cache_configuration,
             "max_num_batched_tokens": 32768,
             "max_num_seqs": 64,
+            "native_sparse": os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "0"),
         },
     }
+
+
+def verify_artifact_identity(arguments, tokenizer, uuids, expected, *, workload):
+    actual = artifact_identity(
+        arguments,
+        tokenizer,
+        uuids,
+        workload=workload,
+    )
+    if actual != expected:
+        raise RuntimeError("DeepSeek benchmark inputs changed during measurement")
 
 
 def service_config(arguments, mode, strategy):
@@ -310,8 +399,17 @@ def main():
         parser.error("DeepSeek benchmark requires four selected GPUs")
     arguments.artifacts.mkdir(parents=True, exist_ok=False)
     tokenizer = Tokenization(arguments.model)
-    identity = artifact_identity(arguments, tokenizer, uuids)
-    identity["matrix_cases"] = len(cases)
+    workload = {
+        "kind": "http",
+        "case_ids": [case_id(case) for case in cases],
+        "prompt_seed": arguments.prompt_seed,
+    }
+    identity = artifact_identity(
+        arguments,
+        tokenizer,
+        uuids,
+        workload=workload,
+    )
     (arguments.artifacts / "identity.json").write_text(
         json.dumps(identity, indent=2) + "\n"
     )
@@ -354,6 +452,13 @@ def main():
                 )
         finally:
             service.close()
+    verify_artifact_identity(
+        arguments,
+        tokenizer,
+        uuids,
+        identity,
+        workload=workload,
+    )
     write_csv(arguments.csv, results)
     (arguments.artifacts / "summary.json").write_text(
         json.dumps({"cases": len(results)}, indent=2) + "\n"

@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from . import agentx, agentx_data
+from .deepseek_agentx import workload_identity
 
 
 def raw_record(response_id, phase="profiling"):
@@ -56,6 +57,22 @@ def server_metric(response_id):
 
 
 class AgentXTests(unittest.TestCase):
+    def test_deepseek_workload_identity_binds_grace_period(self):
+        arguments = type(
+            "Arguments",
+            (),
+            {
+                "seed": 42,
+                "strategy": "tep4",
+                "concurrency": 16,
+                "duration": 900,
+                "grace_period": 45.5,
+                "prompt_seed": "agentx-deepseek-42",
+            },
+        )()
+
+        self.assertEqual(workload_identity(arguments)["grace_period"], 45.5)
+
     def test_phase_and_full_response_identity_control_selection(self):
         records = [
             raw_record("chatcmpl_old_1", "warmup"),

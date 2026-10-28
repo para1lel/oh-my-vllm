@@ -13,8 +13,24 @@ from .deepseek_benchmark import (
     SERVED_MODEL,
     Service,
     artifact_identity,
+    verify_artifact_identity,
 )
 from .device import selected_uuids
+
+
+def workload_identity(args):
+    return {
+        "kind": "agentx",
+        "version": VERSION,
+        "dataset": DATASET,
+        "seed": args.seed,
+        "strategy": args.strategy,
+        "concurrency": args.concurrency,
+        "duration": args.duration,
+        "grace_period": args.grace_period,
+        "mode": "dspark5",
+        "prompt_seed": args.prompt_seed,
+    }
 
 
 def arguments():
@@ -69,15 +85,13 @@ def main():
         raise ValueError(f"install agentx-harness=={VERSION}, found {version}")
     args.artifacts.mkdir(parents=True, exist_ok=False)
     tokenizer = Tokenization(args.model)
-    identity = artifact_identity(args, tokenizer, args.gpu_uuids)
-    identity["agentx"] = {
-        "version": VERSION,
-        "dataset": DATASET,
-        "seed": args.seed,
-        "strategy": args.strategy,
-        "concurrency": args.concurrency,
-        "mode": "dspark5",
-    }
+    workload = workload_identity(args)
+    identity = artifact_identity(
+        args,
+        tokenizer,
+        args.gpu_uuids,
+        workload=workload,
+    )
     (args.artifacts / "identity.json").write_text(json.dumps(identity, indent=2) + "\n")
     service = Service(args, "dspark5", args.strategy)
     service_log = args.artifacts / f"dspark5-{args.strategy}-service.log"
@@ -112,6 +126,13 @@ def main():
         run_harness(command, args.artifacts / "agentx.log")
     finally:
         service.close()
+    verify_artifact_identity(
+        args,
+        tokenizer,
+        args.gpu_uuids,
+        identity,
+        workload=workload,
+    )
     _, counts = export_run(
         args.artifacts / "agentx",
         args.csv,

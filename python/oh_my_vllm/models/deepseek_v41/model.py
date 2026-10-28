@@ -14,11 +14,16 @@ from torch import nn
 from .engram import EngramLayout, NgramHashState
 from .image_processor import IMAGE, IMAGE_END, IMAGE_NEW_LINE, IMAGE_START
 from .kernel import (
+    NATIVE_ROW_LIMIT,
     act_quant,
     fp4_act_quant,
     fp4_gemm,
     fp8_gemm,
+    hc_expand,
+    hc_prepare,
     hc_split_sinkhorn,
+    make_hc_workspace,
+    rms,
     sparse_attn,
 )
 from .vision import Aligner, ViT
@@ -321,10 +326,7 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor):
         dtype = x.dtype
-        x = x.float()
-        var = x.square().mean(-1, keepdim=True)
-        x = x * torch.rsqrt(var + self.eps)
-        return (self.weight * x).to(dtype)
+        return rms(x, self.weight, self.eps).to(dtype)
 
 
 class ParallelEngramEmbedding(nn.Module):
@@ -925,14 +927,25 @@ class Attention(nn.Module):
         apply_rotary_emb(q[..., -rd:], freqs_cis)
 
         kv, topk_idxs = self._window_kv(x, freqs_cis, start_pos, cache_slots)
+        native_window = kv
+        native_compressed = kv.new_empty((bsz, 0, self.head_dim))
         if self.compress_ratio:
             compress_kv, compress_idxs = self._compress_kv(
                 x, qr, start_pos, kv.size(1), cache_slots
             )
+            native_compressed = compress_kv
             kv = torch.cat([kv, compress_kv], dim=1)
             topk_idxs = torch.cat([topk_idxs, compress_idxs], dim=-1)
 
-        o = sparse_attn(q, kv, self.attn_sink, topk_idxs, self.softmax_scale)
+        o = sparse_attn(
+            q,
+            kv,
+            self.attn_sink,
+            topk_idxs,
+            self.softmax_scale,
+            native_window=native_window,
+            native_compressed=native_compressed,
+        )
         apply_rotary_emb(o[..., -rd:], freqs_cis, True)
 
         # wo_a is block-diagonal over groups (each projects only its own heads), hence einsum not
@@ -1157,6 +1170,7 @@ class Block(nn.Module):
             self.hc_ffn_base = nn.Parameter(torch.empty(mix_hc))
             self.hc_attn_scale = nn.Parameter(torch.empty(3))
             self.hc_ffn_scale = nn.Parameter(torch.empty(3))
+        self._hc_workspace = None
 
     def hc_mixes(
         self,
@@ -1207,6 +1221,68 @@ class Block(nn.Module):
         previous layer's FFN produced and the FFN uses what this attention produced.
 
         image_mask: [b, s] bool, True inside image spans (selects the VL routing bias)."""
+        if (
+            x.is_cuda
+            and x.dtype == torch.bfloat16
+            and x.size(-2) == 4
+            and x.size(-1) == 5120
+            and x.numel() // (4 * 5120) <= NATIVE_ROW_LIMIT
+        ):
+            rows = x.numel() // (4 * 5120)
+            current_rows = (
+                0
+                if self._hc_workspace is None
+                else self._hc_workspace["collapsed"].size(0)
+            )
+            if (
+                current_rows < rows
+                or self._hc_workspace["collapsed"].device != x.device
+            ):
+                self._hc_workspace = make_hc_workspace(x.device, max_rows=rows)
+            workspace = self._hc_workspace
+            residual = x
+            x, attn_pre, attn_post, attn_comb = hc_prepare(
+                residual,
+                pre_mix,
+                self.hc_attn_fn,
+                self.hc_attn_scale,
+                self.hc_attn_base,
+                workspace=workspace,
+                next_pre=workspace["next_pre_a"],
+            )
+            x = self.attn_norm(x)
+            x = self.attn(x, start_pos, *attn_args)
+            x = hc_expand(
+                residual,
+                x,
+                attn_post,
+                attn_comb,
+                workspace=workspace,
+                output=workspace["expanded_a"],
+            )
+
+            residual = x
+            x, ffn_pre, ffn_post, ffn_comb = hc_prepare(
+                residual,
+                attn_pre,
+                self.hc_ffn_fn,
+                self.hc_ffn_scale,
+                self.hc_ffn_base,
+                workspace=workspace,
+                next_pre=workspace["next_pre_b"],
+            )
+            x = self.ffn_norm(x)
+            x = self.ffn(x, image_mask)
+            x = hc_expand(
+                residual,
+                x,
+                ffn_post,
+                ffn_comb,
+                workspace=workspace,
+                output=workspace["expanded_b"],
+            )
+            return x, ffn_pre
+
         residual = x
         attn_pre, attn_post, attn_comb = self.hc_mixes(
             x, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base
@@ -1338,7 +1414,15 @@ class DSparkAttention(Attention):
 
         topk_idxs = get_dspark_topk_idxs(win, bsz, block_size, start_pos).to(x.device)
         kv = torch.cat([self.window_kv_cache[cache_slots], kv], dim=1)
-        o = sparse_attn(q, kv, self.attn_sink, topk_idxs, self.softmax_scale)
+        o = sparse_attn(
+            q,
+            kv,
+            self.attn_sink,
+            topk_idxs,
+            self.softmax_scale,
+            native_window=kv,
+            native_compressed=kv.new_empty((bsz, 0, self.head_dim)),
+        )
         apply_rotary_emb(o[..., -rd:], freqs_cis, True)
 
         o = o.view(bsz, block_size, self.n_local_groups, -1)

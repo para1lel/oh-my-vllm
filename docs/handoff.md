@@ -12,11 +12,17 @@ The adapter loads the original 48-shard checkpoint with rank-local placement.
 It supports text target execution and DSpark5 greedy proposal verification.
 The bridge supports `tp4`, `tep4`, and a documented DEP4 executor fallback.
 
-The adapter uses the DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, and transformer support.
+The adapter uses the DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention, and transformer support.
 Prefill rows are split at the native operator row limit.
 DSpark verification keeps rejected drafts private and emits the target correction.
 Engram tables use file-backed host mappings.
 Lookup stages only the selected rows on the GPU.
+
+Released DeepSeek shapes support native mHC, RMS, and sparse attention paths.
+The mHC path keeps bounded per-block workspaces and uses a reference path above the native row limit.
+Sparse attention status failures disable the native path and use the reference path.
+Native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
+The reference sparse path stays the default because per-call packing is slower.
 
 DeepSeek physical pages now keep window KV, compressed KV, index keys, Engram
 hash state, and compressor tails across request slots.
@@ -28,8 +34,13 @@ Nonzero multi-token prefill uses a sequential correctness path while a fused
 chunk path stays a future performance task.
 
 DeepSeek execution is currently Eager.
-The shared Qwen CUDA Graph path has stream handoff, bounded graph workspaces, and cleanup tests.
+The shared Qwen CUDA Graph path has stream handoff, bounded graph workspaces, graph upload, and cleanup tests.
 DeepSeek multi-rank Graph capture is not connected.
+
+DeepSeek startup reads only `config.json` and `model.safetensors.index.json` for its descriptor identity.
+It does not hash weight shards before Ready.
+Rank-local checkpoint tiles use 2048 rows to reduce small host-to-device copies.
+External startup traces use `OH_MY_VLLM_STARTUP_TRACE` and use a separate location from the repository.
 
 ## Current evidence
 
@@ -50,6 +61,15 @@ A DSpark5 target request also returned successfully without worker restart.
 The 2-token DSpark5 request had no proposal budget and therefore reported zero proposal counters.
 The cache behavior test covers host snapshot store, load, drop, prefix copy, and restoration.
 
+The latest native-operator smoke reached ready on GPUs `1,2,3,4`.
+It covered ordinary decode, DSpark5 verification, prefix reuse, and graceful shutdown.
+The ordinary and DSpark5 requests completed without a worker replacement.
+
+On October 28, 2026, a TEP4 smoke on GPUs `1,2,3,4` reached Ready in 28.013 seconds.
+It used 8 physical blocks, a 1024-token context, and returned 4 ordinary output tokens.
+All four startup traces had metadata identity below 0.1 seconds and no shard hash phase.
+The rank-local weight load took about 19-20 seconds, and the service had zero replacements.
+
 The approved DeepSeek workload definitions are available in [deepseek matrix](../development/serving/deepseek_matrix.py).
 The HTTP runner defines 36 DSpark5 cases and 2 ordinary TP4 cases.
 The AgentX runner defines TP4/4, TEP4/16, and DEP4/64 cases.
@@ -59,7 +79,8 @@ No complete approved HTTP or AgentX result set is recorded yet.
 
 - Complete a TP4 readiness and ordinary decode run.
 - Replace the DEP4 fallback with stable request ownership and expert dispatch.
-- Connect native sparse attention, hyper-connections, and transform workspaces.
+- Measure the native DeepSeek paths against the reference path and public baselines.
+- Move native mHC and sparse-attention temporary storage into adapter-owned graph workspaces.
 - Add a coordinated DeepSeek CUDA Graph capture and replay path.
 - Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
 - Get an independent code review before delivery.
