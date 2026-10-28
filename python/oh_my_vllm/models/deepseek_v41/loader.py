@@ -128,10 +128,21 @@ def _fp8_to_bf16(raw, scales):
     )
 
 
+DEFAULT_TILE_ROWS = 16384
+
+
 class RankLoader:
     """Load only the tensors owned by one rank and keep source reads bounded."""
 
-    def __init__(self, root, config, rank, *, strategy="TEP4", tile_rows=2048):
+    def __init__(
+        self,
+        root,
+        config,
+        rank,
+        *,
+        strategy="TEP4",
+        tile_rows=DEFAULT_TILE_ROWS,
+    ):
         if type(rank) is not int or rank not in range(4):
             raise ValueError("rank must be between zero and three")
         if type(tile_rows) is not int or tile_rows < 1:

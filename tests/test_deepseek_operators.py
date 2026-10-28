@@ -185,6 +185,30 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         )
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_long_routing_and_swiglu_paths_accept_prefill_rows(self):
+        device = torch.device("cuda")
+        torch.manual_seed(13)
+        rows = 512
+        logits = torch.randn((rows, 384), device=device)
+        bias = torch.randn((384,), device=device)
+
+        coefficients, expert_ids = kernel.route(logits, bias, None, None)
+        self.assertEqual(tuple(coefficients.shape), (rows, 6))
+        self.assertEqual(tuple(expert_ids.shape), (rows, 6))
+        self.assertTrue(torch.isfinite(coefficients).all())
+
+        gate = torch.randn((rows, 2304), device=device, dtype=torch.bfloat16)
+        up = torch.randn_like(gate)
+        output = kernel.swiglu(
+            gate,
+            up,
+            torch.ones((rows, 1), device=device),
+            limit=10,
+        )
+        self.assertEqual(tuple(output.shape), tuple(gate.shape))
+        self.assertTrue(torch.isfinite(output).all())
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_sparse_attention_native_path_matches_quantized_reference(self):
         device = torch.device("cuda")
         generator = torch.Generator(device=device).manual_seed(19)
@@ -262,6 +286,209 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             self.assertIsNone(
                 kernel._sparse_attn_native(query, sink, indices, window, compressed)
             )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_sparse_attention_failure_disables_long_query_retry(self):
+        device = torch.device("cuda")
+        rows = kernel.NATIVE_ROW_LIMIT + 1
+        query = torch.zeros((1, rows, 16, 512), device=device, dtype=torch.bfloat16)
+        window = torch.zeros((1, 1, 512), device=device, dtype=torch.bfloat16)
+        compressed = torch.empty((1, 0, 512), device=device, dtype=torch.bfloat16)
+        sink = torch.zeros((16,), device=device)
+        indices = torch.zeros((1, rows, 1), device=device, dtype=torch.int32)
+        kv = window
+        native = Mock(return_value=None)
+
+        with (
+            patch.object(kernel, "_SPARSE_NATIVE_DISABLED", True),
+            patch.object(kernel, "_SPARSE_NATIVE_FAILED", False, create=True),
+            patch.object(kernel, "_sparse_attn_native", native),
+        ):
+            kernel.sparse_attn(
+                query,
+                kv,
+                sink,
+                indices,
+                512**-0.5,
+                native_window=window,
+                native_compressed=compressed,
+            )
+            kernel.sparse_attn(
+                query,
+                kv,
+                sink,
+                indices,
+                512**-0.5,
+                native_window=window,
+                native_compressed=compressed,
+            )
+
+        self.assertEqual(native.call_count, 1)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_large_row_native_paths_accept_rows_above_operator_limit(self):
+        device = torch.device("cuda")
+        rows = kernel.NATIVE_ROW_LIMIT + 1
+        generator = torch.Generator(device=device).manual_seed(23)
+
+        residual = torch.randn(
+            (rows, 4, 5120), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        incoming = torch.rand((rows, 4), generator=generator, device=device)
+        projection = (
+            torch.randn((24, 4 * 5120), generator=generator, device=device) * 0.01
+        )
+        scale = torch.randn((3,), generator=generator, device=device)
+        base = torch.randn((24,), generator=generator, device=device)
+        branch = torch.randn(
+            (rows, 5120), generator=generator, device=device, dtype=torch.bfloat16
+        )
+
+        hyperconnection = Mock(wraps=kernel._hyperconnection_module())
+        with patch.object(
+            kernel, "_hyperconnection_module", return_value=hyperconnection
+        ):
+            collapsed, next_pre, post, comb = kernel.hc_prepare(
+                residual, incoming, projection, scale, base
+            )
+            expanded = kernel.hc_expand(residual, branch, post, comb)
+
+        flat = residual.float().flatten(1)
+        mixes = F.linear(flat, projection) * torch.rsqrt(
+            flat.square().mean(-1, keepdim=True) + 1e-20
+        )
+        expected_pre = torch.sigmoid(mixes[..., :4] * scale[0] + base[:4]) + 1e-6
+        expected_post = 2 * torch.sigmoid(mixes[..., 4:8] * scale[1] + base[4:8])
+        expected_comb = torch.softmax(
+            (mixes[..., 8:] * scale[2] + base[8:]).reshape(-1, 4, 4),
+            dim=-1,
+        )
+        expected_comb = expected_comb / (expected_comb.sum(dim=-2, keepdim=True) + 1e-6)
+        for _ in range(19):
+            expected_comb = expected_comb / (
+                expected_comb.sum(dim=-1, keepdim=True) + 1e-6
+            )
+            expected_comb = expected_comb / (
+                expected_comb.sum(dim=-2, keepdim=True) + 1e-6
+            )
+        expected_collapsed = torch.sum(
+            incoming.unsqueeze(-1) * residual.float(), dim=1
+        ).to(torch.bfloat16)
+        expected_expanded = expected_post.unsqueeze(-1) * branch.float().unsqueeze(-2)
+        expected_expanded = expected_expanded + torch.sum(
+            expected_comb.unsqueeze(-1) * residual.float().unsqueeze(-2), dim=1
+        )
+
+        torch.testing.assert_close(collapsed, expected_collapsed, atol=0.01, rtol=0.01)
+        torch.testing.assert_close(next_pre, expected_pre, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(post, expected_post, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(comb, expected_comb, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(
+            expanded, expected_expanded.to(torch.bfloat16), atol=0.02, rtol=0.01
+        )
+        self.assertEqual(hyperconnection.hc_prepare.call_count, 1)
+        self.assertEqual(hyperconnection.hc_expand.call_count, 1)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_large_row_sparse_attention_accepts_rows_above_operator_limit(self):
+        device = torch.device("cuda")
+        rows = kernel.NATIVE_ROW_LIMIT + 1
+        generator = torch.Generator(device=device).manual_seed(29)
+        query = torch.randn(
+            (1, rows, 16, 512), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        window = torch.randn(
+            (1, 7, 512), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        compressed = torch.randn(
+            (1, 4, 512), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        sink = torch.randn((16,), generator=generator, device=device)
+        indices = torch.full((1, rows, 9), -1, device=device, dtype=torch.int32)
+        indices[:, :, :7] = torch.arange(7, device=device, dtype=torch.int32)
+        indices[:, :, 7:] = torch.tensor((7, 8), device=device, dtype=torch.int32)
+
+        sparse_attention = Mock(wraps=kernel._sparse_attention_module())
+        with patch.object(
+            kernel, "_sparse_attention_module", return_value=sparse_attention
+        ):
+            native = kernel._sparse_attn_native(
+                query, sink, indices, window, compressed
+            )
+            with patch.object(kernel, "_SPARSE_NATIVE_DISABLED", True):
+                public = kernel.sparse_attn(
+                    query,
+                    torch.cat((window, compressed), dim=1),
+                    sink,
+                    indices,
+                    512**-0.5,
+                    native_window=window,
+                    native_compressed=compressed,
+                )
+
+        window_codes, window_scales = kernel._pack_fp8_kv(window)
+        window_values = window_codes.view(torch.float8_e4m3fn).float()
+        window_scale_values = window_scales.view(torch.float8_e8m0fnu).float()
+        window_scale_values = window_scale_values.unsqueeze(-1).expand(
+            *window_scale_values.shape, 32
+        )
+        window_values = window_values * window_scale_values.reshape_as(window_values)
+        compressed_codes, compressed_scales = kernel._pack_fp4_kv(compressed)
+        low = (compressed_codes & 15).long()
+        high = (compressed_codes >> 4).long()
+        levels = torch.tensor(
+            (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0),
+            device=device,
+        )
+        compressed_values = torch.stack(
+            (
+                levels[low & 7] * torch.where((low & 8).bool(), -1.0, 1.0),
+                levels[high & 7] * torch.where((high & 8).bool(), -1.0, 1.0),
+            ),
+            dim=-1,
+        ).flatten(-2, -1)
+        compressed_scale_values = compressed_scales.view(torch.float8_e4m3fn).float()
+        compressed_scale_values = compressed_scale_values.unsqueeze(-1).expand(
+            *compressed_scale_values.shape, 16
+        )
+        compressed_values = compressed_values * compressed_scale_values.reshape_as(
+            compressed_values
+        )
+        reference = kernel.sparse_attn(
+            query,
+            torch.cat((window_values, compressed_values), dim=1),
+            sink,
+            indices,
+            512**-0.5,
+        )
+
+        self.assertIsNotNone(native)
+        torch.testing.assert_close(native, reference, atol=0.06, rtol=0.06)
+        torch.testing.assert_close(public, native, atol=0, rtol=0)
+        self.assertEqual(sparse_attention.attend.call_count, 2)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_large_row_rms_accepts_rows_above_operator_limit(self):
+        device = torch.device("cuda")
+        rows = kernel.NATIVE_ROW_LIMIT + 1
+        generator = torch.Generator(device=device).manual_seed(31)
+        values = torch.randn(
+            (rows, 512), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        weight = torch.randn(
+            (512,), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        transform = Mock(wraps=kernel._transform_module())
+        with patch.object(kernel, "_transform_module", return_value=transform):
+            actual = kernel.rms(values, weight, 1e-6)
+        expected = (
+            values.float()
+            * torch.rsqrt(values.float().square().mean(-1, keepdim=True) + 1e-6)
+            * weight.float()
+        ).to(torch.bfloat16)
+
+        torch.testing.assert_close(actual, expected, atol=0.002, rtol=0.002)
+        self.assertEqual(transform.rms.call_count, 1)
 
     def test_rank_loader_maps_a_host_engram_slice_from_safetensors(self):
         name = "layers.1.engram.embed.weight"

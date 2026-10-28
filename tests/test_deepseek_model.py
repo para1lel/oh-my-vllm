@@ -1,6 +1,7 @@
 import unittest
 
 import torch
+from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
 from oh_my_vllm.models.deepseek_v41.model import (
     ModelArgs,
     ParallelEngramEmbedding,
@@ -12,6 +13,40 @@ from oh_my_vllm.models.deepseek_v41.model import (
 
 
 class DeepSeekModel(unittest.TestCase):
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_fp8_projection_accepts_long_prefill_rows(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cuda")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            torch.manual_seed(11)
+            values = torch.randn(512, 128, device="cuda", dtype=torch.bfloat16)
+            weight = torch.randn(32, 128, device="cuda", dtype=torch.float32).to(
+                torch.float8_e4m3fn
+            )
+            weight_scale = torch.ones((1, 4), device="cuda", dtype=torch.float8_e8m0fnu)
+            encoded, scales = act_quant(
+                values,
+                block_size=32,
+                scale_fmt="ue8m0",
+                scale_dtype=torch.float8_e8m0fnu,
+            )
+
+            result = fp8_gemm(
+                encoded,
+                scales,
+                weight,
+                weight_scale,
+                block_size=32,
+            )
+
+            self.assertEqual(tuple(result.shape), (512, 32))
+            self.assertTrue(torch.isfinite(result).all())
+        finally:
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
     def test_transformer_can_skip_vocab_projection_for_prefill(self):
         previous_device = torch.get_default_device()
         previous_dtype = torch.get_default_dtype()

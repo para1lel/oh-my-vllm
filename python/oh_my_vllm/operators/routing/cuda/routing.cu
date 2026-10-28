@@ -55,7 +55,7 @@ __global__ void route_kernel(const float *logits, const float *bias, const float
 
 void route(TensorView logits, TensorView bias, TensorView bias_vl, TensorView image_mask,
            TensorView expert_ids, TensorView coefficients) {
-  TVM_FFI_ICHECK(logits.ndim() == 2 && logits.size(0) >= 0 && logits.size(0) <= 384);
+  TVM_FFI_ICHECK(logits.ndim() == 2 && logits.size(0) >= 0 && logits.size(0) <= 32768);
   int rows = logits.size(0);
   TVM_FFI_ICHECK(logits.size(1) == 128 || logits.size(1) == 384);
   int experts = logits.size(1), topk = experts == 384 ? 6 : 3;

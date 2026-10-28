@@ -224,9 +224,9 @@ void attend(TensorView query, TensorView sink, TensorView indices, TensorView wi
                  compressed.ndim() == 2);
   int64_t rows = query.size(0), heads = query.size(1), slots = indices.size(1);
   int64_t window_rows = window.size(0), compressed_rows = compressed.size(0);
-  TVM_FFI_ICHECK(rows >= 0 && rows <= 384 && (heads == 16 || heads == 64) && slots >= 0 &&
-                 slots <= 640 && window_rows >= 0 && compressed_rows >= 0 &&
-                 window_rows <= INT_MAX && compressed_rows <= INT_MAX - window_rows);
+  TVM_FFI_ICHECK(rows >= 0 && (heads == 16 || heads == 64) && slots >= 0 && slots <= 640 &&
+                 window_rows >= 0 && compressed_rows >= 0 && window_rows <= INT_MAX &&
+                 compressed_rows <= INT_MAX - window_rows);
   tensor_contract(query, query, kDLBfloat, 16, {rows, heads, 512});
   tensor_contract(sink, query, kDLFloat, 32, {heads});
   tensor_contract(indices, query, kDLInt, 32, {rows, slots});

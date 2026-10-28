@@ -257,12 +257,11 @@ class DeepSeekSpeculation(unittest.TestCase):
             [0, 2],
         )
 
-    def test_target_splits_prefill_rows_at_native_limit(self):
+    def test_target_keeps_long_prefill_in_one_native_call(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")
         worker.model = Mock(
             side_effect=[
-                ("first", "first logits", "first hidden"),
                 ("last", "last logits", "last hidden"),
             ]
         )
@@ -270,18 +269,18 @@ class DeepSeekSpeculation(unittest.TestCase):
         result = worker._target([1] * 385, 7, 3)
 
         self.assertEqual(result, ("last", "last logits", "last hidden"))
-        self.assertEqual(worker.model.call_count, 2)
+        self.assertEqual(worker.model.call_count, 1)
         self.assertEqual(
             [call.kwargs["start_pos"] for call in worker.model.call_args_list],
-            [7, 391],
+            [7],
         )
 
-    def test_target_batch_keeps_total_rows_at_native_limit(self):
+    def test_target_batch_keeps_total_rows_in_one_native_call(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")
 
         def model(inputs, **_):
-            self.assertLessEqual(inputs.size(0) * inputs.size(1), 384)
+            self.assertLessEqual(inputs.size(0) * inputs.size(1), 8192)
             return None, None, None
 
         worker.model = Mock(side_effect=model)
@@ -293,10 +292,10 @@ class DeepSeekSpeculation(unittest.TestCase):
             cache_slots=torch.arange(4),
         )
 
-        self.assertEqual(worker.model.call_count, 3)
+        self.assertEqual(worker.model.call_count, 1)
         self.assertEqual(
             [call.kwargs["start_pos"] for call in worker.model.call_args_list],
-            [7, 103, 199],
+            [7],
         )
 
     def test_mtp_seed_keeps_total_rows_at_native_limit(self):
@@ -325,13 +324,13 @@ class DeepSeekSpeculation(unittest.TestCase):
             [7, 103, 199],
         )
 
-    def test_target_batch_uses_small_prefill_subbatches(self):
+    def test_target_batch_uses_four_request_prefill_subbatches(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")
 
         def model(inputs, **_):
             self.assertLessEqual(inputs.size(0), 4)
-            self.assertLessEqual(inputs.size(0) * inputs.size(1), 384)
+            self.assertLessEqual(inputs.size(0) * inputs.size(1), 8192)
             return None, None, None
 
         worker.model = Mock(side_effect=model)
@@ -343,7 +342,7 @@ class DeepSeekSpeculation(unittest.TestCase):
             cache_slots=torch.arange(8),
         )
 
-        self.assertEqual(worker.model.call_count, 4)
+        self.assertEqual(worker.model.call_count, 2)
 
     def test_mtp_seed_keeps_only_the_target_window(self):
         worker = Worker.__new__(Worker)

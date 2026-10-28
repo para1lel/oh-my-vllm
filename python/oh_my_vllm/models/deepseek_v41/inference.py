@@ -15,7 +15,7 @@ from ...worker.trace import Trace
 from .adapter import INFERENCE_CONFIG_SHA256, MAX_CONTEXT_TOKENS, validate_config
 from .cache import DeepSeekCache
 from .descriptor import build_descriptor, checkpoint_metadata_identity
-from .loader import RankLoader
+from .loader import DEFAULT_TILE_ROWS, RankLoader
 from .model import ModelArgs, Transformer
 from .request import Request
 from .speculation import verify_greedy_drafts
@@ -23,6 +23,7 @@ from .tokenizer import Tokenization
 
 DEFAULT_CACHE_CONTEXT = 65536
 MAX_NATIVE_ROWS = 384
+MAX_PREFILL_ROWS = 8192
 MAX_PREFILL_SUBBATCH = 4
 
 
@@ -111,6 +112,9 @@ class Worker:
         args.temperature = 0
         args.parallel_strategy = model_strategy.upper()
         self.args = args
+        tile_rows = int(
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS", DEFAULT_TILE_ROWS)
+        )
         with self.startup_trace.measure("model_construct"), torch.device(self.device):
             self.model = Transformer(args, self.tokenizer.tokenizer)
         with self.startup_trace.measure("loader_construct"):
@@ -119,6 +123,7 @@ class Worker:
                 parsed,
                 self.rank,
                 strategy=model_strategy.upper(),
+                tile_rows=tile_rows,
             )
         with self.startup_trace.measure("checkpoint_metadata"):
             self.checkpoint_identity = checkpoint_metadata_identity(
@@ -261,9 +266,9 @@ class Worker:
     ):
         cache_slots = torch.tensor([slot], device=self.device)
         results = []
-        for offset in range(0, len(token_ids), MAX_NATIVE_ROWS):
+        for offset in range(0, len(token_ids), MAX_PREFILL_ROWS):
             inputs = torch.tensor(
-                [token_ids[offset : offset + MAX_NATIVE_ROWS]],
+                [token_ids[offset : offset + MAX_PREFILL_ROWS]],
                 device=self.device,
                 dtype=torch.long,
             )
@@ -353,7 +358,7 @@ class Worker:
         if full_logits and not compute_logits:
             raise ValueError("full logits require vocab projection")
         length = len(token_batches[0])
-        chunk_size = max(1, MAX_NATIVE_ROWS // len(token_batches))
+        chunk_size = max(1, MAX_PREFILL_ROWS // len(token_batches))
         results = []
         for offset in range(0, length, chunk_size):
             inputs = torch.tensor(

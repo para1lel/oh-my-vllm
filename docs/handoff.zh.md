@@ -13,16 +13,18 @@ adapter 使用原始 48 shard checkpoint 和 rank-local placement.
 bridge 支持 `tp4`, `tep4` 以及已明确记录的 DEP4 executor fallback.
 
 adapter 使用 DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention 和 transformer support.
-prefill row 会按 native operator row limit 切分.
+prefill 使用最多 8192 个 total row 的 working chunk.
 DSpark verification 保持 rejected draft 为 private state, 并输出 target correction.
 Engram table 使用 file-backed host mapping.
 Lookup 只将选中的 row 分阶段传到 GPU.
 
-released DeepSeek shape 支持 native mHC, RMS 和 sparse attention path.
-mHC path 为每个 block 保留有界 workspace, 并在超过 native row limit 时使用 reference path.
+released DeepSeek shape 支持 native projection, routing, activation, mHC, RMS 和 sparse attention path.
+native contract 支持长 row range.
+大型 prefill 使用有界的 8192-row launch, 以限制 temporary storage.
+
 sparse attention status failure 会禁用 native path, 并使用 reference path.
-native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
-因为每次 call packing 较慢, reference sparse path 保持为默认.
+short query 的 native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
+long query 使用 native sparse packing, 因为 reference path 的扩展性较差.
 
 DeepSeek physical page 现在会在 request slot 之间保存 window KV, compressed KV,
 index key, Engram hash state 和 compressor tail.
@@ -52,7 +54,8 @@ workspace 和 capture bucket 之前, DeepSeek 保持 Eager.
 
 DeepSeek startup 只读取 `config.json` 和 `model.safetensors.index.json` 生成 descriptor identity.
 Ready 之前不会 hash weight shard.
-rank-local checkpoint tile 使用 2048 行, 以减少小块 host-to-device copy.
+rank-local checkpoint tile 使用 16384 行, 以减少小块 host-to-device copy.
+设置 `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` 可以覆盖此 startup setting.
 外部 startup trace 使用 `OH_MY_VLLM_STARTUP_TRACE`, 并使用与 repository 分开的 location.
 
 ## 当前证据
@@ -91,9 +94,11 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 
 ## 下一步
 
+- 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
 - 用稳定的 request ownership 和 expert dispatch 替换 DEP4 fallback.
 - 将 native DeepSeek path 与 reference path 和公开 baseline 做性能比较.
-- 将 native mHC 和 sparse-attention temporary storage 移入 adapter-owned graph workspace.
+- 将 large-row native temporary storage 移入 adapter-owned graph workspace.
+- 用 fused grouped expert GEMM 替换 TEP4 和 DEP4 的 Python expert loop.
 - 在添加 DeepSeek CUDA Graph capture 和 replay 之前定义 static multi-rank workspace.
 - 在 GPU 0 以外的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
 - 交付前取得 independent code review.

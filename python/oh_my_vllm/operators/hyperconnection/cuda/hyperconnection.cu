@@ -97,7 +97,7 @@ __global__ void expand_kernel(const __nv_bfloat16 *residual, const __nv_bfloat16
 }
 
 int rows_contract(TensorView residual) {
-  TVM_FFI_ICHECK(residual.ndim() == 3 && residual.size(0) >= 0 && residual.size(0) <= 384);
+  TVM_FFI_ICHECK(residual.ndim() == 3 && residual.size(0) >= 0);
   int rows = residual.size(0);
   tensor_contract(residual, residual, kDLBfloat, 16, {rows, copies, width});
   return rows;

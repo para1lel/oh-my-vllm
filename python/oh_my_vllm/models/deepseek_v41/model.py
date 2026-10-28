@@ -1143,15 +1143,27 @@ class MoE(nn.Module):
             x, None if image_mask is None else image_mask.flatten()
         )
         y = torch.zeros_like(x, dtype=torch.float32)
-        counts = torch.bincount(
-            indices.flatten(), minlength=self.n_routed_experts
-        ).tolist()
+        flat_indices = indices.flatten()
+        order = torch.argsort(flat_indices)
+        sorted_tokens = (
+            torch.arange(x.size(0), device=x.device)
+            .view(-1, 1)
+            .expand_as(indices)
+            .flatten()[order]
+        )
+        sorted_weights = weights.flatten()[order]
+        counts = torch.bincount(flat_indices, minlength=self.n_routed_experts).tolist()
+        first = sum(counts[: self.experts_start_idx])
         for i in range(self.experts_start_idx, self.experts_end_idx):
-            if counts[i] == 0:
+            last = first + counts[i]
+            if first == last:
+                first = last
                 continue
             expert = self.experts[i]
-            idx, top = torch.where(indices == i)
-            y[idx] += expert(x[idx], weights[idx, top, None])
+            idx = sorted_tokens[first:last]
+            expert_weights = sorted_weights[first:last].clone().unsqueeze(-1)
+            y[idx] += expert(x.index_select(0, idx), expert_weights)
+            first = last
         if self.expert_parallel and world_size > 1:
             dist.all_reduce(y)
         y += self.shared_experts(x)
@@ -1254,20 +1266,29 @@ class Block(nn.Module):
             and x.dtype == torch.bfloat16
             and x.size(-2) == 4
             and x.size(-1) == 5120
-            and x.numel() // (4 * 5120) <= NATIVE_ROW_LIMIT
         ):
             rows = x.numel() // (4 * 5120)
-            current_rows = (
-                0
-                if self._hc_workspace is None
-                else self._hc_workspace["collapsed"].size(0)
-            )
-            if (
-                current_rows < rows
-                or self._hc_workspace["collapsed"].device != x.device
-            ):
-                self._hc_workspace = make_hc_workspace(x.device, max_rows=rows)
-            workspace = self._hc_workspace
+            workspace = None
+            next_pre_a = None
+            next_pre_b = None
+            expanded_a = None
+            expanded_b = None
+            if rows <= NATIVE_ROW_LIMIT:
+                current_rows = (
+                    0
+                    if self._hc_workspace is None
+                    else self._hc_workspace["collapsed"].size(0)
+                )
+                if (
+                    current_rows < rows
+                    or self._hc_workspace["collapsed"].device != x.device
+                ):
+                    self._hc_workspace = make_hc_workspace(x.device, max_rows=rows)
+                workspace = self._hc_workspace
+                next_pre_a = workspace["next_pre_a"]
+                next_pre_b = workspace["next_pre_b"]
+                expanded_a = workspace["expanded_a"]
+                expanded_b = workspace["expanded_b"]
             residual = x
             x, attn_pre, attn_post, attn_comb = hc_prepare(
                 residual,
@@ -1276,7 +1297,7 @@ class Block(nn.Module):
                 self.hc_attn_scale,
                 self.hc_attn_base,
                 workspace=workspace,
-                next_pre=workspace["next_pre_a"],
+                next_pre=next_pre_a,
             )
             x = self.attn_norm(x)
             x = self.attn(x, start_pos, *attn_args)
@@ -1286,7 +1307,7 @@ class Block(nn.Module):
                 attn_post,
                 attn_comb,
                 workspace=workspace,
-                output=workspace["expanded_a"],
+                output=expanded_a,
             )
 
             residual = x
@@ -1297,7 +1318,7 @@ class Block(nn.Module):
                 self.hc_ffn_scale,
                 self.hc_ffn_base,
                 workspace=workspace,
-                next_pre=workspace["next_pre_b"],
+                next_pre=next_pre_b,
             )
             x = self.ffn_norm(x)
             x = self.ffn(x, image_mask)
@@ -1307,7 +1328,7 @@ class Block(nn.Module):
                 ffn_post,
                 ffn_comb,
                 workspace=workspace,
-                output=workspace["expanded_b"],
+                output=expanded_b,
             )
             return x, ffn_pre
 

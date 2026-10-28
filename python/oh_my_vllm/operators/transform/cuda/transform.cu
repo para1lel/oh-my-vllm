@@ -50,7 +50,7 @@ __global__ void rope_kernel(const __nv_bfloat162 *values, const float2 *coeffici
 }
 
 void values_contract(TensorView values, TensorView output) {
-  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 384);
+  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0);
   tensor_contract(values, values, kDLBfloat, 16, {values.size(0), values.size(1)});
   tensor_contract(output, values, kDLBfloat, 16, {values.size(0), values.size(1)});
   disjoint(values, output);
@@ -78,7 +78,7 @@ void rms(TensorView values, TensorView weight, TensorView output, double epsilon
 }
 
 void rope(TensorView values, TensorView coefficients, TensorView output, bool inverse) {
-  TVM_FFI_ICHECK(values.ndim() == 3 && values.size(0) >= 0 && values.size(0) <= 384);
+  TVM_FFI_ICHECK(values.ndim() == 3 && values.size(0) >= 0);
   TVM_FFI_ICHECK(values.size(1) == 1 || values.size(1) == 8 || values.size(1) == 16 ||
                  values.size(1) == 32 || values.size(1) == 64);
   TVM_FFI_ICHECK(values.size(2) == 128 || values.size(2) == 512);

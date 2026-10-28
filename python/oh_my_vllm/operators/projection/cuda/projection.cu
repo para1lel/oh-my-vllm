@@ -18,7 +18,7 @@ int round128(int value) { return (value + 127) / 128 * 128; }
 int scale_bytes(int rows, int width) { return round128(rows) * (round128(width) / 32); }
 
 void dimensions(int64_t rows, int64_t outputs, int64_t width, int64_t bits) {
-  TVM_FFI_ICHECK(rows >= 0 && rows <= 384);
+  TVM_FFI_ICHECK(rows >= 0 && rows <= 32768);
   TVM_FFI_ICHECK(outputs >= 32 && outputs <= 32768 && outputs % 32 == 0);
   TVM_FFI_ICHECK(width >= 32 && width <= 16384 && width % 32 == 0);
   TVM_FFI_ICHECK(bits == 4 || bits == 8);

@@ -13,16 +13,18 @@ It supports text target execution and DSpark5 greedy proposal verification.
 The bridge supports `tp4`, `tep4`, and a documented DEP4 executor fallback.
 
 The adapter uses the DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention, and transformer support.
-Prefill rows are split at the native operator row limit.
+Prefill uses working chunks of at most 8192 total rows.
 DSpark verification keeps rejected drafts private and emits the target correction.
 Engram tables use file-backed host mappings.
 Lookup stages only the selected rows on the GPU.
 
-Released DeepSeek shapes support native mHC, RMS, and sparse attention paths.
-The mHC path keeps bounded per-block workspaces and uses a reference path above the native row limit.
+Released DeepSeek shapes support native projection, routing, activation, mHC, RMS, and sparse attention paths.
+The native contracts accept long row ranges. Small rows use bounded workspaces.
+Large prefill calls use bounded 8192-row launches to keep temporary storage bounded.
+
 Sparse attention status failures disable the native path and use the reference path.
-Native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
-The reference sparse path stays the default because per-call packing is slower.
+Short-query native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
+Long queries use native sparse packing because the reference path scales poorly.
 
 DeepSeek physical pages now keep window KV, compressed KV, index keys, Engram
 hash state, and compressor tails across request slots.
@@ -52,7 +54,8 @@ The shared Qwen graph path already owns stream handoff, graph resources, and cle
 
 DeepSeek startup reads only `config.json` and `model.safetensors.index.json` for its descriptor identity.
 It does not hash weight shards before Ready.
-Rank-local checkpoint tiles use 2048 rows to reduce small host-to-device copies.
+Rank-local checkpoint tiles use 16384 rows to reduce small host-to-device copies.
+Set `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` to override this startup setting.
 External startup traces use `OH_MY_VLLM_STARTUP_TRACE` and use a separate location from the repository.
 
 ## Current evidence
@@ -92,9 +95,11 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 
 ## Next work
 
+- Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
 - Replace the DEP4 fallback with stable request ownership and expert dispatch.
 - Measure the native DeepSeek paths against the reference path and public baselines.
-- Move native mHC and sparse-attention temporary storage into adapter-owned graph workspaces.
+- Move large-row native temporary storage into adapter-owned graph workspaces.
+- Replace Python expert loops with fused grouped expert GEMM for TEP4 and DEP4.
 - Define static multi-rank workspaces before adding DeepSeek CUDA Graph capture and replay.
 - Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
 - Get an independent code review before delivery.

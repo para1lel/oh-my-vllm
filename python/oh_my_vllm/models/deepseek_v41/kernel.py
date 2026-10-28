@@ -20,6 +20,7 @@ NATIVE_ROW_LIMIT = 384
 _SPARSE_NATIVE_DISABLED = (
     os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "0") != "1"
 )
+_SPARSE_NATIVE_FAILED = False
 
 
 def _native_available(x):
@@ -183,7 +184,6 @@ def rms(values, weight, epsilon):
         and values.dtype == torch.bfloat16
         and weight.dtype == torch.bfloat16
         and values.size(-1) in (512, 1024, 1280, 5120)
-        and values.numel() // values.size(-1) <= NATIVE_ROW_LIMIT
         and values.is_contiguous()
         and weight.is_contiguous()
         and weight.device == values.device
@@ -280,7 +280,6 @@ def _hc_native_available(residual, *inputs):
         and residual.dtype == torch.bfloat16
         and residual.ndim >= 3
         and tuple(residual.shape[-2:]) == (4, 5120)
-        and residual.numel() // (4 * 5120) <= NATIVE_ROW_LIMIT
         and residual.is_contiguous()
     ):
         return False
@@ -367,18 +366,30 @@ def hc_prepare(
         residual_rows = residual_rows.contiguous()
     if not incoming_rows.is_contiguous():
         incoming_rows = incoming_rows.contiguous()
-    workspace = workspace or make_hc_workspace(residual.device)
-    if any(
-        value.device != residual.device or value.size(0) < rows
-        for value in workspace.values()
-    ):
-        raise ValueError("DeepSeek mHC workspace is incompatible with the input")
-    mixed = workspace["mixed"][:rows]
-    post = workspace["post"][:rows]
-    comb = workspace["comb"][:rows]
-    collapsed = workspace["collapsed"][:rows]
+    if rows <= NATIVE_ROW_LIMIT:
+        workspace = workspace or make_hc_workspace(residual.device)
+        if any(
+            value.device != residual.device or value.size(0) < rows
+            for value in workspace.values()
+        ):
+            raise ValueError("DeepSeek mHC workspace is incompatible with the input")
+        post = workspace["post"][:rows]
+        comb = workspace["comb"][:rows]
+        collapsed = workspace["collapsed"][:rows]
+    else:
+        workspace = None
+        post = torch.empty((rows, 4), dtype=torch.float32, device=residual.device)
+        comb = torch.empty((rows, 4, 4), dtype=torch.float32, device=residual.device)
+        collapsed = torch.empty(
+            (rows, 5120), dtype=torch.bfloat16, device=residual.device
+        )
     if next_pre is None:
-        next_pre = workspace["next_pre_a"][:rows]
+        if rows <= NATIVE_ROW_LIMIT:
+            next_pre = workspace["next_pre_a"][:rows]
+        else:
+            next_pre = torch.empty(
+                (rows, 4), dtype=torch.float32, device=residual.device
+            )
     else:
         if (
             next_pre.device != residual.device
@@ -388,18 +399,34 @@ def hc_prepare(
         ):
             raise ValueError("DeepSeek mHC pre-mix workspace is incompatible")
         next_pre = next_pre[:rows]
-    _hyperconnection_module().hc_prepare(
-        residual_rows,
-        incoming_rows,
-        projection,
-        scale,
-        base,
-        mixed,
-        post,
-        comb,
-        collapsed,
-        next_pre,
-    )
+    module = _hyperconnection_module()
+    if rows > NATIVE_ROW_LIMIT:
+        mixed = torch.empty((rows, 24), dtype=torch.float32, device=residual.device)
+        module.hc_prepare(
+            residual_rows,
+            incoming_rows,
+            projection,
+            scale,
+            base,
+            mixed,
+            post,
+            comb,
+            collapsed,
+            next_pre,
+        )
+    else:
+        module.hc_prepare(
+            residual_rows,
+            incoming_rows,
+            projection,
+            scale,
+            base,
+            workspace["mixed"][:rows],
+            post,
+            comb,
+            collapsed,
+            next_pre,
+        )
     return (
         collapsed.reshape(*leading, 5120),
         next_pre.reshape(*leading, 4),
@@ -436,9 +463,13 @@ def hc_expand(residual, branch, post, comb, *, workspace=None, output=None):
     post_rows = post.reshape(rows, 4)
     comb_rows = comb.reshape(rows, 4, 4)
     if output is None:
-        output = None if workspace is None else workspace.get("expanded_a")
+        output = (
+            None
+            if rows > NATIVE_ROW_LIMIT or workspace is None
+            else workspace.get("expanded_a")
+        )
     if output is None:
-        output = torch.empty_like(residual_rows)
+        output_rows = torch.empty_like(residual_rows)
     else:
         if (
             output.device != residual.device
@@ -447,11 +478,31 @@ def hc_expand(residual, branch, post, comb, *, workspace=None, output=None):
             or tuple(output.shape[1:]) != (4, 5120)
         ):
             raise ValueError("DeepSeek mHC output workspace is incompatible")
-        output = output[:rows]
-    _hyperconnection_module().hc_expand(
-        residual_rows, branch_rows, post_rows, comb_rows, output
-    )
-    return output.reshape(*leading, 4, 5120)
+        output_rows = output[:rows]
+    module = _hyperconnection_module()
+    if rows > NATIVE_ROW_LIMIT:
+        module.hc_expand(
+            residual_rows,
+            branch_rows,
+            post_rows,
+            comb_rows,
+            output_rows,
+        )
+    else:
+        workspace = workspace or make_hc_workspace(residual.device)
+        if any(
+            value.device != residual.device or value.size(0) < rows
+            for value in workspace.values()
+        ):
+            raise ValueError("DeepSeek mHC workspace is incompatible with the input")
+        module.hc_expand(
+            residual_rows,
+            branch_rows,
+            post_rows,
+            comb_rows,
+            output_rows,
+        )
+    return output_rows.reshape(*leading, 4, 5120)
 
 
 def route(logits, bias, bias_vl, image_mask):
@@ -532,7 +583,6 @@ def _sparse_native_available(query, indices, window, compressed):
         and query.ndim == 4
         and query.size(-1) == 512
         and query.size(-2) in (16, 64)
-        and query.numel() // (query.size(-1) * query.size(-2)) <= NATIVE_ROW_LIMIT
         and query.is_contiguous()
         and indices.ndim == 3
         and indices.size(-1) <= 640
@@ -581,14 +631,19 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
     )
     if not sink.is_contiguous():
         sink = sink.contiguous()
-    _sparse_attention_module().attend(
+    module = _sparse_attention_module()
+    packed_window = packed_window.reshape(window_rows, 512)
+    window_scales = window_scales.reshape(window_rows, 16)
+    packed_compressed = packed_compressed.reshape(compressed_rows, 256)
+    compressed_scales = compressed_scales.reshape(compressed_rows, 32)
+    module.attend(
         query_rows,
         sink,
         ids,
-        packed_window.reshape(window_rows, 512),
-        window_scales.reshape(window_rows, 16),
-        packed_compressed.reshape(compressed_rows, 256),
-        compressed_scales.reshape(compressed_rows, 32),
+        packed_window,
+        window_scales,
+        packed_compressed,
+        compressed_scales,
         output,
         status,
     )
@@ -607,9 +662,10 @@ def sparse_attn(
     native_window=None,
     native_compressed=None,
 ):
-    global _SPARSE_NATIVE_DISABLED
+    global _SPARSE_NATIVE_DISABLED, _SPARSE_NATIVE_FAILED
+    long_query = q.numel() // (q.size(-1) * q.size(-2)) > NATIVE_ROW_LIMIT
     if (
-        not _SPARSE_NATIVE_DISABLED
+        (not _SPARSE_NATIVE_DISABLED or (long_query and not _SPARSE_NATIVE_FAILED))
         and native_window is not None
         and native_compressed is not None
         and attn_sink.is_cuda
@@ -622,6 +678,7 @@ def sparse_attn(
         )
         if native is not None:
             return native
+        _SPARSE_NATIVE_FAILED = True
         _SPARSE_NATIVE_DISABLED = True
     indices = topk_idxs.clamp_min(0).long()
     gathered = torch.gather(
