@@ -208,6 +208,95 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         self.assertEqual(tuple(output.shape), tuple(gate.shape))
         self.assertTrue(torch.isfinite(output).all())
 
+    def test_grouped_fp4_reference_path_handles_variable_expert_batches(self):
+        values = torch.tensor(
+            (
+                (1.0,) * 32,
+                (-1.0,) * 32,
+                (1.0,) * 32,
+                (-1.0,) * 32,
+                (1.0,) * 32,
+            ),
+            dtype=torch.bfloat16,
+        )
+        counts = torch.tensor((2, 0, 3), dtype=torch.int32)
+        weights = (
+            (
+                torch.ones((4, 32), dtype=torch.bfloat16),
+                torch.ones((4, 1), dtype=torch.float32),
+            ),
+            (
+                torch.full((4, 32), 3, dtype=torch.bfloat16),
+                torch.ones((4, 1), dtype=torch.float32),
+            ),
+            (
+                torch.full((4, 32), 2, dtype=torch.bfloat16),
+                torch.ones((4, 1), dtype=torch.float32),
+            ),
+        )
+
+        actual = kernel.grouped_fp4_gemm(values, counts, weights)
+
+        expected = torch.cat(
+            (
+                torch.nn.functional.linear(values[:2].float(), weights[0][0].float()),
+                torch.nn.functional.linear(values[2:].float(), weights[2][0].float()),
+            )
+        ).to(actual.dtype)
+        torch.testing.assert_close(actual, expected, atol=0.01, rtol=0.01)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_grouped_fp4_matches_individual_projections(self):
+        device = torch.device("cuda")
+        generator = torch.Generator(device=device).manual_seed(41)
+        values = torch.randn(
+            (5, 32), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        weights = []
+        for seed in (7, 11, 13):
+            weight_generator = torch.Generator(device=device).manual_seed(seed)
+            raw = torch.randint(
+                0,
+                256,
+                (32, 16),
+                generator=weight_generator,
+                device=device,
+                dtype=torch.uint8,
+            )
+            weights.append(
+                (
+                    raw.view(torch.float4_e2m1fn_x2),
+                    torch.ones((32, 1), device=device, dtype=torch.float8_e8m0fnu),
+                )
+            )
+        counts = torch.tensor((2, 0, 3), device=device, dtype=torch.int32)
+
+        actual = kernel.grouped_fp4_gemm(values, counts, weights)
+
+        expected_parts = []
+        first = 0
+        for count, (weight, scale) in zip(counts.tolist(), weights, strict=True):
+            if count:
+                encoded, input_scale = kernel.act_quant(
+                    values[first : first + count],
+                    32,
+                    "ue8m0",
+                    torch.float8_e8m0fnu,
+                )
+                expected_parts.append(
+                    kernel.fp4_gemm(
+                        encoded,
+                        input_scale,
+                        weight,
+                        scale,
+                        torch.float8_e8m0fnu,
+                        32,
+                    )
+                )
+            first += count
+        expected = torch.cat(expected_parts)
+        torch.testing.assert_close(actual, expected, atol=0.08, rtol=0.08)
+
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_sparse_attention_native_path_matches_quantized_reference(self):
         device = torch.device("cuda")

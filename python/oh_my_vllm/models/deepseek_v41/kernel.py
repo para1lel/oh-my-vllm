@@ -33,7 +33,14 @@ def _projection_module():
         from ...operators.runtime.native import load
 
         _PROJECTION_MODULE, _, _ = load(
-            "projection", ("pack_weights", "workspace_size", "project")
+            "projection",
+            (
+                "pack_weights",
+                "workspace_size",
+                "project",
+                "grouped_workspace_size",
+                "grouped_project",
+            ),
         )
     return _PROJECTION_MODULE
 
@@ -175,6 +182,112 @@ def fp4_gemm(a, a_s, b, b_s, scale_dtype=torch.float32, act_block_size=128):
     a_value = a.float() * _scale_values(a_s).repeat_interleave(act_block_size, dim=-1)
     b_value = b.float() * _scale_values(b_s).repeat_interleave(32, dim=-1)
     return F.linear(a_value, b_value).to(torch.get_default_dtype())
+
+
+def grouped_fp4_gemm(values, counts, weights, *, counts_list=None):
+    """Apply one FP4 projection to each consecutive routed expert segment."""
+    if values.ndim != 2:
+        raise ValueError("grouped FP4 input must be a matrix")
+    if counts.ndim != 1 or counts.dtype not in (torch.int32, torch.int64):
+        raise ValueError("grouped FP4 counts must be a one-dimensional integer tensor")
+    if len(weights) != counts.numel():
+        raise ValueError("grouped FP4 weights must match the expert count")
+    if counts.device != values.device:
+        raise ValueError("grouped FP4 counts must use the input device")
+    counts_list = counts.tolist() if counts_list is None else counts_list
+    if len(counts_list) != counts.numel():
+        raise ValueError("grouped FP4 count metadata must match the count tensor")
+    if any(type(count) is not int or count < 0 for count in counts_list):
+        raise ValueError("grouped FP4 counts must be non-negative")
+    if sum(counts_list) != values.size(0):
+        raise ValueError("grouped FP4 counts must cover every input row")
+
+    active = [
+        (count, weight, scale)
+        for count, (weight, scale) in zip(counts_list, weights, strict=True)
+        if count
+    ]
+    if not active:
+        return values.new_empty((0, weights[0][0].size(0)))
+    if values.is_cuda and all(
+        weight.is_cuda and weight.dtype == torch.float4_e2m1fn_x2
+        for _, weight, _ in active
+    ):
+        encoded, input_scale = act_quant(
+            values,
+            32,
+            "ue8m0",
+            torch.float8_e8m0fnu,
+        )
+        packed = [_packed_weight(weight, scale, 4) for _, weight, scale in active]
+        output_width = packed[0][0].size(0)
+        width = values.size(-1)
+        weight_ptrs = torch.tensor(
+            [weight.data_ptr() for weight, _, _ in packed],
+            dtype=torch.int64,
+            device=values.device,
+        )
+        scale_ptrs = torch.tensor(
+            [scale.data_ptr() for _, scale, _ in packed],
+            dtype=torch.int64,
+            device=values.device,
+        )
+        active_counts = torch.tensor(
+            [count for count, _, _ in active], dtype=torch.int32, device=values.device
+        )
+        output = torch.empty(
+            (values.size(0), output_width), dtype=torch.bfloat16, device=values.device
+        )
+        module = _projection_module()
+        scratch = torch.empty(
+            (
+                module.grouped_workspace_size(
+                    values.size(0),
+                    len(active),
+                    max(count for count, _, _ in active),
+                    output_width,
+                    width,
+                ),
+            ),
+            dtype=torch.uint8,
+            device=values.device,
+        )
+        module.grouped_project(
+            encoded.view(torch.uint8),
+            input_scale.view(torch.uint8),
+            weight_ptrs,
+            scale_ptrs,
+            active_counts,
+            output,
+            scratch,
+            max(count for count, _, _ in active),
+        )
+        return output
+
+    outputs = []
+    first = 0
+    for count, (weight, scale) in zip(counts_list, weights, strict=True):
+        if count:
+            encoded, input_scale = act_quant(
+                values[first : first + count],
+                32,
+                "ue8m0",
+                torch.float8_e8m0fnu,
+            )
+            outputs.append(
+                fp4_gemm(
+                    encoded,
+                    input_scale,
+                    weight,
+                    scale,
+                    torch.float8_e8m0fnu,
+                    act_block_size=32,
+                )
+            )
+        first += count
+    if outputs:
+        return torch.cat(outputs, dim=0)
+    return values.new_empty((0, weights[0][0].size(0)))
 
 
 def rms(values, weight, epsilon):

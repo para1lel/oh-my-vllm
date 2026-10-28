@@ -7,7 +7,13 @@ are prepared once outside capture; their stored values stay unchanged.
 
 from typing import NamedTuple
 
-FUNCTIONS = ("pack_weights", "workspace_size", "project")
+FUNCTIONS = (
+    "pack_weights",
+    "workspace_size",
+    "project",
+    "grouped_workspace_size",
+    "grouped_project",
+)
 
 
 class Weights(NamedTuple):

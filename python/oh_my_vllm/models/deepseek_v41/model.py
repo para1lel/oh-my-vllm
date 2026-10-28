@@ -1134,6 +1134,72 @@ class MoE(nn.Module):
             tensor_parallel=shared_tensor_parallel,
         )
 
+    def _grouped_routed(
+        self,
+        sorted_x: torch.Tensor,
+        sorted_tokens: torch.Tensor,
+        sorted_weights: torch.Tensor,
+        counts: list[int],
+        count_tensor: torch.Tensor,
+    ):
+        experts = self.experts[self.experts_start_idx : self.experts_end_idx]
+        if not experts or any(expert is None for expert in experts):
+            return None
+        if any(
+            not all(hasattr(expert, name) for name in ("w1", "w2", "w3"))
+            for expert in experts
+        ):
+            return None
+        if any(
+            expert.w1.weight.dtype != torch.float4_e2m1fn_x2
+            or expert.w1.scale is None
+            or expert.w2.weight.dtype != torch.float4_e2m1fn_x2
+            or expert.w2.scale is None
+            or expert.w3.weight.dtype != torch.float4_e2m1fn_x2
+            or expert.w3.scale is None
+            for expert in experts
+        ):
+            return None
+        first = sum(counts[: self.experts_start_idx])
+        local_counts = counts[self.experts_start_idx : self.experts_end_idx]
+        last = first + sum(local_counts)
+        if first == last:
+            return None
+        local_x = sorted_x[first:last]
+        local_tokens = sorted_tokens[first:last]
+        local_weights = sorted_weights[first:last].unsqueeze(-1)
+        local_count_tensor = count_tensor[
+            self.experts_start_idx : self.experts_end_idx
+        ].to(dtype=torch.int32)
+        from .kernel import grouped_fp4_gemm, swiglu
+
+        gate = grouped_fp4_gemm(
+            local_x,
+            local_count_tensor,
+            tuple((expert.w1.weight, expert.w1.scale) for expert in experts),
+            counts_list=local_counts,
+        )
+        up = grouped_fp4_gemm(
+            local_x,
+            local_count_tensor,
+            tuple((expert.w3.weight, expert.w3.scale) for expert in experts),
+            counts_list=local_counts,
+        )
+        limit = experts[0].swiglu_limit
+        if local_x.is_cuda and gate.size(-1) in (576, 2304):
+            product = swiglu(gate, up, local_weights, limit)
+        else:
+            gate_value = gate.float().clamp_max(limit) if limit else gate.float()
+            up_value = up.float().clamp(-limit, limit) if limit else up.float()
+            product = (F.silu(gate_value) * up_value * local_weights).to(gate.dtype)
+        routed = grouped_fp4_gemm(
+            product,
+            local_count_tensor,
+            tuple((expert.w2.weight, expert.w2.scale) for expert in experts),
+            counts_list=local_counts,
+        )
+        return local_tokens, routed
+
     def forward(
         self, x: torch.Tensor, image_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
@@ -1153,19 +1219,31 @@ class MoE(nn.Module):
         )
         sorted_weights = weights.flatten()[order]
         sorted_x = x.index_select(0, sorted_tokens)
-        counts = torch.bincount(flat_indices, minlength=self.n_routed_experts).tolist()
-        first = sum(counts[: self.experts_start_idx])
-        for i in range(self.experts_start_idx, self.experts_end_idx):
-            last = first + counts[i]
-            if first == last:
+        count_tensor = torch.bincount(flat_indices, minlength=self.n_routed_experts)
+        counts = count_tensor.tolist()
+        grouped = self._grouped_routed(
+            sorted_x,
+            sorted_tokens,
+            sorted_weights,
+            counts,
+            count_tensor,
+        )
+        if grouped is None:
+            first = sum(counts[: self.experts_start_idx])
+            for i in range(self.experts_start_idx, self.experts_end_idx):
+                last = first + counts[i]
+                if first == last:
+                    first = last
+                    continue
+                expert = self.experts[i]
+                idx = sorted_tokens[first:last]
+                expert_weights = sorted_weights[first:last].unsqueeze(-1)
+                y[idx] += expert(sorted_x[first:last], expert_weights)
                 first = last
-                continue
-            expert = self.experts[i]
-            idx = sorted_tokens[first:last]
-            expert_weights = sorted_weights[first:last].unsqueeze(-1)
-            y[idx] += expert(sorted_x[first:last], expert_weights)
-            first = last
-        if self.expert_parallel and world_size > 1:
+        else:
+            local_tokens, routed = grouped
+            y.index_add_(0, local_tokens, routed.float())
+        if (self.expert_parallel or self.tensor_parallel) and world_size > 1:
             dist.all_reduce(y)
         y += self.shared_experts(x)
         return y.type_as(x).view(shape)

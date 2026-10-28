@@ -41,7 +41,11 @@ target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以�
 aligned prefill batch 最多使用四个 request 组成一个 subbatch.
 
 MoE dispatch 只对 sorted routed row 做一次 gather, 并为 local expert 重用 slice.
-Grouped FP4 GEMM 和 distributed expert dispatch 仍是后续工作.
+TP4 和 TEP4 的 FP4 routed expert 使用 CUTLASS pointer-array grouped GEMM
+执行两个 up projection 和一个 down projection.
+Grouped path 保持 local token order, 对 non-FP4 weight 和 test expert
+回退到 reference expert loop.
+DEP4 仍使用 TEP4 executor fallback, 还没有 rank-owned dispatch.
 
 非 final prefill 会跳过 vocabulary projection.
 DSpark 只保留 MTP window 所需的 target hidden tail.
@@ -107,7 +111,7 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 - 用稳定的 request ownership 和 expert dispatch 替换 DEP4 fallback.
 - 将 native DeepSeek path 与 reference path 和公开 baseline 做性能比较.
 - 将 large-row native temporary storage 移入 adapter-owned graph workspace.
-- 用 fused grouped expert GEMM 替换 TEP4 和 DEP4 的 Python expert loop.
+- 将 grouped expert GEMM 扩展到 DEP4 ownership 和 communication path.
 - 在添加 DeepSeek CUDA Graph capture 和 replay 之前定义 static multi-rank workspace.
 - 在 GPU 0 以外的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
 - 交付前取得 independent code review.

@@ -41,7 +41,11 @@ Target and MTP seed chunks keep the total native rows below the operator limit.
 Aligned prefill batches use subbatches of at most four requests.
 
 MoE dispatch gathers sorted routed rows once and reuses slices for local experts.
-Grouped FP4 GEMM and distributed expert dispatch are future work.
+TP4 and TEP4 FP4 routed experts use a CUTLASS pointer-array grouped GEMM for
+the two up projections and the down projection.
+The grouped path keeps the local token order and falls back to the reference
+expert loop for non-FP4 weights and test experts.
+DEP4 still uses the TEP4 executor fallback and has no rank-owned dispatch.
 
 Non-final prefill skips the vocabulary projection.
 DSpark keeps only the target hidden tail needed by its MTP window.
@@ -108,7 +112,7 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 - Replace the DEP4 fallback with stable request ownership and expert dispatch.
 - Measure the native DeepSeek paths against the reference path and public baselines.
 - Move large-row native temporary storage into adapter-owned graph workspaces.
-- Replace Python expert loops with fused grouped expert GEMM for TEP4 and DEP4.
+- Extend grouped expert GEMM to the DEP4 ownership and communication path.
 - Define static multi-rank workspaces before adding DeepSeek CUDA Graph capture and replay.
 - Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
 - Get an independent code review before delivery.
