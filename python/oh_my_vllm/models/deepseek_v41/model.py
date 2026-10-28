@@ -1152,6 +1152,7 @@ class MoE(nn.Module):
             .flatten()[order]
         )
         sorted_weights = weights.flatten()[order]
+        sorted_x = x.index_select(0, sorted_tokens)
         counts = torch.bincount(flat_indices, minlength=self.n_routed_experts).tolist()
         first = sum(counts[: self.experts_start_idx])
         for i in range(self.experts_start_idx, self.experts_end_idx):
@@ -1161,8 +1162,8 @@ class MoE(nn.Module):
                 continue
             expert = self.experts[i]
             idx = sorted_tokens[first:last]
-            expert_weights = sorted_weights[first:last].clone().unsqueeze(-1)
-            y[idx] += expert(x.index_select(0, idx), expert_weights)
+            expert_weights = sorted_weights[first:last].unsqueeze(-1)
+            y[idx] += expert(sorted_x[first:last], expert_weights)
             first = last
         if self.expert_parallel and world_size > 1:
             dist.all_reduce(y)

@@ -4,6 +4,7 @@ import torch
 from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
 from oh_my_vllm.models.deepseek_v41.model import (
     ModelArgs,
+    MoE,
     ParallelEngramEmbedding,
     Transformer,
     get_dspark_topk_idxs,
@@ -13,6 +14,76 @@ from oh_my_vllm.models.deepseek_v41.model import (
 
 
 class DeepSeekModel(unittest.TestCase):
+    def test_moe_merges_routed_experts_and_shared_output(self):
+        class FixedGate(torch.nn.Module):
+            def forward(self, value, image_mask=None):
+                weights = torch.tensor(
+                    (
+                        (0.25, 0.75),
+                        (0.5, 0.5),
+                        (0.75, 0.25),
+                        (0.6, 0.4),
+                    ),
+                    dtype=value.dtype,
+                )
+                indices = torch.tensor(
+                    (
+                        (0, 2),
+                        (1, 3),
+                        (2, 0),
+                        (3, 1),
+                    ),
+                    dtype=torch.long,
+                )
+                return weights[: value.size(0)], indices[: value.size(0)]
+
+        class FixedExpert(torch.nn.Module):
+            def __init__(self, offset):
+                super().__init__()
+                self.offset = offset
+
+            def forward(self, value, weights):
+                return (value + self.offset) * weights
+
+        class ZeroExpert(torch.nn.Module):
+            def forward(self, value):
+                return torch.zeros_like(value)
+
+        args = ModelArgs(
+            dim=2,
+            moe_inter_dim=4,
+            n_routed_experts=4,
+            n_activated_experts=2,
+            n_shared_experts=1,
+            dtype="bf16",
+            expert_dtype=None,
+            parallel_strategy="TP4",
+        )
+        moe = MoE(0, args)
+        moe.gate = FixedGate()
+        moe.experts = torch.nn.ModuleList(FixedExpert(index + 1) for index in range(4))
+        moe.shared_experts = ZeroExpert()
+        value = torch.tensor(
+            (
+                ((1.0, 2.0),),
+                ((3.0, 4.0),),
+                ((5.0, 6.0),),
+                ((7.0, 8.0),),
+            )
+        )
+
+        result = moe(value)
+
+        expected = torch.tensor(
+            (
+                ((3.5, 4.5),),
+                ((6.0, 7.0),),
+                ((7.5, 8.5),),
+                ((10.2, 11.2),),
+            )
+        )
+        torch.testing.assert_close(result, expected)
+
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_fp8_projection_accepts_long_prefill_rows(self):
         previous_device = torch.get_default_device()

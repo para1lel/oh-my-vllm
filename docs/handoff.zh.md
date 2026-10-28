@@ -40,6 +40,9 @@ nonzero multi-token prefill 使用 fused chunk path.
 target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
 aligned prefill batch 最多使用四个 request 组成一个 subbatch.
 
+MoE dispatch 只对 sorted routed row 做一次 gather, 并为 local expert 重用 slice.
+Grouped FP4 GEMM 和 distributed expert dispatch 仍是后续工作.
+
 非 final prefill 会跳过 vocabulary projection.
 DSpark 只保留 MTP window 所需的 target hidden tail.
 ordinary execution 不会收集 target hidden state.

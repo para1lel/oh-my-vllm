@@ -40,6 +40,9 @@ Nonzero multi-token prefill uses the fused chunk path.
 Target and MTP seed chunks keep the total native rows below the operator limit.
 Aligned prefill batches use subbatches of at most four requests.
 
+MoE dispatch gathers sorted routed rows once and reuses slices for local experts.
+Grouped FP4 GEMM and distributed expert dispatch are future work.
+
 Non-final prefill skips the vocabulary projection.
 DSpark keeps only the target hidden tail needed by its MTP window.
 Ordinary execution does not collect target hidden states.
