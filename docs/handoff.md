@@ -65,7 +65,7 @@ The latest native-operator smoke reached ready on GPUs `1,2,3,4`.
 It covered ordinary decode, DSpark5 verification, prefix reuse, and graceful shutdown.
 The ordinary and DSpark5 requests completed without a worker replacement.
 
-On October 28, 2026, a TEP4 smoke on GPUs `1,2,3,4` reached Ready in 28.013 seconds.
+On October 28, 2026, a TEP4 smoke on GPUs `1,2,3,4` reached Ready in 31.012 seconds.
 It used 8 physical blocks, a 1024-token context, and returned 4 ordinary output tokens.
 All four startup traces had metadata identity below 0.1 seconds and no shard hash phase.
 The rank-local weight load took about 19-20 seconds, and the service had zero replacements.
