@@ -88,6 +88,11 @@ class Worker:
         self.root = root
         self.strategy = strategy
         self.dspark = config["num_speculative_tokens"] == 5
+        self.prefill_rows = int(
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS", MAX_PREFILL_ROWS)
+        )
+        if not 1 <= self.prefill_rows <= MAX_PREFILL_ROWS:
+            raise ValueError("DeepSeek prefill row limit is out of bounds")
         self.rank = dist.get_rank()
         self.startup_trace = _StartupTrace(self.rank)
         self.startup_trace.record("process_group_ready")
@@ -265,31 +270,42 @@ class Worker:
         compute_logits=True,
     ):
         cache_slots = torch.tensor([slot], device=self.device)
-        results = []
-        for offset in range(0, len(token_ids), MAX_PREFILL_ROWS):
+        output_ids = logits = main_hidden = None
+        logit_chunks = [] if full_logits else None
+        limit_rows = getattr(self, "prefill_rows", MAX_PREFILL_ROWS)
+        for offset in range(0, len(token_ids), limit_rows):
             inputs = torch.tensor(
-                [token_ids[offset : offset + MAX_PREFILL_ROWS]],
+                [token_ids[offset : offset + limit_rows]],
                 device=self.device,
                 dtype=torch.long,
             )
-            results.append(
-                self.model(
-                    inputs,
-                    start_pos=start_pos + offset,
-                    cache_slots=cache_slots,
-                    full_logits=full_logits,
-                    compute_logits=compute_logits,
-                    collect_main_hidden=getattr(self, "dspark", False),
-                )
+            output_ids, chunk_logits, chunk_hidden = self.model(
+                inputs,
+                start_pos=start_pos + offset,
+                cache_slots=cache_slots,
+                full_logits=full_logits,
+                compute_logits=compute_logits,
+                collect_main_hidden=getattr(self, "dspark", False),
             )
-        if len(results) == 1 or not full_logits:
-            if len(results) == 1:
-                return results[-1]
-            output_ids, logits, _ = results[-1]
-            return output_ids, logits, self._main_hidden_tail(results)
-        output_ids, logits, main_hidden = results[-1]
-        logits = torch.cat([result[1] for result in results], dim=1)
-        main_hidden = self._main_hidden_tail(results)
+            logits = chunk_logits
+            if logit_chunks is not None:
+                logit_chunks.append(chunk_logits)
+            if isinstance(chunk_hidden, torch.Tensor):
+                if isinstance(main_hidden, torch.Tensor):
+                    main_hidden = torch.cat((main_hidden, chunk_hidden), dim=1)
+                else:
+                    main_hidden = chunk_hidden
+                limit = getattr(
+                    getattr(self, "args", None),
+                    "window_size",
+                    MAX_NATIVE_ROWS,
+                )
+                main_hidden = main_hidden[:, -limit:].clone()
+            elif main_hidden is None:
+                main_hidden = chunk_hidden
+            del chunk_hidden
+        if logit_chunks is not None:
+            logits = torch.cat(logit_chunks, dim=1)
         return output_ids, logits, main_hidden
 
     def _main_hidden_tail(self, results):
@@ -358,28 +374,43 @@ class Worker:
         if full_logits and not compute_logits:
             raise ValueError("full logits require vocab projection")
         length = len(token_batches[0])
-        chunk_size = max(1, MAX_PREFILL_ROWS // len(token_batches))
-        results = []
+        limit_rows = getattr(self, "prefill_rows", MAX_PREFILL_ROWS)
+        chunk_size = max(1, limit_rows // len(token_batches))
+        output_ids = logits = main_hidden = None
+        logit_chunks = [] if full_logits else None
         for offset in range(0, length, chunk_size):
             inputs = torch.tensor(
                 [tokens[offset : offset + chunk_size] for tokens in token_batches],
                 device=self.device,
                 dtype=torch.long,
             )
-            results.append(
-                self.model(
-                    inputs,
-                    start_pos=start_pos + offset,
-                    cache_slots=cache_slots,
-                    full_logits=full_logits,
-                    compute_logits=compute_logits,
-                    collect_main_hidden=getattr(self, "dspark", False),
-                )
+            output_ids, chunk_logits, chunk_hidden = self.model(
+                inputs,
+                start_pos=start_pos + offset,
+                cache_slots=cache_slots,
+                full_logits=full_logits,
+                compute_logits=compute_logits,
+                collect_main_hidden=getattr(self, "dspark", False),
             )
-        output_ids, logits, _ = results[-1]
-        main_hidden = self._main_hidden_tail(results)
-        if full_logits:
-            logits = torch.cat([result[1] for result in results], dim=1)
+            logits = chunk_logits
+            if logit_chunks is not None:
+                logit_chunks.append(chunk_logits)
+            if isinstance(chunk_hidden, torch.Tensor):
+                if isinstance(main_hidden, torch.Tensor):
+                    main_hidden = torch.cat((main_hidden, chunk_hidden), dim=1)
+                else:
+                    main_hidden = chunk_hidden
+                limit = getattr(
+                    getattr(self, "args", None),
+                    "window_size",
+                    MAX_NATIVE_ROWS,
+                )
+                main_hidden = main_hidden[:, -limit:].clone()
+            elif main_hidden is None:
+                main_hidden = chunk_hidden
+            del chunk_hidden
+        if logit_chunks is not None:
+            logits = torch.cat(logit_chunks, dim=1)
         return output_ids, logits, main_hidden
 
     def _proposal(self, token, main_hidden, start_pos, slot):

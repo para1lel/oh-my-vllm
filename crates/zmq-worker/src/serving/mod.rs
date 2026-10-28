@@ -699,6 +699,7 @@ struct PendingAdmission {
 async fn begin_admit(
     client: &mut WorkerClient,
     active_count: usize,
+    max_running: usize,
     submission: Submission,
     epoch: u64,
 ) -> Result<Option<PendingAdmission>> {
@@ -712,7 +713,7 @@ async fn begin_admit(
         )));
         return Ok(None);
     }
-    if active_count >= 64 {
+    if active_count >= max_running {
         let _ = submission.ready.send(Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "active request limit exceeded".to_owned(),
@@ -1178,6 +1179,7 @@ async fn run_engine(
     let health = &context.health;
     let diagnostics_interval = context.diagnostics_interval;
     let max_running = (client.configuration().max_num_seqs as usize).min(64);
+    let admission_limit = max_running.saturating_add(1).min(64);
     let mut next_diagnostics = Instant::now();
     loop {
         tokio::time::timeout(context.step_timeout, client.cache_step(scheduler)).await??;
@@ -1218,7 +1220,8 @@ async fn run_engine(
                     continue;
                 }
             };
-            *pending = begin_admit(client, active.len(), submission, epoch).await?;
+            *pending =
+                begin_admit(client, active.len(), admission_limit, submission, epoch).await?;
         }
         if was_idle {
             wait_admit(client, scheduler, active, pending).await?;
@@ -1228,7 +1231,8 @@ async fn run_engine(
                 let Ok(submission) = incoming.try_recv() else {
                     break;
                 };
-                *pending = begin_admit(client, active.len(), submission, epoch).await?;
+                *pending =
+                    begin_admit(client, active.len(), admission_limit, submission, epoch).await?;
                 wait_admit(client, scheduler, active, pending).await?;
             }
         } else if let Some(preparing) = pending.as_ref() {
@@ -1274,10 +1278,12 @@ async fn run_engine(
             }
         }
         if !was_idle
+            && active.len() < admission_limit
             && pending.is_none()
             && let Ok(submission) = incoming.try_recv()
         {
-            *pending = begin_admit(client, active.len(), submission, epoch).await?;
+            *pending =
+                begin_admit(client, active.len(), admission_limit, submission, epoch).await?;
         }
         let batch = scheduler.schedule();
         tokio::time::timeout(context.step_timeout, client.cache_step(scheduler)).await??;

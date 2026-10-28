@@ -14,6 +14,9 @@ The bridge supports `tp4`, `tep4`, and a documented DEP4 executor fallback.
 
 The adapter uses the DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention, and transformer support.
 Prefill uses working chunks of at most 8192 total rows.
+Set `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` to use a smaller model-local chunk.
+Completed chunks release their hidden tail before the next native call.
+
 DSpark verification keeps rejected drafts private and emits the target correction.
 Engram tables use file-backed host mappings.
 Lookup stages only the selected rows on the GPU.
@@ -45,6 +48,9 @@ Complete initial prompts can run as one aligned request batch.
 Shared query attention state resets at each target call.
 Index sources always publish the cache view for the current request slots.
 
+The serving engine enforces the configured `max_num_seqs` resident limit.
+It keeps one additional request in preparation to overlap CPU admission with GPU work.
+
 DeepSeek execution is currently Eager.
 The shared Qwen CUDA Graph path has stream handoff, bounded graph workspaces, graph upload, and cleanup tests.
 DeepSeek multi-rank Graph capture is not connected.
@@ -54,7 +60,7 @@ The shared Qwen graph path already owns stream handoff, graph resources, and cle
 
 DeepSeek startup reads only `config.json` and `model.safetensors.index.json` for its descriptor identity.
 It does not hash weight shards before Ready.
-Rank-local checkpoint tiles use 16384 rows to reduce small host-to-device copies.
+Rank-local checkpoint tiles use 65536 rows to reduce small host-to-device copies.
 Set `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` to override this startup setting.
 External startup traces use `OH_MY_VLLM_STARTUP_TRACE` and use a separate location from the repository.
 

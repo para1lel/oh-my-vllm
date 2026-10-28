@@ -171,7 +171,7 @@ def effective_cache_configuration(arguments):
 
 def effective_service_configuration(arguments):
     return {
-        "max_num_batched_tokens": 32768,
+        "max_num_batched_tokens": getattr(arguments, "max_num_batched_tokens", 32768),
         "max_num_seqs": getattr(arguments, "max_num_seqs", 64),
     }
 

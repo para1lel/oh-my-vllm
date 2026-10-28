@@ -14,6 +14,9 @@ bridge 支持 `tp4`, `tep4` 以及已明确记录的 DEP4 executor fallback.
 
 adapter 使用 DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention 和 transformer support.
 prefill 使用最多 8192 个 total row 的 working chunk.
+设置 `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` 可以使用更小的 model-local chunk.
+完成的 chunk 会在下一次 native call 之前释放 hidden tail.
+
 DSpark verification 保持 rejected draft 为 private state, 并输出 target correction.
 Engram table 使用 file-backed host mapping.
 Lookup 只将选中的 row 分阶段传到 GPU.
@@ -45,6 +48,9 @@ ordinary execution 不会收集 target hidden state.
 每次 target call 都会 reset shared query attention state.
 index source 总是为当前 request slot 发布 cache view.
 
+serving engine 会执行配置的 `max_num_seqs` resident limit.
+它会保留一个额外的 request 做 preparation, 以便让 CPU admission 与 GPU work overlap.
+
 DeepSeek execution 当前使用 Eager.
 共享 Qwen CUDA Graph path 已有 stream handoff, bounded graph workspace, graph upload 和 cleanup checks.
 DeepSeek multi-rank Graph capture 尚未接入.
@@ -54,7 +60,7 @@ workspace 和 capture bucket 之前, DeepSeek 保持 Eager.
 
 DeepSeek startup 只读取 `config.json` 和 `model.safetensors.index.json` 生成 descriptor identity.
 Ready 之前不会 hash weight shard.
-rank-local checkpoint tile 使用 16384 行, 以减少小块 host-to-device copy.
+rank-local checkpoint tile 使用 65536 行, 以减少小块 host-to-device copy.
 设置 `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` 可以覆盖此 startup setting.
 外部 startup trace 使用 `OH_MY_VLLM_STARTUP_TRACE`, 并使用与 repository 分开的 location.
 

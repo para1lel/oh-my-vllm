@@ -128,7 +128,7 @@ def _fp8_to_bf16(raw, scales):
     )
 
 
-DEFAULT_TILE_ROWS = 16384
+DEFAULT_TILE_ROWS = 65536
 
 
 class RankLoader:

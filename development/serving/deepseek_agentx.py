@@ -55,6 +55,7 @@ def arguments():
     parser.add_argument("--cache-context", type=int, default=1048576)
     parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int)
+    parser.add_argument("--max-num-batched-tokens", type=int, default=32768)
     parser.add_argument("--max-num-seqs", type=int)
     parser.add_argument(
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
@@ -67,7 +68,11 @@ def arguments():
         parser.error("put raw artifacts external to the repository")
     if result.duration < 900:
         parser.error("AgentX profiling must last at least 900 seconds")
-    if result.concurrency < 1 or result.cache_context < 1:
+    if (
+        result.concurrency < 1
+        or result.cache_context < 1
+        or result.max_num_batched_tokens < 1
+    ):
         parser.error("concurrency and cache context must be positive")
     try:
         result.max_num_seqs = service_max_num_seqs(

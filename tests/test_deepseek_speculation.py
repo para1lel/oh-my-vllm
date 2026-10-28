@@ -1,4 +1,6 @@
+import gc
 import unittest
+import weakref
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -273,6 +275,46 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(
             [call.kwargs["start_pos"] for call in worker.model.call_args_list],
             [7],
+        )
+
+    def test_target_releases_completed_prefill_hidden_chunks(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+        worker.args = SimpleNamespace(window_size=2)
+        references = []
+
+        def model(_inputs, **_):
+            hidden = torch.ones(1, 1, 2)
+            if references:
+                gc.collect()
+                self.assertIsNone(references[0]())
+            references.append(weakref.ref(hidden))
+            return torch.empty(1, dtype=torch.long), None, hidden
+
+        worker.model = Mock(side_effect=model)
+        result = worker._target([1] * 8193, 7, 3, compute_logits=False)
+
+        self.assertEqual(tuple(result[2].shape), (1, 2, 2))
+        self.assertEqual(worker.model.call_count, 2)
+
+    def test_target_uses_the_bounded_prefill_row_limit(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+        worker.prefill_rows = 128
+        worker.model = Mock(
+            side_effect=[
+                ("first", None, None),
+                ("second", None, None),
+                ("last", None, None),
+            ]
+        )
+
+        worker._target([1] * 257, 7, 3, compute_logits=False)
+
+        self.assertEqual(worker.model.call_count, 3)
+        self.assertEqual(
+            [call.kwargs["start_pos"] for call in worker.model.call_args_list],
+            [7, 135, 263],
         )
 
     def test_target_batch_keeps_total_rows_in_one_native_call(self):

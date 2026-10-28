@@ -105,7 +105,7 @@ impl ManagedChild {
                     return Err(std::io::Error::last_os_error());
                 }
                 let exited = info.si_pid() != 0;
-                if exited {
+                if exited && (info.si_code != libc::CLD_EXITED || info.si_status() != 0) {
                     warn!(
                         worker_pid = self.child().id(),
                         wait_code = info.si_code,

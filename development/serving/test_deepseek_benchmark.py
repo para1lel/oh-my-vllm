@@ -35,6 +35,12 @@ class DeepSeekBenchmark(unittest.TestCase):
             effective_service_configuration(SimpleNamespace()),
             {"max_num_batched_tokens": 32768, "max_num_seqs": 64},
         )
+        self.assertEqual(
+            effective_service_configuration(
+                SimpleNamespace(max_num_batched_tokens=8192, max_num_seqs=1)
+            ),
+            {"max_num_batched_tokens": 8192, "max_num_seqs": 1},
+        )
 
     def test_request_body_uses_the_service_reasoning_field(self):
         body = request_body([{"role": "user", "content": "hello"}], 4, 7)
