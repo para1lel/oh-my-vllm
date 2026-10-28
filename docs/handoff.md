@@ -24,6 +24,8 @@ Lookup stages only the selected rows on the GPU.
 Released DeepSeek shapes support native projection, routing, activation, mHC, RMS, and sparse attention paths.
 The native contracts accept long row ranges. Small rows use bounded workspaces.
 Large prefill calls use bounded 8192-row launches to keep temporary storage bounded.
+Native SwiGLU accepts up to 1048576 routed rows.
+This keeps six-route 8192-row prefill chunks on the native activation path.
 
 Sparse attention status failures disable the native path and use the reference path.
 Short-query native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
@@ -117,6 +119,7 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 ## Next work
 
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
+- Run higher-capacity AgentX cases after increasing physical cache and sequence capacity.
 - Replace the DEP4 fallback with stable request ownership and expert dispatch.
 - Measure the native DeepSeek paths against the reference path and public baselines.
 - Move large-row native temporary storage into adapter-owned graph workspaces.

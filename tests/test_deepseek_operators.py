@@ -308,6 +308,18 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         torch.testing.assert_close(actual, torch.zeros_like(gate))
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_swiglu_accepts_six_route_rows_per_prefill_token(self):
+        rows = 8192 * 6
+        gate = torch.zeros((rows, 576), device="cuda", dtype=torch.bfloat16)
+        up = torch.zeros_like(gate)
+        route = torch.ones((rows,), device="cuda", dtype=torch.float32)
+
+        actual = kernel.swiglu(gate, up, route, 10)
+
+        self.assertEqual(tuple(actual.shape), tuple(gate.shape))
+        torch.testing.assert_close(actual, torch.zeros_like(gate))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_sparse_attention_native_path_matches_quantized_reference(self):
         device = torch.device("cuda")
         generator = torch.Generator(device=device).manual_seed(19)

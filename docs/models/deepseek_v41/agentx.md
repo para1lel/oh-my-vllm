@@ -36,6 +36,28 @@ The runner records source, executable, native modules, checkpoint, tokenizer, to
 Raw harness records and service logs stay in a separate location.
 The CSV and dark-background scatter plot are approved result artifacts.
 
+## Functional record
+
+The latest functional record uses TEP4 with 16 session trees on GPUs 1, 2, 3, and 4.
+It uses `max_num_seqs=1` to fit the model and cache in the available device memory.
+
+| Setting | Value |
+|---|---:|
+| AgentX version | `1.0.7` |
+| Profiling duration | 900 seconds |
+| Cache context | 65536 tokens |
+| GPU blocks | 512 |
+| Mamba blocks | 64 |
+| Maximum batched tokens | 16384 |
+| Warmup requests | 16 |
+| Completed requests | 2 |
+| Failed, cancelled, incomplete requests | 0 |
+
+The [functional CSV](assets/agentx-tep4-16-functional.csv) and
+[functional dark scatter plot](assets/agentx-tep4-16-functional.png) record this run.
+The two completed rows show end-to-end service execution and artifact export.
+They do not represent TEP4 throughput at concurrency 16 because the service used one resident sequence.
+
 The current DEP4 command uses the TEP4 executor fallback.
 Do not treat a DEP4 result as DEP4 performance evidence until request ownership and expert dispatch are implemented.
 No complete approved AgentX result set is recorded yet.

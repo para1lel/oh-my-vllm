@@ -24,6 +24,8 @@ Lookup 只将选中的 row 分阶段传到 GPU.
 released DeepSeek shape 支持 native projection, routing, activation, mHC, RMS 和 sparse attention path.
 native contract 支持长 row range.
 大型 prefill 使用有界的 8192-row launch, 以限制 temporary storage.
+Native SwiGLU 支持最多 1048576 个 routed row.
+这使 six-route 8192-row prefill chunk 保持在 native activation path.
 
 sparse attention status failure 会禁用 native path, 并使用 reference path.
 short query 的 native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
@@ -116,6 +118,7 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 ## 下一步
 
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
+- 增加 physical cache 和 sequence capacity 后, 运行更高容量的 AgentX case.
 - 用稳定的 request ownership 和 expert dispatch 替换 DEP4 fallback.
 - 将 native DeepSeek path 与 reference path 和公开 baseline 做性能比较.
 - 将 large-row native temporary storage 移入 adapter-owned graph workspace.

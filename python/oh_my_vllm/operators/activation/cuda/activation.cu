@@ -28,7 +28,7 @@ __global__ void swiglu_kernel(const __nv_bfloat162 *gate, const __nv_bfloat162 *
 
 void swiglu(TensorView gate, TensorView up, TensorView route, TensorView output, int64_t limit,
             bool routed) {
-  TVM_FFI_ICHECK(gate.ndim() == 2 && gate.size(0) >= 0 && gate.size(0) <= 32768);
+  TVM_FFI_ICHECK(gate.ndim() == 2 && gate.size(0) >= 0 && gate.size(0) <= (1 << 20));
   int rows = gate.size(0), width = gate.size(1);
   TVM_FFI_ICHECK(((width == 576 || width == 2304) && limit == 10) ||
                  (width == 2816 && limit == 0 && !routed));
