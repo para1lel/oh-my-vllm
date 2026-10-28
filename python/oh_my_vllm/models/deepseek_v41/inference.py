@@ -82,7 +82,12 @@ class Worker:
         self.model.eval()
         self.requests = {}
         self.slots = set(range(config["max_num_seqs"]))
-        self.checkpoint_identity = checkpoint_identity(root)
+        # All ranks load the same immutable checkpoint root before rank zero hashes it.
+        identity = [checkpoint_identity(root) if self.rank == 0 else None]
+        dist.broadcast_object_list(identity, src=0)
+        if not isinstance(identity[0], dict):
+            raise ValueError("DeepSeek checkpoint identity broadcast was invalid")
+        self.checkpoint_identity = identity[0]
         self.descriptor = build_descriptor(
             parsed,
             raw_config=raw_config,
@@ -358,8 +363,8 @@ class Worker:
 
     def close(self):
         self.trace.close()
-        self.weights.close()
         del self.model
+        self.weights.close()
         torch.cuda.empty_cache()
 
 

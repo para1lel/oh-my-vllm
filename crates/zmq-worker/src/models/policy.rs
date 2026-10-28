@@ -20,6 +20,7 @@ pub struct ModelDefaults {
     pub max_num_batched_tokens: u32,
     pub max_num_seqs: u32,
     pub mamba_blocks: u32,
+    pub init_timeout_seconds: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -377,6 +378,7 @@ mod tests {
         assert_eq!(policy.max_offline_batch_size(), 64);
         assert_eq!(policy.served_model_name(), "deepseek-v4.1-flash");
         let defaults = policy.defaults();
+        assert_eq!(defaults.init_timeout_seconds, 1800);
         assert_eq!(
             (
                 defaults.block_size,

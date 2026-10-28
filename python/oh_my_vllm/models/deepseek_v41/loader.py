@@ -1,6 +1,10 @@
 """Stream original DeepSeek checkpoint tensors into one rank-local model."""
 
 import json
+import math
+import mmap
+import struct
+import warnings
 from contextlib import ExitStack
 from pathlib import Path
 
@@ -144,6 +148,8 @@ class RankLoader:
             if name is not None:
                 self.sources.setdefault(name, source_name)
         self.resources = ExitStack()
+        self.headers = {}
+        self.mappings = {}
         self.shards = {
             shard: self.resources.enter_context(
                 safe_open(str(self.root / shard), framework="pt", device="cpu")
@@ -195,6 +201,9 @@ class RankLoader:
             scales = self._read_tile(scale_name, scale_spec, 0, (rows + 31) // 32)
             destination.copy_(_fp8_to_bf16(raw, scales))
             return
+        if ".engram.embed." in name:
+            destination.data = self._mapped_parameter(name)
+            return
         if len(expected) == 1:
             raw = self._read(
                 name,
@@ -212,6 +221,84 @@ class RankLoader:
             if spec["dtype"] != spec["stored_dtype"]:
                 value = value.to(PARAM_DTYPES[spec["dtype"]])
             destination[first : first + count].copy_(value)
+
+    def _mapped_parameter(self, name):
+        spec = self.specs[name]
+        source_name = self.sources.get(name)
+        if source_name is None:
+            raise ValueError(f"checkpoint has no source tensor for {name}")
+        shard = self.index[source_name]
+        cached = self.headers.get(shard)
+        if cached is None:
+            with (self.root / shard).open("rb") as source:
+                prefix = source.read(8)
+                if len(prefix) != 8:
+                    raise ValueError(f"truncated checkpoint header: {shard}")
+                header_size = struct.unpack("<Q", prefix)[0]
+                header = json.loads(source.read(header_size))
+            cached = (8 + header_size, header)
+            self.headers[shard] = cached
+        payload_start, header = cached
+        record = header.get(source_name)
+        if not isinstance(record, dict):
+            raise ValueError(f"checkpoint header has no tensor: {source_name}")
+        stored_shape = tuple(self.layout[name]["shape"])
+        record_shape = record.get("shape")
+        if (
+            record.get("dtype") != spec["stored_dtype"]
+            or not isinstance(record_shape, list)
+            or tuple(record_shape) != stored_shape
+        ):
+            raise ValueError(f"checkpoint tensor metadata differs: {source_name}")
+        offsets = record.get("data_offsets")
+        if (
+            not isinstance(offsets, list)
+            or len(offsets) != 2
+            or not all(isinstance(value, int) and value >= 0 for value in offsets)
+        ):
+            raise ValueError(f"invalid checkpoint offsets: {source_name}")
+        expected_bytes = math.prod(stored_shape) * DTYPE_BYTES[spec["stored_dtype"]]
+        if offsets[1] - offsets[0] != expected_bytes:
+            raise ValueError(f"checkpoint tensor byte length differs: {source_name}")
+        file_size = (self.root / shard).stat().st_size
+        if payload_start + offsets[1] > file_size:
+            raise ValueError(f"checkpoint tensor exceeds its shard: {source_name}")
+        mapped = self.mappings.get(shard)
+        if mapped is None:
+            source = self.resources.enter_context((self.root / shard).open("rb"))
+            mapped = self.resources.enter_context(
+                mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
+            )
+            self.mappings[shard] = mapped
+        count = math.prod(stored_shape)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            raw = torch.frombuffer(
+                mapped,
+                dtype=RAW_DTYPES[spec["stored_dtype"]],
+                count=count,
+                offset=payload_start + offsets[0],
+            ).reshape(stored_shape)
+        value = raw.view(PARAM_DTYPES[spec["stored_dtype"]])
+        if spec["axis"] is not None:
+            available = min(
+                spec["shape"][spec["axis"]],
+                stored_shape[spec["axis"]] - spec["start"],
+            )
+            value = value.narrow(spec["axis"], spec["start"], available)
+            if available != spec["shape"][spec["axis"]]:
+                padded = torch.zeros(
+                    spec["shape"],
+                    dtype=value.dtype,
+                    device="cpu",
+                )
+                padded.narrow(spec["axis"], 0, available).copy_(value)
+                value = padded
+        if spec["dtype"] != spec["stored_dtype"]:
+            value = value.to(PARAM_DTYPES[spec["dtype"]])
+        if tuple(value.shape) != tuple(spec["shape"]):
+            raise ValueError(f"source parameter shape differs: {name}")
+        return value
 
     def load_into(self, model):
         parameters = dict(model.named_parameters())

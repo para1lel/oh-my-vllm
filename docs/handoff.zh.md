@@ -15,6 +15,8 @@ bridge 支持 `tp4`, `tep4` 以及已明确记录的 DEP4 executor fallback.
 adapter 使用 DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation 和 transformer support.
 prefill row 会按 native operator row limit 切分.
 DSpark verification 保持 rejected draft 为 private state, 并输出 target correction.
+Engram table 使用 file-backed host mapping.
+Lookup 只将选中的 row 分阶段传到 GPU.
 
 DeepSeek execution 当前使用 Eager.
 共享 Qwen CUDA Graph path 已有 stream handoff, bounded graph workspace 和 cleanup checks.
@@ -25,6 +27,11 @@ DeepSeek multi-rank Graph capture 尚未接入.
 已在 GPU `4,5,6,7` 上使用 TEP4 完成短真实 checkpoint execution.
 它覆盖 readiness, ordinary decode, DSpark proposal output 和 draft rejection.
 CPU 和 Rust checks 覆盖 descriptor, model, operators, launcher cleanup, matrix scope, speculation 和 shared runtime.
+
+2026 年 10 月 28 日, 完整 Rust HTTP service 使用 TEP4 和短 context 成功 ready.
+Smoke run 检查 model listing, diagnostics, ordinary text, DSpark5, SSE usage, validation error 和 shutdown.
+DSpark5 HTTP log 记录了 2 个 proposed draft token 和 2 个 verified draft token.
+这次 smoke run 是功能证据, 不替代 approved matrix.
 
 [DeepSeek matrix](../development/serving/deepseek_matrix.py) 中有批准的 workload definition.
 HTTP runner 定义 36 个 DSpark5 case 和 2 个 ordinary TP4 case.

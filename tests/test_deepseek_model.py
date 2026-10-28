@@ -3,12 +3,44 @@ import unittest
 import torch
 from oh_my_vllm.models.deepseek_v41.model import (
     ModelArgs,
+    ParallelEngramEmbedding,
     Transformer,
     get_dspark_topk_idxs,
 )
 
 
 class DeepSeekModel(unittest.TestCase):
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_engram_table_stays_on_host_for_cuda_lookup(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cuda")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            table = ParallelEngramEmbedding(8, 32)
+            table.weight.data.copy_(
+                torch.arange(8 * 32, device="cpu", dtype=torch.float32)
+                .reshape(8, 32)
+                .to(torch.float8_e4m3fn)
+            )
+            table.scale.data.fill_(1)
+
+            result = table(torch.tensor([[1, 3]], device="cuda"))
+
+            self.assertEqual(table.weight.device.type, "cpu")
+            self.assertFalse(table.weight.is_pinned())
+            self.assertEqual(result.device.type, "cuda")
+            expected = (
+                torch.arange(32, 64, device="cpu", dtype=torch.float32)
+                .to(torch.float8_e4m3fn)
+                .float()
+                .to("cuda")
+            )
+            self.assertTrue(torch.equal(result[0, 0].float(), expected))
+        finally:
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
     def test_dspark_draft_attention_masks_future_draft_positions(self):
         indices = get_dspark_topk_idxs(8, 1, 5, 4)
 

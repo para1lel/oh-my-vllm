@@ -64,7 +64,7 @@ impl WorkerConfig {
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("python3")),
-            init_timeout: Duration::from_secs(300),
+            init_timeout: Duration::from_secs(defaults.init_timeout_seconds),
             torch_profile: None,
         }
     }

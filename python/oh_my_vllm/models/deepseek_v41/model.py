@@ -339,19 +339,31 @@ class ParallelEngramEmbedding(nn.Module):
         self.vocab_end_idx = self.vocab_start_idx + self.part_num_embeddings
 
         self.block_size = fp8_block_size
-        # the table stays fp8 as stored: rows are dequantized with `scale` on lookup
+        # The loader replaces these CPU placeholders with file-backed FP8 views.
         self.weight = nn.Parameter(
-            torch.empty(self.part_num_embeddings, dim, dtype=torch.float8_e4m3fn)
+            torch.empty(
+                self.part_num_embeddings,
+                dim,
+                dtype=torch.float8_e4m3fn,
+                device="cpu",
+            )
         )
         self.scale = nn.Parameter(
             torch.empty(
-                self.part_num_embeddings, dim // self.block_size, dtype=scale_dtype
+                self.part_num_embeddings,
+                dim // self.block_size,
+                dtype=scale_dtype,
+                device="cpu",
             )
         )
 
     def forward(self, indices: torch.Tensor) -> torch.Tensor:
-        mask = (indices < self.vocab_start_idx) | (indices >= self.vocab_end_idx)
-        local_indices = indices - self.vocab_start_idx
+        device = indices.device
+        host_indices = indices.to(device="cpu")
+        mask = (host_indices < self.vocab_start_idx) | (
+            host_indices >= self.vocab_end_idx
+        )
+        local_indices = host_indices - self.vocab_start_idx
         local_indices = local_indices.masked_fill(mask, 0)
 
         values = F.embedding(local_indices, self.weight)
@@ -362,6 +374,8 @@ class ParallelEngramEmbedding(nn.Module):
         values = values.flatten(-2).to(torch.bfloat16)
         values = values.masked_fill(mask.unsqueeze(-1), 0)
 
+        if device.type != "cpu":
+            values = values.pin_memory().to(device, non_blocking=True)
         if world_size > 1:
             dist.all_reduce(values)
         return values

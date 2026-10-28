@@ -30,6 +30,7 @@ pub(in crate::models) fn defaults() -> ModelDefaults {
         max_num_batched_tokens: 32768,
         max_num_seqs: 64,
         mamba_blocks: 128,
+        init_timeout_seconds: 1800,
     }
 }
 
