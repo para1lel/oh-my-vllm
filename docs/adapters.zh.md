@@ -84,7 +84,8 @@ b"oh-my-vllm/tokenizer-identity/v1\0"
 文件名, 摘要或 domain 改变会改变身份.
 缓存容量不改变 checkpoint 或 tokenizer 身份.
 各加载器验证声明的 startup identity 所需的文件.
-DeepSeek 在 load 期间读取并验证 weight data; 完整 shard identity 保留在 measurement artifact 中.
+DeepSeek 在 load 期间读取所需的 weight tensor, 不 hash shard bytes.
+完整 shard identity 保留在 measurement artifact 中.
 
 冻结的 Qwen FP64 生成器使用 `worker.checkpoint` 导入.
 它不是共享运行时 checkpoint 接口.

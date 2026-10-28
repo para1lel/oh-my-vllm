@@ -67,7 +67,11 @@ The shared Qwen graph path already owns stream handoff, graph resources, and cle
 
 DeepSeek startup reads only `config.json` and `model.safetensors.index.json` for its descriptor identity.
 It does not hash weight shards before Ready.
+
 Rank-local checkpoint tiles use 65536 rows to reduce small host-to-device copies.
+Rank-local parameters use 16-byte-aligned contiguous storage.
+GPU startup copies required tensor ranges from each safetensors shard through a
+bounded staging buffer and skips unused Engram payload ranges.
 Set `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` to override this startup setting.
 External startup traces use `OH_MY_VLLM_STARTUP_TRACE` and use a separate location from the repository.
 
@@ -94,6 +98,10 @@ The latest native-operator smoke reached ready on GPUs `1,2,3,4`.
 It covered ordinary decode, DSpark5 verification, prefix reuse, and graceful shutdown.
 The ordinary and DSpark5 requests completed without a worker replacement.
 
+A TP4 ordinary service and a TEP4 DSpark5 service use the shard-range startup
+loader. Each reaches Ready and completes a short HTTP request on GPUs apart
+from GPU 0. DSpark5 reports accepted draft tokens.
+
 On October 28, 2026, a TEP4 smoke on GPUs `1,2,3,4` reached Ready in 31.012 seconds.
 It used 8 physical blocks, a 1024-token context, and returned 4 ordinary output tokens.
 All four startup traces had metadata identity below 0.1 seconds and no shard hash phase.
@@ -114,6 +122,7 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 - Move large-row native temporary storage into adapter-owned graph workspaces.
 - Extend grouped expert GEMM to the DEP4 ownership and communication path.
 - Define static multi-rank workspaces before adding DeepSeek CUDA Graph capture and replay.
+- Run the approved DeepSeek AgentX cases and publish the latest CSV and dark scatter plots.
 - Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
 - Get an independent code review before delivery.
 

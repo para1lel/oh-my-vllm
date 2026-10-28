@@ -1,6 +1,6 @@
 # CUDA Graph Capture and Replay Audit
 
-Audit date: 2026-10-28.
+Audit date: 2026-10-29.
 
 Scope: review the current capture, replay, collective, and shutdown paths.
 This audit does not add the session-only SOTA objective to repository gates.
@@ -78,3 +78,20 @@ Before DeepSeek uses CUDA Graphs, the adapter must:
 
 Until these checks exist, DeepSeek stays Eager.
 This audit makes no DeepSeek throughput claim.
+
+## Current upstream recheck
+
+The current vLLM source uses capture-size buckets and a graph manager.
+It also uses a graph wrapper, a capture memory pool, persistent capture
+outputs, and offloader synchronization before replay. See the [vLLM graph manager](https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu/cudagraph_utils.py).
+
+The current SGLang source separates shape selection from graph mechanics.
+Its base runner computes capture batch sizes. Phase runners own static input
+buffers and output slicing. A backend owns capture and replay for each shape.
+See the [SGLang base runner](https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/model_executor/runner/base_cuda_graph_runner.py)
+and [backend registry](https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/model_executor/runner_backend/__init__.py).
+
+These current patterns support the decision above. DeepSeek still lacks
+fixed multi-rank input and output buffers, shape buckets, rank-symmetric
+capture, and a collective completion and error contract. No Graph code change
+is required in this delivery.

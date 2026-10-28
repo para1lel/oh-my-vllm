@@ -67,7 +67,11 @@ workspace 和 capture bucket 之前, DeepSeek 保持 Eager.
 
 DeepSeek startup 只读取 `config.json` 和 `model.safetensors.index.json` 生成 descriptor identity.
 Ready 之前不会 hash weight shard.
+
 rank-local checkpoint tile 使用 65536 行, 以减少小块 host-to-device copy.
+rank-local parameter 使用 16-byte aligned contiguous storage.
+GPU startup 通过 bounded staging buffer 从每个 safetensors shard copy 所需
+tensor range, 并跳过未使用的 Engram payload range.
 设置 `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` 可以覆盖此 startup setting.
 外部 startup trace 使用 `OH_MY_VLLM_STARTUP_TRACE`, 并使用与 repository 分开的 location.
 
@@ -93,6 +97,10 @@ cache behavior test 覆盖 host snapshot store, load, drop, prefix copy 和 rest
 它覆盖 ordinary decode, DSpark5 verification, prefix reuse 和 graceful shutdown.
 ordinary 和 DSpark5 request 都完成, 且没有 worker replacement.
 
+最新 TP4 ordinary 和 TEP4 DSpark5 service 使用 shard-range startup loader.
+它们在 GPU 0 之外的显卡上成功 Ready 并完成短 HTTP request.
+DSpark5 报告 accepted draft token.
+
 2026 年 10 月 28 日, GPU `1,2,3,4` 上的 TEP4 smoke 在 31.012 秒内达到 Ready.
 它使用 8 个 physical block 和 1024-token context, 并返回 4 个 ordinary output token.
 四个 startup trace 的 metadata identity 都低于 0.1 秒, 且没有 shard hash phase.
@@ -113,6 +121,7 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 - 将 large-row native temporary storage 移入 adapter-owned graph workspace.
 - 将 grouped expert GEMM 扩展到 DEP4 ownership 和 communication path.
 - 在添加 DeepSeek CUDA Graph capture 和 replay 之前定义 static multi-rank workspace.
+- 运行批准的 DeepSeek AgentX case, 发布最新 CSV 和暗色背景散点图.
 - 在 GPU 0 以外的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
 - 交付前取得 independent code review.
 

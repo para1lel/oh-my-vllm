@@ -84,7 +84,7 @@ b"oh-my-vllm/tokenizer-identity/v1\0"
 Changing file names, digests, or domains changes the identity.
 Cache capacity does not change checkpoint or tokenizer identity.
 Each loader verifies the files required by its declared startup identity.
-DeepSeek reads and validates weight data during load.
+DeepSeek reads the required weight tensors during load without hashing shard bytes.
 Full shard identity stays in measurement artifacts.
 
 The `worker.checkpoint` import is used by the frozen Qwen FP64 generator.

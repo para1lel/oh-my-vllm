@@ -298,6 +298,16 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         torch.testing.assert_close(actual, expected, atol=0.08, rtol=0.08)
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_swiglu_accepts_an_unaligned_route_slice(self):
+        gate = torch.zeros((8, 576), device="cuda", dtype=torch.bfloat16)
+        up = torch.zeros_like(gate)
+        route = torch.ones((9,), device="cuda", dtype=torch.float32)[1:]
+
+        actual = kernel.swiglu(gate, up, route, 10)
+
+        torch.testing.assert_close(actual, torch.zeros_like(gate))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_sparse_attention_native_path_matches_quantized_reference(self):
         device = torch.device("cuda")
         generator = torch.Generator(device=device).manual_seed(19)
@@ -630,6 +640,7 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         self,
     ):
         loader = RankLoader.__new__(RankLoader)
+        loader.rank = 0
         loader.specs = {
             "layers.0.attn.attn_sink": {
                 "shape": (16,),
@@ -679,6 +690,36 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         self.assertEqual(loader._read.call_args_list[1].args[1][0], slice(2048, 4096))
         self.assertEqual(destination[0, 0], 0)
         self.assertEqual(destination[2048, 0], 2048)
+
+    def test_rank_loader_loads_multiple_parameter_dtypes_through_the_public_boundary(
+        self,
+    ):
+        loader = RankLoader.__new__(RankLoader)
+        loader.rank = 0
+        loader.specs = {
+            "first": {"shape": (2, 3), "dtype": "BF16"},
+            "second": {"shape": (4,), "dtype": "F32"},
+        }
+        values = {
+            "first": torch.arange(6, dtype=torch.bfloat16).reshape(2, 3),
+            "second": torch.arange(4, dtype=torch.float32),
+        }
+        loader._read_parameter = Mock(side_effect=values.__getitem__)
+
+        class TinyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.first = torch.nn.Parameter(torch.empty(2, 3, dtype=torch.bfloat16))
+                self.second = torch.nn.Parameter(torch.empty(4, dtype=torch.float32))
+
+        model = TinyModel()
+        info = loader.load_into(model)
+
+        self.assertEqual(info["parameter_count"], 2)
+        torch.testing.assert_close(model.first, values["first"])
+        torch.testing.assert_close(model.second, values["second"])
+        self.assertEqual(model.first.data_ptr() % 16, 0)
+        self.assertEqual(model.second.data_ptr() % 16, 0)
 
     def test_native_operator_plans_cover_deepseek_shapes(self):
         self.assertEqual(

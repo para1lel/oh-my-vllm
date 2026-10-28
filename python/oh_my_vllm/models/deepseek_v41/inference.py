@@ -12,9 +12,14 @@ import torch
 import torch.distributed as dist
 
 from ...worker.trace import Trace
-from .adapter import INFERENCE_CONFIG_SHA256, MAX_CONTEXT_TOKENS, validate_config
+from .adapter import (
+    CONFIG_SHA256,
+    INFERENCE_CONFIG_SHA256,
+    MAX_CONTEXT_TOKENS,
+    validate_config,
+)
 from .cache import DeepSeekCache
-from .descriptor import build_descriptor, checkpoint_metadata_identity
+from .descriptor import build_descriptor
 from .loader import DEFAULT_TILE_ROWS, RankLoader
 from .model import ModelArgs, Transformer
 from .request import Request
@@ -130,13 +135,10 @@ class Worker:
                 strategy=model_strategy.upper(),
                 tile_rows=tile_rows,
             )
-        with self.startup_trace.measure("checkpoint_metadata"):
-            self.checkpoint_identity = checkpoint_metadata_identity(
-                root,
-                raw_config=raw_config,
-                weight_map=self.weights.index,
-                index_sha256=self.weights.index_sha256,
-            )
+        self.checkpoint_identity = {
+            "config": CONFIG_SHA256,
+            "index": self.weights.index_sha256,
+        }
         with self.startup_trace.measure("weight_load"):
             self.weight_info = self.weights.load_into(self.model)
         self.model.eval()

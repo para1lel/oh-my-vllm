@@ -1,6 +1,6 @@
 # CUDA Graph Capture 和 Replay 审查
 
-审查日期: 2026-10-28.
+审查日期: 2026-10-29.
 
 范围: 审查当前 capture, replay, collective 和 shutdown path.
 本审查不将当前会话的 SOTA 目标加入 repository gate.
@@ -78,3 +78,19 @@ DeepSeek 使用 CUDA Graph 前, adapter 必须:
 
 这些检查完成前, DeepSeek 保持 Eager.
 本审查不做 DeepSeek throughput claim.
+
+## 当前 upstream 复查
+
+当前 vLLM source 仍使用 capture-size bucket, graph manager, graph wrapper,
+capture memory pool, persistent capture output 和 replay 前的 offloader
+synchronization. 参见 [vLLM graph manager](https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu/cudagraph_utils.py).
+
+当前 SGLang source 将 shape selection 与 graph mechanics 分离.
+它的 base runner 计算 capture batch size, phase runner 拥有 static input
+buffer 和 output slicing, backend 为每个 shape 管理 capture 和 replay.
+参见 [SGLang base runner](https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/model_executor/runner/base_cuda_graph_runner.py)
+和 [backend registry](https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/model_executor/runner_backend/__init__.py).
+
+这些当前实现确认了上面的决定. DeepSeek 仍缺少 fixed multi-rank input 和
+output buffer, shape bucket, rank-symmetric capture 以及 collective completion
+和 error contract. 本次 delivery 不需要修改 Graph code.

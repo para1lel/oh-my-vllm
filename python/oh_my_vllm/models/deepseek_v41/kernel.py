@@ -368,17 +368,25 @@ def swiglu(gate, up, route=None, limit=10):
             result = result * route.unsqueeze(-1)
         return result.to(gate.dtype)
     output = torch.empty_like(gate)
+    gate_value = gate.to(torch.bfloat16)
+    if gate_value.data_ptr() % 16:
+        gate_value = gate_value.clone()
+    up_value = up.to(torch.bfloat16)
+    if up_value.data_ptr() % 16:
+        up_value = up_value.clone()
     route_value = (
         torch.empty((0,), dtype=torch.float32, device=gate.device)
         if route is None
         else route.float().reshape(-1)
     )
+    if route_value.data_ptr() % 16:
+        route_value = route_value.clone()
     native_limit = int(limit)
     if native_limit != limit:
         raise ValueError("native SwiGLU limit must be an integer")
     _activation_module().swiglu(
-        gate.to(torch.bfloat16),
-        up.to(torch.bfloat16),
+        gate_value,
+        up_value,
         route_value,
         output,
         native_limit,
