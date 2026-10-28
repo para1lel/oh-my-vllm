@@ -19,6 +19,11 @@ Image preparation is kept out of the public capability until the tokenizer, imag
 The current DEP4 command selects the TEP4 executor as a functional fallback.
 It does not provide DEP4 request ownership or expert dispatch.
 
+The physical cache keeps model pages behind the Rust logical block tables.
+It supports prefix reuse, partial block copies, host snapshots, and restoration.
+The adapter keeps accepted DSpark MTP state during verification and restore.
+DeepSeek still uses Eager execution because coordinated multi-rank Graph replay is not connected.
+
 Use the [HTTP procedure](performance.md) for the approved 38-case matrix.
 Use the [AgentX procedure](agentx.md) for the three strategy cases.
 The procedures define measurements. They do not add performance gates.
@@ -36,9 +41,11 @@ The physical cache setting must cover the requested prompt and output.
 
 ## State
 
-The Python worker currently keeps model cache state in rank-local tensors.
+The Python worker keeps model cache state in rank-local tensors and physical pages.
 Rust logical cache transfers return completion records for the protocol seam.
-The DeepSeek-specific cache ownership, prefix reuse, host residency, and restoration contract stay in progress.
+DeepSeek-specific DEP4 ownership and coordinated Graph replay stay in progress.
+Nonzero multi-token prefill uses a sequential correctness path.
+Fused multi-token prefill stays a performance task.
 
 Short TEP4 evidence does not prove TP4, DEP4, long context, images, Graphs, or SOTA.
 These paths must have separate checks.

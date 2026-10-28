@@ -162,6 +162,138 @@ class DeepSeekModel(unittest.TestCase):
             torch.set_default_device(previous_device)
             torch.set_default_dtype(previous_dtype)
 
+    def test_nonzero_prefill_chunk_matches_sequential_decode(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=2,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=8,
+                compress_ratios=(0, 0),
+                kv_source_layers=(),
+                index_source_layers=(),
+                index_topk=4,
+                candidate_source_layer=-1,
+                candidate_topk_blocks=0,
+                candidate_block_size=0,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                temperature=0,
+                max_batch_size=1,
+                max_seq_len=8,
+            )
+            sequential = Transformer(args)
+            chunked = Transformer(args)
+            for parameter in sequential.parameters():
+                torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+            chunked.load_state_dict(sequential.state_dict())
+            prompt = torch.tensor([[1, 2, 3, 4]])
+            continuation = torch.tensor([[5, 6]])
+            sequential(prompt, cache_slots=torch.tensor([0]))
+            sequential_logits = sequential(
+                continuation[:, :1],
+                start_pos=4,
+                cache_slots=torch.tensor([0]),
+            )[1]
+            sequential_logits = sequential(
+                continuation[:, 1:],
+                start_pos=5,
+                cache_slots=torch.tensor([0]),
+            )[1]
+            chunked(prompt, cache_slots=torch.tensor([0]))
+            chunked_logits = chunked(
+                continuation,
+                start_pos=4,
+                cache_slots=torch.tensor([0]),
+            )[1]
+            torch.testing.assert_close(chunked_logits, sequential_logits)
+        finally:
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_dspark_seed_stores_target_history_without_running_draft_queries(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=1,
+                n_mtp_layers=1,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                dspark_n_routed_experts=4,
+                dspark_n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=8,
+                compress_ratios=(0, 0),
+                kv_source_layers=(),
+                index_source_layers=(),
+                index_topk=4,
+                candidate_source_layer=-1,
+                candidate_topk_blocks=0,
+                candidate_block_size=0,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                dspark_block_size=5,
+                dspark_noise_token_id=0,
+                dspark_target_layer_ids=(0,),
+                dspark_markov_rank=8,
+                max_batch_size=1,
+                max_seq_len=16,
+            )
+            model = Transformer(args)
+            for parameter in model.parameters():
+                torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+            slots = torch.tensor([0])
+            _, _, hidden = model(torch.randint(0, 128, (1, 4)), cache_slots=slots)
+            model.forward_spec_seed(hidden, start_pos=0, cache_slots=slots)
+            first = model.mtp[0].attn.window_kv_cache[0, :4].clone()
+            self.assertTrue(torch.any(first != 0))
+
+            _, _, hidden = model(
+                torch.randint(0, 128, (1, 1)),
+                start_pos=4,
+                cache_slots=slots,
+            )
+            model.forward_spec_seed(hidden, start_pos=4, cache_slots=slots)
+            self.assertTrue(torch.any(model.mtp[0].attn.window_kv_cache[0, 4] != 0))
+            proposal = model.forward_spec(
+                torch.tensor([[1]]),
+                hidden,
+                start_pos=4,
+                cache_slots=slots,
+            )
+            self.assertIsNotNone(proposal)
+            self.assertEqual(tuple(proposal[0].shape), (1, 6))
+        finally:
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
     def test_tiny_target_forward_returns_finite_logits(self):
         previous_device = torch.get_default_device()
         previous_dtype = torch.get_default_dtype()

@@ -12,6 +12,7 @@ import torch.distributed as dist
 
 from ...worker.trace import Trace
 from .adapter import INFERENCE_CONFIG_SHA256, MAX_CONTEXT_TOKENS, validate_config
+from .cache import DeepSeekCache
 from .descriptor import build_descriptor
 from .loader import RankLoader
 from .model import ModelArgs, Transformer
@@ -82,6 +83,16 @@ class Worker:
         self.model.eval()
         self.requests = {}
         self.slots = set(range(config["max_num_seqs"]))
+        self.cache = DeepSeekCache(
+            self.model,
+            block_tokens=config["block_size"],
+            max_seq_len=args.max_seq_len,
+            host_limit=int(config.get("host_cache_bytes") or 0),
+            fa_capacity=config.get("num_gpu_blocks") or 2048,
+            mamba_capacity=config.get("mamba_blocks") or 128,
+            requests=self.requests,
+            free_slots=self.slots,
+        )
         # All ranks load the same immutable checkpoint root before rank zero hashes it.
         identity = [checkpoint_identity(root) if self.rank == 0 else None]
         dist.broadcast_object_list(identity, src=0)
@@ -118,6 +129,11 @@ class Worker:
                 "strategy": strategy,
                 "effective_strategy": model_strategy,
             },
+            execution={
+                "prefill": "eager",
+                "decode_only": "eager",
+                "mixed": "eager",
+            },
         )
 
     def ready(self):
@@ -126,8 +142,15 @@ class Worker:
             "descriptor": copy.deepcopy(self.descriptor),
             "logical_num_blocks": self.logical_num_blocks,
             "mamba_blocks": self.mamba_blocks,
-            "host_cache_bytes": 0,
-            "cache_memory": {"weight_info": self.weight_info, "rank": self.rank},
+            "host_cache_bytes": self.cache.host_limit,
+            "cache_memory": {
+                "weight_info": self.weight_info,
+                "rank": self.rank,
+                "physical_cache": {
+                    "block_tokens": self.cache.block_tokens,
+                    "host_cache_bytes": self.cache.host_limit,
+                },
+            },
         }
 
     def _slot(self, request_id):
@@ -138,10 +161,47 @@ class Worker:
             request.cache_slot = self.slots.pop()
         return request.cache_slot
 
+    def _free_slot(self, request):
+        slot = getattr(request, "cache_slot", None)
+        if slot is None:
+            return
+        if hasattr(self, "cache"):
+            self.cache.clear_slot(slot)
+        self.slots.add(slot)
+        request.cache_slot = None
+
     def _release(self, request_id):
         request = self.requests.pop(request_id, None)
-        if request is not None and getattr(request, "cache_slot", None) is not None:
-            self.slots.add(request.cache_slot)
+        if request is not None:
+            self._free_slot(request)
+
+    def _validate_execute_message(self, message):
+        scheduled = message["scheduled"]
+        scheduled_ids = [row["request_id"] for row in scheduled]
+        finished_ids = list(message["finished_request_ids"])
+        preempted_ids = list(message["preempted_request_ids"])
+        for name, values in (
+            ("scheduled", scheduled_ids),
+            ("finished", finished_ids),
+            ("preempted", preempted_ids),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"DeepSeek {name} request IDs must be unique")
+        scheduled_set = set(scheduled_ids)
+        if scheduled_set & (set(finished_ids) | set(preempted_ids)):
+            raise ValueError("DeepSeek request lifecycle sets overlap")
+        for request_id in (*scheduled_ids, *finished_ids, *preempted_ids):
+            if request_id not in self.requests:
+                raise ValueError("DeepSeek execute references an unknown request")
+        for row in scheduled:
+            request = self.requests[row["request_id"]]
+            if getattr(request, "cache_slot", None) is not None:
+                expected = int(row["num_computed_tokens"])
+                actual = getattr(request, "state_position", None)
+                if actual is not None and actual != expected:
+                    raise ValueError(
+                        "DeepSeek resident cache position differs from the schedule"
+                    )
 
     def _target(self, token_ids, start_pos, slot, *, full_logits=False):
         cache_slots = torch.tensor([slot], device=self.device)
@@ -161,7 +221,13 @@ class Worker:
                 )
             )
         if len(results) == 1 or not full_logits:
-            return results[-1]
+            if len(results) == 1:
+                return results[-1]
+            output_ids, logits, _ = results[-1]
+            hidden = [result[2] for result in results if result[2] is not None]
+            if hidden and isinstance(hidden[0], torch.Tensor):
+                return output_ids, logits, torch.cat(hidden, dim=1)
+            return output_ids, logits, results[-1][2]
         output_ids, logits, main_hidden = results[-1]
         logits = torch.cat([result[1] for result in results], dim=1)
         hidden = [result[2] for result in results if result[2] is not None]
@@ -184,6 +250,21 @@ class Worker:
         output_ids, _, _ = result
         return output_ids[0, 1:].tolist()
 
+    def _seed_mtp(self, main_hidden, start_pos, slot):
+        if (
+            not self.dspark
+            or main_hidden is None
+            or not hasattr(self, "model")
+            or not hasattr(self.model, "forward_spec_seed")
+        ):
+            return False
+        self.model.forward_spec_seed(
+            main_hidden,
+            start_pos=start_pos,
+            cache_slots=torch.tensor([slot], device=self.device),
+        )
+        return True
+
     @staticmethod
     def _output(request, row, tokens, text, accepted=0, drafts=None):
         return {
@@ -198,18 +279,46 @@ class Worker:
 
     def _execute_row(self, row):
         request = self.requests[row["request_id"]]
+        try:
+            return self._execute_row_impl(row)
+        except BaseException:
+            self._free_slot(request)
+            request.state_position = 0
+            raise
+
+    def _execute_row_impl(self, row):
+        request = self.requests[row["request_id"]]
         if row.get("prefill_token_ids") is not None:
             request.history = list(row["prefill_token_ids"])
+        slot_was_empty = request.cache_slot is None
         slot = self._slot(row["request_id"])
         token_ids = list(row["token_ids"])
         start_pos = int(row["num_computed_tokens"])
+        if hasattr(self, "cache"):
+            try:
+                if slot_was_empty:
+                    self.cache.restore(
+                        row["request_id"],
+                        slot,
+                        row,
+                        start_pos=start_pos,
+                    )
+                self.cache.ensure_mamba_row(row)
+            except BaseException:
+                if slot_was_empty:
+                    self._free_slot(request)
+                raise
         if not token_ids:
             return self._output(request, row, [], "")
 
         known_count = max(0, min(len(token_ids), len(request.history) - start_pos))
         final = start_pos + len(token_ids) >= len(request.history)
+        accepted_end = start_pos
+        mtp_state_updated = False
         if not final:
-            self._target(token_ids, start_pos, slot)
+            _, _, main_hidden = self._target(token_ids, start_pos, slot)
+            mtp_state_updated = self._seed_mtp(main_hidden, start_pos, slot)
+            accepted_end = start_pos + len(token_ids)
             tokens, text = [], ""
             accepted = 0
             proposals = []
@@ -218,6 +327,7 @@ class Worker:
             if not known:
                 raise ValueError("DeepSeek execution row has no accepted input")
             _, logits, main_hidden = self._target(known, start_pos, slot)
+            mtp_state_updated = self._seed_mtp(main_hidden, start_pos, slot)
             target_predictions = [int(logits.argmax(dim=-1).item())]
             drafts = token_ids[known_count:]
             accepted_drafts = []
@@ -230,8 +340,13 @@ class Worker:
                     mismatch = index
                     break
                 accepted_drafts.append(draft)
-                _, current_logits, _ = self._target(
+                _, current_logits, current_hidden = self._target(
                     [draft],
+                    start_pos + known_count + index,
+                    slot,
+                )
+                mtp_state_updated |= self._seed_mtp(
+                    current_hidden,
                     start_pos + known_count + index,
                     slot,
                 )
@@ -251,16 +366,36 @@ class Worker:
                 verification.accepted_draft_tokens,
                 max(0, len(tokens) - 1),
             )
+            accepted_end = start_pos + known_count + accepted
             proposals = []
             if not drafts and self.dspark and not request.finish:
+                mtp_state_updated = True
                 proposals = self._proposal(
                     int(target_predictions[0]),
-                    main_hidden,
-                    start_pos,
+                    main_hidden[:, -1:],
+                    start_pos + known_count - 1,
                     slot,
                 )
                 remaining = max(0, request.limit - request.generated)
                 proposals = proposals[: max(0, remaining - 1)]
+        if hasattr(self, "cache"):
+            self.cache.commit(
+                row["request_id"],
+                row,
+                slot,
+                start_pos=start_pos,
+                accepted_end=accepted_end,
+                include_mtp=mtp_state_updated,
+            )
+            if final and row["token_ids"][known_count:]:
+                self.cache.restore(
+                    row["request_id"],
+                    slot,
+                    row,
+                    start_pos=accepted_end,
+                    use_prefix_state=False,
+                )
+        request.state_position = accepted_end
         self.trace.record(
             "target",
             verify=bool(token_ids[known_count:]) if final else False,
@@ -277,12 +412,22 @@ class Worker:
         return self._output(request, row, tokens, text, accepted, proposals)
 
     def execute(self, message):
+        self._validate_execute_message(message)
         for request_id in message["finished_request_ids"]:
             self._release(request_id)
         for request_id in message["preempted_request_ids"]:
             request = self.requests.get(request_id)
             if request is not None:
+                if (
+                    hasattr(self, "cache")
+                    and getattr(request, "cache_slot", None) is not None
+                ):
+                    self._free_slot(request)
                 request.cache_slot = None
+                request.state_position = 0
+        for row in message["scheduled"]:
+            if hasattr(self, "cache") and row.get("fa_block_copies"):
+                self.cache.copy_prefix(row["fa_block_copies"])
         outputs = [self._execute_row(row) for row in message["scheduled"]]
         return {
             "type": "execute_result",
@@ -293,6 +438,8 @@ class Worker:
     def handle(self, message):
         match message["type"]:
             case "prepare":
+                if message["request_id"] in self.requests:
+                    raise ValueError("DeepSeek request identifier is already owned")
                 options = message["request"]
                 tokens = self.tokenizer.prepare(options)
                 if len(tokens) + options["max_tokens"] > self.runtime_max_context:
@@ -306,6 +453,8 @@ class Worker:
                     "prompt_token_ids": tokens,
                 }
             case "register":
+                if message["request_id"] in self.requests:
+                    raise ValueError("DeepSeek request identifier is already owned")
                 if (
                     len(message["prompt_token_ids"]) + message.get("max_tokens", 64)
                     > self.runtime_max_context
@@ -330,19 +479,12 @@ class Worker:
             case "execute":
                 return self.execute(message)
             case "cache":
-                completed = [
-                    {
-                        "transfer_id": operation["transfer_id"],
-                        "status": "complete",
-                        "bytes": 0,
-                    }
-                    for operation in message["operations"]
-                ]
+                completed = self.cache.handle(message)
                 return {
                     "type": "cache_result",
                     "rpc_id": message["rpc_id"],
                     "completed": completed,
-                    "host_cache_bytes": 0,
+                    "host_cache_bytes": self.cache.host_limit,
                 }
             case "abort":
                 self._release(message["request_id"])
@@ -356,6 +498,7 @@ class Worker:
                         "rank": self.rank,
                         "requests": len(self.requests),
                         "gpu_free_bytes": torch.cuda.mem_get_info(self.device)[0],
+                        **self.cache.stats(),
                     },
                 }
             case _:
@@ -363,6 +506,7 @@ class Worker:
 
     def close(self):
         self.trace.close()
+        self.cache.close()
         del self.model
         self.weights.close()
         torch.cuda.empty_cache()

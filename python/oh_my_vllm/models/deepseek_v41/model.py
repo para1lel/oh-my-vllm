@@ -1267,6 +1267,46 @@ def get_dspark_topk_idxs(window_size: int, bsz: int, block_size: int, start_pos:
 
 
 class DSparkAttention(Attention):
+    def _store_main_kv(self, main_x, start_pos, cache_slots):
+        _bsz, seqlen, _ = main_x.size()
+        win = self.window_size
+        rd = self.rope_head_dim
+        freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
+        main_kv = self.kv_norm(self.wkv(main_x))
+        apply_rotary_emb(main_kv[..., -rd:], freqs_cis)
+        act_quant(main_kv, fp8_block_size, scale_fmt, scale_dtype, True)
+        if start_pos == 0:
+            if seqlen <= win:
+                self.window_kv_cache[cache_slots, :seqlen] = main_kv
+            else:
+                cutoff = seqlen % win
+                (
+                    self.window_kv_cache[cache_slots, cutoff:win],
+                    self.window_kv_cache[cache_slots, :cutoff],
+                ) = main_kv[:, -win:].split([win - cutoff, cutoff], dim=1)
+        else:
+            if seqlen > win:
+                main_kv = main_kv[:, -win:]
+                positions = torch.arange(
+                    start_pos + seqlen - win,
+                    start_pos + seqlen,
+                    device=main_x.device,
+                )
+            else:
+                positions = torch.arange(
+                    start_pos,
+                    start_pos + seqlen,
+                    device=main_x.device,
+                )
+            self.window_kv_cache[cache_slots[:, None], positions.remainder(win)] = (
+                main_kv
+            )
+        return main_kv
+
+    def seed(self, main_x, start_pos, cache_slots):
+        """Store accepted target hidden states without running draft queries."""
+        self._store_main_kv(main_x, start_pos, cache_slots)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -1281,20 +1321,9 @@ class DSparkAttention(Attention):
         win = self.window_size
         rd = self.rope_head_dim
 
-        main_freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
-        main_kv = self.kv_norm(self.wkv(main_x))
-        apply_rotary_emb(main_kv[..., -rd:], main_freqs_cis)
-        act_quant(main_kv, fp8_block_size, scale_fmt, scale_dtype, True)
+        self._store_main_kv(main_x, start_pos, cache_slots)
 
         if start_pos == 0:
-            if seqlen <= win:
-                self.window_kv_cache[cache_slots, :seqlen] = main_kv
-            else:
-                cutoff = seqlen % win
-                (
-                    self.window_kv_cache[cache_slots, cutoff:win],
-                    self.window_kv_cache[cache_slots, :cutoff],
-                ) = main_kv[:, -win:].split([win - cutoff, cutoff], dim=1)
             return x
 
         bsz, block_size, _ = x.size()
@@ -1308,7 +1337,6 @@ class DSparkAttention(Attention):
         act_quant(kv, fp8_block_size, scale_fmt, scale_dtype, True)
 
         topk_idxs = get_dspark_topk_idxs(win, bsz, block_size, start_pos).to(x.device)
-        self.window_kv_cache[cache_slots, start_pos % win] = main_kv.squeeze(1)
         kv = torch.cat([self.window_kv_cache[cache_slots], kv], dim=1)
         o = sparse_attn(q, kv, self.attn_sink, topk_idxs, self.softmax_scale)
         apply_rotary_emb(o[..., -rd:], freqs_cis, True)
@@ -1523,6 +1551,31 @@ class Transformer(nn.Module):
         has already filled, so the padding it uses internally never reaches here. token_types /
         images carry the VL inputs built by image_processor.prepare_vl_inputs; image spans must lie
         inside the first (start_pos 0) chunk."""
+        if start_pos > 0 and input_ids.size(1) > 1:
+            results = [
+                self.forward(
+                    input_ids[:, offset : offset + 1],
+                    start_pos=start_pos + offset,
+                    token_types=(
+                        None
+                        if token_types is None
+                        else token_types[:, offset : offset + 1]
+                    ),
+                    cache_slots=cache_slots,
+                    full_logits=full_logits,
+                )
+                for offset in range(input_ids.size(1))
+            ]
+            main_hidden = None
+            hidden = [result[2] for result in results if result[2] is not None]
+            if hidden:
+                main_hidden = torch.cat(hidden, dim=1)
+            logits = (
+                torch.cat([result[1] for result in results], dim=1)
+                if full_logits
+                else results[-1][1]
+            )
+            return results[-1][0], logits, main_hidden
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
         image_mask = None if token_types is None else token_types >= 0  # TEXT is -1
@@ -1573,6 +1626,23 @@ class Transformer(nn.Module):
         if start_pos == 0:
             return None
         return self.mtp[-1].forward_head(h, pre_mix, input_ids)
+
+    @torch.inference_mode()
+    def forward_spec_seed(
+        self,
+        main_hidden: torch.Tensor,
+        start_pos: int = 0,
+        cache_slots: torch.Tensor | None = None,
+    ):
+        """Store target hidden states that the next DSpark proposal can attend to."""
+        if not self.mtp:
+            return
+        if cache_slots is None:
+            cache_slots = torch.arange(main_hidden.size(0), device=main_hidden.device)
+        first = self.mtp[0]
+        main_x = first.main_norm(first.main_proj(main_hidden))
+        for layer in self.mtp:
+            layer.attn.seed(main_x, start_pos, cache_slots)
 
 
 def sample(logits, temperature: float = 1.0):

@@ -18,6 +18,15 @@ DSpark verification 保持 rejected draft 为 private state, 并输出 target co
 Engram table 使用 file-backed host mapping.
 Lookup 只将选中的 row 分阶段传到 GPU.
 
+DeepSeek physical page 现在会在 request slot 之间保存 window KV, compressed KV,
+index key, Engram hash state 和 compressor tail.
+cache operation 支持 logical block store, load, drop, partial prefix copy 和
+page-backed host snapshot.
+accepted DSpark target state 会 seed MTP window, speculative rollback 会保持
+rejected draft state 为 private state.
+nonzero multi-token prefill 当前使用 sequential correctness path, fused chunk path
+仍是后续 performance work.
+
 DeepSeek execution 当前使用 Eager.
 共享 Qwen CUDA Graph path 已有 stream handoff, bounded graph workspace 和 cleanup checks.
 DeepSeek multi-rank Graph capture 尚未接入.
@@ -33,6 +42,13 @@ Smoke run 检查 model listing, diagnostics, ordinary text, DSpark5, SSE usage, 
 DSpark5 HTTP log 记录了 2 个 proposed draft token 和 2 个 verified draft token.
 这次 smoke run 是功能证据, 不替代 approved matrix.
 
+physical cache change 之后, HTTP service 使用 GPU `1,2,3,4`, TEP4, 8 个 block 和 1024-token physical context 成功 ready.
+两个 ordinary request 都成功返回.
+第二个 request 从 physical prefix cache 复用了 13 个 prompt token.
+一个 DSpark5 target request 也成功返回, 且没有 worker restart.
+这个 2-token DSpark5 request 没有 proposal budget, 所以 proposal counter 为零.
+cache behavior test 覆盖 host snapshot store, load, drop, prefix copy 和 restoration.
+
 [DeepSeek matrix](../development/serving/deepseek_matrix.py) 中有批准的 workload definition.
 HTTP runner 定义 36 个 DSpark5 case 和 2 个 ordinary TP4 case.
 AgentX runner 定义 TP4/4, TEP4/16 和 DEP4/64 case.
@@ -41,7 +57,6 @@ AgentX runner 定义 TP4/4, TEP4/16 和 DEP4/64 case.
 ## 下一步
 
 - 完成真实 TP4 readiness 和 ordinary decode run.
-- 为 window, compressed KV, index keys, accepted state, prefix reuse 和 restoration 实现 physical DeepSeek cache contract.
 - 用稳定的 request ownership 和 expert dispatch 替换 DEP4 fallback.
 - 接入 native sparse attention, hyper-connections 和 transform workspace.
 - 添加 coordinated DeepSeek CUDA Graph capture 和 replay path.

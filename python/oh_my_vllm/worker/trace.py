@@ -6,7 +6,15 @@ from .execution import execution_policy
 
 
 class Trace:
-    def __init__(self, config, identity, *, tokenizer=None, cache_memory=None):
+    def __init__(
+        self,
+        config,
+        identity,
+        *,
+        tokenizer=None,
+        cache_memory=None,
+        execution=None,
+    ):
         path = os.environ.get("OH_MY_VLLM_EXECUTION_TRACE")
         self.output = None
         if path:
@@ -19,7 +27,7 @@ class Trace:
                 config=config,
                 checkpoint=identity,
                 tokenizer=tokenizer,
-                execution=execution_policy(),
+                execution=execution if execution is not None else execution_policy(),
                 **({"cache_memory": cache_memory} if cache_memory is not None else {}),
             )
 

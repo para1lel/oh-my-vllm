@@ -19,6 +19,11 @@ target path 使用 Eager execution.
 当前 DEP4 command 选择 TEP4 executor 作为 functional fallback.
 它没有提供 DEP4 request ownership 或 expert dispatch.
 
+physical cache 在 Rust logical block table 后面保存 model page.
+它支持 prefix reuse, partial block copy, host snapshot 和 restoration.
+adapter 会在 verification 和 restore 期间保存 accepted DSpark MTP state.
+由于 coordinated multi-rank Graph replay 尚未接入, DeepSeek 当前仍使用 Eager execution.
+
 approved 38-case matrix 使用 [HTTP 流程](performance.zh.md).
 三个 strategy case 使用 [AgentX 流程](agentx.zh.md).
 这些流程定义 measurement, 不增加 performance gate.
@@ -36,8 +41,10 @@ physical cache setting 必须覆盖请求的 prompt 和 output.
 
 ## 状态
 
-Python worker 当前在各 rank-local tensor 中保存 model cache state.
+Python worker 在各 rank-local tensor 和 physical page 中保存 model cache state.
 Rust logical cache transfer 为 protocol seam 返回 completion record.
-DeepSeek-specific cache ownership, prefix reuse, host residency 和 restoration contract 仍在开发.
+DeepSeek-specific DEP4 ownership 和 coordinated Graph replay 仍在开发.
+nonzero multi-token prefill 当前使用 sequential correctness path.
+fused multi-token prefill 仍是 performance task.
 
 不要将短 TEP4 evidence 视为 TP4, DEP4, long-context capacity, image serving, CUDA Graph execution 或 SOTA performance 的证明.
