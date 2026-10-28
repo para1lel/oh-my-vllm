@@ -5,6 +5,7 @@ model construction and small reference cases usable before a workspace is attach
 """
 
 import os
+from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +17,8 @@ _HYPERCONNECTION_MODULE = None
 _TRANSFORM_MODULE = None
 _SPARSE_ATTENTION_MODULE = None
 _PACKED_WEIGHTS = {}
+_GROUPED_POINTERS = OrderedDict()
+_GROUPED_POINTER_CACHE_LIMIT = 128
 NATIVE_ROW_LIMIT = 384
 _SPARSE_NATIVE_DISABLED = (
     os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "0") != "1"
@@ -123,6 +126,32 @@ def _packed_weight(weight, scales, bits):
     return packed
 
 
+def _grouped_pointer_arrays(packed, device):
+    key = (
+        str(device),
+        tuple((weight.data_ptr(), scales.data_ptr()) for weight, scales, _ in packed),
+    )
+    cached = _GROUPED_POINTERS.get(key)
+    if cached is not None:
+        _GROUPED_POINTERS.move_to_end(key)
+        return cached[0], cached[1]
+    weight_ptrs = torch.tensor(
+        [weight.data_ptr() for weight, _, _ in packed],
+        dtype=torch.int64,
+        device=device,
+    )
+    scale_ptrs = torch.tensor(
+        [scales.data_ptr() for _, scales, _ in packed],
+        dtype=torch.int64,
+        device=device,
+    )
+    _GROUPED_POINTERS[key] = (weight_ptrs, scale_ptrs, packed)
+    _GROUPED_POINTERS.move_to_end(key)
+    while len(_GROUPED_POINTERS) > _GROUPED_POINTER_CACHE_LIMIT:
+        _GROUPED_POINTERS.popitem(last=False)
+    return weight_ptrs, scale_ptrs
+
+
 def _block_scales(x, block_size):
     width = x.size(-1)
     if width % block_size:
@@ -222,16 +251,7 @@ def grouped_fp4_gemm(values, counts, weights, *, counts_list=None):
         packed = [_packed_weight(weight, scale, 4) for _, weight, scale in active]
         output_width = packed[0][0].size(0)
         width = values.size(-1)
-        weight_ptrs = torch.tensor(
-            [weight.data_ptr() for weight, _, _ in packed],
-            dtype=torch.int64,
-            device=values.device,
-        )
-        scale_ptrs = torch.tensor(
-            [scale.data_ptr() for _, scale, _ in packed],
-            dtype=torch.int64,
-            device=values.device,
-        )
+        weight_ptrs, scale_ptrs = _grouped_pointer_arrays(packed, values.device)
         active_counts = torch.tensor(
             [count for count, _, _ in active], dtype=torch.int32, device=values.device
         )

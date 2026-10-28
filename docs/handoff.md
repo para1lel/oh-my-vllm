@@ -47,6 +47,7 @@ TP4 and TEP4 FP4 routed experts use a CUTLASS pointer-array grouped GEMM for
 the two up projections and the down projection.
 The grouped path keeps the local token order and falls back to the reference
 expert loop for non-FP4 weights and test experts.
+Static packed-expert pointer arrays use a bounded LRU cache.
 DEP4 still uses the TEP4 executor fallback and has no rank-owned dispatch.
 
 Non-final prefill skips the vocabulary projection.
