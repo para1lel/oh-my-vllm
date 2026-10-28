@@ -18,6 +18,13 @@ from .deepseek_benchmark import (
 from .device import selected_uuids
 
 
+def service_max_num_seqs(concurrency, override=None):
+    value = concurrency if override is None else override
+    if type(value) is not int or not 1 <= value <= 64:
+        raise ValueError("max number of service sequences must be between 1 and 64")
+    return value
+
+
 def workload_identity(args):
     return {
         "kind": "agentx",
@@ -48,6 +55,7 @@ def arguments():
     parser.add_argument("--cache-context", type=int, default=1048576)
     parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int)
+    parser.add_argument("--max-num-seqs", type=int)
     parser.add_argument(
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
     )
@@ -61,6 +69,13 @@ def arguments():
         parser.error("AgentX profiling must last at least 900 seconds")
     if result.concurrency < 1 or result.cache_context < 1:
         parser.error("concurrency and cache context must be positive")
+    try:
+        result.max_num_seqs = service_max_num_seqs(
+            min(64, result.concurrency),
+            result.max_num_seqs,
+        )
+    except ValueError as error:
+        parser.error(str(error))
     if result.csv.exists() or result.figure.exists():
         parser.error("use new CSV and figure paths")
     uuids = selected_uuids()

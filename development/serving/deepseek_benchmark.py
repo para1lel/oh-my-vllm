@@ -169,8 +169,16 @@ def effective_cache_configuration(arguments):
     }
 
 
+def effective_service_configuration(arguments):
+    return {
+        "max_num_batched_tokens": 32768,
+        "max_num_seqs": getattr(arguments, "max_num_seqs", 64),
+    }
+
+
 def artifact_identity(arguments, tokenizer, uuids, *, workload):
     cache_configuration = effective_cache_configuration(arguments)
+    service_configuration = effective_service_configuration(arguments)
     return {
         "source": source_identity(),
         "binary": file_sha256(arguments.binary),
@@ -182,8 +190,7 @@ def artifact_identity(arguments, tokenizer, uuids, *, workload):
         "configuration": {
             "cache_context": arguments.cache_context,
             **cache_configuration,
-            "max_num_batched_tokens": 32768,
-            "max_num_seqs": 64,
+            **service_configuration,
             "native_sparse": os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "0"),
         },
     }
@@ -202,14 +209,14 @@ def verify_artifact_identity(arguments, tokenizer, uuids, expected, *, workload)
 
 def service_config(arguments, mode, strategy):
     drafts = 5 if mode == "dspark5" else 0
+    service_configuration = effective_service_configuration(arguments)
     return {
         "model_path": str(arguments.model),
         "strategy": strategy,
         "mode": mode,
         "drafts": drafts,
         "cache_context": arguments.cache_context,
-        "max_num_seqs": 64,
-        "max_num_batched_tokens": 32768,
+        **service_configuration,
     }
 
 
@@ -235,9 +242,9 @@ class Service:
             "--model",
             str(arguments.model),
             "--max-num-batched-tokens",
-            "32768",
+            str(effective_service_configuration(arguments)["max_num_batched_tokens"]),
             "--max-num-seqs",
-            "64",
+            str(effective_service_configuration(arguments)["max_num_seqs"]),
             "--max-model-len",
             "1048576",
             "--num-speculative-tokens",

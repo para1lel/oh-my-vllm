@@ -9,6 +9,7 @@ adapter 绑定 public configuration, inference configuration, tokenizer asset �
 它在 load 期间读取 weight shard, 但不执行完整 startup hash pass.
 它支持发布的 48 shard safetensors layout, FP8 projection, FP4 routed expert, sparse attention, Engram table 和 Hyper-Connections.
 prefill row 在进入 native operator 前切分.
+nonzero multi-token prefill 使用 fused chunk path.
 
 当前 functional path 支持 text target decode 和 greedy DSpark5 verification.
 短真实 checkpoint checks 在 GPU `4,5,6,7` 上使用 TEP4.
@@ -45,7 +46,7 @@ physical cache setting 必须覆盖请求的 prompt 和 output.
 Python worker 在各 rank-local tensor 和 physical page 中保存 model cache state.
 Rust logical cache transfer 为 protocol seam 返回 completion record.
 DeepSeek-specific DEP4 ownership 和 coordinated Graph replay 仍在开发.
-nonzero multi-token prefill 当前使用 sequential correctness path.
-fused multi-token prefill 仍是 performance task.
+nonzero multi-token prefill 使用 fused chunk path.
+target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
 
 不要将短 TEP4 evidence 视为 TP4, DEP4, long-context capacity, image serving, CUDA Graph execution 或 SOTA performance 的证明.

@@ -55,6 +55,8 @@ def profile_command(
         "inferencex-agentx-mvp",
         "--url",
         f"http://127.0.0.1:{port}",
+        "--request-timeout-seconds",
+        "1800",
         "--model",
         model_name,
         "--tokenizer",

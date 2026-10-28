@@ -276,6 +276,139 @@ class DeepSeekSpeculation(unittest.TestCase):
             [7, 391],
         )
 
+    def test_target_batch_keeps_total_rows_at_native_limit(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+
+        def model(inputs, **_):
+            self.assertLessEqual(inputs.size(0) * inputs.size(1), 384)
+            return None, None, None
+
+        worker.model = Mock(side_effect=model)
+        token_batches = [[index] * 200 for index in range(4)]
+
+        worker._target_batch(
+            token_batches,
+            start_pos=7,
+            cache_slots=torch.arange(4),
+        )
+
+        self.assertEqual(worker.model.call_count, 3)
+        self.assertEqual(
+            [call.kwargs["start_pos"] for call in worker.model.call_args_list],
+            [7, 103, 199],
+        )
+
+    def test_mtp_seed_keeps_total_rows_at_native_limit(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+        worker.dspark = True
+        worker.model = SimpleNamespace(forward_spec_seed=Mock())
+        hidden = torch.zeros(4, 200, 8)
+        cache_slots = torch.arange(4)
+
+        self.assertTrue(worker._seed_mtp_batch(hidden, 7, cache_slots))
+
+        self.assertEqual(worker.model.forward_spec_seed.call_count, 3)
+        self.assertEqual(
+            [
+                call.args[0].shape[1]
+                for call in worker.model.forward_spec_seed.call_args_list
+            ],
+            [96, 96, 8],
+        )
+        self.assertEqual(
+            [
+                call.kwargs["start_pos"]
+                for call in worker.model.forward_spec_seed.call_args_list
+            ],
+            [7, 103, 199],
+        )
+
+    def test_target_batch_uses_small_prefill_subbatches(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+
+        def model(inputs, **_):
+            self.assertLessEqual(inputs.size(0), 4)
+            self.assertLessEqual(inputs.size(0) * inputs.size(1), 384)
+            return None, None, None
+
+        worker.model = Mock(side_effect=model)
+        token_batches = [[index] * 100 for index in range(8)]
+
+        worker._target_batch(
+            token_batches,
+            start_pos=7,
+            cache_slots=torch.arange(8),
+        )
+
+        self.assertEqual(worker.model.call_count, 4)
+
+    def test_mtp_seed_keeps_only_the_target_window(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+        worker.dspark = True
+        worker.args = SimpleNamespace(window_size=8)
+        worker.model = SimpleNamespace(forward_spec_seed=Mock())
+        hidden = torch.zeros(1, 200, 8)
+
+        self.assertTrue(
+            worker._seed_mtp_batch(
+                hidden,
+                7,
+                torch.tensor([0]),
+                source_length=200,
+            )
+        )
+
+        worker.model.forward_spec_seed.assert_called_once()
+        call = worker.model.forward_spec_seed.call_args
+        self.assertEqual(tuple(call.args[0].shape), (1, 8, 8))
+        self.assertEqual(call.kwargs["start_pos"], 199)
+
+    def test_execute_groups_complete_initial_prefills(self):
+        worker = Worker.__new__(Worker)
+        worker.requests = {
+            1: SimpleNamespace(cache_slot=None, history=[10, 11, 12]),
+            2: SimpleNamespace(cache_slot=None, history=[20, 21, 22]),
+        }
+        worker._execute_prefill_group = Mock(
+            return_value={
+                1: {"request_id": 1},
+                2: {"request_id": 2},
+            }
+        )
+        worker._execute_row = Mock()
+
+        result = worker.execute(
+            {
+                "finished_request_ids": [],
+                "preempted_request_ids": [],
+                "scheduled": [
+                    {
+                        "request_id": 1,
+                        "token_ids": [10, 11, 12],
+                        "num_computed_tokens": 0,
+                    },
+                    {
+                        "request_id": 2,
+                        "token_ids": [20, 21, 22],
+                        "num_computed_tokens": 0,
+                    },
+                ],
+                "rpc_id": 1,
+            }
+        )
+
+        worker._execute_prefill_group.assert_called_once()
+        self.assertEqual(
+            worker._execute_prefill_group.call_args.kwargs,
+            {"final": True},
+        )
+        worker._execute_row.assert_not_called()
+        self.assertEqual(result["outputs"], [{"request_id": 1}, {"request_id": 2}])
+
     def test_rejection_keeps_only_the_matching_prefix_and_target_correction(self):
         result = verify_greedy_drafts(
             drafts=[11, 12, 13],

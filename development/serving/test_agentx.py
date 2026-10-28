@@ -149,6 +149,7 @@ class AgentXTests(unittest.TestCase):
             ("--random-seed", "42"),
             ("--export-level", "raw"),
             ("--max-context-length", "262144"),
+            ("--request-timeout-seconds", "1800"),
         ):
             self.assertEqual(command[command.index(flag) + 1], value)
         self.assertNotIn("--unsafe-override", command)

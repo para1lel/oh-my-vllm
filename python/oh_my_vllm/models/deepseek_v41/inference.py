@@ -23,6 +23,7 @@ from .tokenizer import Tokenization
 
 DEFAULT_CACHE_CONTEXT = 65536
 MAX_NATIVE_ROWS = 384
+MAX_PREFILL_SUBBATCH = 4
 
 
 class _StartupTrace:
@@ -249,7 +250,15 @@ class Worker:
                         "DeepSeek resident cache position differs from the schedule"
                     )
 
-    def _target(self, token_ids, start_pos, slot, *, full_logits=False):
+    def _target(
+        self,
+        token_ids,
+        start_pos,
+        slot,
+        *,
+        full_logits=False,
+        compute_logits=True,
+    ):
         cache_slots = torch.tensor([slot], device=self.device)
         results = []
         for offset in range(0, len(token_ids), MAX_NATIVE_ROWS):
@@ -264,21 +273,108 @@ class Worker:
                     start_pos=start_pos + offset,
                     cache_slots=cache_slots,
                     full_logits=full_logits,
+                    compute_logits=compute_logits,
+                    collect_main_hidden=getattr(self, "dspark", False),
                 )
             )
         if len(results) == 1 or not full_logits:
             if len(results) == 1:
                 return results[-1]
             output_ids, logits, _ = results[-1]
-            hidden = [result[2] for result in results if result[2] is not None]
-            if hidden and isinstance(hidden[0], torch.Tensor):
-                return output_ids, logits, torch.cat(hidden, dim=1)
-            return output_ids, logits, results[-1][2]
+            return output_ids, logits, self._main_hidden_tail(results)
         output_ids, logits, main_hidden = results[-1]
         logits = torch.cat([result[1] for result in results], dim=1)
-        hidden = [result[2] for result in results if result[2] is not None]
-        if hidden:
-            main_hidden = torch.cat(hidden, dim=1)
+        main_hidden = self._main_hidden_tail(results)
+        return output_ids, logits, main_hidden
+
+    def _main_hidden_tail(self, results):
+        hidden = [
+            result[2] for result in results if isinstance(result[2], torch.Tensor)
+        ]
+        if not hidden:
+            return results[-1][2]
+        limit = getattr(getattr(self, "args", None), "window_size", MAX_NATIVE_ROWS)
+        tail = hidden[0]
+        for value in hidden[1:]:
+            tail = torch.cat((tail, value), dim=1)
+            if tail.size(1) > limit:
+                tail = tail[:, -limit:]
+        return tail[:, -limit:]
+
+    def _target_batch(
+        self,
+        token_batches,
+        start_pos,
+        cache_slots,
+        *,
+        full_logits=False,
+        compute_logits=True,
+    ):
+        if not token_batches:
+            raise ValueError("DeepSeek target batch must contain a request")
+        length = len(token_batches[0])
+        if length < 1 or any(len(tokens) != length for tokens in token_batches):
+            raise ValueError("DeepSeek target batch rows must have one length")
+        groups = []
+        for offset in range(0, len(token_batches), MAX_PREFILL_SUBBATCH):
+            groups.append(
+                self._target_batch_group(
+                    token_batches[offset : offset + MAX_PREFILL_SUBBATCH],
+                    start_pos,
+                    cache_slots[offset : offset + MAX_PREFILL_SUBBATCH],
+                    full_logits=full_logits,
+                    compute_logits=compute_logits,
+                )
+            )
+        if len(groups) == 1:
+            return groups[0]
+        output_ids = self._merge_batch_values(groups, 0)
+        logits = self._merge_batch_values(groups, 1)
+        hidden = self._merge_batch_values(groups, 2)
+        return output_ids, logits, hidden
+
+    @staticmethod
+    def _merge_batch_values(results, index):
+        values = [result[index] for result in results]
+        tensors = [value for value in values if isinstance(value, torch.Tensor)]
+        if len(tensors) != len(values):
+            return values[-1]
+        return torch.cat(tensors, dim=0)
+
+    def _target_batch_group(
+        self,
+        token_batches,
+        start_pos,
+        cache_slots,
+        *,
+        full_logits=False,
+        compute_logits=True,
+    ):
+        if full_logits and not compute_logits:
+            raise ValueError("full logits require vocab projection")
+        length = len(token_batches[0])
+        chunk_size = max(1, MAX_NATIVE_ROWS // len(token_batches))
+        results = []
+        for offset in range(0, length, chunk_size):
+            inputs = torch.tensor(
+                [tokens[offset : offset + chunk_size] for tokens in token_batches],
+                device=self.device,
+                dtype=torch.long,
+            )
+            results.append(
+                self.model(
+                    inputs,
+                    start_pos=start_pos + offset,
+                    cache_slots=cache_slots,
+                    full_logits=full_logits,
+                    compute_logits=compute_logits,
+                    collect_main_hidden=getattr(self, "dspark", False),
+                )
+            )
+        output_ids, logits, _ = results[-1]
+        main_hidden = self._main_hidden_tail(results)
+        if full_logits:
+            logits = torch.cat([result[1] for result in results], dim=1)
         return output_ids, logits, main_hidden
 
     def _proposal(self, token, main_hidden, start_pos, slot):
@@ -296,7 +392,32 @@ class Worker:
         output_ids, _, _ = result
         return output_ids[0, 1:].tolist()
 
-    def _seed_mtp(self, main_hidden, start_pos, slot):
+    def _seed_mtp(self, main_hidden, start_pos, slot, *, source_length=None):
+        if main_hidden is None:
+            return False
+        return self._seed_mtp_batch(
+            main_hidden,
+            start_pos,
+            torch.tensor([slot], device=main_hidden.device),
+            source_length=source_length,
+        )
+
+    def _mtp_source_length(self, length):
+        window_size = getattr(
+            getattr(self, "args", None),
+            "window_size",
+            MAX_NATIVE_ROWS,
+        )
+        return length if length > window_size else None
+
+    def _seed_mtp_batch(
+        self,
+        main_hidden,
+        start_pos,
+        cache_slots,
+        *,
+        source_length=None,
+    ):
         if (
             not self.dspark
             or main_hidden is None
@@ -304,11 +425,27 @@ class Worker:
             or not hasattr(self.model, "forward_spec_seed")
         ):
             return False
-        self.model.forward_spec_seed(
-            main_hidden,
-            start_pos=start_pos,
-            cache_slots=torch.tensor([slot], device=self.device),
+        batch_size, hidden_length, _ = main_hidden.size()
+        source_length = hidden_length if source_length is None else source_length
+        if type(source_length) is not int or source_length < hidden_length:
+            raise ValueError("DeepSeek MTP source length is shorter than hidden state")
+        window_size = getattr(
+            getattr(self, "args", None),
+            "window_size",
+            hidden_length,
         )
+        hidden_start = start_pos + source_length - hidden_length
+        if hidden_length > window_size:
+            main_hidden = main_hidden[:, -window_size:]
+            hidden_start += hidden_length - window_size
+            hidden_length = window_size
+        chunk_size = max(1, MAX_NATIVE_ROWS // batch_size)
+        for offset in range(0, hidden_length, chunk_size):
+            self.model.forward_spec_seed(
+                main_hidden[:, offset : offset + chunk_size],
+                start_pos=hidden_start + offset,
+                cache_slots=cache_slots,
+            )
         return True
 
     @staticmethod
@@ -332,7 +469,7 @@ class Worker:
             request.state_position = 0
             raise
 
-    def _execute_row_impl(self, row):
+    def _prepare_row(self, row):
         request = self.requests[row["request_id"]]
         if row.get("prefill_token_ids") is not None:
             request.history = list(row["prefill_token_ids"])
@@ -354,6 +491,92 @@ class Worker:
                 if slot_was_empty:
                     self._free_slot(request)
                 raise
+        return request, slot, token_ids, start_pos
+
+    def _execute_prefill_group(self, rows, *, final=False):
+        prepared = []
+        try:
+            for row in rows:
+                request, slot, token_ids, start_pos = self._prepare_row(row)
+                prepared.append((row, request, slot, token_ids, start_pos))
+            start_pos = prepared[0][4]
+            length = len(prepared[0][3])
+            if any(item[4] != start_pos or len(item[3]) != length for item in prepared):
+                raise ValueError("DeepSeek prefill batch rows are not aligned")
+            cache_slots = torch.tensor(
+                [item[2] for item in prepared],
+                device=self.device,
+                dtype=torch.long,
+            )
+            _, logits, main_hidden = self._target_batch(
+                [item[3] for item in prepared],
+                start_pos,
+                cache_slots,
+                compute_logits=final,
+            )
+            mtp_state_updated = self._seed_mtp_batch(
+                main_hidden,
+                start_pos,
+                cache_slots,
+                source_length=self._mtp_source_length(length),
+            )
+            outputs = {}
+            accepted_end = start_pos + length
+            for index, (row, request, slot, token_ids, _) in enumerate(prepared):
+                tokens, text, proposals = [], "", []
+                if final:
+                    target = int(logits[index].argmax(dim=-1).item())
+                    tokens, text = request.append([target])
+                    if self.dspark and not request.finish:
+                        proposals = self._proposal(
+                            target,
+                            main_hidden[index : index + 1, -1:],
+                            accepted_end - 1,
+                            slot,
+                        )
+                        remaining = max(0, request.limit - request.generated)
+                        proposals = proposals[: max(0, remaining - 1)]
+                if hasattr(self, "cache"):
+                    self.cache.commit(
+                        row["request_id"],
+                        row,
+                        slot,
+                        start_pos=start_pos,
+                        accepted_end=accepted_end,
+                        include_mtp=mtp_state_updated,
+                    )
+                request.state_position = accepted_end
+                self.trace.record(
+                    "target",
+                    verify=False,
+                    execution="eager",
+                    requests=[
+                        {
+                            "id": row["request_id"],
+                            "start": start_pos,
+                            "count": len(token_ids),
+                            "prompt": request.prompt_len,
+                        }
+                    ],
+                )
+                outputs[row["request_id"]] = self._output(
+                    request,
+                    row,
+                    tokens,
+                    text,
+                    0,
+                    proposals,
+                )
+            return outputs
+        except BaseException:
+            for _row, request, _slot, _token_ids, _start_pos in prepared:
+                self._free_slot(request)
+                request.state_position = 0
+            raise
+
+    def _execute_row_impl(self, row):
+        request = self.requests[row["request_id"]]
+        _, slot, token_ids, start_pos = self._prepare_row(row)
         if not token_ids:
             return self._output(request, row, [], "")
 
@@ -362,8 +585,18 @@ class Worker:
         accepted_end = start_pos
         mtp_state_updated = False
         if not final:
-            _, _, main_hidden = self._target(token_ids, start_pos, slot)
-            mtp_state_updated = self._seed_mtp(main_hidden, start_pos, slot)
+            _, _, main_hidden = self._target(
+                token_ids,
+                start_pos,
+                slot,
+                compute_logits=False,
+            )
+            mtp_state_updated = self._seed_mtp(
+                main_hidden,
+                start_pos,
+                slot,
+                source_length=self._mtp_source_length(len(token_ids)),
+            )
             accepted_end = start_pos + len(token_ids)
             tokens, text = [], ""
             accepted = 0
@@ -373,7 +606,12 @@ class Worker:
             if not known:
                 raise ValueError("DeepSeek execution row has no accepted input")
             _, logits, main_hidden = self._target(known, start_pos, slot)
-            mtp_state_updated = self._seed_mtp(main_hidden, start_pos, slot)
+            mtp_state_updated = self._seed_mtp(
+                main_hidden,
+                start_pos,
+                slot,
+                source_length=self._mtp_source_length(len(known)),
+            )
             target_predictions = [int(logits.argmax(dim=-1).item())]
             drafts = token_ids[known_count:]
             accepted_drafts = []
@@ -395,6 +633,7 @@ class Worker:
                     current_hidden,
                     start_pos + known_count + index,
                     slot,
+                    source_length=self._mtp_source_length(1),
                 )
                 target_predictions.append(int(current_logits.argmax(dim=-1).item()))
             if not drafts:
@@ -474,7 +713,37 @@ class Worker:
         for row in message["scheduled"]:
             if hasattr(self, "cache") and row.get("fa_block_copies"):
                 self.cache.copy_prefix(row["fa_block_copies"])
-        outputs = [self._execute_row(row) for row in message["scheduled"]]
+        initial_prefill_groups = {}
+        prefill_groups = {}
+        for row in message["scheduled"]:
+            request = self.requests[row["request_id"]]
+            if row.get("prefill_token_ids") is not None:
+                request.history = list(row["prefill_token_ids"])
+            token_ids = list(row["token_ids"])
+            start_pos = int(row["num_computed_tokens"])
+            end_pos = start_pos + len(token_ids)
+            if token_ids and end_pos == len(request.history):
+                initial_prefill_groups.setdefault(
+                    (start_pos, len(token_ids)),
+                    [],
+                ).append(row)
+            elif token_ids and end_pos < len(request.history):
+                prefill_groups.setdefault(
+                    (start_pos, len(token_ids)),
+                    [],
+                ).append(row)
+        outputs_by_id = {}
+        prefill_ids = set()
+        for rows in initial_prefill_groups.values():
+            outputs_by_id.update(self._execute_prefill_group(rows, final=True))
+            prefill_ids.update(row["request_id"] for row in rows)
+        for rows in prefill_groups.values():
+            outputs_by_id.update(self._execute_prefill_group(rows))
+            prefill_ids.update(row["request_id"] for row in rows)
+        for row in message["scheduled"]:
+            if row["request_id"] not in prefill_ids:
+                outputs_by_id[row["request_id"]] = self._execute_row(row)
+        outputs = [outputs_by_id[row["request_id"]] for row in message["scheduled"]]
         return {
             "type": "execute_result",
             "rpc_id": message["rpc_id"],

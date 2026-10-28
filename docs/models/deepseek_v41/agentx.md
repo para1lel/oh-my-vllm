@@ -3,6 +3,8 @@
 Use `agentx-harness==1.0.7` and the existing `inferencex-agentx-mvp` scenario.
 Use the pinned dataset, seed `42`, and at least 900 seconds of profiling.
 Use four GPUs apart from GPU 0.
+The runner uses the session-tree concurrency as the default service sequence capacity.
+Use `--max-num-seqs` to override it.
 
 The approved cases are:
 

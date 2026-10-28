@@ -9,6 +9,7 @@ The adapter binds the public configuration, inference configuration, tokenizer a
 It reads weight shards during load without a full startup hash pass.
 It supports the released 48-shard safetensors layout, FP8 projections, FP4 routed experts, sparse attention, Engram tables, and Hyper-Connections.
 Prefill rows are split before native operators receive them.
+Nonzero multi-token prefill uses the fused chunk path.
 
 The current functional path supports text target decode and greedy DSpark5 verification.
 Short checkpoint checks use TEP4 on GPUs `4,5,6,7`.
@@ -45,8 +46,8 @@ The physical cache setting must cover the requested prompt and output.
 The Python worker keeps model cache state in rank-local tensors and physical pages.
 Rust logical cache transfers return completion records for the protocol seam.
 DeepSeek-specific DEP4 ownership and coordinated Graph replay stay in progress.
-Nonzero multi-token prefill uses a sequential correctness path.
-Fused multi-token prefill stays a performance task.
+Nonzero multi-token prefill uses the fused chunk path.
+Target and MTP seed chunks keep total native rows below the operator limit.
 
 Short TEP4 evidence does not prove TP4, DEP4, long context, images, Graphs, or SOTA.
 These paths must have separate checks.

@@ -507,6 +507,23 @@ def get_window_topk_idxs(window_size: int, bsz: int, seqlen: int, start_pos: int
     return idxs.int().unsqueeze(0).expand(bsz, -1, -1).contiguous()
 
 
+@lru_cache(1)
+def get_prefill_window_topk_idxs(
+    window_size: int, bsz: int, seqlen: int, start_pos: int
+):
+    """Build causal indices for a chunk after the first prefill chunk.
+
+    The key rows contain the previous ring window followed by the current chunk.
+    """
+    previous = min(window_size, start_pos)
+    end = (previous + torch.arange(seqlen)).unsqueeze(1)
+    indices = (end - window_size + 1).clamp_min(0) + torch.arange(
+        min(window_size, previous + seqlen)
+    )
+    indices = torch.where(indices <= end, indices, -1)
+    return indices.int().unsqueeze(0).expand(bsz, -1, -1).contiguous()
+
+
 class Compressor(nn.Module):
     """Pools `compress_ratio` consecutive tokens into one KV latent with a learned softmax gate.
 
@@ -552,7 +569,7 @@ class Compressor(nn.Module):
         start_pos: int,
         cache_slots: torch.Tensor | None = None,
     ) -> torch.Tensor | None:
-        bsz, seqlen, _ = x.size()
+        bsz, _, _ = x.size()
         if cache_slots is None:
             cache_slots = torch.arange(bsz, device=x.device)
         ratio, dtype = self.compress_ratio, x.dtype
@@ -561,32 +578,20 @@ class Compressor(nn.Module):
 
         x = x.float()
         kv, score = self.wkv(x), self.wgate(x)
-        if start_pos == 0:
-            should_compress = seqlen >= ratio
-            remainder = seqlen % ratio
-            cutoff = seqlen - remainder
-            if remainder:  # trailing partial group waits in the state
-                kv, self.kv_state[cache_slots, :remainder] = kv.split(
-                    [cutoff, remainder], dim=1
-                )
-                score, self.score_state[cache_slots, :remainder] = score.split(
-                    [cutoff, remainder], dim=1
-                )
-            kv = kv.unflatten(1, (-1, ratio))
-            score = score.unflatten(1, (-1, ratio))
-            kv = (kv * score.softmax(dim=2)).sum(dim=2)
-        else:  # one token per step: fill a slot, and pool only when the group just completed
-            should_compress = (start_pos + 1) % ratio == 0
-            slot = start_pos % ratio
-            self.kv_state[cache_slots, slot] = kv.squeeze(1)
-            self.score_state[cache_slots, slot] = score.squeeze(1)
-            if should_compress:
-                kv = (
-                    self.kv_state[cache_slots]
-                    * self.score_state[cache_slots].softmax(dim=1)
-                ).sum(dim=1, keepdim=True)
-        if not should_compress:
+        prefix = start_pos % ratio
+        if prefix:
+            kv = torch.cat((self.kv_state[cache_slots, :prefix], kv), dim=1)
+            score = torch.cat((self.score_state[cache_slots, :prefix], score), dim=1)
+        complete = kv.size(1) // ratio * ratio
+        remainder = kv.size(1) - complete
+        if remainder:
+            self.kv_state[cache_slots, :remainder] = kv[:, complete:]
+            self.score_state[cache_slots, :remainder] = score[:, complete:]
+        if complete == 0:
             return None
+        kv = kv[:, :complete].unflatten(1, (-1, ratio))
+        score = score[:, :complete].unflatten(1, (-1, ratio))
+        kv = (kv * score.softmax(dim=2)).sum(dim=2)
         return self.norm(kv.to(dtype))
 
 
@@ -657,19 +662,19 @@ class Indexer(torch.nn.Module):
         ratio, rd, end_pos = self.compress_ratio, self.rope_head_dim, start_pos + seqlen
 
         # latent is None while a group is still filling up, so there is nothing to publish yet
-        if self.owns_k and latent is not None:
-            # a latent stands for the first token of its group, so group j takes position j * ratio
-            freqs = (
-                self.freqs_cis[: seqlen - seqlen % ratio : ratio]
-                if start_pos == 0
-                else self.freqs_cis[start_pos + 1 - ratio].unsqueeze(0)
-            )
-            k = self.k_norm(self.wk(latent))
-            apply_rotary_emb(k[..., -rd:], freqs)
-            fp4_act_quant(k, fp4_block_size, True)
-            self.k_cache[
-                cache_slots, start_pos // ratio : start_pos // ratio + k.size(1)
-            ] = k
+        if self.owns_k:
+            if latent is not None:
+                # a latent stands for the first token of its group, so group j takes position j * ratio
+                group_start = start_pos - start_pos % ratio
+                freqs = self.freqs_cis[
+                    group_start : group_start + latent.size(1) * ratio : ratio
+                ]
+                k = self.k_norm(self.wk(latent))
+                apply_rotary_emb(k[..., -rd:], freqs)
+                fp4_act_quant(k, fp4_block_size, True)
+                self.k_cache[
+                    cache_slots, start_pos // ratio : start_pos // ratio + k.size(1)
+                ] = k
             shared_attn.index_k = self.k_cache[cache_slots]
 
         q = self.wq_b(qr).unflatten(-1, (self.n_local_heads, self.index_head_dim))
@@ -685,16 +690,13 @@ class Indexer(torch.nn.Module):
 
         # how many compressed positions each query can see: a block becomes visible once the query
         # has passed its last token. One query per decode step, so there it is just a number.
-        if start_pos == 0:
-            compress_lens = (
-                torch.arange(1, seqlen + 1, device=x.device) // ratio
-            ).unsqueeze(-1)
-            index_score.masked_fill_(
-                torch.arange(seqlen // ratio, device=x.device) >= compress_lens,
-                -torch.inf,
-            )
-        else:
-            compress_lens = end_pos // ratio
+        compress_lens = (
+            (start_pos + torch.arange(1, seqlen + 1, device=x.device)) // ratio
+        ).unsqueeze(-1)
+        index_score.masked_fill_(
+            torch.arange(index_score.size(-1), device=x.device) >= compress_lens,
+            -torch.inf,
+        )
 
         if self.is_candidate_source:
             shared_attn.candidates = select_candidate_blocks(
@@ -856,10 +858,37 @@ class Attention(nn.Module):
                     self.window_kv_cache[cache_slots, :cutoff],
                 ) = kv[:, -win:].split([win - cutoff, cutoff], dim=1)
             window_kv = kv
-        else:  # decode: one token into the ring buffer, attend over the whole window
+            topk_idxs = get_window_topk_idxs(win, bsz, seqlen, start_pos)
+        elif (
+            seqlen == 1
+        ):  # decode: one token into the ring buffer, attend over the whole window
             self.window_kv_cache[cache_slots, start_pos % win] = kv.squeeze(1)
             window_kv = self.window_kv_cache[cache_slots]
-        return window_kv, get_window_topk_idxs(win, bsz, seqlen, start_pos).to(x.device)
+            topk_idxs = get_window_topk_idxs(win, bsz, seqlen, start_pos)
+        else:  # chunked prefill: attend over the previous ring and this causal chunk
+            previous = min(start_pos, win)
+            if start_pos >= win:
+                ring_start = start_pos % win
+                previous_kv = torch.cat(
+                    (
+                        self.window_kv_cache[cache_slots, ring_start:],
+                        self.window_kv_cache[cache_slots, :ring_start],
+                    ),
+                    dim=1,
+                )
+            else:
+                previous_kv = self.window_kv_cache[cache_slots, :previous]
+            window_kv = torch.cat((previous_kv, kv), dim=1)
+            write_kv = kv[:, -win:]
+            write_start = start_pos + seqlen - write_kv.size(1)
+            positions = torch.arange(
+                write_start,
+                start_pos + seqlen,
+                device=x.device,
+            ).remainder(win)
+            self.window_kv_cache[cache_slots[:, None], positions[None, :]] = write_kv
+            topk_idxs = get_prefill_window_topk_idxs(win, bsz, seqlen, start_pos)
+        return window_kv, topk_idxs.to(x.device)
 
     def _compress_topk_idxs(
         self, x, qr, latent, start_pos, offset, compress_len, cache_slots
@@ -896,11 +925,10 @@ class Attention(nn.Module):
         )
         if latent is not None:
             # a latent stands for the first token of its group, so group j takes position j * ratio
-            freqs = (
-                self.freqs_cis[: seqlen - seqlen % ratio : ratio]
-                if start_pos == 0
-                else self.freqs_cis[start_pos + 1 - ratio].unsqueeze(0)
-            )
+            group_start = start_pos - start_pos % ratio
+            freqs = self.freqs_cis[
+                group_start : group_start + latent.size(1) * ratio : ratio
+            ]
             apply_rotary_emb(latent[..., -self.rope_head_dim :], freqs)
             # Compressed KV uses groups of 16 with E4M3 scales; the indexer uses 32 with E8M0.
             fp4_act_quant(latent, 16, True, scale_dtype=torch.float8_e4m3fn)
@@ -1542,15 +1570,19 @@ def make_identity_pre_mix(x: torch.Tensor, hc_mult: int) -> torch.Tensor:
 
 class SharedAttentionRuntime:
     """What attention layers hand down the stack instead of recomputing. Layers run in order and
-    every source writes before its consumers read, so one slot each is enough and nothing needs
-    resetting between forwards. Sources: compress_kv and index_k from kv_source_layers, topk_idxs
-    from index_source_layers, candidates from candidate_source_layer."""
+    every source writes before its consumers read, so one slot each is enough within one forward.
+    Sources: compress_kv and index_k from kv_source_layers, topk_idxs from index_source_layers,
+    candidates from candidate_source_layer."""
 
     def __init__(self):
         self.compress_kv: torch.Tensor | None = None
         self.index_k: torch.Tensor | None = None
         self.topk_idxs: torch.Tensor | None = None
         self.candidates: torch.Tensor | None = None
+
+    def reset_query_state(self):
+        self.topk_idxs = None
+        self.candidates = None
 
 
 # Only ever one model per process, same as world_size / rank / default_dtype above.
@@ -1630,36 +1662,16 @@ class Transformer(nn.Module):
         token_types: torch.Tensor | None = None,
         cache_slots: torch.Tensor | None = None,
         full_logits: bool = False,
+        compute_logits: bool = True,
+        collect_main_hidden: bool = True,
     ):
         """input_ids: [b, s], every entry a real token id -- generate.py only ever passes positions it
         has already filled, so the padding it uses internally never reaches here. token_types /
         images carry the VL inputs built by image_processor.prepare_vl_inputs; image spans must lie
         inside the first (start_pos 0) chunk."""
-        if start_pos > 0 and input_ids.size(1) > 1:
-            results = [
-                self.forward(
-                    input_ids[:, offset : offset + 1],
-                    start_pos=start_pos + offset,
-                    token_types=(
-                        None
-                        if token_types is None
-                        else token_types[:, offset : offset + 1]
-                    ),
-                    cache_slots=cache_slots,
-                    full_logits=full_logits,
-                )
-                for offset in range(input_ids.size(1))
-            ]
-            main_hidden = None
-            hidden = [result[2] for result in results if result[2] is not None]
-            if hidden:
-                main_hidden = torch.cat(hidden, dim=1)
-            logits = (
-                torch.cat([result[1] for result in results], dim=1)
-                if full_logits
-                else results[-1][1]
-            )
-            return results[-1][0], logits, main_hidden
+        if full_logits and not compute_logits:
+            raise ValueError("full logits require vocab projection")
+        shared_attn.reset_query_state()
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
         image_mask = None if token_types is None else token_types >= 0  # TEXT is -1
@@ -1686,12 +1698,20 @@ class Transformer(nn.Module):
                     engram_mask,
                 )
             # the MTP head reads the attention input of its target layers, not their output
-            if i in self.target_layer_ids:
+            if collect_main_hidden and i in self.target_layer_ids:
                 main_hiddens.append(h.mean(dim=2))
             h, pre_mix = layer(h, start_pos, pre_mix, image_mask, cache_slots)
         h = layer.hc_pre(h, pre_mix)
-        logits = self.head(self.norm(h), full_logits=full_logits)
-        output_ids = sample(logits, self.temperature)
+        if compute_logits:
+            logits = self.head(self.norm(h), full_logits=full_logits)
+            output_ids = sample(logits, self.temperature)
+        else:
+            logits = None
+            output_ids = torch.empty(
+                input_ids.size(0),
+                dtype=torch.long,
+                device=input_ids.device,
+            )
         main_hidden = torch.cat(main_hiddens, dim=-1) if main_hiddens else None
         return output_ids, logits, main_hidden
 
@@ -1703,6 +1723,7 @@ class Transformer(nn.Module):
         start_pos: int = 0,
         cache_slots: torch.Tensor | None = None,
     ):
+        shared_attn.reset_query_state()
         h, main_x = self.mtp[0].forward_embed(main_hidden, input_ids)
         pre_mix = make_identity_pre_mix(h, self.hc_mult)
         for layer in self.mtp:

@@ -28,14 +28,27 @@ DeepSeek physical page 现在会在 request slot 之间保存 window KV, compres
 index key, Engram hash state 和 compressor tail.
 cache operation 支持 logical block store, load, drop, partial prefix copy 和
 page-backed host snapshot.
+
 accepted DSpark target state 会 seed MTP window, speculative rollback 会保持
 rejected draft state 为 private state.
-nonzero multi-token prefill 当前使用 sequential correctness path, fused chunk path
-仍是后续 performance work.
+nonzero multi-token prefill 使用 fused chunk path.
+target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
+aligned prefill batch 最多使用四个 request 组成一个 subbatch.
+
+非 final prefill 会跳过 vocabulary projection.
+DSpark 只保留 MTP window 所需的 target hidden tail.
+ordinary execution 不会收集 target hidden state.
+
+完整的 initial prompt 可以作为一个 aligned request batch 执行.
+每次 target call 都会 reset shared query attention state.
+index source 总是为当前 request slot 发布 cache view.
 
 DeepSeek execution 当前使用 Eager.
 共享 Qwen CUDA Graph path 已有 stream handoff, bounded graph workspace, graph upload 和 cleanup checks.
 DeepSeek multi-rank Graph capture 尚未接入.
+对照当前 vLLM 和 SGLang graph pattern 后, 在定义 static multi-rank
+workspace 和 capture bucket 之前, DeepSeek 保持 Eager.
+共享 Qwen graph path 已经管理 stream handoff, graph resource 和 cleanup.
 
 DeepSeek startup 只读取 `config.json` 和 `model.safetensors.index.json` 生成 descriptor identity.
 Ready 之前不会 hash weight shard.
@@ -73,14 +86,15 @@ rank-local weight load 约用时 19-20 秒, service 没有 worker replacement.
 HTTP runner 定义 36 个 DSpark5 case 和 2 个 ordinary TP4 case.
 AgentX runner 定义 TP4/4, TEP4/16 和 DEP4/64 case.
 当前还没有记录完整的 approved HTTP 或 AgentX result set.
+CodeGraph 1.6.2 已安装到 Codex.
+repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 
 ## 下一步
 
-- 完成真实 TP4 readiness 和 ordinary decode run.
 - 用稳定的 request ownership 和 expert dispatch 替换 DEP4 fallback.
 - 将 native DeepSeek path 与 reference path 和公开 baseline 做性能比较.
 - 将 native mHC 和 sparse-attention temporary storage 移入 adapter-owned graph workspace.
-- 添加 coordinated DeepSeek CUDA Graph capture 和 replay path.
+- 在添加 DeepSeek CUDA Graph capture 和 replay 之前定义 static multi-rank workspace.
 - 在 GPU 0 以外的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
 - 交付前取得 independent code review.
 

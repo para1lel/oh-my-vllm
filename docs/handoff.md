@@ -28,14 +28,27 @@ DeepSeek physical pages now keep window KV, compressed KV, index keys, Engram
 hash state, and compressor tails across request slots.
 Cache operations support logical block store, load, drop, partial prefix copy, and
 page-backed host snapshots.
+
 Accepted DSpark target states seed the MTP window and speculative rollback keeps
 rejected draft state private.
-Nonzero multi-token prefill uses a sequential correctness path while a fused
-chunk path stays a future performance task.
+Nonzero multi-token prefill uses the fused chunk path.
+Target and MTP seed chunks keep the total native rows below the operator limit.
+Aligned prefill batches use subbatches of at most four requests.
+
+Non-final prefill skips the vocabulary projection.
+DSpark keeps only the target hidden tail needed by its MTP window.
+Ordinary execution does not collect target hidden states.
+
+Complete initial prompts can run as one aligned request batch.
+Shared query attention state resets at each target call.
+Index sources always publish the cache view for the current request slots.
 
 DeepSeek execution is currently Eager.
 The shared Qwen CUDA Graph path has stream handoff, bounded graph workspaces, graph upload, and cleanup tests.
 DeepSeek multi-rank Graph capture is not connected.
+An audit against current vLLM and SGLang graph patterns keeps DeepSeek Eager until
+static multi-rank workspaces and capture buckets are defined.
+The shared Qwen graph path already owns stream handoff, graph resources, and cleanup.
 
 DeepSeek startup reads only `config.json` and `model.safetensors.index.json` for its descriptor identity.
 It does not hash weight shards before Ready.
@@ -74,14 +87,15 @@ The approved DeepSeek workload definitions are available in [deepseek matrix](..
 The HTTP runner defines 36 DSpark5 cases and 2 ordinary TP4 cases.
 The AgentX runner defines TP4/4, TEP4/16, and DEP4/64 cases.
 No complete approved HTTP or AgentX result set is recorded yet.
+CodeGraph 1.6.2 is installed in Codex.
+This repository has a local CodeGraph index and ignores `.codegraph/`.
 
 ## Next work
 
-- Complete a TP4 readiness and ordinary decode run.
 - Replace the DEP4 fallback with stable request ownership and expert dispatch.
 - Measure the native DeepSeek paths against the reference path and public baselines.
 - Move native mHC and sparse-attention temporary storage into adapter-owned graph workspaces.
-- Add a coordinated DeepSeek CUDA Graph capture and replay path.
+- Define static multi-rank workspaces before adding DeepSeek CUDA Graph capture and replay.
 - Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
 - Get an independent code review before delivery.
 

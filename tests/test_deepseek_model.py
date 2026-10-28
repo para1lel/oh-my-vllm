@@ -6,10 +6,174 @@ from oh_my_vllm.models.deepseek_v41.model import (
     ParallelEngramEmbedding,
     Transformer,
     get_dspark_topk_idxs,
+    get_prefill_window_topk_idxs,
+    shared_attn,
 )
 
 
 class DeepSeekModel(unittest.TestCase):
+    def test_transformer_can_skip_vocab_projection_for_prefill(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=1,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(0,),
+                kv_source_layers=(),
+                index_source_layers=(),
+                index_topk=0,
+                candidate_source_layer=-1,
+                candidate_topk_blocks=0,
+                candidate_block_size=0,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                max_batch_size=1,
+                max_seq_len=8,
+                dspark_target_layer_ids=(0,),
+            )
+            model = Transformer(args)
+            _, logits, hidden = model(
+                torch.randint(0, 128, (1, 2)),
+                compute_logits=False,
+            )
+            self.assertIsNone(logits)
+            self.assertEqual(tuple(hidden.shape), (1, 2, 64))
+            _, logits, hidden = model(
+                torch.randint(0, 128, (1, 2)),
+                compute_logits=False,
+                collect_main_hidden=False,
+            )
+            self.assertIsNone(logits)
+            self.assertIsNone(hidden)
+        finally:
+            shared_attn.topk_idxs = None
+            shared_attn.compress_kv = None
+            shared_attn.index_k = None
+            shared_attn.candidates = None
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_transformer_clears_shared_attention_state_before_forward(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        shared_attn.topk_idxs = torch.ones(4, 1, 1, dtype=torch.int32)
+        shared_attn.candidates = torch.ones(4, 1, dtype=torch.bool)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=1,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(0,),
+                kv_source_layers=(),
+                index_source_layers=(),
+                index_topk=0,
+                candidate_source_layer=-1,
+                candidate_topk_blocks=0,
+                candidate_block_size=0,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                max_batch_size=1,
+                max_seq_len=8,
+            )
+            Transformer(args)(torch.randint(0, 128, (1, 1)))
+            self.assertIsNone(shared_attn.topk_idxs)
+            self.assertIsNone(shared_attn.candidates)
+        finally:
+            shared_attn.topk_idxs = None
+            shared_attn.compress_kv = None
+            shared_attn.index_k = None
+            shared_attn.candidates = None
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_index_cache_tracks_cache_slots_when_a_group_is_incomplete(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=2,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(2, 2),
+                kv_source_layers=(0,),
+                index_source_layers=(0, 1),
+                index_topk=4,
+                candidate_source_layer=0,
+                candidate_topk_blocks=1,
+                candidate_block_size=2,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                max_batch_size=4,
+                max_seq_len=32,
+            )
+            model = Transformer(args)
+            model(torch.randint(0, 128, (4, 4)), cache_slots=torch.arange(4))
+            output = model(
+                torch.randint(0, 128, (1, 1)),
+                start_pos=4,
+                cache_slots=torch.tensor([0]),
+            )
+            self.assertEqual(tuple(output[0].shape), (1,))
+        finally:
+            shared_attn.topk_idxs = None
+            shared_attn.compress_kv = None
+            shared_attn.index_k = None
+            shared_attn.candidates = None
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_prefill_window_indices_include_previous_cache_and_causal_chunk(self):
+        indices = get_prefill_window_topk_idxs(4, 1, 3, 4)
+
+        self.assertEqual(tuple(indices.shape), (1, 3, 4))
+        self.assertTrue(torch.equal(indices[0, 0], torch.tensor([1, 2, 3, 4])))
+        self.assertTrue(torch.equal(indices[0, 1], torch.tensor([2, 3, 4, 5])))
+        self.assertTrue(torch.equal(indices[0, 2], torch.tensor([3, 4, 5, 6])))
+
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_engram_table_stays_on_host_for_cuda_lookup(self):
         previous_device = torch.get_default_device()
@@ -205,23 +369,134 @@ class DeepSeekModel(unittest.TestCase):
             prompt = torch.tensor([[1, 2, 3, 4]])
             continuation = torch.tensor([[5, 6]])
             sequential(prompt, cache_slots=torch.tensor([0]))
-            sequential_logits = sequential(
-                continuation[:, :1],
-                start_pos=4,
-                cache_slots=torch.tensor([0]),
-            )[1]
-            sequential_logits = sequential(
-                continuation[:, 1:],
-                start_pos=5,
-                cache_slots=torch.tensor([0]),
-            )[1]
+            sequential_logits = [
+                sequential(
+                    continuation[:, offset : offset + 1],
+                    start_pos=4 + offset,
+                    cache_slots=torch.tensor([0]),
+                    full_logits=True,
+                )[1]
+                for offset in range(continuation.size(1))
+            ]
             chunked(prompt, cache_slots=torch.tensor([0]))
             chunked_logits = chunked(
                 continuation,
                 start_pos=4,
                 cache_slots=torch.tensor([0]),
+                full_logits=True,
             )[1]
-            torch.testing.assert_close(chunked_logits, sequential_logits)
+            torch.testing.assert_close(
+                chunked_logits,
+                torch.cat(sequential_logits, dim=1),
+                atol=1e-5,
+                rtol=1e-3,
+            )
+        finally:
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_nonzero_prefill_chunk_matches_sequential_compressed_attention(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=2,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(2, 2),
+                kv_source_layers=(0,),
+                index_source_layers=(0, 1),
+                index_n_heads=4,
+                index_head_dim=32,
+                index_topk=4,
+                candidate_source_layer=0,
+                candidate_topk_blocks=1,
+                candidate_block_size=2,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                temperature=0,
+                max_batch_size=2,
+                max_seq_len=32,
+                dspark_target_layer_ids=(0, 1),
+            )
+            for prefix_length, chunk_length in ((3, 5), (9, 13)):
+                with self.subTest(prefix=prefix_length, chunk=chunk_length):
+                    torch.manual_seed(71)
+                    sequential = Transformer(args).float()
+                    chunked = Transformer(args).float()
+                    for parameter in sequential.parameters():
+                        torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+                    chunked.load_state_dict(sequential.state_dict())
+                    slots = torch.tensor([1])
+                    prompt = torch.arange(1, prefix_length + 1).unsqueeze(0)
+                    continuation = torch.arange(
+                        prefix_length + 1, prefix_length + chunk_length + 1
+                    ).unsqueeze(0)
+                    sequential(prompt, cache_slots=slots)
+                    expected = [
+                        sequential(
+                            continuation[:, offset : offset + 1],
+                            start_pos=prefix_length + offset,
+                            cache_slots=slots,
+                            full_logits=True,
+                        )
+                        for offset in range(chunk_length)
+                    ]
+                    chunked(prompt, cache_slots=slots)
+                    actual = chunked(
+                        continuation,
+                        start_pos=prefix_length,
+                        cache_slots=slots,
+                        full_logits=True,
+                    )
+                    torch.testing.assert_close(
+                        actual[1],
+                        torch.cat([item[1] for item in expected], dim=1),
+                        atol=2e-4,
+                        rtol=2e-3,
+                    )
+                    torch.testing.assert_close(
+                        actual[2],
+                        torch.cat([item[2] for item in expected], dim=1),
+                        atol=2e-4,
+                        rtol=2e-3,
+                    )
+                    for left, right in zip(
+                        chunked.layers, sequential.layers, strict=True
+                    ):
+                        torch.testing.assert_close(
+                            left.attn.window_kv_cache,
+                            right.attn.window_kv_cache,
+                            atol=3e-4,
+                            rtol=3e-3,
+                        )
+                    compressed = (prefix_length + chunk_length) // 2
+                    torch.testing.assert_close(
+                        chunked.layers[0].attn.compress_kv_cache[1, :compressed],
+                        sequential.layers[0].attn.compress_kv_cache[1, :compressed],
+                        atol=3e-4,
+                        rtol=3e-3,
+                    )
+                    torch.testing.assert_close(
+                        chunked.layers[0].attn.indexer.k_cache[1, :compressed],
+                        sequential.layers[0].attn.indexer.k_cache[1, :compressed],
+                        atol=3e-4,
+                        rtol=3e-3,
+                    )
         finally:
             torch.set_default_device(previous_device)
             torch.set_default_dtype(previous_dtype)
