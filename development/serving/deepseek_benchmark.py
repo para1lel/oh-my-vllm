@@ -12,6 +12,10 @@ import subprocess
 import time
 from pathlib import Path
 
+from oh_my_vllm.models.deepseek_v41.inference import (
+    DEFAULT_PREFILL_ROWS,
+    prefill_row_limit,
+)
 from oh_my_vllm.models.deepseek_v41.tokenizer import Tokenization
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 
@@ -173,6 +177,9 @@ def effective_service_configuration(arguments):
     return {
         "max_num_batched_tokens": getattr(arguments, "max_num_batched_tokens", 32768),
         "max_num_seqs": getattr(arguments, "max_num_seqs", 64),
+        "prefill_rows": prefill_row_limit(
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS", DEFAULT_PREFILL_ROWS)
+        ),
     }
 
 

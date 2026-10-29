@@ -310,6 +310,7 @@ class DeepSeekSpeculation(unittest.TestCase):
     def test_target_releases_completed_prefill_hidden_chunks(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")
+        worker.prefill_rows = MAX_PREFILL_ROWS
         worker.args = SimpleNamespace(window_size=2)
         references = []
 
@@ -350,6 +351,7 @@ class DeepSeekSpeculation(unittest.TestCase):
     def test_target_batch_keeps_total_rows_in_one_native_call(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")
+        worker.prefill_rows = MAX_PREFILL_ROWS
 
         def model(inputs, **_):
             self.assertLessEqual(inputs.size(0) * inputs.size(1), 8192)
@@ -399,6 +401,7 @@ class DeepSeekSpeculation(unittest.TestCase):
     def test_target_batch_uses_four_request_prefill_subbatches(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")
+        worker.prefill_rows = MAX_PREFILL_ROWS
 
         def model(inputs, **_):
             self.assertLessEqual(inputs.size(0), 4)

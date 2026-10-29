@@ -29,18 +29,36 @@ class DeepSeekBenchmark(unittest.TestCase):
     def test_service_identity_uses_the_effective_sequence_capacity(self):
         self.assertEqual(
             effective_service_configuration(SimpleNamespace(max_num_seqs=16)),
-            {"max_num_batched_tokens": 32768, "max_num_seqs": 16},
+            {
+                "max_num_batched_tokens": 32768,
+                "max_num_seqs": 16,
+                "prefill_rows": 384,
+            },
         )
         self.assertEqual(
             effective_service_configuration(SimpleNamespace()),
-            {"max_num_batched_tokens": 32768, "max_num_seqs": 64},
+            {
+                "max_num_batched_tokens": 32768,
+                "max_num_seqs": 64,
+                "prefill_rows": 384,
+            },
         )
         self.assertEqual(
             effective_service_configuration(
                 SimpleNamespace(max_num_batched_tokens=8192, max_num_seqs=1)
             ),
-            {"max_num_batched_tokens": 8192, "max_num_seqs": 1},
+            {
+                "max_num_batched_tokens": 8192,
+                "max_num_seqs": 1,
+                "prefill_rows": 384,
+            },
         )
+
+    def test_service_identity_records_the_prefill_row_override(self):
+        with patch.dict("os.environ", {"OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS": "1024"}):
+            configuration = effective_service_configuration(SimpleNamespace())
+
+        self.assertEqual(configuration["prefill_rows"], 1024)
 
     def test_request_body_uses_the_service_reasoning_field(self):
         body = request_body([{"role": "user", "content": "hello"}], 4, 7)

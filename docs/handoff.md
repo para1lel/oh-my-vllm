@@ -13,8 +13,8 @@ It supports text target execution and DSpark5 greedy proposal verification.
 The bridge supports `tp4`, `tep4`, and a documented DEP4 executor fallback.
 
 The adapter uses the DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention, and transformer support.
-Prefill uses working chunks of at most 8192 total rows.
-Set `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` to use a smaller model-local chunk.
+Prefill uses working chunks of at most 384 total rows by default.
+Set `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` to select a value up to 8192.
 Completed chunks release their hidden tail before the next native call.
 
 DSpark verification keeps rejected drafts private and emits the target correction.
@@ -23,7 +23,9 @@ Lookup stages only the selected rows on the GPU.
 
 Released DeepSeek shapes support native projection, routing, activation, mHC, RMS, and sparse attention paths.
 The native contracts accept long row ranges. Small rows use bounded workspaces.
-Large prefill calls use bounded 8192-row launches to keep temporary storage bounded.
+Configured large prefill calls use bounded launches up to 8192 rows.
+The smaller default keeps multi-request temporary storage bounded.
+
 Native SwiGLU accepts up to 1048576 routed rows.
 This keeps six-route 8192-row prefill chunks on the native activation path.
 
