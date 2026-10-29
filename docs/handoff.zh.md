@@ -34,6 +34,7 @@ Native SwiGLU 支持最多 1048576 个 routed row.
 DeepSeek rank worker 为 prefill input copy 复用 pinned host 和 device token buffer.
 
 DeepSeek 使用发布模型的 FP4 和 FP8 scale rule, 并对数值使用最近偶数舍入.
+Dense FP8 projection 在 scale multiplication 和 FP32 accumulation 之前, 为每个 K32 group 重置 raw dot product.
 In-place quantization 先舍入再反量化.
 Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 temporary tensor.
 Native attention 使用独立的 window KV 和 compressed KV table.

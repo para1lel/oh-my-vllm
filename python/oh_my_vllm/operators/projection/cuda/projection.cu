@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../../runtime/cuda/contracts.cuh"
+#include "fp8_k32.cuh"
 
 namespace encoded_projection {
 
@@ -152,6 +153,19 @@ void launch_projection(TensorView encoded, TensorView scales, TensorView weight,
   check_cutlass(Kernel::initialize_workspace(args, scratch.data_ptr(), stream));
   auto params = Kernel::to_underlying_arguments(args, scratch.data_ptr());
   check_cutlass(Gemm::run(params, stream));
+}
+
+template <class Output>
+void launch_fp8_projection(TensorView encoded, TensorView scales, TensorView weight,
+                           TensorView weight_scales, TensorView output, int rows, int outputs,
+                           int width, cudaStream_t stream) {
+  auto layout = ScaleConfig::tile_atom_to_shape_SFB(make_shape(1, outputs, width, 1));
+  launch_fp8_k32(static_cast<const uint8_t *>(encoded.data_ptr()),
+                 static_cast<const uint8_t *>(weight.data_ptr()),
+                 static_cast<const uint8_t *>(scales.data_ptr()),
+                 static_cast<const uint8_t *>(weight_scales.data_ptr()),
+                 static_cast<Output *>(output.data_ptr()), rows, outputs, width, layout, stream);
+  check_cuda(cudaGetLastError());
 }
 
 } // namespace encoded_projection
@@ -362,9 +376,6 @@ void pack_weights(TensorView raw_weight, TensorView raw_scales, TensorView packe
   if (bits == 4) {
     Projection<4>::configure();
     Projection<4, float>::configure();
-  } else {
-    Projection<8>::configure();
-    Projection<8, float>::configure();
   }
   if (!alias)
     launch_padding(raw_weight, packed_weight, outputs, width * bits / 8, padded * bits / 8, stream);
@@ -550,17 +561,12 @@ void grouped_project(TensorView encoded, TensorView scales, TensorView weight_pt
 
 int64_t workspace_size(int64_t rows, int64_t outputs, int64_t width, int64_t bits) {
   dimensions(rows, outputs, width, bits);
-  if (!rows)
+  if (!rows || bits == 8)
     return 0;
-  if (bits == 4)
-    return std::max(Projection<4>::Gemm::get_workspace_size(
-                        Projection<4>::arguments(rows, outputs, round128(width))),
-                    Projection<4, float>::Gemm::get_workspace_size(
-                        Projection<4, float>::arguments(rows, outputs, round128(width))));
-  return std::max(
-      Projection<8>::Gemm::get_workspace_size(Projection<8>::arguments(rows, outputs, width)),
-      Projection<8, float>::Gemm::get_workspace_size(
-          Projection<8, float>::arguments(rows, outputs, width)));
+  return std::max(Projection<4>::Gemm::get_workspace_size(
+                      Projection<4>::arguments(rows, outputs, round128(width))),
+                  Projection<4, float>::Gemm::get_workspace_size(
+                      Projection<4, float>::arguments(rows, outputs, round128(width))));
 }
 
 void project(TensorView encoded, TensorView scales, TensorView packed_weight,
@@ -597,12 +603,12 @@ void project(TensorView encoded, TensorView scales, TensorView packed_weight,
     launch_projection<4, float>(encoded, scales, packed_weight, weight_scales, output, padded_input,
                                 packed_input_scales, scratch, rows, outputs, width, stream);
   else if (bits == 8 && fp32)
-    launch_projection<8, float>(encoded, scales, packed_weight, weight_scales, output, padded_input,
-                                packed_input_scales, scratch, rows, outputs, width, stream);
+    launch_fp8_projection<float>(encoded, scales, packed_weight, weight_scales, output, rows,
+                                 outputs, width, stream);
   else if (bits == 4)
     launch_projection<4>(encoded, scales, packed_weight, weight_scales, output, padded_input,
                          packed_input_scales, scratch, rows, outputs, width, stream);
   else
-    launch_projection<8>(encoded, scales, packed_weight, weight_scales, output, padded_input,
-                         packed_input_scales, scratch, rows, outputs, width, stream);
+    launch_fp8_projection<__nv_bfloat16>(encoded, scales, packed_weight, weight_scales, output,
+                                         rows, outputs, width, stream);
 }

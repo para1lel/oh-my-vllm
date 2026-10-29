@@ -43,6 +43,13 @@ Native projection 使用每 32 个 channel 一组的 activation scale.
 Reference FP8 projection 沿 row 和 column group 两个维度展开 weight scale.
 FP32 scale 输入使用 reference projection path, 而不是 native UE8M0 byte interface.
 
+Dense FP8 projection 使用 raw K32 dot product 和 FP32 accumulator.
+每个 raw dot 从零开始.
+执行 `scaled = mul_rn(raw_dot, activation_scale)`.
+执行 `sum = fma_rn(scaled, weight_scale, sum)`.
+不要在 dot product 之前将两个 scale 相乘.
+仅将完成的总和舍入到所选 output type.
+
 [Router](../../../python/oh_my_vllm/models/deepseek_v41/model.py) 在 score calculation 之前, 使用 FP32 input 和 weight 执行 projection.
 Expert selection 之前不要将 router logits 舍入到 BF16.
 

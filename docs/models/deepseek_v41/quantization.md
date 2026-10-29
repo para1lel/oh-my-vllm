@@ -43,6 +43,13 @@ Each 128-channel activation scale repeats across four native groups.
 Reference FP8 projection expands weight scales across row and column groups.
 FP32 scale inputs use the reference projection path, not the native UE8M0 byte interface.
 
+Dense FP8 projections use raw K32 dot products with FP32 accumulators.
+Start each raw dot at zero.
+Apply `scaled = mul_rn(raw_dot, activation_scale)`.
+Apply `sum = fma_rn(scaled, weight_scale, sum)`.
+Do not multiply the two scales before the dot product.
+Round only the completed sum to the selected output type.
+
 The [router](../../../python/oh_my_vllm/models/deepseek_v41/model.py) projects inputs and weights in FP32 before score calculation.
 Do not round router logits to BF16 before expert selection.
 

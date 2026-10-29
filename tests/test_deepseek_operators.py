@@ -71,6 +71,54 @@ def projection_reference(encoded, input_scales, weight, scales, bits):
 
 
 class DeepSeekOperatorContracts(unittest.TestCase):
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_fp8_projection_scales_each_k32_dot_before_accumulation(self):
+        # Raw K32 dots are -1 and 323. Their scaled FP32 sum rounds to 646,
+        # then the BF16 midpoint rounds to 648, not 644.
+        for rows in (1, 33, 125, 126):
+            inputs = torch.zeros((rows, 64), device="cuda")
+            weight = torch.zeros((160, 64), device="cuda")
+            for column, left, right in (
+                (8, -1, 1),
+                (32, 16, 16),
+                (48, 8, 8),
+                (63, 3, 1),
+            ):
+                inputs[:, column] = left
+                weight[:, column] = right
+            inputs = inputs.to(torch.float8_e4m3fn)
+            weight = weight.to(torch.float8_e4m3fn)
+            row_shifts = torch.arange(rows, device="cuda") % 3 - 1
+            group_shifts = torch.arange(5, device="cuda") - 2
+            input_scales = (
+                (torch.tensor([113, 127], device="cuda") + row_shifts[:, None])
+                .to(torch.uint8)
+                .view(torch.float8_e8m0fnu)
+            )
+            weight_scales = (
+                (torch.tensor([126, 128], device="cuda") + group_shifts[:, None])
+                .to(torch.uint8)
+                .view(torch.float8_e8m0fnu)
+            )
+            factors = torch.exp2(
+                row_shifts[:, None].float()
+                + group_shifts.repeat_interleave(32)[None, :].float()
+            )
+            for dtype, value in ((torch.float32, 646), (torch.bfloat16, 648)):
+                with self.subTest(rows=rows, dtype=dtype):
+                    actual = kernel.fp8_gemm(
+                        inputs,
+                        input_scales,
+                        weight,
+                        weight_scales,
+                        torch.float8_e8m0fnu,
+                        block_size=32,
+                        output_dtype=dtype,
+                    )
+                    torch.testing.assert_close(
+                        actual, (factors * value).to(dtype), rtol=0, atol=0
+                    )
+
     def test_sparse_reference_rounds_unnormalized_probabilities_before_values(self):
         query = torch.zeros((1, 1, 16, 512), dtype=torch.bfloat16)
         query[..., 0] = 32
@@ -140,39 +188,44 @@ class DeepSeekOperatorContracts(unittest.TestCase):
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_fp32_projection_replays_on_caller_stream(self):
-        encoded = torch.ones((2, 128), device="cuda").to(torch.float8_e4m3fn)
-        scales = torch.ones((2, 4), device="cuda").to(torch.float8_e8m0fnu)
-        weight = torch.ones((32, 128), device="cuda").to(torch.float8_e4m3fn)
-        weight_scales = scales[:1].contiguous()
-        module = kernel._projection_module()
-        proxy = Mock(wraps=module)
-        with patch.object(kernel, "_projection_module", return_value=proxy):
-            output = kernel.fp8_gemm(
-                encoded,
-                scales,
-                weight,
-                weight_scales,
-                torch.float8_e8m0fnu,
-                block_size=32,
-                output_dtype=torch.float32,
+        for width, outputs in ((128, 32), (1024, 512)):
+            encoded = torch.ones((2, width), device="cuda").to(torch.float8_e4m3fn)
+            scales = torch.ones((2, width // 32), device="cuda").to(
+                torch.float8_e8m0fnu
             )
-        arguments = proxy.project.call_args.args
-        torch.cuda.synchronize()
-        graph = torch.cuda.CUDAGraph()
-        try:
-            with torch.cuda.graph(graph):
-                module.project(*arguments)
-            stream = torch.cuda.Stream()
-            with torch.cuda.stream(stream):
-                encoded.view(torch.uint8).fill_(64)
-                graph.replay()
-            stream.synchronize()
-            torch.testing.assert_close(
-                output, torch.full_like(output, 256), rtol=0, atol=0
+            weight = torch.ones((outputs, width), device="cuda").to(torch.float8_e4m3fn)
+            weight_scales = torch.ones((outputs // 32, width // 32), device="cuda").to(
+                torch.float8_e8m0fnu
             )
-        finally:
+            module = kernel._projection_module()
+            proxy = Mock(wraps=module)
+            with patch.object(kernel, "_projection_module", return_value=proxy):
+                output = kernel.fp8_gemm(
+                    encoded,
+                    scales,
+                    weight,
+                    weight_scales,
+                    torch.float8_e8m0fnu,
+                    block_size=32,
+                    output_dtype=torch.float32,
+                )
+            arguments = proxy.project.call_args.args
             torch.cuda.synchronize()
-            graph.reset()
+            graph = torch.cuda.CUDAGraph()
+            try:
+                with torch.cuda.graph(graph):
+                    module.project(*arguments)
+                stream = torch.cuda.Stream()
+                with torch.cuda.stream(stream):
+                    encoded.view(torch.uint8).fill_(64)
+                    graph.replay()
+                stream.synchronize()
+                torch.testing.assert_close(
+                    output, torch.full_like(output, 2 * width), rtol=0, atol=0
+                )
+            finally:
+                torch.cuda.synchronize()
+                graph.reset()
 
     def test_hyperconnection_sinkhorn_preserves_zero_probability_support(self):
         mixes = torch.zeros((1, 1, 24), dtype=torch.float32)

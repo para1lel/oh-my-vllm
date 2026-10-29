@@ -34,6 +34,7 @@ This keeps six-route 8192-row prefill chunks on the native activation path.
 DeepSeek rank workers reuse pinned host and device token buffers for prefill input copies.
 
 DeepSeek uses the released FP4 and FP8 scale rules and nearest-even value rounding.
+Dense FP8 projections reset raw dot products for each K32 group before scale multiplication and FP32 accumulation.
 In-place quantization rounds before dequantization.
 The native quantizer writes encoded values and scales without context-sized temporary tensors.
 Native attention uses separate window and compressed KV tables.

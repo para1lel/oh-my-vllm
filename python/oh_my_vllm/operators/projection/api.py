@@ -6,6 +6,9 @@ are prepared once outside capture; their stored values stay unchanged.
 Dense project accepts BF16 or FP32 output storage. FP32 output keeps partial
 sums for a later rank reduction. Grouped project keeps BF16 output storage.
 The dense workspace query covers both output types.
+Dense FP8 resets its raw FP32 dot for each K32 group, then applies the
+activation scale with MUL and the weight scale with FMA into the running
+sum. It reads prepared weight scales and needs no device scratch.
 """
 
 from typing import NamedTuple
