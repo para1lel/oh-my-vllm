@@ -27,6 +27,7 @@ MODULE_SOURCES = {
 }
 OPTIONAL_MODULE_SOURCES = {
     "collectives": SOURCES / "runtime/cuda/collectives.cu",
+    "paged": SOURCES / "runtime/cuda/paged_cache.cu",
 }
 
 

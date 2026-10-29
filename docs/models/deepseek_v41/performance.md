@@ -28,6 +28,8 @@ OH_MY_VLLM_GPU_COUNT=4 scripts/with-env.sh scripts/with-gpu.sh python -m develop
 Use `--case` with the identifier from `development/serving/deepseek_matrix.py` for a subset.
 Set `OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT` through the runner's `--cache-context` option.
 The runner records source, executable, native modules, checkpoint, tokenizer, topology, and configuration identities.
+It also records the harness Python, PyTorch, CUDA, NCCL, and numerical settings.
+These settings do not independently identify each worker's runtime.
 
 The full timer includes request submission, prompt preparation, queueing, model execution, and response parsing.
 It excludes model loading and initialization.

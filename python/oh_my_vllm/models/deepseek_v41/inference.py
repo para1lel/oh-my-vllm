@@ -116,6 +116,7 @@ class Worker:
         with self.startup_trace.measure("model_args"):
             args = ModelArgs(**inference_config)
         args.max_batch_size = config["max_num_seqs"]
+        args.lazy_cache = True
         cache_context = int(
             os.environ.get("OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT", DEFAULT_CACHE_CONTEXT)
         )
@@ -343,6 +344,7 @@ class Worker:
                 collect_main_hidden=getattr(self, "dspark", False),
                 logit_start=chunk_logit_start,
                 sample_output=not full_logits,
+                cache_slots_cpu=(slot,),
             )
             logits = chunk_logits
             if logit_chunks is not None:
@@ -433,6 +435,7 @@ class Worker:
         length = len(token_batches[0])
         limit_rows = getattr(self, "prefill_rows", DEFAULT_PREFILL_ROWS)
         chunk_size = max(1, limit_rows // len(token_batches))
+        cache_slots_cpu = cache_slots.tolist()
         output_ids = logits = main_hidden = None
         logit_chunks = [] if full_logits else None
         for offset in range(0, length, chunk_size):
@@ -446,6 +449,7 @@ class Worker:
                 full_logits=full_logits,
                 compute_logits=compute_logits,
                 collect_main_hidden=getattr(self, "dspark", False),
+                cache_slots_cpu=cache_slots_cpu,
             )
             logits = chunk_logits
             if logit_chunks is not None:

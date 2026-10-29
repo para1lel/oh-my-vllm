@@ -13,6 +13,7 @@ from torch import nn
 
 from .engram import EngramLayout, NgramHashState
 from .image_processor import IMAGE, IMAGE_END, IMAGE_NEW_LINE, IMAGE_START
+from .indexing import INDEX_SCORE_WORK_BYTES, score_chunks
 from .kernel import (
     NATIVE_ROW_LIMIT,
     act_quant,
@@ -26,6 +27,7 @@ from .kernel import (
     rms,
     sparse_attn,
 )
+from .storage import sequence_cache
 from .vision import Aligner, ViT
 
 # Set once by Transformer.__init__; one model per process, so layers just read them.
@@ -61,6 +63,7 @@ class ModelArgs:
     # runtime limits rather than model shape: they size the KV caches
     max_batch_size: int = 4
     max_seq_len: int = 4096
+    lazy_cache: bool = False
     temperature: float = 1
     dtype: Literal["bf16", "fp8"] = "fp8"
     expert_dtype: Literal["fp4"] | None = "fp4"
@@ -635,10 +638,14 @@ class Indexer(torch.nn.Module):
             self.k_cache: torch.Tensor
             self.register_buffer(
                 "k_cache",
-                torch.zeros(
-                    args.max_batch_size,
-                    args.max_seq_len // self.compress_ratio,
-                    args.index_head_dim,
+                sequence_cache(
+                    args,
+                    (
+                        args.max_batch_size,
+                        args.max_seq_len // self.compress_ratio,
+                        args.index_head_dim,
+                    ),
+                    ratio=self.compress_ratio,
                 ),
                 persistent=False,
             )
@@ -684,36 +691,43 @@ class Indexer(torch.nn.Module):
 
         index_k = shared_attn.index_k[:, : end_pos // ratio]
         weights = self.weights_proj(x) * (self.softmax_scale * self.n_heads**-0.5)
-        index_score = torch.einsum("bshd,btd->bsht", q, index_k)
-        index_score = (index_score.relu_() * weights.unsqueeze(-1)).sum(dim=2)
-        if world_size > 1:
-            dist.all_reduce(index_score)
-
-        # how many compressed positions each query can see: a block becomes visible once the query
-        # has passed its last token. One query per decode step, so there it is just a number.
-        compress_lens = (
-            (start_pos + torch.arange(1, seqlen + 1, device=x.device)) // ratio
-        ).unsqueeze(-1)
-        index_score.masked_fill_(
-            torch.arange(index_score.size(-1), device=x.device) >= compress_lens,
-            -torch.inf,
-        )
-
-        if self.is_candidate_source:
-            shared_attn.candidates = select_candidate_blocks(
-                index_score,
-                compress_lens,
-                self.candidate_topk_blocks,
-                self.candidate_block_size,
+        positions = torch.arange(index_k.size(1), device=x.device)
+        indices, candidates = [], []
+        for first, last, index_score in score_chunks(
+            q,
+            index_k,
+            weights,
+            work_bytes=INDEX_SCORE_WORK_BYTES,
+            rank_sum=world_size > 1,
+        ):
+            compress_lens = (
+                (start_pos + torch.arange(first + 1, last + 1, device=x.device))
+                // ratio
+            ).unsqueeze(-1)
+            index_score.masked_fill_(positions >= compress_lens, -torch.inf)
+            if self.is_candidate_source:
+                candidates.append(
+                    select_candidate_blocks(
+                        index_score,
+                        compress_lens,
+                        self.candidate_topk_blocks,
+                        self.candidate_block_size,
+                    )
+                )
+            elif self.uses_candidates:
+                keep = shared_attn.candidates[:, first:last].repeat_interleave(
+                    self.candidate_block_size, dim=-1
+                )[..., : index_k.size(1)]
+                index_score.masked_fill_(~keep, -torch.inf)
+            topk = min(self.index_topk, end_pos // ratio)
+            idxs = (
+                index_score.topk(topk, dim=-1, sorted=False).indices.sort(dim=-1).values
             )
-        elif self.uses_candidates:
-            # level two: score with our own weights, but only inside the source's candidate blocks
-            index_score = index_score.masked_fill(~shared_attn.candidates, -torch.inf)
-
-        # top-k by score, re-sorted into position order; unreachable -> -1, rest shifted by offset
-        topk = min(self.index_topk, end_pos // ratio)
-        idxs = index_score.topk(topk, dim=-1, sorted=False).indices.sort(dim=-1).values
-        return torch.where(idxs < compress_lens, idxs + offset, -1).int()
+            indices.append(torch.where(idxs < compress_lens, idxs + offset, -1).int())
+            del index_score
+        if self.is_candidate_source:
+            shared_attn.candidates = torch.cat(candidates, dim=1)
+        return torch.cat(indices, dim=1)
 
 
 def select_candidate_blocks(
@@ -726,8 +740,8 @@ def select_candidate_blocks(
 
     `logits` is [..., n_positions] with positions the query cannot reach already at -inf, which is
     what makes a block score of -inf mean "not reachable yet". `compress_lens` is a plain int during
-    decode, or broadcasts against logits' leading dims during prefill. Returns a bool mask shaped
-    like `logits`, so the layers consuming it just mask and never think about blocks again.
+    decode, or broadcasts against logits' leading dims during prefill. Returns one bool per block.
+    Consumers expand only their current query chunk to position granularity.
     """
     width = logits.size(-1)
     # score each block by its best position; -inf pads the last one out to block_size
@@ -747,7 +761,7 @@ def select_candidate_blocks(
     keep = torch.zeros_like(scores, dtype=torch.bool).scatter_(
         -1, top.indices, top.values > -torch.inf
     )
-    return keep.repeat_interleave(block_size, dim=-1)[..., :width]
+    return keep
 
 
 class Attention(nn.Module):
@@ -812,10 +826,14 @@ class Attention(nn.Module):
             self.compress_kv_cache: torch.Tensor
             self.register_buffer(
                 "compress_kv_cache",
-                torch.zeros(
-                    args.max_batch_size,
-                    args.max_seq_len // self.compress_ratio,
-                    self.head_dim,
+                sequence_cache(
+                    args,
+                    (
+                        args.max_batch_size,
+                        args.max_seq_len // self.compress_ratio,
+                        self.head_dim,
+                    ),
+                    ratio=self.compress_ratio,
                 ),
                 persistent=False,
             )
@@ -1756,6 +1774,22 @@ class Transformer(nn.Module):
             self.image_start = nn.Parameter(torch.empty(args.dim))
             self.image_end = nn.Parameter(torch.empty(args.dim))
             self.image_newline = nn.Parameter(torch.empty(args.dim))
+        self._sequence_caches = tuple(
+            value for value in self.buffers() if hasattr(value, "_paged_storage")
+        )
+
+    def _apply(self, function, recurse=True):
+        if getattr(self, "_sequence_caches", ()):
+            raise RuntimeError(
+                "mapped model storage does not support tensor conversion"
+            )
+        return super()._apply(function, recurse=recurse)
+
+    def reserve_cache(self, slots, end_pos):
+        for value in self._sequence_caches:
+            rows = end_pos // value._context_ratio
+            for slot in slots:
+                value._paged_storage.reserve(slot, rows)
 
     @torch.inference_mode()
     def encode_image(
@@ -1791,6 +1825,7 @@ class Transformer(nn.Module):
         collect_main_hidden: bool = True,
         logit_start: int = 0,
         sample_output: bool = True,
+        cache_slots_cpu=None,
     ):
         """input_ids: [b, s], every entry a real token id -- generate.py only ever passes positions it
         has already filled, so the padding it uses internally never reaches here. token_types /
@@ -1801,6 +1836,9 @@ class Transformer(nn.Module):
         shared_attn.reset_query_state()
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
+        if self._sequence_caches:
+            slots = cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
+            self.reserve_cache(slots, start_pos + input_ids.size(1))
         image_mask = None if token_types is None else token_types >= 0  # TEXT is -1
         # image tokens take no part in an n-gram and get no engram contribution; text-only needs no mask
         engram_mask = None if image_mask is None else ~image_mask

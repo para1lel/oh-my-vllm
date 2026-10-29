@@ -57,8 +57,9 @@ MODULES = {
 
 def optional_modules():
     from oh_my_vllm.operators.runtime.collectives import FUNCTIONS
+    from oh_my_vllm.operators.runtime.paged import FUNCTIONS as PAGED_FUNCTIONS
 
-    return {"collectives": FUNCTIONS}
+    return {"collectives": FUNCTIONS, "paged": PAGED_FUNCTIONS}
 
 
 @functools.cache
@@ -117,7 +118,7 @@ def build(name, functions):
     directory.mkdir(parents=True, exist_ok=True)
     library = build_inline(
         f"oh_my_vllm_{name}",
-        cuda_sources=f'#include "{name}.cu"',
+        cuda_sources=f'#include "{source.name}"',
         functions=functions,
         extra_cuda_cflags=flags,
         extra_include_paths=include_paths,

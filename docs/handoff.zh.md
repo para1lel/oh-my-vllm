@@ -42,8 +42,8 @@ index key, Engram hash state 和 compressor tail.
 cache operation 支持 logical block store, load, drop, partial prefix copy 和
 page-backed host snapshot.
 
-accepted DSpark target state 会 seed MTP window, speculative rollback 会保持
-rejected draft state 为 private state.
+accepted DSpark target state 会 seed MTP window.
+精确回滚已覆盖的 target window 和 compressor tail 必须有 bounded undo state.
 nonzero multi-token prefill 使用 fused chunk path.
 target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
 aligned prefill batch 最多使用四个 request 组成一个 subbatch.
@@ -66,6 +66,11 @@ ordinary execution 不会收集 target hidden state.
 index source 总是为当前 request slot 发布 cache view.
 Compressed KV source 在当前 cache write 后发布选中的 slot.
 Compressed KV 和 index copy 只包含 active context range.
+
+CUDA sequence staging 为 active request slot 使用按需映射的 storage.
+Slot restoration 在复制 state 前映射所需 context.
+Slot release 在解除 storage 映射前等待 device work.
+Index scoring 使用有界 query chunk 和紧凑的 candidate-block mask.
 
 serving engine 会执行配置的 `max_num_seqs` resident limit.
 它会保留一个额外的 request 做 preparation, 以便让 CPU admission 与 GPU work overlap.
@@ -127,7 +132,9 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 
 ## 下一步
 
-- 用有界 cache storage 替换 dense maximum-context staging 和完整 window-page copy.
+- 将 window snapshot 从 FA page 移到精确的 accepted-state endpoint.
+- 发布 accepted snapshot 前, 为 window KV 和 compressor tail 保留有界 verification undo state.
+- 测量并移除重复的 GPU checkpoint 和 packed projection storage.
 - 将配置的 context limit 与观测到的 AgentX request length 分开记录.
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
 - 在 DeepSeek CUDA Graph capture 之前增加 per-request varlen position metadata 和 batch decode.

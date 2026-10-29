@@ -24,7 +24,23 @@ It does not provide DEP4 request ownership or expert dispatch.
 The physical cache keeps model pages behind the Rust logical block tables.
 It supports prefix reuse, partial block copies, host snapshots, and restoration.
 The adapter keeps accepted DSpark MTP state during verification and restore.
+Verification rollback does not yet restore overwritten window rows and compressor tails at each accepted endpoint.
 DeepSeek still uses Eager execution because coordinated multi-rank Graph replay is not connected.
+
+CUDA sequence staging uses demand-mapped storage for compressed KV, index keys, and Engram history.
+Each request slot maps only its active context range.
+The logical tensor address stays fixed during growth.
+Restoration maps the required range before the state copy.
+Slot release waits for device work before it releases physical storage.
+
+CPU reference execution keeps dense tensors.
+Models with mapped storage do not support tensor device or dtype conversion.
+
+Index score tensors use query chunks with a 256 MiB budget.
+This budget excludes inputs, selected results, and native library workspaces.
+FP16/BF16 index rank sums use FP32 and return to the score dtype after the sum.
+Candidate filters keep one boolean per block.
+Consumers expand only the current query chunk to token positions.
 
 Use the [HTTP procedure](performance.md) for the approved 38-case matrix.
 Use the [AgentX procedure](agentx.md) for the three strategy cases.
@@ -35,6 +51,12 @@ The procedures define measurements. They do not add performance gates.
 Use four GPUs apart from GPU 0.
 The current validation preference is GPUs `4,5,6,7`.
 Set the four GPU UUIDs through the GPU wrapper or the ignored `LOCAL.md` file.
+
+Build the demand-mapped storage module before starting the worker:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.native_build --module paged
+```
 
 The default worker context is bounded for functional startup.
 Set `OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT` to the requested physical context before a long-context check.

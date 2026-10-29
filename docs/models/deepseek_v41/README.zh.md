@@ -24,7 +24,23 @@ target path 使用 Eager execution.
 physical cache 在 Rust logical block table 后面保存 model page.
 它支持 prefix reuse, partial block copy, host snapshot 和 restoration.
 adapter 会在 verification 和 restore 期间保存 accepted DSpark MTP state.
+Verification rollback 尚不能在每个 accepted endpoint 恢复已覆盖的 window row 和 compressor tail.
 由于 coordinated multi-rank Graph replay 尚未接入, DeepSeek 当前仍使用 Eager execution.
+
+CUDA sequence staging 为 compressed KV, index key 和 Engram history 使用按需映射的 storage.
+每个 request slot 只映射其 active context range.
+增长期间 logical tensor address 保持不变.
+Restoration 在 state copy 前映射所需 range.
+Slot release 在释放 physical storage 前等待 device work.
+
+CPU reference execution 保留 dense tensor.
+使用映射 storage 的 model 不支持 tensor device 或 dtype conversion.
+
+Index score tensor 使用 query chunk, budget 为 256 MiB.
+这个 budget 不包含 input, selected result 和 native library workspace.
+FP16/BF16 index rank sum 使用 FP32, 求和后返回 score dtype.
+Candidate filter 为每个 block 保留一个 boolean.
+Consumer 只将当前 query chunk 展开到 token position.
 
 approved 38-case matrix 使用 [HTTP 流程](performance.zh.md).
 三个 strategy case 使用 [AgentX 流程](agentx.zh.md).
@@ -35,6 +51,12 @@ approved 38-case matrix 使用 [HTTP 流程](performance.zh.md).
 使用 GPU 0 以外的四张显卡.
 当前 validation 优先使用 GPU `4,5,6,7`.
 通过 GPU wrapper 或 ignored `LOCAL.md` 设置四个 GPU UUID.
+
+启动 worker 前, 构建按需映射的 storage module:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.native_build --module paged
+```
 
 默认 worker context 为 functional startup 设置了上限.
 执行 long-context check 前, 将 `OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT` 设为所需 physical context.

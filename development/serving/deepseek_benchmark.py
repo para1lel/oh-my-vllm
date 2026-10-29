@@ -3,12 +3,14 @@ import concurrent.futures
 import csv
 import hashlib
 import http.client
+import importlib.metadata
 import json
 import os
 import re
 import signal
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -25,6 +27,7 @@ from .device import device_identity, selected_uuids
 
 DEEPSEEK_NATIVE_MODULES = (
     "device",
+    "paged",
     "activation",
     "hyperconnection",
     "projection",
@@ -183,6 +186,47 @@ def effective_service_configuration(arguments):
     }
 
 
+def numeric_runtime_identity():
+    import torch
+
+    return {
+        "python": list(sys.version_info[:3]),
+        "torch": str(torch.__version__),
+        "torch_source": torch.version.git_version,
+        "cuda": torch.version.cuda,
+        "nccl": (
+            list(torch.cuda.nccl.version())
+            if torch.distributed.is_nccl_available()
+            else None
+        ),
+        "tvm_ffi": importlib.metadata.version("apache-tvm-ffi"),
+        "float32_matmul_precision": torch.get_float32_matmul_precision(),
+        "fp16_reduced_precision_reduction": (
+            torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction
+        ),
+        "bf16_reduced_precision_reduction": (
+            torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction
+        ),
+        "cpu_threads": torch.get_num_threads(),
+        "environment": {
+            name: os.environ.get(name)
+            for name in (
+                "NCCL_ALGO",
+                "NCCL_PROTO",
+                "NCCL_COLLNET_ENABLE",
+                "NCCL_NVLS_ENABLE",
+                "NCCL_MIN_NCHANNELS",
+                "NCCL_MAX_NCHANNELS",
+                "NCCL_CUMEM_ENABLE",
+                "NCCL_CUMEM_HOST_ENABLE",
+                "TORCH_NCCL_ASYNC_ERROR_HANDLING",
+                "PYTORCH_CUDA_ALLOC_CONF",
+                "PYTORCH_ALLOC_CONF",
+            )
+        },
+    }
+
+
 def artifact_identity(arguments, tokenizer, uuids, *, workload):
     cache_configuration = effective_cache_configuration(arguments)
     service_configuration = effective_service_configuration(arguments)
@@ -190,6 +234,7 @@ def artifact_identity(arguments, tokenizer, uuids, *, workload):
         "source": source_identity(),
         "binary": file_sha256(arguments.binary),
         "native": native_identity(),
+        "harness_numeric_runtime": numeric_runtime_identity(),
         "checkpoint": checkpoint_identity(arguments.model),
         "tokenizer": tokenizer.identity,
         "topology": topology_identity(uuids),

@@ -7,6 +7,8 @@ import torch
 from sympy import isprime
 from torch import nn
 
+from .storage import sequence_cache
+
 
 def find_next_prime(start: int, seen_primes: set[int]) -> int:
     """The smallest prime above `start` that has not been handed out yet."""
@@ -172,7 +174,11 @@ class NgramHashState(nn.Module):
         self.register_buffer("token_map", torch.tensor(token_map), persistent=False)
         self.register_buffer(
             "cache",
-            torch.empty(args.max_batch_size, args.max_seq_len, dtype=torch.int64),
+            sequence_cache(
+                args,
+                (args.max_batch_size, args.max_seq_len),
+                dtype=torch.int64,
+            ),
             persistent=False,
         )
 
@@ -199,7 +205,7 @@ class NgramHashState(nn.Module):
         ).expand(batch, seqlen)
         tokens, blocked = [], torch.zeros_like(positions, dtype=torch.bool)
         for shift in range(self.layout.max_ngram_size):
-            source = self.cache[cache_slots].gather(1, (positions - shift).clamp_min(0))
+            source = self.cache[cache_slots[:, None], (positions - shift).clamp_min(0)]
             blocked = blocked | (positions < shift) | (source == self.DEAD)
             tokens.append(torch.where(blocked, self.pad_id, source))
         tokens = torch.stack(tokens, dim=-1)  # [B, L, max_ngram_size]

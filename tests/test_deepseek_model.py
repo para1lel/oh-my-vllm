@@ -1,6 +1,10 @@
 import unittest
+from dataclasses import replace
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
+from oh_my_vllm.models.deepseek_v41.engram import NgramHashState
 from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
 from oh_my_vllm.models.deepseek_v41.model import (
     Attention,
@@ -11,11 +15,160 @@ from oh_my_vllm.models.deepseek_v41.model import (
     Transformer,
     get_dspark_topk_idxs,
     get_prefill_window_topk_idxs,
+    select_candidate_blocks,
     shared_attn,
 )
 
 
 class DeepSeekModel(unittest.TestCase):
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_lazy_cache_keeps_empty_context_storage_dense(self):
+        from oh_my_vllm.models.deepseek_v41.storage import sequence_cache
+
+        previous_device = torch.get_default_device()
+        torch.set_default_device("cuda")
+        try:
+            value = sequence_cache(
+                SimpleNamespace(lazy_cache=True), (2, 0, 32), dtype=torch.bfloat16
+            )
+            self.assertEqual(value.shape, (2, 0, 32))
+            self.assertEqual(value.device.type, "cuda")
+            self.assertFalse(hasattr(value, "_paged_storage"))
+        finally:
+            torch.set_default_device(previous_device)
+
+    def test_mapped_models_reject_storage_conversion_before_access(self):
+        model = Transformer.__new__(Transformer)
+        torch.nn.Module.__init__(model)
+        model._sequence_caches = (torch.empty(0),)
+        with self.assertRaisesRegex(RuntimeError, "mapped.*conversion"):
+            model.float()
+
+    def test_candidate_selection_keeps_a_compact_causal_block_mask(self):
+        scores = torch.tensor(
+            [[[1.0, 2, 3, 4, 5], [3.0, 2, 1, -torch.inf, -torch.inf]]]
+        )
+        lengths = torch.tensor([[[5], [3]]])
+        actual = select_candidate_blocks(scores, lengths, 1, 2)
+        expected = torch.tensor([[[False, False, True], [False, True, False]]])
+        self.assertTrue(torch.equal(actual, expected))
+
+    def test_engram_hash_reads_only_the_requested_lookback_positions(self):
+        from torch.utils._python_dispatch import TorchDispatchMode
+
+        state = NgramHashState.__new__(NgramHashState)
+        torch.nn.Module.__init__(state)
+        state.layout = SimpleNamespace(max_ngram_size=2)
+        state.pad_id = 0
+        state.cache = torch.zeros(3, 1024, dtype=torch.int64)
+        state.cache[2, 511] = 7
+        state.cache[0, 511] = 3
+        state.token_map = torch.arange(8)
+        state.multipliers = torch.tensor([[1, 3]])
+        state.primes = torch.tensor([[[11]]])
+        state.offsets = torch.tensor([[0]])
+
+        class ActiveRowsOnly(TorchDispatchMode):
+            def __torch_dispatch__(self, function, types, args=(), kwargs=None):
+                if (
+                    function == torch.ops.aten.index.Tensor
+                    and args[0] is state.cache
+                    and len(args[1]) < 2
+                ):
+                    raise AssertionError(
+                        "Engram selected the full context before lookback"
+                    )
+                return function(*args, **(kwargs or {}))
+
+        with ActiveRowsOnly():
+            actual = state(
+                torch.tensor([[1, 2], [4, 5]]),
+                start_pos=512,
+                cache_slots=torch.tensor([2, 0]),
+            )
+        self.assertTrue(
+            torch.equal(actual, torch.tensor([[[[9]], [[1]]], [[[2]], [[9]]]]))
+        )
+        self.assertEqual(torch.count_nonzero(state.cache[1]).item(), 0)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_lazy_cache_maps_only_selected_slots_and_releases_finished_state(self):
+        from oh_my_vllm.models.deepseek_v41.cache import DeepSeekCache
+        from oh_my_vllm.operators.runtime.paged import mapped_bytes
+
+        previous_device, previous_dtype = (
+            torch.get_default_device(),
+            torch.get_default_dtype(),
+        )
+        torch.set_default_device("cuda")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=1,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(2,),
+                kv_source_layers=(0,),
+                index_source_layers=(0,),
+                index_n_heads=4,
+                index_head_dim=32,
+                index_topk=4,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                temperature=0,
+                max_batch_size=64,
+                max_seq_len=1048576,
+                lazy_cache=True,
+            )
+            before = mapped_bytes()
+            model = Transformer(args)
+            self.assertEqual(mapped_bytes(), before)
+            reference = Transformer(
+                replace(args, max_batch_size=2, max_seq_len=16, lazy_cache=False)
+            )
+            for parameter in model.parameters():
+                torch.nn.init.normal_(parameter, mean=0, std=0.02)
+            reference.load_state_dict(model.state_dict())
+            tokens = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
+            output = model(tokens, cache_slots=torch.tensor([63, 2]), full_logits=True)
+            expected = reference(tokens, full_logits=True)
+            torch.testing.assert_close(output[1], expected[1], atol=2e-4, rtol=2e-3)
+            active = mapped_bytes() - before
+            self.assertGreater(active, 0)
+            self.assertLess(active, 64 * 1024 * 1024)
+            attention = model.layers[0].attn
+            saved = attention.compress_kv_cache[2, :2].clone()
+            cache = DeepSeekCache(model, block_tokens=2, max_seq_len=args.max_seq_len)
+            row = {"fa_block_table": [1, 2], "mamba_block_table": [3, 4]}
+            restored = attention.compress_kv_cache[63, :2].clone()
+            cache.commit(7, row, 63, accepted_end=4)
+            cache.clear_slot(63)
+            self.assertEqual(mapped_bytes() - before, active // 2)
+            torch.testing.assert_close(attention.compress_kv_cache[2, :2], saved)
+            cache.restore(7, 10, row, start_pos=4)
+            torch.testing.assert_close(attention.compress_kv_cache[10, :2], restored)
+            self.assertEqual(mapped_bytes() - before, active)
+            cache.clear_slot(10)
+            cache.clear_slot(2)
+            self.assertEqual(mapped_bytes(), before)
+        finally:
+            shared_attn.reset_query_state()
+            shared_attn.compress_kv = shared_attn.index_k = None
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
     def test_compressed_cache_publishes_current_groups_for_selected_slots(self):
         attention = Attention.__new__(Attention)
         torch.nn.Module.__init__(attention)
@@ -772,12 +925,16 @@ class DeepSeekModel(unittest.TestCase):
                         for offset in range(chunk_length)
                     ]
                     chunked(prompt, cache_slots=slots)
-                    actual = chunked(
-                        continuation,
-                        start_pos=prefix_length,
-                        cache_slots=slots,
-                        full_logits=True,
-                    )
+                    with patch(
+                        "oh_my_vllm.models.deepseek_v41.model.INDEX_SCORE_WORK_BYTES",
+                        1024,
+                    ):
+                        actual = chunked(
+                            continuation,
+                            start_pos=prefix_length,
+                            cache_slots=slots,
+                            full_logits=True,
+                        )
                     torch.testing.assert_close(
                         actual[1],
                         torch.cat([item[1] for item in expected], dim=1),

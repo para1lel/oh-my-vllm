@@ -42,8 +42,8 @@ hash state, and compressor tails across request slots.
 Cache operations support logical block store, load, drop, partial prefix copy, and
 page-backed host snapshots.
 
-Accepted DSpark target states seed the MTP window and speculative rollback keeps
-rejected draft state private.
+Accepted DSpark target states seed the MTP window.
+Bounded undo state is necessary for exact rollback of overwritten target windows and compressor tails.
 Nonzero multi-token prefill uses the fused chunk path.
 Target and MTP seed chunks keep the total native rows below the operator limit.
 Aligned prefill batches use subbatches of at most four requests.
@@ -66,6 +66,11 @@ Shared query attention state resets at each target call.
 Index sources always publish the cache view for the current request slots.
 Compressed KV sources publish selected slots after the current cache write.
 Compressed KV and index copies contain only the active context range.
+
+CUDA sequence staging uses demand-mapped storage for active request slots.
+Slot restoration maps the required context before copying state.
+Slot release waits for device work before unmapping storage.
+Index scoring uses bounded query chunks and compact candidate-block masks.
 
 The serving engine enforces the configured `max_num_seqs` resident limit.
 It keeps one additional request in preparation to overlap CPU admission with GPU work.
@@ -128,7 +133,9 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 
 ## Next work
 
-- Replace dense maximum-context staging and full window-page copies with bounded cache storage.
+- Move window snapshots from FA pages to exact accepted-state endpoints.
+- Keep bounded verification undo state for window KV and compressor tails before publishing accepted snapshots.
+- Measure and remove duplicate GPU checkpoint and packed projection storage.
 - Keep the configured context limit separate from the observed AgentX request lengths.
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
 - Add per-request varlen position metadata and batch decode before DeepSeek CUDA Graph capture.

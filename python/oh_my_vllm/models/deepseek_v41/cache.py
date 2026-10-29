@@ -5,6 +5,8 @@ from math import ceil
 
 import torch
 
+from .storage import release_sequence_slot, reserve_sequence_slot
+
 
 def _blocks(value):
     if not isinstance(value, list) or any(
@@ -161,7 +163,29 @@ class DeepSeekCache:
         return self.used_bytes
 
     def stats(self):
+        staging = [
+            value
+            for value in (
+                *(value for value, _ in self._compressed),
+                *(value for value, _ in self._index),
+                *self._engram,
+            )
+            if hasattr(value, "_paged_storage")
+        ]
+        mapped = 0
+        if staging:
+            from ...operators.runtime.paged import mapped_bytes
+
+            mapped = mapped_bytes()
         return {
+            "sequence_staging_mapped_bytes": mapped,
+            "sequence_staging_logical_bytes": sum(
+                value.numel() * value.element_size() for value in staging
+            ),
+            "gpu_logical_page_bytes": (
+                len(self.fa_pages) * self._fa_page_bytes()
+                + len(self.mamba_pages) * self._mamba_page_bytes()
+            ),
             "host_cache_capacity_bytes": self.host_limit,
             "host_cache_allocated_bytes": self.used_bytes,
             "host_cache_used_bytes": self.used_bytes,
@@ -300,14 +324,20 @@ class DeepSeekCache:
         for value in self._mtp_window:
             value[slot].zero_()
         for value, _ratio in self._compressed:
-            value[slot].zero_()
+            release_sequence_slot(value, slot)
         for value, _ratio in self._index:
-            value[slot].zero_()
+            release_sequence_slot(value, slot)
         for value in self._engram:
-            value[slot].fill_(0)
+            release_sequence_slot(value, slot)
         for kv, score in self._tails:
             kv[slot].zero_()
             score[slot].fill_(-torch.inf)
+
+    def reserve_slot(self, slot, end):
+        for value, ratio in (*self._compressed, *self._index):
+            reserve_sequence_slot(value, slot, end // ratio)
+        for value in self._engram:
+            reserve_sequence_slot(value, slot, end)
 
     def commit(
         self,
@@ -518,6 +548,7 @@ class DeepSeekCache:
         self.clear_slot(slot)
         if start_pos == 0:
             return
+        self.reserve_slot(slot, start_pos)
         for page_index, block in enumerate(fa_blocks):
             page_start = page_index * self.block_tokens
             if page_start >= start_pos:
@@ -958,6 +989,15 @@ class DeepSeekCache:
         return completed
 
     def close(self):
+        for value in (
+            *(value for value, _ in self._compressed),
+            *(value for value, _ in self._index),
+            *self._engram,
+        ):
+            owner = getattr(value, "_paged_storage", None)
+            if owner is not None:
+                for slot in range(value.shape[0]):
+                    owner.release(slot)
         self.snapshots.clear()
         self.fa_pages.clear()
         self.mamba_pages.clear()

@@ -1,17 +1,87 @@
+import hashlib
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from .deepseek_agentx import service_max_num_seqs
 from .deepseek_benchmark import (
+    artifact_identity,
     effective_cache_configuration,
     effective_service_configuration,
+    native_identity,
     request_body,
     verify_artifact_identity,
 )
 
 
 class DeepSeekBenchmark(unittest.TestCase):
+    def test_numeric_runtime_changes_invalidate_the_measurement_identity(self):
+        import torch
+
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "service"
+            binary.write_bytes(b"fixed service executable")
+            arguments = SimpleNamespace(
+                binary=binary,
+                model=Path(directory),
+                cache_context=1048576,
+                blocks=16,
+                mamba_blocks=8,
+            )
+            tokenizer = SimpleNamespace(identity={"tokenizer": "fixed"})
+            precision = torch.get_float32_matmul_precision()
+            with (
+                patch(
+                    "development.serving.deepseek_benchmark.native_identity",
+                    return_value={},
+                ),
+                patch(
+                    "development.serving.deepseek_benchmark.checkpoint_identity",
+                    return_value={},
+                ),
+                patch(
+                    "development.serving.deepseek_benchmark.topology_identity",
+                    return_value=[],
+                ),
+            ):
+                expected = artifact_identity(arguments, tokenizer, (), workload={})
+                try:
+                    torch.set_float32_matmul_precision(
+                        "high" if precision != "high" else "highest"
+                    )
+                    with self.assertRaisesRegex(RuntimeError, "changed"):
+                        verify_artifact_identity(
+                            arguments, tokenizer, (), expected, workload={}
+                        )
+                finally:
+                    torch.set_float32_matmul_precision(precision)
+
+    def test_native_identity_reads_the_registered_paged_allocator_manifest(self):
+        from oh_my_vllm.operators.runtime.native import (
+            MODULE_SOURCES,
+            OPTIONAL_MODULE_SOURCES,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "native.so"
+            binary.write_bytes(b"immutable native test image")
+            metadata = {
+                "library": str(binary),
+                "binary_id": hashlib.sha256(binary.read_bytes()).hexdigest(),
+            }
+            for name in MODULE_SOURCES | OPTIONAL_MODULE_SOURCES:
+                (root / f"{name}.json").write_text(json.dumps(metadata))
+            with patch(
+                "development.serving.deepseek_benchmark.cache_directory",
+                return_value=root,
+            ):
+                identity = native_identity()
+            self.assertEqual(identity["paged"], metadata)
+
     def test_agentx_default_sequence_capacity_follows_concurrency(self):
         self.assertEqual(service_max_num_seqs(16), 16)
         self.assertEqual(service_max_num_seqs(64), 64)
