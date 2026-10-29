@@ -42,6 +42,10 @@ The reference path joins their tables before computation.
 
 Shared-expert tensor-parallel down projections keep FP32 partial sums until rank reduction.
 Sinkhorn mixing adds epsilon before the first column normalization.
+
+Native mHC keeps the released product, sum, and row-count-dependent mean order.
+Its FP32 projection uses the tensor runtime's cuBLAS images and an explicit 32 MiB workspace.
+Prepared HC workspaces keep FP32 input and statistics storage for Eager or Graph execution.
 Sparse attention rounds unnormalized probabilities to BF16 in ordered 64-slot blocks before multiplication by V.
 The sink enters the denominator after these blocks and does not change their running maximum.
 
@@ -157,6 +161,7 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 - Reuse encoded KV across consumers without repeated full-context format conversion.
 - Define explicit ownership for raw weights and padded projection copies.
 - Correct candidate differences against the independent frozen DeepSeek text endpoints before performance acceptance.
+- Reduce duplicate cuBLAS workspace storage before long-context capacity tuning.
 - Add independent image endpoints before image acceptance.
 - Keep the configured context limit separate from the observed AgentX request lengths.
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.

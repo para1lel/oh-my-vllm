@@ -42,6 +42,10 @@ Reference path 在计算之前合并这些 table.
 
 Shared-expert tensor-parallel down projection 保留 FP32 partial sum, 直到 rank reduction 完成.
 Sinkhorn mixing 在第一次 column normalization 之前加上 epsilon.
+
+Native mHC 保持发布参考的 product, sum 和取决于 row 数的 mean 顺序.
+其 FP32 projection 使用 tensor runtime 的 cuBLAS image 和显式 32 MiB workspace.
+Prepared HC workspace 为 Eager 或 Graph execution 保留 FP32 input 和 statistics storage.
 Sparse attention 按顺序处理 64-slot block, 在与 V 相乘之前将未归一化的 probability 舍入到 BF16.
 这些 block 完成后, sink 才计入 denominator, 不改变它们的 running maximum.
 
@@ -156,6 +160,7 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 - 在 consumer 之间复用 encoded KV, 避免重复转换完整 context 的格式.
 - 为 raw weight 和 padded projection copy 定义明确的 ownership.
 - 在 performance acceptance 之前修正 candidate 与独立 DeepSeek text frozen endpoint 的差异.
+- 在 long-context capacity 调整之前, 减少重复的 cuBLAS workspace storage.
 - 在 image acceptance 之前增加独立的 image endpoint.
 - 将配置的 context limit 与观测到的 AgentX request length 分开记录.
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.

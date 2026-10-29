@@ -113,6 +113,39 @@ def vision_vendor_dependencies():
     )
 
 
+def hyperconnection_vendor_dependencies():
+    package = importlib.metadata.distribution("nvidia-cublas")
+    names = (
+        "libcublas.so.13",
+        "libcublasLt.so.13",
+        "cublas_api.h",
+        "cublas_v2.h",
+        "cublasLt.h",
+    )
+    paths = {
+        Path(name).name: Path(package.locate_file(name)).resolve(strict=True)
+        for name in package.files or ()
+        if Path(name).name in names
+    }
+    if set(paths) != set(names):
+        raise RuntimeError("the tensor runtime cuBLAS package is incomplete")
+    images = [
+        {"path": str(paths[name]), "sha256": file_sha256(paths[name])}
+        for name in names[:2]
+    ]
+    return {
+        "version": package.version,
+        "images": images,
+        "headers": {str(paths[name]): file_sha256(paths[name]) for name in names[2:]},
+        "include_directory": str(paths["cublas_v2.h"].parent),
+        "ldflags": [
+            *(image["path"] for image in images),
+            f"-Wl,-rpath,{paths[names[0]].parent}",
+            "-ldl",
+        ],
+    }
+
+
 def collectives_vendor_dependencies():
     import shutil
     import subprocess
@@ -187,6 +220,11 @@ def verify_vision_vendor_images(module, vendor):
     verify_vendor_images(paths, vendor["images"], "Vision")
 
 
+def verify_hyperconnection_vendor_images(module, vendor):
+    paths = tuple(str(path) for path in module.hc_images())
+    verify_vendor_images(paths, vendor["images"], "HC")
+
+
 @functools.cache
 def load(name, functions):
     manifest = cache_directory() / f"{name}.json"
@@ -208,6 +246,8 @@ def load(name, functions):
         vendor = vision_vendor_dependencies()
     elif name == "collectives":
         vendor = collectives_vendor_dependencies()
+    elif name == "hyperconnection":
+        vendor = hyperconnection_vendor_dependencies()
     if vendor is not None and metadata.get(f"{name}_vendor") != vendor:
         raise RuntimeError(f"native {name} vendor dependencies are stale")
     if name in (
@@ -249,4 +289,6 @@ def load(name, functions):
         verify_vision_vendor_images(module, vendor)
     elif name == "collectives":
         verify_collectives_vendor_images(module, vendor)
+    elif name == "hyperconnection":
+        verify_hyperconnection_vendor_images(module, vendor)
     return module, metadata["source_id"], library

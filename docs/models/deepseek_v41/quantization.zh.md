@@ -72,6 +72,19 @@ Empty row 和 fully masked row 返回零, 即使 finite sink exponential 下溢�
 
 在 Sinkhorn mixing 中, 第一次 column normalization 之前, 给 row softmax value 加上 `hc_eps`.
 发布模型使用 `hc_eps=1e-6`.
+对于四份 copy, row sum 使用 XOR offset `2, 1`.
+Column sum 使用 XOR offset `8, 4`.
+
+HC collapse 对每个 FP32 product 先舍入, 再从左向右求和.
+HC expansion 先按该顺序对已舍入的 residual product 求和.
+在 residual sum 之后, 加上单独舍入的 branch product.
+在这些求和中, 保持 FP32 multiplication 和 addition 分离.
+
+HC mixing 使用四个独立的 FP32 accumulator 累加 squared input.
+完整逻辑 row 数决定 reduction layout.
+在 FP32 projection 之后应用 inverse RMS.
+Native projection 使用 tensor runtime 的 cuBLAS library 和 caller 拥有的 32 MiB workspace.
+这个 workspace 大小是数值契约的一部分.
 
 ## 执行
 
@@ -80,6 +93,13 @@ Empty row 和 fully masked row 返回零, 即使 finite sink exponential 下溢�
 它使用 caller 的 CUDA stream.
 每个 warp 在 in-place write 之前读取一个完整 group.
 Native quantization 不分配临时 device storage.
+
+HC preparation 保留 FP32 residual 副本, mean 与 inverse statistics, 以及 cuBLAS workspace.
+Native HC call 接受最多 32768 行.
+Small-row workspace plan 保留 384-row 限制.
+在 Graph recording 之前准备 thread-local cuBLAS handle.
+在 Graph release 之前, 保持 captured workspace 存活.
+Native manifest 记录 tensor runtime package 的 cuBLAS library image 和 header identity.
 
 Tensor preparation 可以生成一个对齐的 contiguous input copy.
 Encoded output 和 scale 使用独立 storage.

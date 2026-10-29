@@ -1,1 +1,2 @@
 apache-tvm-ffi==0.1.14.post1
+nvidia-cublas==13.1.1.3

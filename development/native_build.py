@@ -27,8 +27,10 @@ from oh_my_vllm.operators.runtime.native import (
     build_digest,
     cache_directory,
     collectives_vendor_dependencies,
+    hyperconnection_vendor_dependencies,
     source_digest,
     verify_collectives_vendor_images,
+    verify_hyperconnection_vendor_images,
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
@@ -100,6 +102,8 @@ def build(name, functions):
     if name == "collectives":
         vendor = collectives_vendor_dependencies()
         flags += ("--compiler-bindir", vendor["host_compiler"])
+    elif name == "hyperconnection":
+        vendor = hyperconnection_vendor_dependencies()
     build_options = {}
     if vendor is not None:
         include_paths.append(vendor["include_directory"])
@@ -163,6 +167,8 @@ def build(name, functions):
         verify_vision_vendor_images(module, vendor)
     elif name == "collectives":
         verify_collectives_vendor_images(module, vendor)
+    elif name == "hyperconnection":
+        verify_hyperconnection_vendor_images(module, vendor)
     return module, source_id, immutable_library
 
 

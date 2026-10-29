@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from .api import BLAS_WORKSPACE_BYTES
+
 
 @dataclass(frozen=True)
 class Plan:
@@ -19,6 +21,9 @@ class Plan:
             ((rows, 24), "float32"),
             ((rows, 4), "float32"),
             ((rows, 4, 4), "float32"),
+            ((rows, 20480), "float32"),
+            ((rows, 2), "float32"),
+            ((BLAS_WORKSPACE_BYTES if rows else 0,), "uint8"),
         )
 
 

@@ -1,48 +1,19 @@
 #include <cuda_bf16.h>
 #include "../../runtime/cuda/contracts.cuh"
+#include "hc_projection.cuh"
 
 namespace {
 
 constexpr int width = 5120, copies = 4, flat_width = width * copies, mixes = 24;
 
-__device__ float warp_sum(float value) {
-  for (int offset = 16; offset; offset /= 2)
-    value += __shfl_down_sync(0xffffffff, value, offset);
-  return value;
-}
-
-__global__ void project_kernel(const __nv_bfloat16 *residual, const float *weight, float *mixed) {
-  int row = blockIdx.x, coefficient = blockIdx.y, lane = threadIdx.x % 32, warp = threadIdx.x / 32;
-  float dot = 0.f, norm = 0.f;
-  for (int column = threadIdx.x; column < flat_width; column += blockDim.x) {
-    float value = __bfloat162float(residual[row * flat_width + column]);
-    dot = fmaf(value, weight[coefficient * flat_width + column], dot);
-    norm = fmaf(value, value, norm);
-  }
-  dot = warp_sum(dot);
-  norm = warp_sum(norm);
-  __shared__ float partials[2][8];
-  if (lane == 0) {
-    partials[0][warp] = dot;
-    partials[1][warp] = norm;
-  }
-  __syncthreads();
-  if (warp == 0) {
-    dot = warp_sum(lane < 8 ? partials[0][lane] : 0.f);
-    norm = warp_sum(lane < 8 ? partials[1][lane] : 0.f);
-    if (lane == 0)
-      mixed[row * mixes + coefficient] = dot * rsqrtf(norm / flat_width + 1e-20f);
-  }
-}
-
 __device__ float row_sum(float value) {
-  value += __shfl_xor_sync(0xffff, value, 1, 16);
-  return value + __shfl_xor_sync(0xffff, value, 2, 16);
+  value += __shfl_xor_sync(0xffff, value, 2, 16);
+  return value + __shfl_xor_sync(0xffff, value, 1, 16);
 }
 
 __device__ float column_sum(float value) {
-  value += __shfl_xor_sync(0xffff, value, 4, 16);
-  return value + __shfl_xor_sync(0xffff, value, 8, 16);
+  value += __shfl_xor_sync(0xffff, value, 8, 16);
+  return value + __shfl_xor_sync(0xffff, value, 4, 16);
 }
 
 __global__ void split_kernel(const float *mixed, const float *scale, const float *base, float *pre,
@@ -76,8 +47,9 @@ __global__ void collapse_kernel(const __nv_bfloat16 *residual, const float *inco
     return;
   float value = 0.f;
   for (int copy = 0; copy < copies; ++copy)
-    value += incoming[row * copies + copy] *
-             __bfloat162float(residual[row * flat_width + copy * width + column]);
+    value = __fadd_rn(
+        value, __fmul_rn(incoming[row * copies + copy],
+                         __bfloat162float(residual[row * flat_width + copy * width + column])));
   output[row * width + column] = __float2bfloat16_rn(value);
 }
 
@@ -88,16 +60,19 @@ __global__ void expand_kernel(const __nv_bfloat16 *residual, const __nv_bfloat16
     return;
   float value = __bfloat162float(branch[row * width + column]);
   for (int destination = 0; destination < copies; ++destination) {
-    float result = post[row * copies + destination] * value;
+    float result = 0.f;
     for (int source = 0; source < copies; ++source)
-      result += comb[row * 16 + source * copies + destination] *
-                __bfloat162float(residual[row * flat_width + source * width + column]);
+      result = __fadd_rn(
+          result,
+          __fmul_rn(comb[row * 16 + source * copies + destination],
+                    __bfloat162float(residual[row * flat_width + source * width + column])));
+    result = __fadd_rn(result, __fmul_rn(post[row * copies + destination], value));
     output[row * flat_width + destination * width + column] = __float2bfloat16_rn(result);
   }
 }
 
 int rows_contract(TensorView residual) {
-  TVM_FFI_ICHECK(residual.ndim() == 3 && residual.size(0) >= 0);
+  TVM_FFI_ICHECK(residual.ndim() == 3 && residual.size(0) >= 0 && residual.size(0) <= 32768);
   int rows = residual.size(0);
   tensor_contract(residual, residual, kDLBfloat, 16, {rows, copies, width});
   return rows;
@@ -111,9 +86,37 @@ void separate(std::initializer_list<TensorView> values) {
 
 } // namespace
 
+int64_t workspace_size(int64_t rows) {
+  TVM_FFI_ICHECK(rows >= 0 && rows <= 32768);
+  return rows ? hc_projection::BlasBytes : 0;
+}
+
+void hc_warmup(TensorView reference) {
+  TVM_FFI_ICHECK(reference.device().device_type == kDLCUDA);
+  tvm::ffi::CUDADeviceGuard guard(reference.device().device_id);
+  auto stream =
+      static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, reference.device().device_id));
+  cudaStreamCaptureStatus capture;
+  check_cuda(cudaStreamIsCapturing(stream, &capture));
+  TVM_FFI_ICHECK(capture == cudaStreamCaptureStatusNone) << "prepare HC outside Graph capture";
+  hc_projection::handle(reference.device().device_id, stream);
+}
+
+tvm::ffi::Array<tvm::ffi::String> hc_images() {
+  tvm::ffi::Array<tvm::ffi::String> paths;
+  for (const void *symbol : {reinterpret_cast<const void *>(&cublasCreate_v2),
+                             reinterpret_cast<const void *>(&cublasLtCreate)}) {
+    Dl_info image{};
+    TVM_FFI_ICHECK(dladdr(symbol, &image) && image.dli_fname);
+    paths.push_back(tvm::ffi::String(image.dli_fname));
+  }
+  return paths;
+}
+
 void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, TensorView scale,
                 TensorView base, TensorView mixed, TensorView post, TensorView comb,
-                TensorView collapsed, TensorView next_pre) {
+                TensorView collapsed, TensorView next_pre, TensorView flat, TensorView statistics,
+                TensorView blas_workspace) {
   int rows = rows_contract(residual);
   tensor_contract(incoming, residual, kDLFloat, 32, {rows, copies});
   tensor_contract(weight, residual, kDLFloat, 32, {mixes, flat_width});
@@ -124,15 +127,17 @@ void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, Ten
   tensor_contract(comb, residual, kDLFloat, 32, {rows, copies, copies});
   tensor_contract(collapsed, residual, kDLBfloat, 16, {rows, width});
   tensor_contract(next_pre, residual, kDLFloat, 32, {rows, copies});
-  separate({residual, incoming, weight, scale, base, mixed, post, comb, collapsed, next_pre});
+  tensor_contract(flat, residual, kDLFloat, 32, {rows, flat_width});
+  tensor_contract(statistics, residual, kDLFloat, 32, {rows, 2});
+  tensor_contract(blas_workspace, residual, kDLUInt, 8, {workspace_size(rows)});
+  TVM_FFI_ICHECK(reinterpret_cast<uintptr_t>(blas_workspace.data_ptr()) % 256 == 0);
+  separate({residual, incoming, weight, scale, base, mixed, post, comb, collapsed, next_pre, flat,
+            statistics, blas_workspace});
   if (!rows)
     return;
   tvm::ffi::CUDADeviceGuard guard(residual.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, residual.device().device_id));
-  project_kernel<<<dim3(rows, mixes), 256, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-      static_cast<const float *>(weight.data_ptr()), static_cast<float *>(mixed.data_ptr()));
-  check_cuda(cudaGetLastError());
+  hc_projection::project(residual, weight, mixed, flat, statistics, blas_workspace, rows, stream);
   split_kernel<<<rows, 32, 0, stream>>>(
       static_cast<const float *>(mixed.data_ptr()), static_cast<const float *>(scale.data_ptr()),
       static_cast<const float *>(base.data_ptr()), static_cast<float *>(next_pre.data_ptr()),

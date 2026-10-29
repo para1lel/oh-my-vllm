@@ -72,6 +72,19 @@ Empty and fully masked rows return zero, even when a finite sink exponential und
 
 Add `hc_eps` to row softmax values before the first column normalization in Sinkhorn mixing.
 Use `hc_eps=1e-6` for the released model.
+For four copies, row sums use XOR offsets `2, 1`.
+Column sums use XOR offsets `8, 4`.
+
+HC collapse rounds each FP32 product before a left-to-right sum.
+HC expansion first adds the rounded residual products in that order.
+Add the separately rounded branch product after the residual sum.
+Keep FP32 multiplication and addition separate in these sums.
+
+HC mixing uses four separate FP32 accumulators for squared inputs.
+The complete logical row count selects the reduction layout.
+Apply the inverse RMS after the FP32 projection.
+The native projection uses the tensor runtime's cuBLAS library and a caller-owned 32 MiB workspace.
+This workspace size is part of the numerical contract.
 
 ## Execution
 
@@ -80,6 +93,13 @@ The [native interface](../../../python/oh_my_vllm/operators/transform/api.py) sp
 It uses the caller's CUDA stream.
 Each warp reads one complete group before an in-place write.
 Native quantization does not allocate temporary device storage.
+
+HC preparation keeps an FP32 residual copy, mean and inverse statistics, and the cuBLAS workspace.
+Native HC calls accept up to 32768 rows.
+Small-row workspace plans keep their 384-row limit.
+Prepare the thread-local cuBLAS handle before Graph recording.
+Keep the captured workspace until Graph release.
+The native manifest records cuBLAS library image and header identities for the tensor runtime package.
 
 Tensor preparation can make an aligned contiguous input copy.
 Encoded output and scales have separate storage.

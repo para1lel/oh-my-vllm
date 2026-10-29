@@ -10,6 +10,7 @@ from collections import OrderedDict
 import torch
 import torch.nn.functional as F
 
+from ...operators.hyperconnection.api import FUNCTIONS as HYPERCONNECTION_FUNCTIONS
 from ...operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
 from .quantization import act_quant, fp4_act_quant, fp4_values
 
@@ -75,7 +76,7 @@ def _hyperconnection_module():
         from ...operators.runtime.native import load
 
         _HYPERCONNECTION_MODULE, _, _ = load(
-            "hyperconnection", ("hc_prepare", "hc_expand")
+            "hyperconnection", HYPERCONNECTION_FUNCTIONS
         )
     return _HYPERCONNECTION_MODULE
 
@@ -445,13 +446,19 @@ def _hc_native_available(residual, *inputs):
 def make_hc_workspace(device, max_rows=NATIVE_ROW_LIMIT):
     if type(max_rows) is not int or not 0 < max_rows <= NATIVE_ROW_LIMIT:
         raise ValueError("DeepSeek mHC workspace rows must be between one and 384")
-    return {
+    module = _hyperconnection_module()
+    workspace = {
         "mixed": torch.empty((max_rows, 24), dtype=torch.float32, device=device),
         "post": torch.empty((max_rows, 4), dtype=torch.float32, device=device),
         "comb": torch.empty((max_rows, 4, 4), dtype=torch.float32, device=device),
         "collapsed": torch.empty((max_rows, 5120), dtype=torch.bfloat16, device=device),
         "next_pre_a": torch.empty((max_rows, 4), dtype=torch.float32, device=device),
         "next_pre_b": torch.empty((max_rows, 4), dtype=torch.float32, device=device),
+        "flat": torch.empty((max_rows, 20480), dtype=torch.float32, device=device),
+        "statistics": torch.empty((max_rows, 2), dtype=torch.float32, device=device),
+        "blas": torch.empty(
+            (module.workspace_size(max_rows),), dtype=torch.uint8, device=device
+        ),
         "expanded_a": torch.empty(
             (max_rows, 4, 5120), dtype=torch.bfloat16, device=device
         ),
@@ -459,6 +466,8 @@ def make_hc_workspace(device, max_rows=NATIVE_ROW_LIMIT):
             (max_rows, 4, 5120), dtype=torch.bfloat16, device=device
         ),
     }
+    module.hc_warmup(workspace["collapsed"])
+    return workspace
 
 
 def hc_prepare(
@@ -550,6 +559,12 @@ def hc_prepare(
     module = _hyperconnection_module()
     if rows > NATIVE_ROW_LIMIT:
         mixed = torch.empty((rows, 24), dtype=torch.float32, device=residual.device)
+        flat = torch.empty((rows, 20480), dtype=torch.float32, device=residual.device)
+        statistics = torch.empty((rows, 2), dtype=torch.float32, device=residual.device)
+        blas = torch.empty(
+            (module.workspace_size(rows),), dtype=torch.uint8, device=residual.device
+        )
+        module.hc_warmup(collapsed)
         module.hc_prepare(
             residual_rows,
             incoming_rows,
@@ -561,6 +576,9 @@ def hc_prepare(
             comb,
             collapsed,
             next_pre,
+            flat,
+            statistics,
+            blas,
         )
     else:
         module.hc_prepare(
@@ -574,6 +592,9 @@ def hc_prepare(
             comb,
             collapsed,
             next_pre,
+            workspace["flat"][:rows],
+            workspace["statistics"][:rows],
+            workspace["blas"][: module.workspace_size(rows)],
         )
     return (
         collapsed.reshape(*leading, 5120),

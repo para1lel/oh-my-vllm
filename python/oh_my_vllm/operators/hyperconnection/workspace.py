@@ -12,6 +12,9 @@ class Storage(NamedTuple):
     mixed: object
     post: object
     comb: object
+    flat: object
+    statistics: object
+    blas: object
 
 
 class Workspace:
@@ -19,6 +22,7 @@ class Workspace:
         self.module, self.source_id, self.library = load("hyperconnection", FUNCTIONS)
         self.plan, self.device, self.weights = plan, device, weights
         self.storage = Storage(*(allocate(*field) for field in plan.storage))
+        self.module.hc_warmup(self.storage.collapsed)
         self.outputs = Outputs(*self.storage[:3])
         self.closed = False
 
@@ -50,6 +54,9 @@ class Workspace:
             storage.comb,
             storage.collapsed,
             storage.next_pre,
+            storage.flat,
+            storage.statistics,
+            storage.blas,
         )
         return self.outputs.collapsed, self.outputs.next_pre
 
