@@ -39,6 +39,9 @@ The native quantizer writes encoded values and scales without context-sized temp
 Native attention uses separate window and compressed KV tables.
 The reference path joins their tables before computation.
 
+Shared-expert tensor-parallel down projections keep FP32 partial sums until rank reduction.
+Sinkhorn mixing adds epsilon before the first column normalization.
+
 An independent development reference uses official MP4 placement and a recorded quantizer synchronization patch.
 Frozen text fixtures contain complete vocabulary vectors, DSpark5 proposal and verification vectors, and fresh accepted-only restoration endpoints.
 The current candidate does not satisfy these text endpoint checks.

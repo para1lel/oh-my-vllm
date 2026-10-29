@@ -59,7 +59,7 @@ __global__ void split_kernel(const float *mixed, const float *scale, const float
     float peak = fmaxf(value, __shfl_xor_sync(0xffff, value, 1, 16));
     peak = fmaxf(peak, __shfl_xor_sync(0xffff, peak, 2, 16));
     value = expf(value - peak);
-    value = value / row_sum(value);
+    value = value / row_sum(value) + 1e-6f;
     value /= column_sum(value) + 1e-6f;
     for (int iteration = 1; iteration < 20; ++iteration) {
       value /= row_sum(value) + 1e-6f;

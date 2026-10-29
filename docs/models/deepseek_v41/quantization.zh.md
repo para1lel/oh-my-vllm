@@ -46,6 +46,13 @@ FP32 scale 输入使用 reference projection path, 而不是 native UE8M0 byte i
 [Router](../../../python/oh_my_vllm/models/deepseek_v41/model.py) 在 score calculation 之前, 使用 FP32 input 和 weight 执行 projection.
 Expert selection 之前不要将 router logits 舍入到 BF16.
 
+Tensor-parallel shared-expert down projection 保留 FP32 partial sum, 直到 rank reduction 完成.
+将归约结果舍入到 BF16.
+Attention output projection 保留其 FP32 rank reduction 之前的 local BF16 舍入.
+
+在 Sinkhorn mixing 中, 第一次 column normalization 之前, 给 row softmax value 加上 `hc_eps`.
+发布模型使用 `hc_eps=1e-6`.
+
 ## 执行
 
 [Model quantizer](../../../python/oh_my_vllm/models/deepseek_v41/quantization.py) 选择 native BF16 path 或 reference computation.

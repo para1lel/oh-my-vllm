@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cute/tensor.hpp>
 #include <cutlass/detail/sm100_blockscaled_layout.hpp>
 #include <cutlass/epilogue/collective/collective_builder.hpp>
@@ -37,13 +38,15 @@ void check_cutlass(cutlass::Status status) {
 
 using Tile = Shape<_128, _128, _128>;
 using Cluster = Shape<_1, _1, _1>;
-using Epilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
+template <class Output>
+using ProjectionEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
     cutlass::arch::Sm100, cutlass::arch::OpClassBlockScaledTensorOp, Tile, Cluster,
-    cutlass::epilogue::collective::EpilogueTileAuto, float, float, cutlass::bfloat16_t,
-    cutlass::layout::RowMajor, 8, cutlass::bfloat16_t, cutlass::layout::RowMajor, 8,
-    cutlass::epilogue::TmaWarpSpecialized1Sm>::CollectiveOp;
+    cutlass::epilogue::collective::EpilogueTileAuto, float, float, Output,
+    cutlass::layout::RowMajor, 16 / sizeof(Output), Output, cutlass::layout::RowMajor,
+    16 / sizeof(Output), cutlass::epilogue::TmaWarpSpecialized1Sm>::CollectiveOp;
 
-template <int Bits> struct Projection {
+template <int Bits, class Output = cutlass::bfloat16_t> struct Projection {
+  using Epilogue = ProjectionEpilogue<Output>;
   using ElementA = cutlass::mx_float8_t<cutlass::float_e4m3_t>;
   using ElementB = conditional_t<Bits == 4, cutlass::mx_float4_t<cutlass::float_e2m1_t>, ElementA>;
   using Mainloop = typename cutlass::gemm::collective::CollectiveBuilder<
@@ -77,7 +80,7 @@ template <int Bits> struct Projection {
         {{1.f, 0.f},
          nullptr,
          cutlass::make_cute_packed_stride(typename Kernel::StrideC{}, make_shape(rows, outputs, 1)),
-         static_cast<cutlass::bfloat16_t *>(output),
+         static_cast<Output *>(output),
          cutlass::make_cute_packed_stride(typename Kernel::StrideD{},
                                           make_shape(rows, outputs, 1))}};
   }
@@ -128,12 +131,12 @@ void launch_padding(TensorView input, TensorView output, int rows, int width, in
   check_cuda(cudaGetLastError());
 }
 
-template <int Bits>
+template <int Bits, class Output = cutlass::bfloat16_t>
 void launch_projection(TensorView encoded, TensorView scales, TensorView weight,
                        TensorView weight_scales, TensorView output, TensorView padded_input,
                        TensorView packed_scales, TensorView scratch, int rows, int outputs,
                        int width, cudaStream_t stream) {
-  using Operator = Projection<Bits>;
+  using Operator = Projection<Bits, Output>;
   using Kernel = typename Operator::Kernel;
   using Gemm = typename Operator::Gemm;
   int padded = Bits == 4 ? round128(width) : width;
@@ -356,10 +359,13 @@ void pack_weights(TensorView raw_weight, TensorView raw_scales, TensorView packe
   cudaStreamCaptureStatus capture;
   check_cuda(cudaStreamIsCapturing(stream, &capture));
   TVM_FFI_ICHECK(capture == cudaStreamCaptureStatusNone) << "prepare weights outside capture";
-  if (bits == 4)
+  if (bits == 4) {
     Projection<4>::configure();
-  else
+    Projection<4, float>::configure();
+  } else {
     Projection<8>::configure();
+    Projection<8, float>::configure();
+  }
   if (!alias)
     launch_padding(raw_weight, packed_weight, outputs, width * bits / 8, padded * bits / 8, stream);
   auto layout = ScaleConfig::tile_atom_to_shape_SFB(make_shape(1, int(outputs), padded, 1));
@@ -547,9 +553,14 @@ int64_t workspace_size(int64_t rows, int64_t outputs, int64_t width, int64_t bit
   if (!rows)
     return 0;
   if (bits == 4)
-    return Projection<4>::Gemm::get_workspace_size(
-        Projection<4>::arguments(rows, outputs, round128(width)));
-  return Projection<8>::Gemm::get_workspace_size(Projection<8>::arguments(rows, outputs, width));
+    return std::max(Projection<4>::Gemm::get_workspace_size(
+                        Projection<4>::arguments(rows, outputs, round128(width))),
+                    Projection<4, float>::Gemm::get_workspace_size(
+                        Projection<4, float>::arguments(rows, outputs, round128(width))));
+  return std::max(
+      Projection<8>::Gemm::get_workspace_size(Projection<8>::arguments(rows, outputs, width)),
+      Projection<8, float>::Gemm::get_workspace_size(
+          Projection<8, float>::arguments(rows, outputs, width)));
 }
 
 void project(TensorView encoded, TensorView scales, TensorView packed_weight,
@@ -563,7 +574,8 @@ void project(TensorView encoded, TensorView scales, TensorView packed_weight,
   tensor_contract(scales, encoded, kDLUInt, 8, {rows, width / 32});
   tensor_contract(packed_weight, encoded, kDLUInt, 8, {outputs, padded * bits / 8});
   tensor_contract(weight_scales, encoded, kDLUInt, 8, {scale_bytes(outputs, width)});
-  tensor_contract(output, encoded, kDLBfloat, 16, {rows, outputs});
+  bool fp32 = output.dtype().code == kDLFloat && output.dtype().bits == 32;
+  tensor_contract(output, encoded, fp32 ? kDLFloat : kDLBfloat, fp32 ? 32 : 16, {rows, outputs});
   if (padded != width)
     tensor_contract(padded_input, encoded, kDLUInt, 8, {rows, padded});
   tensor_contract(packed_input_scales, encoded, kDLUInt, 8, {scale_bytes(rows, width)});
@@ -581,7 +593,13 @@ void project(TensorView encoded, TensorView scales, TensorView packed_weight,
     return;
   tvm::ffi::CUDADeviceGuard guard(encoded.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, encoded.device().device_id));
-  if (bits == 4)
+  if (bits == 4 && fp32)
+    launch_projection<4, float>(encoded, scales, packed_weight, weight_scales, output, padded_input,
+                                packed_input_scales, scratch, rows, outputs, width, stream);
+  else if (bits == 8 && fp32)
+    launch_projection<8, float>(encoded, scales, packed_weight, weight_scales, output, padded_input,
+                                packed_input_scales, scratch, rows, outputs, width, stream);
+  else if (bits == 4)
     launch_projection<4>(encoded, scales, packed_weight, weight_scales, output, padded_input,
                          packed_input_scales, scratch, rows, outputs, width, stream);
   else

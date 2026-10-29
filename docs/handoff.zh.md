@@ -39,6 +39,9 @@ Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 
 Native attention 使用独立的 window KV 和 compressed KV table.
 Reference path 在计算之前合并这些 table.
 
+Shared-expert tensor-parallel down projection 保留 FP32 partial sum, 直到 rank reduction 完成.
+Sinkhorn mixing 在第一次 column normalization 之前加上 epsilon.
+
 独立的 development reference 使用官方 MP4 placement, 并记录 quantizer synchronization patch.
 冻结的 text fixture 包含完整 vocabulary vector, DSpark5 proposal 和 verification vector, 以及全新 accepted-only 重放的 restoration endpoint.
 当前 candidate 不满足这些 text endpoint 检查.

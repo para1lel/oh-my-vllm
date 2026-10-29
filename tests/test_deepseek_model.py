@@ -10,10 +10,12 @@ from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
 from oh_my_vllm.models.deepseek_v41.model import (
     Attention,
     Compressor,
+    Expert,
     Gate,
     ModelArgs,
     MoE,
     ParallelEngramEmbedding,
+    RowParallelLinear,
     Transformer,
     get_dspark_topk_idxs,
     get_prefill_window_topk_idxs,
@@ -23,6 +25,40 @@ from oh_my_vllm.models.deepseek_v41.model import (
 
 
 class DeepSeekModel(unittest.TestCase):
+    def test_expert_down_projection_rounds_after_tensor_parallel_reduction(self):
+        with patch("oh_my_vllm.models.deepseek_v41.model.world_size", 4):
+            expert = Expert(2, 8, dtype=torch.bfloat16, tensor_parallel=True)
+            attention = RowParallelLinear(8, 2, dtype=torch.bfloat16)
+            for layer, partial, result in (
+                (expert.w2, 257 / 256, 1 / 256),
+                (attention, 1, 0),
+            ):
+                with self.subTest(expert=layer is expert.w2):
+                    with torch.no_grad():
+                        layer.weight.copy_(torch.tensor([[1, 1 / 256]] * 2))
+
+                    def reduce(value, partial=partial):
+                        self.assertEqual(value.dtype, torch.float32)
+                        torch.testing.assert_close(
+                            value,
+                            torch.full((1, 2), partial, dtype=torch.float32),
+                            rtol=0,
+                            atol=0,
+                        )
+                        value.sub_(1)
+
+                    with patch(
+                        "oh_my_vllm.models.deepseek_v41.model.dist.all_reduce",
+                        side_effect=reduce,
+                    ):
+                        actual = layer(torch.ones((1, 2), dtype=torch.bfloat16))
+                    torch.testing.assert_close(
+                        actual,
+                        torch.full((1, 2), result, dtype=torch.bfloat16),
+                        rtol=0,
+                        atol=0,
+                    )
+
     def test_router_keeps_float32_projection_before_expert_selection(self):
         args = ModelArgs(
             dim=2,

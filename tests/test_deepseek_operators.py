@@ -71,6 +71,131 @@ def projection_reference(encoded, input_scales, weight, scales, bits):
 
 
 class DeepSeekOperatorContracts(unittest.TestCase):
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_fp32_projection_replays_on_caller_stream(self):
+        encoded = torch.ones((2, 128), device="cuda").to(torch.float8_e4m3fn)
+        scales = torch.ones((2, 4), device="cuda").to(torch.float8_e8m0fnu)
+        weight = torch.ones((32, 128), device="cuda").to(torch.float8_e4m3fn)
+        weight_scales = scales[:1].contiguous()
+        module = kernel._projection_module()
+        proxy = Mock(wraps=module)
+        with patch.object(kernel, "_projection_module", return_value=proxy):
+            output = kernel.fp8_gemm(
+                encoded,
+                scales,
+                weight,
+                weight_scales,
+                torch.float8_e8m0fnu,
+                block_size=32,
+                output_dtype=torch.float32,
+            )
+        arguments = proxy.project.call_args.args
+        torch.cuda.synchronize()
+        graph = torch.cuda.CUDAGraph()
+        try:
+            with torch.cuda.graph(graph):
+                module.project(*arguments)
+            stream = torch.cuda.Stream()
+            with torch.cuda.stream(stream):
+                encoded.view(torch.uint8).fill_(64)
+                graph.replay()
+            stream.synchronize()
+            torch.testing.assert_close(
+                output, torch.full_like(output, 256), rtol=0, atol=0
+            )
+        finally:
+            torch.cuda.synchronize()
+            graph.reset()
+
+    def test_hyperconnection_sinkhorn_preserves_zero_probability_support(self):
+        mixes = torch.zeros((1, 1, 24), dtype=torch.float32)
+        scale = torch.ones(3, dtype=torch.float32)
+        base = torch.tensor(
+            [0.0] * 8 + [0.0, -1000.0, -1000.0, -1000.0] * 4,
+            dtype=torch.float32,
+        )
+        expected = torch.full((1, 1, 4, 4), 0.24999975, dtype=torch.float32)
+        actual = kernel.hc_split_sinkhorn(mixes, scale, base)[2]
+        with self.subTest(backend="reference"):
+            torch.testing.assert_close(actual, expected, rtol=0, atol=2e-7)
+        if torch.cuda.is_available():
+            actual = kernel.hc_prepare(
+                torch.ones((1, 1, 4, 5120), dtype=torch.bfloat16, device="cuda"),
+                torch.tensor(
+                    [[[1.0, 0.0, 0.0, 0.0]]], dtype=torch.float32, device="cuda"
+                ),
+                torch.zeros((24, 20480), dtype=torch.float32, device="cuda"),
+                scale.cuda(),
+                base.cuda(),
+            )[3]
+            with self.subTest(backend="cuda"):
+                torch.testing.assert_close(actual.cpu(), expected, rtol=0, atol=2e-7)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_retains_fp32_partials_before_reduction(self):
+        for rows, width in ((1, 32), (33, 128), (33, 160)):
+            encoded = torch.zeros((rows, width), dtype=torch.float32, device="cuda")
+            encoded[:, :2] = torch.tensor([1, 1 / 256], device="cuda")
+            encoded = encoded.to(torch.float8_e4m3fn)
+            input_scales = torch.ones((rows, width // 32), device="cuda").to(
+                torch.float8_e8m0fnu
+            )
+            for bits in (4, 8):
+                with self.subTest(bits=bits, rows=rows, width=width):
+                    if bits == 4:
+                        weight = torch.full(
+                            (32, width // 2), 0x22, dtype=torch.uint8, device="cuda"
+                        ).view(torch.float4_e2m1fn_x2)
+                        scales = torch.ones((32, width // 32), device="cuda").to(
+                            torch.float8_e8m0fnu
+                        )
+                        gemm = kernel.fp4_gemm
+                        kwargs = {"act_block_size": 32}
+                    else:
+                        weight = torch.ones((32, width), device="cuda").to(
+                            torch.float8_e4m3fn
+                        )
+                        scales = torch.ones((1, width // 32), device="cuda").to(
+                            torch.float8_e8m0fnu
+                        )
+                        gemm = kernel.fp8_gemm
+                        kwargs = {"block_size": 32}
+                    inputs = (
+                        encoded,
+                        input_scales,
+                        weight,
+                        scales,
+                        torch.float8_e8m0fnu,
+                    )
+                    actual = gemm(*inputs, output_dtype=torch.float32, **kwargs)
+                    torch.testing.assert_close(
+                        actual,
+                        torch.full(
+                            (rows, 32), 257 / 256, dtype=torch.float32, device="cuda"
+                        ),
+                        rtol=0,
+                        atol=0,
+                    )
+                    self.assertEqual(actual.dtype, torch.float32)
+                    rounded = gemm(*inputs, **kwargs)
+                    torch.testing.assert_close(
+                        rounded,
+                        torch.ones_like(actual, dtype=torch.bfloat16),
+                        rtol=0,
+                        atol=0,
+                    )
+                    empty = gemm(
+                        encoded[:0],
+                        input_scales[:0],
+                        *inputs[2:],
+                        output_dtype=torch.float32,
+                        **kwargs,
+                    )
+                    self.assertEqual(empty.shape, (0, 32))
+                    self.assertEqual(empty.dtype, torch.float32)
+                    with self.assertRaisesRegex(ValueError, "output dtype"):
+                        gemm(*inputs, output_dtype=torch.float16, **kwargs)
+
     def test_source_index_returns_the_digest_for_the_loaded_index_bytes(self):
         raw_index = (
             b'{"weight_map":{"model.embed.weight":"model-00001-of-00048.safetensors"}}'
@@ -148,6 +273,7 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             (mixes[..., 8:] * scale[2] + base[8:]).reshape(-1, 4, 4),
             dim=-1,
         )
+        expected_comb = expected_comb + 1e-6
         expected_comb = expected_comb / (expected_comb.sum(dim=-2, keepdim=True) + 1e-6)
         for _ in range(19):
             expected_comb = expected_comb / (
@@ -204,6 +330,7 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             (mixes[..., 8:] * scale[2] + base[8:]).reshape(-1, 4, 4),
             dim=-1,
         )
+        expected_comb = expected_comb + 1e-6
         expected_comb = expected_comb / (expected_comb.sum(dim=-2, keepdim=True) + 1e-6)
         for _ in range(19):
             expected_comb = expected_comb / (
@@ -691,6 +818,7 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             (mixes[..., 8:] * scale[2] + base[8:]).reshape(-1, 4, 4),
             dim=-1,
         )
+        expected_comb = expected_comb + 1e-6
         expected_comb = expected_comb / (expected_comb.sum(dim=-2, keepdim=True) + 1e-6)
         for _ in range(19):
             expected_comb = expected_comb / (

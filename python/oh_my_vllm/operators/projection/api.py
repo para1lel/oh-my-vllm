@@ -3,6 +3,9 @@
 Callers retain inputs and the workspace through Eager completion. Enter a
 graph lease before capture and release it after graph destruction. Weights
 are prepared once outside capture; their stored values stay unchanged.
+Dense project accepts BF16 or FP32 output storage. FP32 output keeps partial
+sums for a later rank reduction. Grouped project keeps BF16 output storage.
+The dense workspace query covers both output types.
 """
 
 from typing import NamedTuple

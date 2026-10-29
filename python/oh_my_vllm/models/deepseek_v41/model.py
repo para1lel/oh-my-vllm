@@ -202,7 +202,11 @@ class ParallelEmbedding(nn.Module):
 
 
 def linear(
-    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None = None
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None = None,
+    *,
+    output_dtype=None,
 ) -> torch.Tensor:
     """Pick a GEMM from the weight dtype. Quantized weights need a quantized activation, and both
     fp4 and fp8 weights take an fp8 one -- for fp4 the kernel handles the mixed precision."""
@@ -217,6 +221,7 @@ def linear(
             weight.scale,
             scale_dtype,
             act_block_size=fp8_block_size,
+            output_dtype=output_dtype,
         )
     elif weight.dtype == torch.float8_e4m3fn:
         x, s = act_quant(x, fp8_block_size, scale_fmt, scale_dtype)
@@ -227,8 +232,11 @@ def linear(
             weight.scale,
             scale_dtype,
             block_size=fp8_block_size,
+            output_dtype=output_dtype,
         )
     else:
+        if output_dtype is not None:
+            return F.linear(x.float(), weight.float()).to(output_dtype)
         return F.linear(x, weight)
 
 
@@ -309,10 +317,16 @@ class RowParallelLinear(Linear):
             f"Input features must be divisible by world size (world_size={world_size})"
         )
         self.part_in_features = in_features // world_size
+        self.reduce_before_rounding = False
         super().__init__(self.part_in_features, out_features, bias, dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        y = linear(x, self.weight, None)
+        y = linear(
+            x,
+            self.weight,
+            None,
+            output_dtype=torch.float32 if self.reduce_before_rounding else None,
+        )
         if world_size > 1:
             y = y.float()
             dist.all_reduce(y)
@@ -1089,6 +1103,8 @@ class Expert(nn.Module):
         output_cls = RowParallelLinear if tensor_parallel else Linear
         self.w1 = linear_cls(dim, inter_dim, dtype=dtype)
         self.w2 = output_cls(inter_dim, dim, dtype=dtype)
+        if tensor_parallel:
+            self.w2.reduce_before_rounding = True
         self.w3 = linear_cls(dim, inter_dim, dtype=dtype)
         self.swiglu_limit = swiglu_limit
 

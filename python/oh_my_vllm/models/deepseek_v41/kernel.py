@@ -172,21 +172,35 @@ def _scale_values(scales):
     return scales.float()
 
 
-def fp8_gemm(a, a_s, b, b_s, scale_dtype=torch.float32, block_size=128):
+def _projection_output_dtype(output_dtype):
+    if output_dtype not in (None, torch.bfloat16, torch.float32):
+        raise ValueError("projection output dtype must be BF16 or FP32")
+    return output_dtype
+
+
+def fp8_gemm(
+    a, a_s, b, b_s, scale_dtype=torch.float32, block_size=128, *, output_dtype=None
+):
+    _projection_output_dtype(output_dtype)
     if (
         _native_available(a)
         and block_size == 32
         and a_s.dtype == torch.float8_e8m0fnu
         and b_s.dtype == torch.float8_e8m0fnu
     ):
-        return _projection_gemm(a, a_s, b, b_s, bits=8)
+        return _projection_gemm(
+            a, a_s, b, b_s, bits=8, output_dtype=output_dtype or torch.bfloat16
+        )
     a_value = a.float() * _scale_values(a_s).repeat_interleave(block_size, dim=-1)
     weight_scales = _scale_values(b_s).repeat_interleave(block_size, dim=0)[: b.size(0)]
     b_value = b.float() * weight_scales.repeat_interleave(block_size, dim=-1)
-    return F.linear(a_value, b_value).to(torch.get_default_dtype())
+    return F.linear(a_value, b_value).to(output_dtype or torch.get_default_dtype())
 
 
-def fp4_gemm(a, a_s, b, b_s, scale_dtype=torch.float32, act_block_size=128):
+def fp4_gemm(
+    a, a_s, b, b_s, scale_dtype=torch.float32, act_block_size=128, *, output_dtype=None
+):
+    _projection_output_dtype(output_dtype)
     if (
         _native_available(a)
         and act_block_size in (32, 128)
@@ -195,12 +209,14 @@ def fp4_gemm(a, a_s, b, b_s, scale_dtype=torch.float32, act_block_size=128):
     ):
         if act_block_size == 128:
             a_s = a_s.view(torch.uint8).repeat_interleave(4, dim=-1).view(a_s.dtype)
-        return _projection_gemm(a, a_s, b, b_s, bits=4)
+        return _projection_gemm(
+            a, a_s, b, b_s, bits=4, output_dtype=output_dtype or torch.bfloat16
+        )
     if b.dtype == torch.float4_e2m1fn_x2:
         b = fp4_values(b)
     a_value = a.float() * _scale_values(a_s).repeat_interleave(act_block_size, dim=-1)
     b_value = b.float() * _scale_values(b_s).repeat_interleave(32, dim=-1)
-    return F.linear(a_value, b_value).to(torch.get_default_dtype())
+    return F.linear(a_value, b_value).to(output_dtype or torch.get_default_dtype())
 
 
 def grouped_fp4_gemm(values, counts, weights, *, counts_list=None):
@@ -326,14 +342,15 @@ def rms(values, weight, epsilon):
     return (normalized * weight.float()).to(values.dtype)
 
 
-def _projection_gemm(a, a_s, b, b_s, bits):
+def _projection_gemm(a, a_s, b, b_s, bits, output_dtype=torch.bfloat16):
+    _projection_output_dtype(output_dtype)
     module = _projection_module()
     packed_weight, packed_scales, width = _packed_weight(b, b_s, bits)
     values = a.reshape(-1, a.size(-1))
     encoded = values.view(torch.uint8)
     scales = a_s.reshape(-1, a_s.size(-1)).view(torch.uint8)
     output = torch.empty(
-        (values.size(0), b.size(0)), dtype=torch.bfloat16, device=a.device
+        (values.size(0), b.size(0)), dtype=output_dtype, device=a.device
     )
     padded = torch.empty(
         (
@@ -809,6 +826,7 @@ def hc_split_sinkhorn(mixes, hc_scale, hc_base, hc_mult=4, sinkhorn_iters=20, ep
     comb = torch.softmax(
         comb * hc_scale[2] + hc_base[2 * hc_mult :].reshape(hc_mult, hc_mult), dim=-1
     )
+    comb = comb + eps
     comb = comb / (comb.sum(dim=-2, keepdim=True) + eps)
     for _ in range(max(0, sinkhorn_iters - 1)):
         comb = comb / (comb.sum(dim=-1, keepdim=True) + eps)

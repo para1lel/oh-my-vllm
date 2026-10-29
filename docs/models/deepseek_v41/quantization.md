@@ -46,6 +46,13 @@ FP32 scale inputs use the reference projection path, not the native UE8M0 byte i
 The [router](../../../python/oh_my_vllm/models/deepseek_v41/model.py) projects inputs and weights in FP32 before score calculation.
 Do not round router logits to BF16 before expert selection.
 
+Tensor-parallel shared-expert down projections keep FP32 partial sums until rank reduction.
+Round the reduced result to BF16.
+Attention output projections keep their local BF16 rounding before FP32 rank reduction.
+
+Add `hc_eps` to row softmax values before the first column normalization in Sinkhorn mixing.
+Use `hc_eps=1e-6` for the released model.
+
 ## Execution
 
 The [model quantizer](../../../python/oh_my_vllm/models/deepseek_v41/quantization.py) selects the native BF16 path or reference computation.
