@@ -1238,6 +1238,11 @@ class MoE(nn.Module):
             local_count_tensor,
             tuple((expert.w2.weight, expert.w2.scale) for expert in experts),
             counts_list=local_counts,
+            output_dtype=(
+                torch.float32
+                if self.tensor_parallel and world_size > 1
+                else torch.bfloat16
+            ),
         )
         return local_tokens, routed
 

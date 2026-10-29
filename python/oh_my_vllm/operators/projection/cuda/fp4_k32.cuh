@@ -149,15 +149,15 @@ void launch_fp4_k32(const uint8_t *input, const uint8_t *weight, const uint8_t *
       outputs, width, rows, weight_stride, layout);
 }
 
-template <class ScaleLayout>
+template <class Output, class ScaleLayout>
 void launch_grouped_fp4_k32(const uint8_t *input, const uint8_t *input_scales,
                             const int64_t *weight_ptrs, const int64_t *weight_scale_ptrs,
-                            const int32_t *counts, int32_t *offsets, __nv_bfloat16 *output,
-                            int groups, int rows, int outputs, int width, int max_rows,
-                            int weight_stride, ScaleLayout layout, cudaStream_t stream) {
+                            const int32_t *counts, int32_t *offsets, Output *output, int groups,
+                            int rows, int outputs, int width, int max_rows, int weight_stride,
+                            ScaleLayout layout, cudaStream_t stream) {
   fp4_group_offsets<<<1, 1, 0, stream>>>(counts, offsets, groups, rows, max_rows);
   int tiles = (outputs / 32) * ((max_rows + 15) / 16);
-  fp4_k32_kernel<__nv_bfloat16, ScaleLayout, true><<<dim3(tiles, groups), 128, 0, stream>>>(
+  fp4_k32_kernel<Output, ScaleLayout, true><<<dim3(tiles, groups), 128, 0, stream>>>(
       input, nullptr, input_scales, nullptr, output, weight_ptrs, weight_scale_ptrs, offsets,
       groups, rows, outputs, width, max_rows, weight_stride, layout);
 }

@@ -221,8 +221,11 @@ def fp4_gemm(
     return F.linear(a_value, b_value).to(output_dtype or torch.get_default_dtype())
 
 
-def grouped_fp4_gemm(values, counts, weights, *, counts_list=None):
+def grouped_fp4_gemm(
+    values, counts, weights, *, counts_list=None, output_dtype=torch.bfloat16
+):
     """Apply one FP4 projection to each consecutive routed expert segment."""
+    output_dtype = _projection_output_dtype(output_dtype) or torch.bfloat16
     if values.ndim != 2:
         raise ValueError("grouped FP4 input must be a matrix")
     if counts.ndim != 1 or counts.dtype not in (torch.int32, torch.int64):
@@ -245,7 +248,7 @@ def grouped_fp4_gemm(values, counts, weights, *, counts_list=None):
         if count
     ]
     if not active:
-        return values.new_empty((0, weights[0][0].size(0)))
+        return values.new_empty((0, weights[0][0].size(0)), dtype=output_dtype)
     if values.is_cuda and all(
         weight.is_cuda and weight.dtype == torch.float4_e2m1fn_x2
         for _, weight, _ in active
@@ -264,7 +267,7 @@ def grouped_fp4_gemm(values, counts, weights, *, counts_list=None):
             [count for count, _, _ in active], dtype=torch.int32, device=values.device
         )
         output = torch.empty(
-            (values.size(0), output_width), dtype=torch.bfloat16, device=values.device
+            (values.size(0), output_width), dtype=output_dtype, device=values.device
         )
         module = _projection_module()
         scratch = torch.empty(
@@ -310,12 +313,13 @@ def grouped_fp4_gemm(values, counts, weights, *, counts_list=None):
                     scale,
                     torch.float8_e8m0fnu,
                     act_block_size=32,
+                    output_dtype=output_dtype,
                 )
             )
         first += count
     if outputs:
         return torch.cat(outputs, dim=0)
-    return values.new_empty((0, weights[0][0].size(0)))
+    return values.new_empty((0, weights[0][0].size(0)), dtype=output_dtype)
 
 
 def rms(values, weight, epsilon):

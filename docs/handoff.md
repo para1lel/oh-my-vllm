@@ -82,6 +82,10 @@ Aligned prefill batches use subbatches of at most four requests.
 MoE dispatch gathers sorted routed rows once and reuses slices for local experts.
 TP4 and TEP4 FP4 routed experts use native grouped projection for
 the two up projections and the down projection.
+Multi-rank TP4 down projections keep FP32 partial sums through routed accumulation and rank reduction.
+Up projections and TEP4 down projections keep BF16 output.
+Single-rank grouped down projections return complete BF16 expert outputs.
+
 Grouped projection calculates row offsets on the device and does not upload host descriptors.
 The grouped path keeps the local token order and falls back to the reference
 expert loop for non-FP4 weights and test experts.
@@ -172,7 +176,7 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 - Measure persistent encoded KV storage against direct BF16 table reads.
 - Define explicit ownership for raw weights and padded projection copies.
 - Correct candidate differences against the independent frozen DeepSeek text endpoints before performance acceptance.
-- Keep grouped TP4 down-projection partial sums in FP32 before rank reduction.
+- Do a check of the complete TP4 K32 accumulation and rank reduction order against the reference.
 - Reduce duplicate cuBLAS workspace storage before long-context capacity tuning.
 - Add independent image endpoints before image acceptance.
 - Keep the configured context limit separate from the observed AgentX request lengths.

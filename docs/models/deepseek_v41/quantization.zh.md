@@ -75,10 +75,13 @@ Corrected score 相等时, native routing 选择最小的 global expert ID.
 对于这种 tie, 发布参考的 top-k 可能选择不同 ID.
 
 Tensor-parallel expert down projection 必须保留 FP32 partial sum, 直到 rank reduction 完成.
-Non-grouped path 保留这些 FP32 partial sum.
-Grouped TP4 path 返回 BF16 partial sum.
-在数值验收前修正该路径.
+Grouped 和 non-grouped TP4 path 保留这些 FP32 partial sum.
 将归约结果舍入到 BF16.
+
+Grouped up projection 和 TEP4 down projection 保留 BF16 output.
+Single-rank grouped down projection 返回完整的 BF16 expert output, 而不是 rank partial sum.
+Grouped interface 接受 BF16 或 FP32 output, 不改变 workspace 大小.
+这些 output type 不能规定完整的 tensor-parallel accumulation order.
 
 Shared expert 在每个 rank 上保留完整权重.
 在 routed rank reduction 后添加其输出.

@@ -78,6 +78,24 @@ void launch_fp4_projection(TensorView encoded, TensorView scales, TensorView wei
 }
 
 template <class Output>
+void launch_grouped_fp4_projection(TensorView encoded, TensorView scales, TensorView weight_ptrs,
+                                   TensorView weight_scale_ptrs, TensorView counts,
+                                   TensorView output, TensorView scratch, int groups, int rows,
+                                   int outputs, int width, int max_rows, cudaStream_t stream) {
+  int padded = round128(width);
+  auto layout = ScaleConfig::tile_atom_to_shape_SFB(make_shape(1, outputs, padded, 1));
+  launch_grouped_fp4_k32(static_cast<const uint8_t *>(encoded.data_ptr()),
+                         static_cast<const uint8_t *>(scales.data_ptr()),
+                         static_cast<const int64_t *>(weight_ptrs.data_ptr()),
+                         static_cast<const int64_t *>(weight_scale_ptrs.data_ptr()),
+                         static_cast<const int32_t *>(counts.data_ptr()),
+                         static_cast<int32_t *>(scratch.data_ptr()),
+                         static_cast<Output *>(output.data_ptr()), groups, rows, outputs, width,
+                         max_rows, padded / 2, layout, stream);
+  check_cuda(cudaGetLastError());
+}
+
+template <class Output>
 void launch_fp8_projection(TensorView encoded, TensorView scales, TensorView weight,
                            TensorView weight_scales, TensorView output, int rows, int outputs,
                            int width, cudaStream_t stream) {
@@ -160,7 +178,8 @@ void grouped_project(TensorView encoded, TensorView scales, TensorView weight_pt
   tensor_contract(weight_ptrs, encoded, kDLInt, 64, {groups});
   tensor_contract(weight_scale_ptrs, encoded, kDLInt, 64, {groups});
   tensor_contract(counts, encoded, kDLInt, 32, {groups});
-  tensor_contract(output, encoded, kDLBfloat, 16, {rows, outputs});
+  bool fp32 = output.dtype().code == kDLFloat && output.dtype().bits == 32;
+  tensor_contract(output, encoded, fp32 ? kDLFloat : kDLBfloat, fp32 ? 32 : 16, {rows, outputs});
   tensor_contract(scratch, encoded, kDLUInt, 8, {scratch.size(0)});
 
   auto bytes = grouped_workspace_size(rows, groups, max_rows, outputs, width);
@@ -173,18 +192,14 @@ void grouped_project(TensorView encoded, TensorView scales, TensorView weight_pt
     return;
   tvm::ffi::CUDADeviceGuard guard(encoded.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, encoded.device().device_id));
-  int padded = round128(static_cast<int>(width));
-  auto layout =
-      ScaleConfig::tile_atom_to_shape_SFB(make_shape(1, static_cast<int>(outputs), padded, 1));
-  launch_grouped_fp4_k32(static_cast<const uint8_t *>(encoded.data_ptr()),
-                         static_cast<const uint8_t *>(scales.data_ptr()),
-                         static_cast<const int64_t *>(weight_ptrs.data_ptr()),
-                         static_cast<const int64_t *>(weight_scale_ptrs.data_ptr()),
-                         static_cast<const int32_t *>(counts.data_ptr()),
-                         static_cast<int32_t *>(scratch.data_ptr()),
-                         static_cast<__nv_bfloat16 *>(output.data_ptr()), groups, rows, outputs,
-                         width, max_rows, padded / 2, layout, stream);
-  check_cuda(cudaGetLastError());
+  if (fp32)
+    launch_grouped_fp4_projection<float>(encoded, scales, weight_ptrs, weight_scale_ptrs, counts,
+                                         output, scratch, groups, rows, outputs, width, max_rows,
+                                         stream);
+  else
+    launch_grouped_fp4_projection<__nv_bfloat16>(encoded, scales, weight_ptrs, weight_scale_ptrs,
+                                                 counts, output, scratch, groups, rows, outputs,
+                                                 width, max_rows, stream);
 }
 
 int64_t workspace_size(int64_t rows, int64_t outputs, int64_t width, int64_t bits) {

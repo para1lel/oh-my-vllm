@@ -581,6 +581,7 @@ class DeepSeekModel(unittest.TestCase):
         torch.set_default_device("cuda")
         torch.set_default_dtype(torch.bfloat16)
         try:
+            torch.manual_seed(0)
             args = ModelArgs(
                 dim=32,
                 moe_inter_dim=32,

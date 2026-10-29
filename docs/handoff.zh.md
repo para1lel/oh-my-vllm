@@ -26,6 +26,7 @@ Lookup 只将选中的 row 分阶段传到 GPU.
 
 released DeepSeek shape 支持 native projection, routing, activation, mHC, RMS 和 sparse attention path.
 native contract 支持长 row range.
+较少行数的输入使用有界 workspace.
 配置为大 chunk 的 prefill 使用最多 8192-row 的有界 launch.
 默认值会减少 long-context launch count. 环境覆盖值可以降低 temporary storage.
 
@@ -82,6 +83,10 @@ aligned prefill batch 最多使用四个 request 组成一个 subbatch.
 MoE dispatch 只对 sorted routed row 做一次 gather, 并为 local expert 重用 slice.
 TP4 和 TEP4 的 FP4 routed expert 使用 native grouped projection
 执行两个 up projection 和一个 down projection.
+Multi-rank TP4 down projection 在 routed accumulation 和 rank reduction 期间保留 FP32 partial sum.
+Up projection 和 TEP4 down projection 保留 BF16 output.
+Single-rank grouped down projection 返回完整的 BF16 expert output.
+
 Grouped projection 在 device 上计算 row offset, 不上传 host descriptor.
 Grouped path 保持 local token order, 对 non-FP4 weight 和 test expert
 回退到 reference expert loop.
@@ -171,7 +176,7 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 - 比较 persistent encoded KV storage 与直接 BF16 table read 的测量结果.
 - 为 raw weight 和 padded projection copy 定义明确的 ownership.
 - 在 performance acceptance 之前修正 candidate 与独立 DeepSeek text frozen endpoint 的差异.
-- 在 rank reduction 之前, 将 grouped TP4 down-projection partial sum 保持在 FP32.
+- 按 reference 检查完整的 TP4 K32 accumulation 和 rank reduction 顺序.
 - 在 long-context capacity 调整之前, 减少重复的 cuBLAS workspace storage.
 - 在 image acceptance 之前增加独立的 image endpoint.
 - 将配置的 context limit 与观测到的 AgentX request length 分开记录.
