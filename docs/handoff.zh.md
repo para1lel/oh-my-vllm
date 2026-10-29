@@ -64,6 +64,8 @@ ordinary execution 不会收集 target hidden state.
 完整的 initial prompt 可以作为一个 aligned request batch 执行.
 每次 target call 都会 reset shared query attention state.
 index source 总是为当前 request slot 发布 cache view.
+Compressed KV source 在当前 cache write 后发布选中的 slot.
+Compressed KV 和 index copy 只包含 active context range.
 
 serving engine 会执行配置的 `max_num_seqs` resident limit.
 它会保留一个额外的 request 做 preparation, 以便让 CPU admission 与 GPU work overlap.
@@ -125,6 +127,8 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 
 ## 下一步
 
+- 用有界 cache storage 替换 dense maximum-context staging 和完整 window-page copy.
+- 将配置的 context limit 与观测到的 AgentX request length 分开记录.
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
 - 在 DeepSeek CUDA Graph capture 之前增加 per-request varlen position metadata 和 batch decode.
 - 增加 physical cache 和 sequence capacity 后, 运行更高容量的 AgentX case.

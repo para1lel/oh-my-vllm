@@ -19,7 +19,7 @@ runner 设置 `ignore_eos` 并检查完整 usage record.
 使用以下命令运行 matrix:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.deepseek_benchmark \
+OH_MY_VLLM_GPU_COUNT=4 scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.deepseek_benchmark \
   --model "$MODEL_ROOT" \
   --artifacts "$ARTIFACT_ROOT" \
   --csv docs/models/deepseek_v41/assets/http-latest.csv

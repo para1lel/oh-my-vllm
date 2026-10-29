@@ -676,7 +676,7 @@ class Indexer(torch.nn.Module):
                 self.k_cache[
                     cache_slots, start_pos // ratio : start_pos // ratio + k.size(1)
                 ] = k
-            shared_attn.index_k = self.k_cache[cache_slots]
+            shared_attn.index_k = self.k_cache[:, : end_pos // ratio][cache_slots]
 
         q = self.wq_b(qr).unflatten(-1, (self.n_local_heads, self.index_head_dim))
         apply_rotary_emb(q[..., -rd:], self.freqs_cis[start_pos:end_pos])
@@ -919,7 +919,6 @@ class Attention(nn.Module):
         latent = None
         if self.is_kv_source:
             latent = self.compressor(x, start_pos, cache_slots)
-            shared_attn.compress_kv = self.compress_kv_cache[cache_slots]
         # the indexer needs the latent before RoPE, so it runs before the cache is written
         idxs = self._compress_topk_idxs(
             x, qr, latent, start_pos, offset, compress_len, cache_slots
@@ -936,8 +935,12 @@ class Attention(nn.Module):
             self.compress_kv_cache[
                 cache_slots, start_pos // ratio : start_pos // ratio + latent.size(1)
             ] = latent
-        # read after the write, so this does not depend on the slice aliasing the cache
-        return shared_attn.compress_kv[:, :compress_len], idxs
+        if self.is_kv_source:
+            # Slot indexing makes a copy, so publish only after the current write.
+            shared_attn.compress_kv = self.compress_kv_cache[:, :compress_len][
+                cache_slots
+            ]
+        return shared_attn.compress_kv, idxs
 
     def forward(
         self,

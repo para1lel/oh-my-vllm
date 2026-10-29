@@ -32,7 +32,7 @@ class DeepSeekBenchmark(unittest.TestCase):
             {
                 "max_num_batched_tokens": 32768,
                 "max_num_seqs": 16,
-                "prefill_rows": 384,
+                "prefill_rows": 8192,
             },
         )
         self.assertEqual(
@@ -40,7 +40,7 @@ class DeepSeekBenchmark(unittest.TestCase):
             {
                 "max_num_batched_tokens": 32768,
                 "max_num_seqs": 64,
-                "prefill_rows": 384,
+                "prefill_rows": 8192,
             },
         )
         self.assertEqual(
@@ -50,7 +50,7 @@ class DeepSeekBenchmark(unittest.TestCase):
             {
                 "max_num_batched_tokens": 8192,
                 "max_num_seqs": 1,
-                "prefill_rows": 384,
+                "prefill_rows": 8192,
             },
         )
 

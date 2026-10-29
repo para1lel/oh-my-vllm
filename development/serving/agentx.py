@@ -18,6 +18,7 @@ from .device import selected_uuid
 
 VERSION = "1.0.7"
 DATASET = "semianalysis_cc_traces_weka_062126_256k"
+FULL_CONTEXT_DATASET = "semianalysis_cc_traces_weka_062126"
 DEFAULT_GRACE_PERIOD = 120
 
 
@@ -40,6 +41,7 @@ def profile_command(
     model_name="qwen3.8-27b-fp8",
     max_context=262144,
     concurrency=4,
+    dataset=DATASET,
 ):
     if duration < 900:
         raise ValueError("AgentX profiling must last at least 900 seconds")
@@ -62,7 +64,7 @@ def profile_command(
         "--tokenizer",
         str(model),
         "--public-dataset",
-        DATASET,
+        dataset,
         "--max-context-length",
         str(max_context),
         "--concurrency",
@@ -215,7 +217,11 @@ def main():
         service.close()
     verify_artifact_identity(args, identity)
     service.verify_identity(identity["checkpoint"], identity["tokenizer"])
-    _, counts = export_run(args.artifacts / "agentx", args.csv)
+    _, counts = export_run(
+        args.artifacts / "agentx",
+        args.csv,
+        harness_log=args.artifacts / "agentx/logs/aiperf.log",
+    )
     subprocess.run(
         [
             str(args.agentx_python),

@@ -3,6 +3,8 @@ import unittest
 import torch
 from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
 from oh_my_vllm.models.deepseek_v41.model import (
+    Attention,
+    Compressor,
     ModelArgs,
     MoE,
     ParallelEngramEmbedding,
@@ -14,6 +16,51 @@ from oh_my_vllm.models.deepseek_v41.model import (
 
 
 class DeepSeekModel(unittest.TestCase):
+    def test_compressed_cache_publishes_current_groups_for_selected_slots(self):
+        attention = Attention.__new__(Attention)
+        torch.nn.Module.__init__(attention)
+        attention.compress_ratio = 2
+        attention.rope_head_dim = 16
+        attention.is_kv_source = True
+        attention.is_index_source = False
+        attention.compress_kv_cache = torch.zeros(4, 8, 32)
+        attention.compress_kv_cache[2, 0].fill_(3)
+        attention.compress_kv_cache[0, 0].fill_(1)
+        attention.freqs_cis = torch.ones(16, 8, dtype=torch.complex64)
+        attention.compressor = Compressor(
+            ModelArgs(dim=64, head_dim=32, compress_ratios=(2,), max_batch_size=4),
+            0,
+        )
+        for parameter in attention.compressor.parameters():
+            torch.nn.init.constant_(parameter, 0.01)
+        slots = torch.tensor([2, 0])
+        value = torch.arange(1, 257, dtype=torch.float32).reshape(2, 2, 64) / 256
+        previous_cache, previous_indices = (
+            shared_attn.compress_kv,
+            shared_attn.topk_idxs,
+        )
+        try:
+            shared_attn.topk_idxs = torch.tensor([[[0]], [[0]]])
+            current, indices = attention._compress_kv(value, value, 2, 4, slots)
+            expected = attention.compress_kv_cache[slots, :2]
+            self.assertTrue(torch.count_nonzero(expected[:, 1]).item())
+            torch.testing.assert_close(current, expected)
+            self.assertEqual(
+                tuple(shared_attn.compress_kv.shape), tuple(expected.shape)
+            )
+            self.assertIs(indices, shared_attn.topk_idxs)
+            attention.is_kv_source = False
+            reused, _ = attention._compress_kv(value, value, 2, 4, slots)
+            torch.testing.assert_close(reused, expected)
+            self.assertEqual(
+                torch.count_nonzero(attention.compress_kv_cache[1]).item(), 0
+            )
+        finally:
+            shared_attn.compress_kv, shared_attn.topk_idxs = (
+                previous_cache,
+                previous_indices,
+            )
+
     def test_moe_merges_routed_experts_and_shared_output(self):
         class FixedGate(torch.nn.Module):
             def forward(self, value, image_mask=None):
@@ -407,6 +454,9 @@ class DeepSeekModel(unittest.TestCase):
                 cache_slots=torch.tensor([0]),
             )
             self.assertEqual(tuple(output[0].shape), (1,))
+            self.assertEqual(
+                tuple(shared_attn.index_k.shape), (1, 2, args.index_head_dim)
+            )
         finally:
             shared_attn.topk_idxs = None
             shared_attn.compress_kv = None

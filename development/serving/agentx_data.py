@@ -4,6 +4,7 @@ import csv
 import datetime
 import json
 import math
+import re
 from pathlib import Path
 
 
@@ -184,7 +185,92 @@ def collect_rows(records, metrics, profile_start, max_context=262144):
     return sorted(rows, key=lambda row: row["processing_start_s"]), dict(counts)
 
 
-def export_run(artifacts, output, max_context=262144, service_log=None):
+def utc_time(value):
+    result = datetime.datetime.fromisoformat(value)
+    return result.replace(tzinfo=datetime.UTC) if result.tzinfo is None else result
+
+
+def phase_totals(path, summary):
+    if summary.get("aiperf_version") != "1.0.7":
+        raise ValueError("phase log accounting requires agentx-harness==1.0.7")
+    number = r"(?:0|[1-9][0-9]{0,2}(?:,[0-9]{3})*)"
+    patterns = (
+        r"started \| phase_index=0 \| profiling_index=0(?: \| target: [^|]+)?",
+        rf"sending complete \| sent=({number}), completed=({number}), "
+        rf"in_flight=({number})(?: \| sessions: sent={number}, completed={number})?"
+        r"(?: \| timeout_triggered=True)?",
+        rf"complete \| completed=({number}), cancelled=({number}), errors=({number})"
+        rf"(?: \| sessions: completed={number}, cancelled={number})?"
+        r" \| elapsed=([0-9]+\.[0-9]{2})s( \| grace_period_timeout=True)?",
+    )
+    events = []
+    try:
+        with Path(path).open() as source:
+            for line in source:
+                marker = " - PhaseRunner - NOTICE - Phase profiling (profiling) "
+                if marker not in line:
+                    continue
+                timestamp, message = line.rstrip().split(marker, 1)
+                index = len(events)
+                match = re.fullmatch(patterns[index], message) if index < 3 else None
+                if match is None:
+                    raise ValueError("invalid or duplicate profiling phase log")
+                events.append((utc_time(timestamp), match.groups()))
+    except OSError as error:
+        raise ValueError("authoritative AgentX phase totals unavailable") from error
+    if len(events) != 3:
+        raise ValueError("authoritative AgentX phase totals unavailable")
+    (start, _), (sending_end, sent_fields), (end, returned_fields) = events
+    sent, early_completed, in_flight = (
+        int(value.replace(",", "")) for value in sent_fields
+    )
+    returned, cancelled, errors = (
+        int(value.replace(",", "")) for value in returned_fields[:3]
+    )
+    elapsed = float(returned_fields[3])
+    if (
+        not start <= sending_end <= end
+        or abs((start - utc_time(summary["start_time"])).total_seconds()) > 1
+        or abs((end - utc_time(summary["end_time"])).total_seconds()) > 1
+        or abs((end - start).total_seconds() - elapsed) > 0.02
+        or early_completed > returned
+        or early_completed + in_flight > sent
+        or sent != returned + cancelled
+        or errors > returned
+    ):
+        raise ValueError("inconsistent AgentX phase totals or timestamps")
+    return {
+        "sent": sent,
+        "returned": returned,
+        "cancelled": cancelled,
+        "errors": errors,
+        "profiling_seconds": (sending_end - start).total_seconds(),
+        "drain_seconds": (end - sending_end).total_seconds(),
+        "phase_seconds": elapsed,
+        "grace_period_timeout": returned_fields[4] is not None,
+    }
+
+
+def reconcile_counts(counts, totals):
+    errors = counts["failed"] + counts["incomplete"]
+    # Harness "completed" credits include errors and skips, but not cancellations.
+    returned = counts["completed"] + errors + counts["skipped_context_overflow"]
+    if (
+        returned != totals["returned"]
+        or errors != totals["errors"]
+        or counts["cancelled"] > totals["cancelled"]
+    ):
+        raise ValueError("raw export differs from authoritative AgentX phase totals")
+    # The pinned harness can return cancelled credits without exporting raw records.
+    counts["cancelled_without_raw"] = totals["cancelled"] - counts["cancelled"]
+    counts.update({key: value for key, value in totals.items() if key != "errors"})
+    counts["accounting_complete"] = True
+    counts["accounting_source"] = "agentx-harness-1.0.7-phase-log"
+
+
+def export_run(
+    artifacts, output, max_context=262144, service_log=None, harness_log=None
+):
     artifacts, output = Path(artifacts), Path(output)
     summary = json.loads((artifacts / "profile_export_aiperf.json").read_text())
     if summary.get("metadata", {}).get("submission_valid") is not True or summary.get(
@@ -192,9 +278,11 @@ def export_run(artifacts, output, max_context=262144, service_log=None):
     ):
         raise ValueError("AgentX did not produce a valid completed measurement")
     # The launcher sets TZ=UTC because upstream exports a naive local datetime.
-    start = datetime.datetime.fromisoformat(summary["start_time"])
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=datetime.UTC)
+    start = utc_time(summary["start_time"])
+    totals = phase_totals(
+        artifacts / "logs/aiperf.log" if harness_log is None else harness_log,
+        summary,
+    )
     rows, counts = collect_rows(
         read_jsonl(artifacts / "profile_export_raw.jsonl"),
         service_metrics(
@@ -220,6 +308,7 @@ def export_run(artifacts, output, max_context=262144, service_log=None):
     ):
         raise ValueError("raw export error count differs from the summary")
     counts["context_overflow"] = summary.get("context_overflow_count", {}).get("avg", 0)
+    reconcile_counts(counts, totals)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", newline="") as destination:
         writer = csv.DictWriter(destination, fieldnames=list(rows[0]))
@@ -235,8 +324,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifacts", type=Path, required=True)
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--harness-log", type=Path)
     arguments = parser.parse_args()
-    _, counts = export_run(arguments.artifacts, arguments.csv)
+    _, counts = export_run(
+        arguments.artifacts, arguments.csv, harness_log=arguments.harness_log
+    )
     print(json.dumps(counts))
 
 

@@ -64,6 +64,8 @@ Ordinary execution does not collect target hidden states.
 Complete initial prompts can run as one aligned request batch.
 Shared query attention state resets at each target call.
 Index sources always publish the cache view for the current request slots.
+Compressed KV sources publish selected slots after the current cache write.
+Compressed KV and index copies contain only the active context range.
 
 The serving engine enforces the configured `max_num_seqs` resident limit.
 It keeps one additional request in preparation to overlap CPU admission with GPU work.
@@ -126,6 +128,8 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 
 ## Next work
 
+- Replace dense maximum-context staging and full window-page copies with bounded cache storage.
+- Keep the configured context limit separate from the observed AgentX request lengths.
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
 - Add per-request varlen position metadata and batch decode before DeepSeek CUDA Graph capture.
 - Run higher-capacity AgentX cases after increasing physical cache and sequence capacity.

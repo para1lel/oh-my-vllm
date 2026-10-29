@@ -6,6 +6,16 @@ Use four GPUs apart from GPU 0.
 The runner uses the session-tree concurrency as the default service sequence capacity.
 Use `--max-num-seqs` to override it.
 
+The default dataset, `semianalysis_cc_traces_weka_062126_256k`, has a 256K context range.
+The context option selects an upper limit. It does not extend the dataset requests.
+A 1048576-token limit does not prove execution at that length.
+
+Use `--dataset semianalysis_cc_traces_weka_062126` for an additional full-context run.
+Set `--cache-context 1048576` for that run.
+Keep its results separate from the approved `_256k` matrix.
+The [full dataset](https://huggingface.co/datasets/semianalysisai/cc-traces-weka-062126/tree/23f152f6f0f9399a85901b89a6458def0ef16729) permits input lengths up to 990016 proxy tokens.
+Report the observed maximum input and total lengths, not only the configured limit.
+
 The approved cases are:
 
 | Session-tree concurrency | Strategy |
@@ -22,7 +32,7 @@ Keep queueing, failed, cancelled, incomplete, overflow, and completed counts sep
 Run one case with:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.deepseek_agentx \
+OH_MY_VLLM_GPU_COUNT=4 scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.deepseek_agentx \
   --model "$MODEL_ROOT" \
   --agentx-python "$AGENTX_ENV/bin/python" \
   --strategy tep4 \
@@ -50,13 +60,21 @@ It uses `max_num_seqs=1` to fit the model and cache in the available device memo
 | Mamba blocks | 64 |
 | Maximum batched tokens | 16384 |
 | Warmup requests | 16 |
+| Profiling requests sent | 14 |
 | Completed requests | 2 |
-| Failed, cancelled, incomplete requests | 0 |
+| Failed requests | 0 |
+| Cancelled requests | 12 |
+| Unaccounted requests | 0 |
+| Drain duration | 120 seconds |
+| Drain timeout | Yes |
 
 The [functional CSV](assets/agentx-tep4-16-functional.csv) and
 [functional dark scatter plot](assets/agentx-tep4-16-functional.png) record this run.
 The two completed rows show end-to-end service execution and artifact export.
 They do not represent TEP4 throughput at concurrency 16 because the service used one resident sequence.
+The harness phase counters include 12 requests cancelled after the drain timeout.
+The raw request export does not include these cancelled requests.
+Thus, counts from raw request records alone are not complete.
 
 The current DEP4 command uses the TEP4 executor fallback.
 Do not treat a DEP4 result as DEP4 performance evidence until request ownership and expert dispatch are implemented.

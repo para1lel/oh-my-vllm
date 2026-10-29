@@ -5,7 +5,7 @@ from pathlib import Path
 
 from oh_my_vllm.models.deepseek_v41.tokenizer import Tokenization
 
-from .agentx import DATASET, VERSION, profile_command, run_harness
+from .agentx import DATASET, FULL_CONTEXT_DATASET, VERSION, profile_command, run_harness
 from .agentx_data import export_run
 from .agentx_plot import plot
 from .deepseek_benchmark import (
@@ -29,7 +29,7 @@ def workload_identity(args):
     return {
         "kind": "agentx",
         "version": VERSION,
-        "dataset": DATASET,
+        "dataset": args.dataset,
         "seed": args.seed,
         "strategy": args.strategy,
         "concurrency": args.concurrency,
@@ -52,6 +52,9 @@ def arguments():
     parser.add_argument("--duration", type=int, default=900)
     parser.add_argument("--grace-period", type=float, default=120)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--dataset", choices=(DATASET, FULL_CONTEXT_DATASET), default=DATASET
+    )
     parser.add_argument("--cache-context", type=int, default=1048576)
     parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int)
@@ -128,6 +131,7 @@ def main():
             model_name=SERVED_MODEL,
             max_context=args.cache_context,
             concurrency=args.concurrency,
+            dataset=args.dataset,
         )
         (args.artifacts / "command.json").write_text(
             json.dumps(command, indent=2) + "\n"
@@ -158,6 +162,7 @@ def main():
         args.csv,
         max_context=args.cache_context,
         service_log=service_log,
+        harness_log=args.artifacts / "agentx/logs/aiperf.log",
     )
     plot(
         args.csv,

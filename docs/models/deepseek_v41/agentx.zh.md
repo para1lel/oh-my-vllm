@@ -6,6 +6,16 @@
 runner 默认使用 session-tree concurrency 作为 service sequence capacity.
 使用 `--max-num-seqs` 可以覆盖这个值.
 
+默认 dataset `semianalysis_cc_traces_weka_062126_256k` 的 context 范围为 256K.
+context 选项选择上限. 它不会延长 dataset 中的 request.
+1048576-token limit 不能证明在该长度下的执行.
+
+额外的 full-context run 使用 `--dataset semianalysis_cc_traces_weka_062126`.
+该 run 设置 `--cache-context 1048576`.
+其 result 与批准的 `_256k` matrix 分开记录.
+[完整 dataset](https://huggingface.co/datasets/semianalysisai/cc-traces-weka-062126/tree/23f152f6f0f9399a85901b89a6458def0ef16729) 允许 input length 达到 990016 个 proxy token.
+报告观测到的最大 input length 和 total length, 不要只报告配置的上限.
+
 approved case 如下:
 
 | Session-tree concurrency | Strategy |
@@ -22,7 +32,7 @@ queueing, failed, cancelled, incomplete, overflow 和 completed count 分开记�
 使用以下命令运行一个 case:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.deepseek_agentx \
+OH_MY_VLLM_GPU_COUNT=4 scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.deepseek_agentx \
   --model "$MODEL_ROOT" \
   --agentx-python "$AGENTX_ENV/bin/python" \
   --strategy tep4 \
@@ -50,13 +60,21 @@ CSV 和暗色背景散点图是 approved result artifact.
 | Mamba blocks | 64 |
 | Maximum batched tokens | 16384 |
 | Warmup requests | 16 |
+| Profiling requests sent | 14 |
 | Completed requests | 2 |
-| Failed, cancelled, incomplete requests | 0 |
+| Failed requests | 0 |
+| Cancelled requests | 12 |
+| Unaccounted requests | 0 |
+| Drain duration | 120 秒 |
+| Drain timeout | 是 |
 
 [functional CSV](assets/agentx-tep4-16-functional.csv) 和
 [functional dark scatter plot](assets/agentx-tep4-16-functional.png) 记录这次 run.
 这两个 completed row 证明 end-to-end service execution 和 artifact export.
 由于 service 使用一个 resident sequence, 它们不代表 concurrency 16 下的 TEP4 throughput.
+harness phase counter 包含 drain timeout 后取消的 12 个 request.
+raw request export 不包含这些 cancelled request.
+因此, 只根据 raw request record 得到的 count 不完整.
 
 当前 DEP4 command 使用 TEP4 executor fallback.
 在 request ownership 和 expert dispatch 实现前, 不要把 DEP4 result 作为 DEP4 performance evidence.

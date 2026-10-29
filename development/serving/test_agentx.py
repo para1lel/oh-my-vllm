@@ -1,11 +1,14 @@
 import contextlib
 import copy
+import csv
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from . import agentx, agentx_data
+from . import agentx, agentx_data, deepseek_agentx
 from .deepseek_agentx import profile_command as deepseek_profile_command
 from .deepseek_agentx import workload_identity
 
@@ -57,8 +60,177 @@ def server_metric(response_id):
     }
 
 
+def export_fixture(root, records):
+    artifacts = root / "agentx"
+    artifacts.mkdir()
+    summary = {
+        "aiperf_version": "1.0.7",
+        "metadata": {"submission_valid": True},
+        "was_cancelled": False,
+        "start_time": "1970-01-01T00:01:40",
+        "end_time": "1970-01-01T00:18:40",
+        "request_count": {"avg": 2},
+    }
+    (artifacts / "profile_export_aiperf.json").write_text(json.dumps(summary))
+    (artifacts / "profile_export_raw.jsonl").write_text(
+        "".join(json.dumps(record) + "\n" for record in records)
+    )
+    (root / "mtp4-service.log").write_text(
+        "".join(
+            "SERVING_REQUEST_METRIC " + json.dumps(server_metric(name)) + "\n"
+            for name in ("first", "second")
+        )
+    )
+    logs = artifacts / "logs"
+    logs.mkdir()
+    log = (
+        "1970-01-01 00:01:40.000 - PhaseRunner - NOTICE - "
+        "Phase profiling (profiling) started | phase_index=0 | profiling_index=0 | "
+        "target: 900.0s duration\n"
+        "1970-01-01 00:16:40.000 - PhaseRunner - NOTICE - "
+        "Phase profiling (profiling) sending complete | sent=14, completed=1, "
+        "in_flight=13 | sessions: sent=9, completed=0 | timeout_triggered=True\n"
+        "1970-01-01 00:18:40.000 - PhaseRunner - NOTICE - "
+        "Phase profiling (profiling) complete | completed=2, cancelled=12, errors=0 | "
+        "sessions: completed=0, cancelled=3 | elapsed=1020.00s | "
+        "grace_period_timeout=True\n"
+    )
+    (logs / "aiperf.log").write_text(log)
+    return artifacts, summary, log
+
+
 class AgentXTests(unittest.TestCase):
-    def test_deepseek_workload_identity_binds_grace_period(self):
+    def test_export_accounts_for_drain_cancellations_without_raw_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifacts, _, _ = export_fixture(
+                root, [raw_record("first"), raw_record("second")]
+            )
+            output = root / "requests.csv"
+            rows, counts = agentx_data.export_run(artifacts, output)
+
+            self.assertEqual(counts["cancelled"], 12)
+            self.assertEqual(counts["sent"], 14)
+            self.assertEqual(counts["cancelled_without_raw"], 12)
+            self.assertTrue(counts["accounting_complete"])
+            self.assertEqual(counts["profiling_seconds"], 900)
+            self.assertEqual(counts["drain_seconds"], 120)
+            self.assertTrue(counts["grace_period_timeout"])
+            self.assertEqual(len(rows), 2)
+            with output.open() as source:
+                self.assertEqual(len(list(csv.DictReader(source))), 2)
+            self.assertEqual(
+                json.loads((root / "request-counts.json").read_text()), counts
+            )
+
+    def test_export_rejects_missing_or_inconsistent_phase_totals(self):
+        for case in (
+            "missing",
+            "truncated",
+            "duplicate",
+            "malformed",
+            "unreturned",
+            "missing_result",
+            "errors",
+            "version",
+            "stale",
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                artifacts, summary, log = export_fixture(
+                    root, [raw_record("first"), raw_record("second")]
+                )
+                path = artifacts / "logs/aiperf.log"
+                if case == "missing":
+                    path.unlink()
+                elif case == "truncated":
+                    path.write_text(log.rsplit("\n", 2)[0] + "\n")
+                elif case == "duplicate":
+                    path.write_text(log + log)
+                elif case == "malformed":
+                    path.write_text(log.replace("sent=14", "sent=unknown"))
+                elif case == "unreturned":
+                    path.write_text(log.replace("cancelled=12", "cancelled=11"))
+                elif case == "missing_result":
+                    path.write_text(
+                        log.replace("completed=2", "completed=3").replace(
+                            "cancelled=12", "cancelled=11"
+                        )
+                    )
+                elif case == "errors":
+                    path.write_text(log.replace("errors=0", "errors=1"))
+                elif case == "version":
+                    summary["aiperf_version"] = "1.0.8"
+                elif case == "stale":
+                    summary["start_time"] = "1970-01-02T00:01:40"
+                (artifacts / "profile_export_aiperf.json").write_text(
+                    json.dumps(summary)
+                )
+                with self.assertRaises(ValueError):
+                    agentx_data.export_run(artifacts, root / "requests.csv")
+                self.assertFalse((root / "requests.csv").exists())
+                self.assertFalse((root / "request-counts.json").exists())
+
+    def test_export_reconciles_errors_skips_and_exported_cancellations(self):
+        failed = raw_record("failed")
+        failed.update(status=503, error={"message": "worker unavailable"})
+        incomplete = raw_record("incomplete")
+        incomplete["responses"].pop()
+        cancelled = raw_record("cancelled")
+        cancelled["metadata"]["was_cancelled"] = True
+        overflow = raw_record("overflow")
+        overflow["metadata"]["context_overflow_skip"] = True
+        records = [raw_record("first"), raw_record("second")]
+        records.extend([failed, incomplete, cancelled, overflow])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifacts, summary, log = export_fixture(root, records)
+            summary["error_request_count"] = {"avg": 3}
+            summary["skipped_context_overflow_count"] = {"avg": 1}
+            (artifacts / "profile_export_aiperf.json").write_text(json.dumps(summary))
+            log = (
+                log.replace("sent=14", "sent=8")
+                .replace("in_flight=13", "in_flight=7")
+                .replace("completed=2", "completed=5")
+                .replace("cancelled=12", "cancelled=3")
+                .replace("errors=0", "errors=2")
+            )
+            explicit_log = root / "harness.log"
+            (artifacts / "logs/aiperf.log").unlink()
+            explicit_log.write_text(log)
+            rows, counts = agentx_data.export_run(
+                artifacts, root / "requests.csv", harness_log=explicit_log
+            )
+
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(counts["failed"], 1)
+            self.assertEqual(counts["incomplete"], 1)
+            self.assertEqual(counts["cancelled"], 3)
+            self.assertEqual(counts["cancelled_without_raw"], 2)
+            self.assertEqual(counts["skipped_context_overflow"], 1)
+            self.assertEqual(counts["sent"], 8)
+
+    def test_export_keeps_complete_runs_without_cancellations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifacts, _, log = export_fixture(
+                root, [raw_record("first"), raw_record("second")]
+            )
+            log = (
+                log.replace("sent=14", "sent=2")
+                .replace("in_flight=13", "in_flight=1")
+                .replace("cancelled=12", "cancelled=0")
+                .replace(" | grace_period_timeout=True", "")
+            )
+            (artifacts / "logs/aiperf.log").write_text(log)
+            _, counts = agentx_data.export_run(artifacts, root / "requests.csv")
+
+            self.assertEqual(counts["sent"], 2)
+            self.assertEqual(counts["cancelled"], 0)
+            self.assertEqual(counts["cancelled_without_raw"], 0)
+            self.assertFalse(counts["grace_period_timeout"])
+
+    def test_deepseek_workload_identity_binds_dataset_and_grace_period(self):
         arguments = type(
             "Arguments",
             (),
@@ -69,10 +241,53 @@ class AgentXTests(unittest.TestCase):
                 "duration": 900,
                 "grace_period": 45.5,
                 "prompt_seed": "agentx-deepseek-42",
+                "dataset": "semianalysis_cc_traces_weka_062126",
             },
         )()
 
         self.assertEqual(workload_identity(arguments)["grace_period"], 45.5)
+        self.assertEqual(
+            workload_identity(arguments)["dataset"],
+            "semianalysis_cc_traces_weka_062126",
+        )
+
+    def test_deepseek_dataset_selection_keeps_the_approved_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            argv = [
+                "deepseek_agentx",
+                "--model",
+                "/model",
+                "--artifacts",
+                directory,
+                "--agentx-python",
+                "/env/python",
+                "--csv",
+                f"{directory}/result.csv",
+                "--figure",
+                f"{directory}/result.png",
+                "--strategy",
+                "tep4",
+                "--concurrency",
+                "16",
+            ]
+            for selection, expected in (
+                ([], agentx.DATASET),
+                (
+                    ["--dataset", "semianalysis_cc_traces_weka_062126"],
+                    "semianalysis_cc_traces_weka_062126",
+                ),
+            ):
+                with (
+                    self.subTest(dataset=expected),
+                    patch("sys.argv", [*argv, *selection]),
+                    patch.object(
+                        deepseek_agentx,
+                        "selected_uuids",
+                        return_value=("a", "b", "c", "d"),
+                    ),
+                ):
+                    arguments = deepseek_agentx.arguments()
+                    self.assertEqual(getattr(arguments, "dataset", None), expected)
 
     def test_phase_and_full_response_identity_control_selection(self):
         records = [
@@ -215,6 +430,7 @@ class AgentXTests(unittest.TestCase):
             42,
             max_context=1048576,
             concurrency=16,
+            dataset="semianalysis_cc_traces_weka_062126",
         )
 
         self.assertEqual(
@@ -224,6 +440,10 @@ class AgentXTests(unittest.TestCase):
         self.assertEqual(
             command[command.index("--concurrency") + 1],
             "16",
+        )
+        self.assertEqual(
+            command[command.index("--public-dataset") + 1],
+            agentx.FULL_CONTEXT_DATASET,
         )
 
 
