@@ -990,7 +990,7 @@ class Attention(nn.Module):
                 x, qr, start_pos, kv.size(1), cache_slots
             )
             native_compressed = compress_kv
-            kv = torch.cat([kv, compress_kv], dim=1)
+            kv = None
             topk_idxs = torch.cat([topk_idxs, compress_idxs], dim=-1)
 
         o = sparse_attn(

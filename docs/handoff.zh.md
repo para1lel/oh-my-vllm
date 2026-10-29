@@ -33,6 +33,12 @@ Native SwiGLU 支持最多 1048576 个 routed row.
 
 DeepSeek rank worker 为 prefill input copy 复用 pinned host 和 device token buffer.
 
+DeepSeek 使用发布模型的 FP4 和 FP8 scale rule, 并对数值使用最近偶数舍入.
+In-place quantization 先舍入再反量化.
+Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 temporary tensor.
+Native attention 使用独立的 window KV 和 compressed KV table.
+Reference path 在计算之前合并这些 table.
+
 sparse attention status failure 会禁用 native path, 并使用 reference path.
 short query 的 native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
 long query 使用 native sparse packing, 因为 reference path 的扩展性较差.
@@ -137,7 +143,7 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 ## 下一步
 
 - 在 approved long-context workload 中测量 exact-endpoint window storage.
-- 限制 compressed-KV packing workspace, 避免重复转换完整 context 的格式.
+- 在 consumer 之间复用 encoded KV, 避免重复转换完整 context 的格式.
 - 为 raw weight 和 padded projection copy 定义明确的 ownership.
 - 在 full-model numerical acceptance 之前增加独立的 DeepSeek endpoint frozen fixture.
 - 将配置的 context limit 与观测到的 AgentX request length 分开记录.

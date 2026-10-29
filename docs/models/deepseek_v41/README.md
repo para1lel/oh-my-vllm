@@ -37,6 +37,7 @@ Window storage grows with checkpoint capacity, not with FA token-page capacity.
 Native [projection preparation](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py) shares compatible encoded weight storage.
 Packed scales and padded weights keep separate storage.
 The reference path can still use the raw parameters.
+The [quantization contract](quantization.md) defines activation and KV formats, scale rounding, and in-place behavior.
 
 CUDA sequence staging uses demand-mapped storage for compressed KV, index keys, and Engram history.
 Each request slot maps only its active context range.

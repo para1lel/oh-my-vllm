@@ -33,6 +33,12 @@ This keeps six-route 8192-row prefill chunks on the native activation path.
 
 DeepSeek rank workers reuse pinned host and device token buffers for prefill input copies.
 
+DeepSeek uses the released FP4 and FP8 scale rules and nearest-even value rounding.
+In-place quantization rounds before dequantization.
+The native quantizer writes encoded values and scales without context-sized temporary tensors.
+Native attention uses separate window and compressed KV tables.
+The reference path joins their tables before computation.
+
 Sparse attention status failures disable the native path and use the reference path.
 Short-query native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
 Long queries use native sparse packing because the reference path scales poorly.
@@ -138,7 +144,7 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 ## Next work
 
 - Measure exact-endpoint window storage with the approved long-context workloads.
-- Bound compressed-KV packing workspaces and avoid repeated full-context format conversion.
+- Reuse encoded KV across consumers without repeated full-context format conversion.
 - Define explicit ownership for raw weights and padded projection copies.
 - Add independent frozen DeepSeek endpoint fixtures before full-model numerical acceptance.
 - Keep the configured context limit separate from the observed AgentX request lengths.

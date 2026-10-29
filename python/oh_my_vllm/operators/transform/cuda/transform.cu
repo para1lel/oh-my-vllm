@@ -1,7 +1,118 @@
 #include <cuda_bf16.h>
+#include <cuda_fp4.h>
+#include <cuda_fp8.h>
+#include <limits>
 #include "../../runtime/cuda/contracts.cuh"
 
 namespace {
+
+__device__ float ceil_power_of_two(float value) {
+  uint32_t bits = __float_as_uint(value);
+  return __uint_as_float((bits & 0x7f800000u) + ((bits & 0x007fffffu) ? 0x00800000u : 0));
+}
+
+__device__ float quantization_scale(float maximum, int bits, int format, bool round_scale,
+                                    bool invalid, uint8_t &code) {
+  float scale;
+  if (bits == 8) {
+    scale = __fmul_rn(fmaxf(maximum, 1e-4f), 1.f / 448.f);
+    if (round_scale)
+      scale = ceil_power_of_two(scale);
+  } else if (format == 1) {
+    scale = ceil_power_of_two(__fmul_rn(fmaxf(maximum, 6.f * 0x1p-126f), 1.f / 6.f));
+  } else {
+    float unrounded = __fdiv_rn(fmaxf(maximum, 6.f * 0x1p-9f), 6.f);
+    // The hardware cast saturates; reject scales beyond E4M3's nearest-even overflow midpoint.
+    invalid |= !isfinite(unrounded) || unrounded > 464.f;
+    code = __nv_cvt_float_to_fp8(unrounded, __NV_SATFINITE, __NV_E4M3);
+    __nv_fp8_e4m3 stored;
+    stored.__x = code;
+    scale = static_cast<float>(stored);
+  }
+  invalid |= !isfinite(scale) || scale <= 0.f;
+  if (format == 1) {
+    float stored = ceil_power_of_two(scale);
+    invalid |= !isfinite(stored);
+    code = static_cast<uint8_t>(__float_as_uint(stored) >> 23);
+  }
+  if (invalid) {
+    code = format == 2 ? 0x7f : 0xff;
+    return __uint_as_float(0x7fc00000u);
+  }
+  return scale;
+}
+
+__global__ void quantize_kernel(const __nv_bfloat162 *values, void *output, void *scales,
+                                int64_t groups, int bits, int group_size, int format,
+                                bool round_scale, bool inplace) {
+  int lane = threadIdx.x % 32, warp = threadIdx.x / 32;
+  int pairs = group_size / 2;
+  for (int64_t group = int64_t(blockIdx.x) * 4 + warp; group < groups;
+       group += int64_t(gridDim.x) * 4) {
+    float2 input[2];
+    float maximum = 0.f;
+    bool invalid = false;
+    // One warp owns a group and reads it entirely before any exact-alias output write.
+    for (int i = 0; i < 2; ++i) {
+      int pair = lane + i * 32;
+      input[i] =
+          pair < pairs ? __bfloat1622float2(values[group * pairs + pair]) : make_float2(0.f, 0.f);
+      invalid |= !isfinite(input[i].x) || !isfinite(input[i].y);
+      maximum = fmaxf(maximum, fmaxf(fabsf(input[i].x), fabsf(input[i].y)));
+    }
+    for (int offset = 16; offset; offset >>= 1)
+      maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffff, maximum, offset));
+    invalid = __any_sync(0xffffffff, invalid);
+    uint8_t scale_code = 0;
+    float scale = 0.f;
+    if (lane == 0) {
+      scale = quantization_scale(maximum, bits, format, round_scale, invalid, scale_code);
+      if (format == 0)
+        static_cast<float *>(scales)[group] = scale;
+      else
+        static_cast<uint8_t *>(scales)[group] = scale_code;
+    }
+    scale = __shfl_sync(0xffffffff, scale, 0);
+    invalid = !isfinite(scale);
+    for (int i = 0; i < 2; ++i) {
+      int pair = lane + i * 32;
+      if (pair >= pairs)
+        continue;
+      float limit = bits == 4 ? 6.f : 448.f;
+      float2 normalized = make_float2(fminf(fmaxf(__fdiv_rn(input[i].x, scale), -limit), limit),
+                                      fminf(fmaxf(__fdiv_rn(input[i].y, scale), -limit), limit));
+      float2 decoded;
+      if (bits == 4) {
+        uint8_t code =
+            invalid ? 0 : __nv_cvt_float2_to_fp4x2(normalized, __NV_E2M1, cudaRoundNearest);
+        if (!inplace) {
+          static_cast<uint8_t *>(output)[group * pairs + pair] = code;
+          continue;
+        }
+        decoded = __half22float2(static_cast<__half2>(__nv_cvt_fp4x2_to_halfraw2(code, __NV_E2M1)));
+      } else {
+        uint16_t code =
+            invalid ? 0x7f7f : __nv_cvt_float2_to_fp8x2(normalized, __NV_SATFINITE, __NV_E4M3);
+        if (!inplace) {
+          static_cast<uint16_t *>(output)[group * pairs + pair] = code;
+          continue;
+        }
+        __nv_fp8x2_e4m3 stored;
+        stored.__x = code;
+        decoded = static_cast<float2>(stored);
+      }
+      static_cast<__nv_bfloat162 *>(output)[group * pairs + pair] =
+          __floats2bfloat162_rn(__fmul_rn(decoded.x, scale), __fmul_rn(decoded.y, scale));
+    }
+  }
+}
+
+void quantization_span(TensorView tensor, int64_t bytes) {
+  auto address = reinterpret_cast<uintptr_t>(tensor.data_ptr());
+  TVM_FFI_ICHECK(bytes >= 0 && (bytes == 0 || address != 0));
+  TVM_FFI_ICHECK(static_cast<uint64_t>(bytes) <= std::numeric_limits<uintptr_t>::max() - address)
+      << "quantization tensor address overflow";
+}
 
 __device__ float warp_sum(float value) {
   for (int offset = 16; offset; offset >>= 1)
@@ -57,6 +168,46 @@ void values_contract(TensorView values, TensorView output) {
 }
 
 } // namespace
+
+void quantize(TensorView values, TensorView output, TensorView scales, int64_t bits,
+              int64_t group_size, int64_t scale_format, bool round_scale, bool inplace) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(1) > 0);
+  TVM_FFI_ICHECK(values.device().device_id >= 0);
+  TVM_FFI_ICHECK(group_size == 16 || group_size == 32 || group_size == 128);
+  int64_t rows = values.size(0), width = values.size(1);
+  TVM_FFI_ICHECK(width % group_size == 0);
+  TVM_FFI_ICHECK(bits == 4 || bits == 8);
+  TVM_FFI_ICHECK((bits == 8 && (scale_format == 0 || scale_format == 1)) ||
+                 (bits == 4 && (scale_format == 1 || scale_format == 2)));
+  TVM_FFI_ICHECK(width <= std::numeric_limits<int64_t>::max() / 2);
+  TVM_FFI_ICHECK(rows <= std::numeric_limits<int64_t>::max() / 2 / width)
+      << "quantization tensor size overflow";
+  int64_t elements = rows * width, groups = elements / group_size;
+  tensor_contract(values, values, kDLBfloat, 16, {rows, width});
+  tensor_contract(output, values, inplace ? kDLBfloat : kDLUInt, inplace ? 16 : 8,
+                  {rows, inplace ? width : width / (8 / bits)});
+  tensor_contract(scales, values, scale_format == 0 ? kDLFloat : kDLUInt,
+                  scale_format == 0 ? 32 : 8, {rows, width / group_size});
+  quantization_span(values, elements * 2);
+  quantization_span(output, inplace ? elements * 2 : elements / (8 / bits));
+  quantization_span(scales, groups * (scale_format == 0 ? 4 : 1));
+  if (!inplace || values.data_ptr() != output.data_ptr())
+    disjoint(values, output);
+  disjoint(values, scales);
+  disjoint(output, scales);
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  int64_t blocks = (groups + 3) / 4;
+  if (blocks > 65535)
+    blocks = 65535;
+  quantize_kernel<<<static_cast<unsigned>(blocks), 128, 0, stream>>>(
+      static_cast<const __nv_bfloat162 *>(values.data_ptr()), output.data_ptr(), scales.data_ptr(),
+      groups, static_cast<int>(bits), static_cast<int>(group_size), static_cast<int>(scale_format),
+      round_scale, inplace);
+  check_cuda(cudaGetLastError());
+}
 
 void rms(TensorView values, TensorView weight, TensorView output, double epsilon) {
   values_contract(values, output);

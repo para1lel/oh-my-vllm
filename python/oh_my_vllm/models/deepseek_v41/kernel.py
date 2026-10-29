@@ -10,6 +10,9 @@ from collections import OrderedDict
 import torch
 import torch.nn.functional as F
 
+from ...operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
+from .quantization import act_quant, fp4_act_quant, fp4_values
+
 _PROJECTION_MODULE = None
 _ROUTING_MODULE = None
 _ACTIVATION_MODULE = None
@@ -82,7 +85,7 @@ def _transform_module():
     if _TRANSFORM_MODULE is None:
         from ...operators.runtime.native import load
 
-        _TRANSFORM_MODULE, _, _ = load("transform", ("rms", "rope"))
+        _TRANSFORM_MODULE, _, _ = load("transform", TRANSFORM_FUNCTIONS)
     return _TRANSFORM_MODULE
 
 
@@ -163,42 +166,6 @@ def _grouped_pointer_arrays(packed, device):
     return weight_ptrs, scale_ptrs
 
 
-def _block_scales(x, block_size):
-    width = x.size(-1)
-    if width % block_size:
-        raise ValueError("quantization width must be divisible by the block size")
-    view = x.float().reshape(*x.shape[:-1], width // block_size, block_size)
-    return view.abs().amax(-1).clamp_min(1e-4)
-
-
-def act_quant(
-    x, block_size=128, scale_fmt=None, scale_dtype=torch.float32, inplace=False
-):
-    scales = _block_scales(x, block_size)
-    if scale_fmt is not None:
-        scales = torch.ldexp(
-            torch.ones_like(scales), torch.ceil(torch.log2(scales / 448))
-        )
-    encoded = (
-        x.float().reshape(*x.shape[:-1], -1, block_size) / scales.unsqueeze(-1)
-    ).clamp(-448, 448)
-    if inplace:
-        x.copy_((encoded * scales.unsqueeze(-1)).reshape_as(x).to(x.dtype))
-        return x
-    return encoded.reshape_as(x).to(torch.float8_e4m3fn), scales.to(scale_dtype)
-
-
-def fp4_act_quant(x, block_size=32, inplace=False, scale_dtype=torch.float8_e8m0fnu):
-    scales = _block_scales(x, block_size)
-    encoded = (
-        x.float().reshape(*x.shape[:-1], -1, block_size) / scales.unsqueeze(-1)
-    ).clamp(-6, 6)
-    if inplace:
-        x.copy_((encoded * scales.unsqueeze(-1)).reshape_as(x).to(x.dtype))
-        return x
-    return encoded.reshape_as(x).to(x.dtype), scales.to(scale_dtype)
-
-
 def _scale_values(scales):
     if scales.dtype in (torch.float8_e8m0fnu, torch.float8_e4m3fn):
         return scales.float()
@@ -206,19 +173,31 @@ def _scale_values(scales):
 
 
 def fp8_gemm(a, a_s, b, b_s, scale_dtype=torch.float32, block_size=128):
-    if _native_available(a) and block_size == 32:
+    if (
+        _native_available(a)
+        and block_size == 32
+        and a_s.dtype == torch.float8_e8m0fnu
+        and b_s.dtype == torch.float8_e8m0fnu
+    ):
         return _projection_gemm(a, a_s, b, b_s, bits=8)
     a_value = a.float() * _scale_values(a_s).repeat_interleave(block_size, dim=-1)
-    b_value = b.float() * _scale_values(b_s).repeat_interleave(block_size, dim=-1)
+    weight_scales = _scale_values(b_s).repeat_interleave(block_size, dim=0)[: b.size(0)]
+    b_value = b.float() * weight_scales.repeat_interleave(block_size, dim=-1)
     return F.linear(a_value, b_value).to(torch.get_default_dtype())
 
 
 def fp4_gemm(a, a_s, b, b_s, scale_dtype=torch.float32, act_block_size=128):
-    if _native_available(a) and act_block_size in (32, 128):
+    if (
+        _native_available(a)
+        and act_block_size in (32, 128)
+        and a_s.dtype == torch.float8_e8m0fnu
+        and b_s.dtype == torch.float8_e8m0fnu
+    ):
+        if act_block_size == 128:
+            a_s = a_s.view(torch.uint8).repeat_interleave(4, dim=-1).view(a_s.dtype)
         return _projection_gemm(a, a_s, b, b_s, bits=4)
     if b.dtype == torch.float4_e2m1fn_x2:
-        b = b.to(torch.bfloat16)
-        b = b.repeat_interleave(2, dim=-1)
+        b = fp4_values(b)
     a_value = a.float() * _scale_values(a_s).repeat_interleave(act_block_size, dim=-1)
     b_value = b.float() * _scale_values(b_s).repeat_interleave(32, dim=-1)
     return F.linear(a_value, b_value).to(torch.get_default_dtype())
@@ -685,47 +664,13 @@ def route(logits, bias, bias_vl, image_mask):
 
 
 def _pack_fp8_kv(values):
-    scales = _block_scales(values, 32)
-    scales = torch.ldexp(torch.ones_like(scales), torch.ceil(torch.log2(scales / 448)))
-    groups = values.float().reshape(*values.shape[:-1], -1, 32)
-    encoded = (
-        (groups / scales.unsqueeze(-1))
-        .clamp(-448, 448)
-        .reshape_as(values)
-        .to(torch.float8_e4m3fn)
-    )
-    scale_codes = scales.to(torch.float8_e8m0fnu).view(torch.uint8).clamp_max(254)
-    return encoded.view(torch.uint8).reshape(*values.shape[:-1], 512), (
-        scale_codes.reshape(*values.shape[:-1], 16)
-    )
+    encoded, scales = act_quant(values, 32, "ue8m0", torch.float8_e8m0fnu)
+    return encoded.view(torch.uint8), scales.view(torch.uint8)
 
 
 def _pack_fp4_kv(values):
-    if values.size(-2) == 0:
-        empty_shape = (*values.shape[:-1], 256)
-        scales_shape = (*values.shape[:-1], 32)
-        return (
-            torch.empty(empty_shape, dtype=torch.uint8, device=values.device),
-            torch.empty(scales_shape, dtype=torch.uint8, device=values.device),
-        )
-    scales = _block_scales(values, 16).clamp(0.001953125, 448)
-    groups = values.float().reshape(*values.shape[:-1], -1, 16)
-    normalized = (groups / scales.unsqueeze(-1)).clamp(-6, 6).reshape_as(values)
-    absolute = normalized.abs()
-    levels = torch.bucketize(
-        absolute,
-        torch.tensor(
-            (0.25, 0.75, 1.25, 1.75, 2.5, 3.5, 5.0),
-            device=values.device,
-            dtype=absolute.dtype,
-        ),
-    )
-    codes = levels.to(torch.uint8) | (normalized.signbit().to(torch.uint8) << 3)
-    packed = codes[..., 0::2] | (codes[..., 1::2] << 4)
-    scale_codes = scales.to(torch.float8_e4m3fn).view(torch.uint8)
-    return packed.reshape(*values.shape[:-1], 256), scale_codes.reshape(
-        *values.shape[:-1], 32
-    )
+    encoded, scales = fp4_act_quant(values, 16, scale_dtype=torch.float8_e4m3fn)
+    return encoded.view(torch.uint8), scales.view(torch.uint8)
 
 
 def _sparse_native_available(query, indices, window, compressed):
@@ -832,6 +777,8 @@ def sparse_attn(
             return native
         _SPARSE_NATIVE_FAILED = True
         _SPARSE_NATIVE_DISABLED = True
+    if kv is None:
+        kv = torch.cat((native_window, native_compressed), dim=1)
     indices = topk_idxs.clamp_min(0).long()
     gathered = torch.gather(
         kv.unsqueeze(1).expand(-1, q.size(1), -1, -1),

@@ -37,6 +37,7 @@ Window storage 随 checkpoint capacity 增长, 不随 FA token-page capacity 增
 Native [projection preparation](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py) 共享兼容的 encoded weight storage.
 Packed scale 和 padded weight 保留独立的 storage.
 Reference path 仍可使用 raw parameter.
+[量化契约](quantization.zh.md) 定义 activation 和 KV format, scale rounding 和 in-place behavior.
 
 CUDA sequence staging 为 compressed KV, index key 和 Engram history 使用按需映射的 storage.
 每个 request slot 只映射其 active context range.
