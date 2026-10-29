@@ -20,7 +20,7 @@ Use these normalization scales:
 Power-of-two rounding uses the FP32 exponent and mantissa bits.
 It does not use a rounded `log2` result.
 FP4 E4M3 scale rounding occurs before value normalization.
-UE8M0 scale storage rounds upward.
+UE8M0 scale storage rounds up.
 Unrounded FP8 normalization still uses the original FP32 scale when its stored scale uses UE8M0.
 
 Use nearest-even rounding for E4M3 and E2M1 values.
@@ -34,7 +34,7 @@ A zero FP4 group keeps a nonzero scale.
 
 An in-place call rounds normalized values to the selected format before dequantization.
 The result returns to the input dtype.
-An encoded call returns E4M3 values or packed E2M1 bytes, with separate scales.
+An encoded call returns E4M3 values or packed E2M1 bytes, with scales in different storage.
 FP4 encoded storage has half the logical width.
 
 FP4 projection activations use FP8, not FP4.
@@ -79,9 +79,9 @@ The grouped and non-grouped TP4 paths keep these FP32 partial sums.
 Round the reduced result to BF16.
 
 Grouped up projections and TEP4 down projections keep BF16 output.
-Single-rank grouped down projections return complete BF16 expert outputs, not rank partial sums.
+Single-rank grouped down projections return full BF16 expert outputs, not rank partial sums.
 The grouped interface accepts BF16 or FP32 output without a workspace size change.
-These output types do not specify the complete tensor-parallel accumulation order.
+These output types do not specify the full tensor-parallel accumulation order.
 
 Shared experts keep full weights on each rank.
 Add their output after routed rank reduction.
@@ -116,20 +116,34 @@ Column sums use XOR offsets `8, 4`.
 HC collapse rounds each FP32 product before a left-to-right sum.
 HC expansion first adds the rounded residual products in that order.
 Add the separately rounded branch product after the residual sum.
-Keep FP32 multiplication and addition separate in these sums.
+Round FP32 multiplication and addition independently in these sums.
 
-HC mixing uses four separate FP32 accumulators for squared inputs.
-The complete logical row count selects the reduction layout.
+HC mixing accumulates squared inputs independently in four FP32 accumulators.
+The full logical row count selects the reduction layout.
 Apply the inverse RMS after the FP32 projection.
 The native projection uses the tensor runtime's cuBLAS library and a caller-owned 32 MiB workspace.
 This workspace size is part of the numerical contract.
+
+## Target row groups
+
+Initial target prefill, single-token target calls, and MTP keep their existing row layouts.
+Nonzero multi-token target calls keep batch-major `[batch, step, ...]` storage.
+Their logical row count is the request batch size.
+HC and router FP32 projections use this row count for each source step.
+Their SGEMM calls write directly to strided physical output storage.
+
+RMS selects its mean reduction layout from the logical row count and processes all physical rows.
+Engram uses four times the token logical row count for per-copy mean and dot reductions.
+FP32 multiplication and addition round independently in its final residual addition.
+Engram embedding, KV projection, target attention, and routed expert computation stay batched.
+The router can use the HC cuBLAS workspace after HC projection completes.
 
 ## Execution
 
 The [model quantizer](../../../python/oh_my_vllm/models/deepseek_v41/quantization.py) selects the native BF16 path or reference computation.
 The [native interface](../../../python/oh_my_vllm/operators/transform/api.py) specifies shapes, formats, alignment, and overlap rules.
 It uses the caller's CUDA stream.
-Each warp reads one complete group before an in-place write.
+Each warp reads one full group before an in-place write.
 Native quantization does not allocate temporary device storage.
 
 HC preparation keeps an FP32 residual copy, mean and inverse statistics, and the cuBLAS workspace.
@@ -140,25 +154,33 @@ Keep the captured workspace until Graph release.
 The native manifest records cuBLAS library image and header identities for the tensor runtime package.
 
 Tensor preparation can make an aligned contiguous input copy.
-Encoded output and scales have separate storage.
+Encoded output and scales use different storage.
 
 Dense projection does not use device scratch storage.
 Grouped projection uses device row offsets without host descriptor uploads.
 Each device count must be between zero and the prepared maximum row count.
 The counts must sum to the full input row count.
 Invalid device counts produce NaN output without input or weight access.
+
 Prepared weight storage must stay valid until execution completes or the Graph is released.
+Prepared cache entries keep the original weight and scale owners, not only their addresses.
+Use different prepared entries for source views with different dtypes, shapes, or strides.
+Do not change weights or scales after preparation.
 
 Host metadata failures occur before launch.
 Invalid device values or scales produce invalid scale codes.
 Native attention checks these codes before it accepts the output.
 Inputs must have finite reconstruction results, as specified by the interface.
 
-Native attention uses separate window and compressed KV tables.
+Native attention keeps window and compressed KV in two tables.
 The attention call does not quantize these BF16 tables.
 The operator also accepts encoded tables with their scale arrays.
 The reference path joins their BF16 tables before computation.
-Short-query native selection and attention status fallback keep their existing rules.
+
+Native sparse attention is the default for supported inputs.
+Set `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0` to select reference attention for short queries.
+Long queries keep native selection unless a native status failure occurs.
+Attention status failures disable native selection and use the reference path.
 
 ## Acceptance
 

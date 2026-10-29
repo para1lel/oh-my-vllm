@@ -113,11 +113,14 @@ tvm::ffi::Array<tvm::ffi::String> hc_images() {
   return paths;
 }
 
-void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, TensorView scale,
-                TensorView base, TensorView mixed, TensorView post, TensorView comb,
-                TensorView collapsed, TensorView next_pre, TensorView flat, TensorView statistics,
-                TensorView blas_workspace) {
+void hc_prepare_grouped(TensorView residual, TensorView incoming, TensorView weight,
+                        TensorView scale, TensorView base, TensorView mixed, TensorView post,
+                        TensorView comb, TensorView collapsed, TensorView next_pre, TensorView flat,
+                        TensorView statistics, TensorView blas_workspace, int64_t logical_rows) {
   int rows = rows_contract(residual);
+  TVM_FFI_ICHECK((rows == 0 && logical_rows == 0) ||
+                 (logical_rows > 0 && logical_rows <= rows && rows % logical_rows == 0))
+      << "HC logical rows must divide the physical rows";
   tensor_contract(incoming, residual, kDLFloat, 32, {rows, copies});
   tensor_contract(weight, residual, kDLFloat, 32, {mixes, flat_width});
   tensor_contract(scale, residual, kDLFloat, 32, {3});
@@ -137,7 +140,8 @@ void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, Ten
     return;
   tvm::ffi::CUDADeviceGuard guard(residual.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, residual.device().device_id));
-  hc_projection::project(residual, weight, mixed, flat, statistics, blas_workspace, rows, stream);
+  hc_projection::project(residual, weight, mixed, flat, statistics, blas_workspace, rows,
+                         static_cast<int>(logical_rows), stream);
   split_kernel<<<rows, 32, 0, stream>>>(
       static_cast<const float *>(mixed.data_ptr()), static_cast<const float *>(scale.data_ptr()),
       static_cast<const float *>(base.data_ptr()), static_cast<float *>(next_pre.data_ptr()),
@@ -147,6 +151,41 @@ void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, Ten
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
       static_cast<const float *>(incoming.data_ptr()),
       static_cast<__nv_bfloat16 *>(collapsed.data_ptr()));
+  check_cuda(cudaGetLastError());
+}
+
+void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, TensorView scale,
+                TensorView base, TensorView mixed, TensorView post, TensorView comb,
+                TensorView collapsed, TensorView next_pre, TensorView flat, TensorView statistics,
+                TensorView blas_workspace) {
+  TVM_FFI_ICHECK(residual.ndim() == 3);
+  hc_prepare_grouped(residual, incoming, weight, scale, base, mixed, post, comb, collapsed,
+                     next_pre, flat, statistics, blas_workspace, residual.size(0));
+}
+
+void fp32_project(TensorView values, TensorView weight, TensorView output,
+                  TensorView blas_workspace, int64_t logical_rows) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 32768);
+  TVM_FFI_ICHECK(weight.ndim() == 2 && (weight.size(0) == 128 || weight.size(0) == 384));
+  int rows = values.size(0), outputs = weight.size(0);
+  TVM_FFI_ICHECK(logical_rows >= 0 && logical_rows <= rows &&
+                 (!logical_rows || rows % logical_rows == 0))
+      << "projection logical rows must divide the physical rows";
+  tensor_contract(values, values, kDLFloat, 32, {rows, width});
+  tensor_contract(weight, values, kDLFloat, 32, {outputs, width});
+  tensor_contract(output, values, kDLFloat, 32, {rows, outputs});
+  tensor_contract(blas_workspace, values, kDLUInt, 8, {workspace_size(rows)});
+  TVM_FFI_ICHECK(reinterpret_cast<uintptr_t>(blas_workspace.data_ptr()) % 256 == 0);
+  separate({values, weight, output, blas_workspace});
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  auto blas = hc_projection::bind(values.device().device_id, blas_workspace, stream);
+  hc_projection::multiply(blas, static_cast<const float *>(values.data_ptr()),
+                          static_cast<const float *>(weight.data_ptr()),
+                          static_cast<float *>(output.data_ptr()), rows, width, outputs,
+                          logical_rows ? static_cast<int>(logical_rows) : rows);
   check_cuda(cudaGetLastError());
 }
 

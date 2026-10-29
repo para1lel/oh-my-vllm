@@ -17,9 +17,11 @@ from .indexing import INDEX_SCORE_WORK_BYTES, score_chunks
 from .kernel import (
     NATIVE_ROW_LIMIT,
     act_quant,
+    engram_mix,
     fp4_act_quant,
     fp4_gemm,
     fp8_gemm,
+    fp32_project,
     hc_expand,
     hc_prepare,
     hc_split_sinkhorn,
@@ -342,9 +344,9 @@ class RMSNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, *, logical_rows=0):
         dtype = x.dtype
-        return rms(x, self.weight, self.eps).to(dtype)
+        return rms(x, self.weight, self.eps, logical_rows=logical_rows).to(dtype)
 
 
 class ParallelEngramEmbedding(nn.Module):
@@ -430,28 +432,22 @@ class Engram(nn.Module):
         x: torch.Tensor,
         hash_ids: torch.Tensor,
         token_mask: torch.Tensor | None = None,
+        *,
+        logical_rows=0,
     ) -> torch.Tensor:
         """x: [B, L, hc_mult, dim]; hash_ids: [B, L, n_hash_cols]; token_mask: [B, L], False shuts
         the gate so those positions pass through untouched."""
         kv = self.wkv(self.embed(hash_ids).flatten(-2))
-        key, value = kv.split([self.hc_mult * self.dim, self.dim], dim=-1)
-        key = key.float().unflatten(-1, (self.hc_mult, self.dim))
-        weight = (
-            self.q_weight.float() * self.k_weight.float()
-        )  # only ever used as a product
-        h, eps = x.float(), self.eps
-        # normalized per (token, hc copy) over `dim`, NOT jointly over the copies
-        rstd = torch.rsqrt(h.square().mean(-1) + eps) * torch.rsqrt(
-            key.square().mean(-1) + eps
+        return engram_mix(
+            x,
+            kv,
+            self.q_weight,
+            self.k_weight,
+            token_mask,
+            epsilon=self.eps,
+            clamp_value=self.clamp_value,
+            logical_rows=logical_rows,
         )
-        dot = (h * weight * key).sum(-1) * rstd * self.dim**-0.5
-        # signed sqrt before the sigmoid, matching the training kernel
-        gate = torch.sigmoid(
-            torch.copysign(dot.abs().clamp_min(self.clamp_value).sqrt(), dot)
-        )
-        if token_mask is not None:
-            gate = gate.masked_fill(~token_mask.unsqueeze(-1), 0)
-        return (h + gate.unsqueeze(-1) * value.float().unsqueeze(-2)).to(x.dtype)
 
 
 @lru_cache(2)
@@ -585,13 +581,15 @@ class Compressor(nn.Module):
         x: torch.Tensor,
         start_pos: int,
         cache_slots: torch.Tensor | None = None,
+        *,
+        logical_rows=0,
     ) -> torch.Tensor | None:
         bsz, _, _ = x.size()
         if cache_slots is None:
             cache_slots = torch.arange(bsz, device=x.device)
         ratio, dtype = self.compress_ratio, x.dtype
         if ratio == 1:  # one token per group: nothing to pool, so no gate and no fp32
-            return self.norm(self.wkv(x))
+            return self.norm(self.wkv(x), logical_rows=logical_rows)
 
         x = x.float()
         kv, score = self.wkv(x), self.wgate(x)
@@ -612,7 +610,7 @@ class Compressor(nn.Module):
         kv = kv[:, :complete].unflatten(1, (-1, ratio))
         score = score[:, :complete].unflatten(1, (-1, ratio))
         kv = (kv * score.softmax(dim=2)).sum(dim=2)
-        return self.norm(kv.to(dtype))
+        return self.norm(kv.to(dtype), logical_rows=logical_rows)
 
 
 class Indexer(torch.nn.Module):
@@ -674,6 +672,8 @@ class Indexer(torch.nn.Module):
         start_pos: int,
         offset: int,
         cache_slots: torch.Tensor | None = None,
+        *,
+        logical_rows=0,
     ):
         """`latent` is this layer's RoPE-free compressed latent, None when this layer does not
         compress or when its current group is still incomplete. An index-key owner turns it into
@@ -693,7 +693,7 @@ class Indexer(torch.nn.Module):
                 freqs = self.freqs_cis[
                     group_start : group_start + latent.size(1) * ratio : ratio
                 ]
-                k = self.k_norm(self.wk(latent))
+                k = self.k_norm(self.wk(latent), logical_rows=logical_rows)
                 apply_rotary_emb(k[..., -rd:], freqs)
                 fp4_act_quant(k, fp4_block_size, True)
                 self.k_cache[
@@ -873,12 +873,17 @@ class Attention(nn.Module):
         self.freqs_cis: torch.Tensor
         self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
-    def _window_kv(self, x, freqs_cis, start_pos, cache_slots):
+    def _window_kv(self, x, freqs_cis, start_pos, cache_slots, *, logical_rows=0):
         """This layer's sliding-window K and the window positions every query may attend to. The K
         stays fp8, quantized over the whole post-RoPE vector, RoPE tail included."""
         bsz, seqlen, _ = x.size()
         win = self.window_size
-        kv = self.kv_norm(self.wkv(x))
+        projected = self.wkv(x)
+        kv = (
+            self.kv_norm(projected, logical_rows=logical_rows)
+            if logical_rows
+            else self.kv_norm(projected)
+        )
         apply_rotary_emb(kv[..., -self.rope_head_dim :], freqs_cis)
         act_quant(kv, fp8_block_size, scale_fmt, scale_dtype, True)
         export = getattr(self, "_state_export", None)
@@ -929,7 +934,16 @@ class Attention(nn.Module):
         return window_kv, topk_idxs.to(x.device)
 
     def _compress_topk_idxs(
-        self, x, qr, latent, start_pos, offset, compress_len, cache_slots
+        self,
+        x,
+        qr,
+        latent,
+        start_pos,
+        offset,
+        compress_len,
+        cache_slots,
+        *,
+        logical_rows=0,
     ):
         """Which compressed positions each query attends to. Index sources run their own indexer;
         the layers in between reuse the result their source published."""
@@ -943,11 +957,13 @@ class Attention(nn.Module):
             assert self.indexer is not None
             if self.indexer.freqs_cis is None:
                 self.indexer.freqs_cis = self.freqs_cis
-            idxs = self.indexer(x, qr, latent, start_pos, offset, cache_slots)
+            idxs = self.indexer(
+                x, qr, latent, start_pos, offset, cache_slots, logical_rows=logical_rows
+            )
         shared_attn.topk_idxs = idxs
         return idxs
 
-    def _compress_kv(self, x, qr, start_pos, offset, cache_slots):
+    def _compress_kv(self, x, qr, start_pos, offset, cache_slots, *, logical_rows=0):
         """The shared compressed KV and the compressed positions every query may attend to. This
         layer compresses its own KV only when it is a source; otherwise it just reads the cache."""
         _, seqlen, _ = x.size()
@@ -955,10 +971,19 @@ class Attention(nn.Module):
         compress_len = (start_pos + seqlen) // ratio
         latent = None
         if self.is_kv_source:
-            latent = self.compressor(x, start_pos, cache_slots)
+            latent = self.compressor(
+                x, start_pos, cache_slots, logical_rows=logical_rows
+            )
         # the indexer needs the latent before RoPE, so it runs before the cache is written
         idxs = self._compress_topk_idxs(
-            x, qr, latent, start_pos, offset, compress_len, cache_slots
+            x,
+            qr,
+            latent,
+            start_pos,
+            offset,
+            compress_len,
+            cache_slots,
+            logical_rows=logical_rows,
         )
         if latent is not None:
             # a latent stands for the first token of its group, so group j takes position j * ratio
@@ -984,6 +1009,8 @@ class Attention(nn.Module):
         x: torch.Tensor,
         start_pos: int,
         cache_slots: torch.Tensor | None = None,
+        *,
+        logical_rows=0,
     ):
         bsz, seqlen, _ = x.size()
         if cache_slots is None:
@@ -991,16 +1018,18 @@ class Attention(nn.Module):
         freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
         rd = self.rope_head_dim
 
-        qr = self.q_norm(self.wq_a(x))
+        qr = self.q_norm(self.wq_a(x), logical_rows=logical_rows)
         q = self.wq_b(qr).unflatten(-1, (self.n_local_heads, self.head_dim))
         apply_rotary_emb(q[..., -rd:], freqs_cis)
 
-        kv, topk_idxs = self._window_kv(x, freqs_cis, start_pos, cache_slots)
+        kv, topk_idxs = self._window_kv(
+            x, freqs_cis, start_pos, cache_slots, logical_rows=logical_rows
+        )
         native_window = kv
         native_compressed = kv.new_empty((bsz, 0, self.head_dim))
         if self.compress_ratio:
             compress_kv, compress_idxs = self._compress_kv(
-                x, qr, start_pos, kv.size(1), cache_slots
+                x, qr, start_pos, kv.size(1), cache_slots, logical_rows=logical_rows
             )
             native_compressed = compress_kv
             kv = None
@@ -1048,10 +1077,24 @@ class Gate(nn.Module):
         )
 
     def forward(
-        self, x: torch.Tensor, image_mask: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        image_mask: torch.Tensor | None = None,
+        *,
+        logical_rows=0,
+        blas_workspace=None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """x: [n, dim]; image_mask: [n] bool, True for tokens inside an image span."""
-        logits = linear(x.float(), self.weight.float()) / self.gate_temp
+        if logical_rows:
+            logits = fp32_project(
+                x.float(),
+                self.weight.float(),
+                logical_rows=logical_rows,
+                workspace=blas_workspace,
+            )
+        else:
+            logits = linear(x.float(), self.weight.float())
+        logits = logits / self.gate_temp
         if (
             x.is_cuda
             and self.score_func == "sqrtsoftplus"
@@ -1247,11 +1290,11 @@ class MoE(nn.Module):
         return local_tokens, routed
 
     def _forward_rows(
-        self, x: torch.Tensor, image_mask: torch.Tensor | None = None
+        self, x: torch.Tensor, image_mask: torch.Tensor | None = None, *, routing=None
     ) -> torch.Tensor:
-        weights, indices = self.gate(
-            x, None if image_mask is None else image_mask.flatten()
-        )
+        if routing is None:
+            routing = self.gate(x, None if image_mask is None else image_mask.flatten())
+        weights, indices = routing
         y = torch.zeros_like(x, dtype=torch.float32)
         flat_indices = indices.flatten()
         order = torch.argsort(flat_indices)
@@ -1293,20 +1336,39 @@ class MoE(nn.Module):
         return y.type_as(x)
 
     def forward(
-        self, x: torch.Tensor, image_mask: torch.Tensor | None = None
+        self,
+        x: torch.Tensor,
+        image_mask: torch.Tensor | None = None,
+        *,
+        logical_rows=0,
+        blas_workspace=None,
     ) -> torch.Tensor:
         shape = x.size()
         rows = x.view(-1, self.dim)
         mask = None if image_mask is None else image_mask.flatten()
+        routing = (
+            self.gate(
+                rows, mask, logical_rows=logical_rows, blas_workspace=blas_workspace
+            )
+            if logical_rows
+            else None
+        )
         if rows.size(0) <= MAX_MOE_ROWS:
+            if routing is not None:
+                return self._forward_rows(rows, mask, routing=routing).view(shape)
             return self._forward_rows(rows, mask).view(shape)
         output = torch.empty_like(rows)
         for first in range(0, rows.size(0), MAX_MOE_ROWS):
             last = min(first + MAX_MOE_ROWS, rows.size(0))
-            output[first:last] = self._forward_rows(
-                rows[first:last],
-                None if mask is None else mask[first:last],
-            )
+            chunk_mask = None if mask is None else mask[first:last]
+            if routing is None:
+                output[first:last] = self._forward_rows(rows[first:last], chunk_mask)
+            else:
+                output[first:last] = self._forward_rows(
+                    rows[first:last],
+                    chunk_mask,
+                    routing=(routing[0][first:last], routing[1][first:last]),
+                )
         return output.view(shape)
 
 
@@ -1358,9 +1420,24 @@ class Block(nn.Module):
         hc_fn: torch.Tensor,
         hc_scale: torch.Tensor,
         hc_base: torch.Tensor,
+        *,
+        logical_rows=0,
     ):
         """x: [b,s,hc,d], hc_fn: [mix_hc, hc*d], hc_scale: [3], hc_base: [mix_hc]. Returns the
         pre / post / comb coefficients, split out of one projection of the flattened stream."""
+        if logical_rows:
+            if logical_rows != x.size(0):
+                raise ValueError("HC logical rows must match the request batch")
+            values = [
+                self.hc_mixes(
+                    x[:, step : step + 1].contiguous(), hc_fn, hc_scale, hc_base
+                )
+                for step in range(x.size(1))
+            ]
+            return tuple(
+                torch.cat([value[index] for value in values], dim=1)
+                for index in range(3)
+            )
         # normalized over the whole flattened hc*d stream, one statistic per token
         x = x.flatten(2).float()
         rsqrt = torch.rsqrt(x.square().mean(-1, keepdim=True) + self.norm_eps)
@@ -1395,12 +1472,14 @@ class Block(nn.Module):
         pre_mix: torch.Tensor,
         image_mask: torch.Tensor | None,
         *attn_args,
+        logical_rows=0,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """`pre_mix` collapses the hc_mult copies down to one input for this block's attention. Each
         sub-block's own `hc_mixes` produces the mix for the *next* one, so attention uses what the
         previous layer's FFN produced and the FFN uses what this attention produced.
 
         image_mask: [b, s] bool, True inside image spans (selects the VL routing bias)."""
+        options = {"logical_rows": logical_rows} if logical_rows else {}
         if (
             x.is_cuda
             and x.dtype == torch.bfloat16
@@ -1438,9 +1517,10 @@ class Block(nn.Module):
                 self.hc_attn_base,
                 workspace=workspace,
                 next_pre=next_pre_a,
+                logical_rows=logical_rows,
             )
-            x = self.attn_norm(x)
-            x = self.attn(x, start_pos, *attn_args)
+            x = self.attn_norm(x, **options)
+            x = self.attn(x, start_pos, *attn_args, **options)
             x = hc_expand(
                 residual,
                 x,
@@ -1459,9 +1539,18 @@ class Block(nn.Module):
                 self.hc_ffn_base,
                 workspace=workspace,
                 next_pre=next_pre_b,
+                logical_rows=logical_rows,
             )
-            x = self.ffn_norm(x)
-            x = self.ffn(x, image_mask)
+            x = self.ffn_norm(x, **options)
+            if logical_rows:
+                x = self.ffn(
+                    x,
+                    image_mask,
+                    logical_rows=logical_rows,
+                    blas_workspace=None if workspace is None else workspace["blas"],
+                )
+            else:
+                x = self.ffn(x, image_mask)
             x = hc_expand(
                 residual,
                 x,
@@ -1474,20 +1563,20 @@ class Block(nn.Module):
 
         residual = x
         attn_pre, attn_post, attn_comb = self.hc_mixes(
-            x, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base
+            x, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base, **options
         )
         x = self.hc_pre(x, pre_mix)
-        x = self.attn_norm(x)
-        x = self.attn(x, start_pos, *attn_args)
+        x = self.attn_norm(x, **options)
+        x = self.attn(x, start_pos, *attn_args, **options)
         x = self.hc_post(x, residual, attn_post, attn_comb)
 
         residual = x
         ffn_pre, ffn_post, ffn_comb = self.hc_mixes(
-            x, self.hc_ffn_fn, self.hc_ffn_scale, self.hc_ffn_base
+            x, self.hc_ffn_fn, self.hc_ffn_scale, self.hc_ffn_base, **options
         )
         x = self.hc_pre(x, attn_pre)
-        x = self.ffn_norm(x)
-        x = self.ffn(x, image_mask)
+        x = self.ffn_norm(x, **options)
+        x = self.ffn(x, image_mask, **options)
         x = self.hc_post(x, residual, ffn_post, ffn_comb)
         return x, ffn_pre
 
@@ -1886,6 +1975,10 @@ class Transformer(nn.Module):
             self.merge_image_embeddings(images, h)
         # Expand to hc_mult copies for Hyper-Connections
         h = h.unsqueeze(2).repeat(1, 1, self.hc_mult, 1)
+        logical_rows = (
+            input_ids.size(0) if start_pos > 0 and input_ids.size(1) > 1 else 0
+        )
+        options = {"logical_rows": logical_rows} if logical_rows else {}
         main_hiddens = []
         pre_mix = make_identity_pre_mix(h, self.hc_mult)
         for i, layer in enumerate(self.layers):
@@ -1894,15 +1987,18 @@ class Transformer(nn.Module):
                     h,
                     engram_hashes[:, :, layer.engram.layer_hash_index, :],
                     engram_mask,
+                    **options,
                 )
             # the MTP head reads the attention input of its target layers, not their output
             if collect_main_hidden and i in self.target_layer_ids:
                 main_hiddens.append(h.mean(dim=2))
-            h, pre_mix = layer(h, start_pos, pre_mix, image_mask, cache_slots)
+            h, pre_mix = layer(
+                h, start_pos, pre_mix, image_mask, cache_slots, **options
+            )
         h = layer.hc_pre(h, pre_mix)
         if compute_logits:
             logits = self.head(
-                self.norm(h),
+                self.norm(h, **options),
                 full_logits=full_logits,
                 logit_start=logit_start,
             )

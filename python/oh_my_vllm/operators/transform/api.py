@@ -3,6 +3,27 @@
 RMS parameters contain original BF16 weights, without an offset. RoPE parameters
 contain FP32 cosine/sine pairs for each row, shared by its attention heads.
 RMS values have shape (rows, width); RoPE values have shape (rows, heads, width).
+RMS width is 128, 512, 1024, 1280, or 5120. Epsilon is 1e-20 or 1e-6.
+rms_grouped(values, weight, output, epsilon, logical_rows) keeps the RMS
+arithmetic of logical_rows source rows but writes all physical rows. Nonempty
+values require positive logical_rows that divides the physical row count.
+Empty values require logical_rows == 0. rms retains physical-row selection.
+
+engram(residual, kv, q_weight, k_weight, token_mask, output, logical_rows)
+uses contiguous BF16 residual/output (rows, 4, 5120), kv (rows, 25600), and
+q_weight/k_weight (4, 5120). rows is at most 32768. All base addresses must
+be 16-byte aligned and on the same CUDA device. Output must not overlap any
+input. token_mask is contiguous U8 (rows,) with canonical bytes 0 or 1, or
+U8 (0,) for all valid rows. A zero mask selects source arithmetic with a
+positive-zero gate, including its signed-zero multiply and add behavior.
+logical_rows counts token rows, not HC copies. Zero selects the physical row
+count. Otherwise it must be positive, at most rows, and divide rows. Empty
+values require zero. Mean and dot reductions use 4 * logical_rows source
+rows; the grid writes every physical token and HC copy. The native operation
+uses epsilon 1e-20 and clamp 1e-6. It allocates no device workspace and does
+not synchronize. Metadata errors raise before launch. The caller retains all
+buffers through Eager completion or graph release.
+
 Inputs must be finite and bounded
 so FP32 intermediate values and BF16 outputs remain finite.
 Retain inputs through Eager completion or graph release.
@@ -40,7 +61,7 @@ through Eager completion or graph release.
 
 from typing import NamedTuple
 
-FUNCTIONS = ("rms", "rope", "quantize")
+FUNCTIONS = ("rms", "rope", "quantize", "rms_grouped", "engram")
 
 
 class Inputs(NamedTuple):

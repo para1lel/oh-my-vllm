@@ -4,6 +4,7 @@ import json
 import struct
 import tempfile
 import unittest
+import weakref
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -922,14 +923,81 @@ class DeepSeekOperatorContracts(unittest.TestCase):
                 pointer = weight.data_ptr()
                 storage_pointer = weight.untyped_storage().data_ptr()
                 expected = weight.view(torch.uint8).clone()
-                key = (pointer, scales.data_ptr(), bits, weight.device.index)
                 kernel._packed_weight(weight, scales, bits)
+                key = next(iter(kernel._PACKED_WEIGHTS))
                 del weight, scales
                 gc.collect()
-                retained = kernel._PACKED_WEIGHTS[key][0]
+                retained = kernel._PACKED_WEIGHTS[key].packed[0]
                 self.assertEqual(retained.data_ptr(), pointer)
                 self.assertEqual(retained.untyped_storage().data_ptr(), storage_pointer)
                 torch.testing.assert_close(retained, expected)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_cache_keeps_original_owners_for_padded_weights(self):
+        with patch.dict(kernel._PACKED_WEIGHTS, clear=True):
+            weight, scales = projection_weight(4, 32, 64, offset=0)
+            weight_reference, scales_reference = (
+                weakref.ref(weight),
+                weakref.ref(scales),
+            )
+            packed = kernel._packed_weight(weight, scales, 4)
+            self.assertNotEqual(packed[0].data_ptr(), weight.data_ptr())
+            self.assertNotEqual(packed[1].data_ptr(), scales.data_ptr())
+            torch.cuda.synchronize()
+            del weight, scales
+            gc.collect()
+            self.assertIsNotNone(weight_reference())
+            self.assertIsNotNone(scales_reference())
+            self.assertIs(
+                kernel._packed_weight(weight_reference(), scales_reference(), 4), packed
+            )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_cache_does_not_reuse_different_source_views(self):
+        with patch.dict(kernel._PACKED_WEIGHTS, clear=True):
+            weight, scales = projection_weight(4, 64, 64, offset=0)
+            small = kernel._packed_weight(weight[:32], scales[:32], 4)
+            full = kernel._packed_weight(weight, scales, 4)
+            self.assertEqual(full[0].size(0), 64)
+            self.assertIsNot(small, full)
+            self.assertIs(kernel._packed_weight(weight[:32], scales[:32], 4), small)
+            with self.assertRaisesRegex(Exception, "Check failed"):
+                kernel._packed_weight(weight, scales[:32], 4)
+            self.assertIs(kernel._packed_weight(weight, scales, 4), full)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_cache_keeps_warmed_views_for_graph_replay(self):
+        from tests.test_projection_precision import fp4_literal
+
+        encoded, scales, weight, weight_scales, factors = fp4_literal(1)
+
+        def run(outputs):
+            return kernel.fp4_gemm(
+                encoded,
+                scales,
+                weight[:outputs],
+                weight_scales[:outputs],
+                torch.float8_e8m0fnu,
+                act_block_size=32,
+            )
+
+        with patch.dict(kernel._PACKED_WEIGHTS, clear=True):
+            run(64)
+            run(128)
+            graph = torch.cuda.CUDAGraph()
+            try:
+                with torch.cuda.graph(graph):
+                    output = run(64)
+                run(128)
+                output.fill_(-7)
+                graph.replay()
+                torch.cuda.synchronize()
+                torch.testing.assert_close(
+                    output, (factors[:, :64] * 648).bfloat16(), rtol=0, atol=0
+                )
+            finally:
+                torch.cuda.synchronize()
+                graph.reset()
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_projection_packing_keeps_incompatible_values_separate(self):

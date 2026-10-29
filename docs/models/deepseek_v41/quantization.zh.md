@@ -34,7 +34,7 @@ E2M1 magnitude code `0` 至 `7` 表示 `0, 0.5, 1, 1.5, 2, 3, 4, 6`.
 
 In-place 调用先将归一化数值舍入到所选格式, 再反量化.
 结果转回输入 dtype.
-Encoded 调用返回 E4M3 数值或 packed E2M1 byte, 并单独返回 scale.
+Encoded 调用返回 E4M3 数值或 packed E2M1 byte, 并在不同的 storage 中返回 scale.
 FP4 encoded storage 的宽度是逻辑宽度的一半.
 
 FP4 projection 的 activation 使用 FP8, 而不是 FP4.
@@ -116,13 +116,27 @@ Column sum 使用 XOR offset `8, 4`.
 HC collapse 对每个 FP32 product 先舍入, 再从左向右求和.
 HC expansion 先按该顺序对已舍入的 residual product 求和.
 在 residual sum 之后, 加上单独舍入的 branch product.
-在这些求和中, 保持 FP32 multiplication 和 addition 分离.
+在这些求和中, 对 FP32 multiplication 和 addition 独立舍入.
 
-HC mixing 使用四个独立的 FP32 accumulator 累加 squared input.
+HC mixing 在四个 FP32 accumulator 中独立累加 squared input.
 完整逻辑 row 数决定 reduction layout.
 在 FP32 projection 之后应用 inverse RMS.
 Native projection 使用 tensor runtime 的 cuBLAS library 和 caller 拥有的 32 MiB workspace.
 这个 workspace 大小是数值契约的一部分.
+
+## Target row group
+
+Initial target prefill, single-token target call 和 MTP 保持现有的 row layout.
+Nonzero multi-token target call 保持 batch-major `[batch, step, ...]` storage.
+其 logical row count 为 request batch size.
+HC 和 router FP32 projection 对每个 source step 使用这个 row count.
+其 SGEMM call 直接写入 strided physical output storage.
+
+RMS 按 logical row count 选择 mean reduction layout, 并处理所有 physical row.
+Engram 使用 token logical row count 的四倍, 执行每份 copy 的 mean 和 dot reduction.
+在其最终 residual addition 中, 对 FP32 multiplication 和 addition 独立舍入.
+Engram embedding, KV projection, target attention 和 routed expert computation 保持批量执行.
+Router 可以在 HC projection 完成后使用 HC cuBLAS workspace.
 
 ## 执行
 
@@ -140,25 +154,33 @@ Small-row workspace plan 保留 384-row 限制.
 Native manifest 记录 tensor runtime package 的 cuBLAS library image 和 header identity.
 
 Tensor preparation 可以生成一个对齐的 contiguous input copy.
-Encoded output 和 scale 使用独立 storage.
+Encoded output 和 scale 使用不同的 storage.
 
 Dense projection 不使用 device scratch storage.
 Grouped projection 使用 device row offset, 不上传 host descriptor.
 每个 device count 必须在零与准备的最大行数之间.
 这些 count 的总和必须等于完整输入行数.
 无效 device count 生成 NaN output, 且不访问 input 或 weight.
+
 Prepared weight storage 必须保持有效, 直到执行完成或 Graph 释放.
+Prepared cache entry 保留原始 weight 和 scale 的 owner, 而不只是其地址.
+Source view 的 dtype, shape 或 stride 不同时, 使用不同的 prepared entry.
+准备完成后, 不要改变 weight 或 scale.
 
 Host metadata failure 在 launch 之前发生.
 无效 device value 或 scale 产生无效 scale code.
 Native attention 在接受 output 之前检查这些 code.
 Input 必须产生 interface 规定的有限 reconstruction result.
 
-Native attention 中的 window KV 和 compressed KV 保持分离.
+Native attention 将 window KV 和 compressed KV 保存在两张 table 中.
 Attention call 不量化这些 BF16 table.
 算子也接受 encoded table 及其 scale array.
 Reference path 在计算之前连接两张 BF16 table.
-Short-query native selection 和 attention status fallback 保留现有规则.
+
+Native sparse attention 是 supported input 的默认路径.
+设置 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0`, 为 short query 选择 reference attention.
+除非发生 native status failure, 否则 long query 保持 native selection.
+Attention status failure 禁用 native selection, 并使用 reference path.
 
 ## 验收
 

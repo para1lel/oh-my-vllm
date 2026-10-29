@@ -6,6 +6,7 @@ model construction and small reference cases usable before a workspace is attach
 
 import os
 from collections import OrderedDict
+from typing import NamedTuple
 
 import torch
 import torch.nn.functional as F
@@ -26,9 +27,15 @@ _GROUPED_POINTERS = OrderedDict()
 _GROUPED_POINTER_CACHE_LIMIT = 128
 NATIVE_ROW_LIMIT = 384
 _SPARSE_NATIVE_DISABLED = (
-    os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "0") != "1"
+    os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "1") != "1"
 )
 _SPARSE_NATIVE_FAILED = False
+
+
+class _PackedWeightCacheEntry(NamedTuple):
+    packed: tuple
+    raw_weight: object
+    raw_scales: object
 
 
 def _native_available(x):
@@ -109,10 +116,17 @@ def _scale_bytes(rows, width):
 
 
 def _packed_weight(weight, scales, bits):
-    key = (weight.data_ptr(), scales.data_ptr(), bits, weight.device.index)
-    packed = _PACKED_WEIGHTS.get(key)
-    if packed is not None:
-        return packed
+    key = (
+        weight.data_ptr(),
+        scales.data_ptr(),
+        bits,
+        weight.device.index,
+        (weight.dtype, weight.shape, weight.stride()),
+        (scales.dtype, scales.shape, scales.stride()),
+    )
+    cached = _PACKED_WEIGHTS.get(key)
+    if cached is not None:
+        return cached.packed
     module = _projection_module()
     raw_weight = weight.view(torch.uint8)
     raw_scales = scales.view(torch.uint8)
@@ -138,7 +152,7 @@ def _packed_weight(weight, scales, bits):
     )
     module.pack_weights(raw_weight, raw_scales, packed_weight, packed_scales, bits)
     packed = (packed_weight, packed_scales, width)
-    _PACKED_WEIGHTS[key] = packed
+    _PACKED_WEIGHTS[key] = _PackedWeightCacheEntry(packed, weight, scales)
     return packed
 
 
@@ -322,30 +336,175 @@ def grouped_fp4_gemm(
     return values.new_empty((0, weights[0][0].size(0)), dtype=output_dtype)
 
 
-def rms(values, weight, epsilon):
+def _logical_row_count(rows, logical_rows):
+    if (
+        type(logical_rows) is not int
+        or not 0 <= logical_rows <= rows
+        or (logical_rows and rows % logical_rows)
+    ):
+        raise ValueError("logical row count must divide the physical row count")
+    return logical_rows or rows
+
+
+def _source_steps(values, logical_rows, operation):
+    if logical_rows == values.size(0):
+        return operation(values)
+    grouped = values.unflatten(0, (logical_rows, -1))
+    return torch.stack(
+        [operation(grouped[:, step].contiguous()) for step in range(grouped.size(1))],
+        dim=1,
+    ).flatten(0, 1)
+
+
+def fp32_project(values, weight, *, logical_rows=0, workspace=None):
+    if values.ndim != 2 or weight.ndim != 2 or values.size(1) != weight.size(1):
+        raise ValueError("FP32 projection inputs must be compatible matrices")
+    rows = values.size(0)
+    source_rows = _logical_row_count(rows, logical_rows)
+    if (
+        values.is_cuda
+        and weight.device == values.device
+        and values.dtype == weight.dtype == torch.float32
+        and values.size(1) == 5120
+        and weight.size(0) in (128, 384)
+        and values.is_contiguous()
+        and weight.is_contiguous()
+    ):
+        module = _hyperconnection_module()
+        if workspace is None:
+            workspace = torch.empty(
+                module.workspace_size(rows), dtype=torch.uint8, device=values.device
+            )
+            module.hc_warmup(values)
+        output = torch.empty(
+            (rows, weight.size(0)), dtype=torch.float32, device=values.device
+        )
+        module.fp32_project(values, weight, output, workspace, logical_rows)
+        return output
+    return _source_steps(
+        values.float(), source_rows, lambda x: F.linear(x, weight.float())
+    )
+
+
+def rms(values, weight, epsilon, *, logical_rows=0):
     """Apply RMS normalization with the native full-width path when available."""
+    rows = values.numel() // values.size(-1)
+    source_rows = _logical_row_count(rows, logical_rows)
     if (
         values.is_cuda
         and values.dtype == torch.bfloat16
         and weight.dtype == torch.bfloat16
-        and values.size(-1) in (512, 1024, 1280, 5120)
+        and values.size(-1) in (128, 512, 1024, 1280, 5120)
         and values.is_contiguous()
         and weight.is_contiguous()
         and weight.device == values.device
     ):
         shape = values.shape
-        rows = values.numel() // values.size(-1)
         inputs = values.reshape(rows, values.size(-1))
         if not inputs.is_contiguous():
             inputs = inputs.contiguous()
         output = torch.empty_like(inputs)
-        _transform_module().rms(inputs, weight, output, epsilon)
+        if logical_rows:
+            _transform_module().rms_grouped(
+                inputs, weight, output, epsilon, logical_rows
+            )
+        else:
+            _transform_module().rms(inputs, weight, output, epsilon)
         return output.reshape(shape)
-    normalized = values.float()
-    normalized = normalized * torch.rsqrt(
-        normalized.square().mean(-1, keepdim=True) + epsilon
+
+    def normalize(x):
+        value = x * torch.rsqrt(x.square().mean(-1, keepdim=True) + epsilon)
+        return value * weight.float()
+
+    output = _source_steps(
+        values.float().reshape(rows, values.size(-1)), source_rows, normalize
     )
-    return (normalized * weight.float()).to(values.dtype)
+    return output.to(values.dtype).reshape(values.shape)
+
+
+def _engram_reference(
+    residual, kv, q_weight, k_weight, token_mask, epsilon, clamp_value
+):
+    copies, width = residual.shape[-2:]
+    key, value = kv.split([copies * width, width], dim=-1)
+    key = key.float().unflatten(-1, (copies, width))
+    weight = q_weight.float() * k_weight.float()
+    hidden = residual.float()
+    inverse = torch.rsqrt(hidden.square().mean(-1) + epsilon) * torch.rsqrt(
+        key.square().mean(-1) + epsilon
+    )
+    dot = (hidden * weight * key).sum(-1) * inverse * width**-0.5
+    gate = torch.sigmoid(torch.copysign(dot.abs().clamp_min(clamp_value).sqrt(), dot))
+    if token_mask is not None:
+        gate = gate.masked_fill(~token_mask.unsqueeze(-1), 0)
+    return (hidden + gate.unsqueeze(-1) * value.float().unsqueeze(-2)).to(
+        residual.dtype
+    )
+
+
+def engram_mix(
+    residual,
+    kv,
+    q_weight,
+    k_weight,
+    token_mask=None,
+    *,
+    epsilon=1e-20,
+    clamp_value=1e-6,
+    logical_rows=0,
+):
+    copies, width = residual.shape[-2:]
+    rows = residual.numel() // (copies * width)
+    source_rows = _logical_row_count(rows, logical_rows)
+    hidden = residual.reshape(rows, copies, width)
+    projected = kv.reshape(rows, (copies + 1) * width)
+    mask = None if token_mask is None else token_mask.reshape(rows)
+    inputs = (residual, kv, q_weight, k_weight)
+    if (
+        logical_rows
+        and copies == 4
+        and width == 5120
+        and epsilon == 1e-20
+        and clamp_value == 1e-6
+        and all(
+            value.is_cuda
+            and value.device == residual.device
+            and value.dtype == torch.bfloat16
+            and value.is_contiguous()
+            for value in inputs
+        )
+    ):
+        native_mask = (
+            hidden.view(torch.uint8).flatten()[:0]
+            if mask is None
+            else mask.to(dtype=torch.uint8).contiguous()
+        )
+        output = torch.empty_like(hidden)
+        _transform_module().engram(
+            hidden, projected, q_weight, k_weight, native_mask, output, logical_rows
+        )
+        return output.reshape(residual.shape)
+    if source_rows == rows:
+        return _engram_reference(
+            hidden, projected, q_weight, k_weight, mask, epsilon, clamp_value
+        ).reshape(residual.shape)
+    steps = rows // source_rows
+    hidden = hidden.unflatten(0, (source_rows, steps))
+    projected = projected.unflatten(0, (source_rows, steps))
+    mask = None if mask is None else mask.unflatten(0, (source_rows, steps))
+    output = [
+        _engram_reference(
+            hidden[:, step].contiguous(),
+            projected[:, step].contiguous(),
+            q_weight,
+            k_weight,
+            None if mask is None else mask[:, step],
+            epsilon,
+            clamp_value,
+        )
+        for step in range(steps)
+    ]
+    return torch.stack(output, dim=1).reshape(residual.shape)
 
 
 def _projection_gemm(a, a_s, b, b_s, bits, output_dtype=torch.bfloat16):
@@ -484,12 +643,17 @@ def hc_prepare(
     *,
     workspace=None,
     next_pre=None,
+    logical_rows=0,
 ):
     """Collapse one mHC residual and prepare the coefficients for expansion.
 
     The native path uses the released DeepSeek shape.
     The reference path keeps CPU checks independent of the native module.
     """
+    if residual.size(-2) != 4 or residual.size(-1) < 1:
+        raise ValueError("DeepSeek mHC residual must contain four nonempty copies")
+    rows = residual.numel() // (4 * residual.size(-1))
+    source_rows = _logical_row_count(rows, logical_rows)
     if not (
         _hc_native_available(residual, incoming_pre, projection, scale, base)
         and incoming_pre.dtype == torch.float32
@@ -497,15 +661,18 @@ def hc_prepare(
         and scale.dtype == torch.float32
         and base.dtype == torch.float32
     ):
-        if residual.size(-2) != 4:
-            raise ValueError("DeepSeek mHC residual must contain four copies")
         width = residual.size(-1)
         leading = residual.shape[:-2]
         flat_residual = residual.float().reshape(-1, 4, width)
         incoming = incoming_pre.float().reshape(-1, 4)
         flat = flat_residual.flatten(1)
-        mixes = F.linear(flat, projection.float()) * torch.rsqrt(
-            flat.square().mean(-1, keepdim=True) + 1e-20
+        mixes = _source_steps(
+            flat,
+            source_rows,
+            lambda x: (
+                F.linear(x, projection.float())
+                * torch.rsqrt(x.square().mean(-1, keepdim=True) + 1e-20)
+            ),
         )
         pre, post, comb = hc_split_sinkhorn(
             mixes, scale.float(), base.float(), hc_mult=4, sinkhorn_iters=20, eps=1e-6
@@ -521,7 +688,6 @@ def hc_prepare(
         )
 
     leading = residual.shape[:-2]
-    rows = residual.numel() // (4 * 5120)
     residual_rows = residual.reshape(rows, 4, 5120)
     incoming_rows = incoming_pre.reshape(rows, 4)
     if not residual_rows.is_contiguous():
@@ -562,6 +728,8 @@ def hc_prepare(
             raise ValueError("DeepSeek mHC pre-mix workspace is incompatible")
         next_pre = next_pre[:rows]
     module = _hyperconnection_module()
+    prepare = module.hc_prepare_grouped if logical_rows else module.hc_prepare
+    grouping = (logical_rows,) if logical_rows else ()
     if rows > NATIVE_ROW_LIMIT:
         mixed = torch.empty((rows, 24), dtype=torch.float32, device=residual.device)
         flat = torch.empty((rows, 20480), dtype=torch.float32, device=residual.device)
@@ -570,7 +738,7 @@ def hc_prepare(
             (module.workspace_size(rows),), dtype=torch.uint8, device=residual.device
         )
         module.hc_warmup(collapsed)
-        module.hc_prepare(
+        prepare(
             residual_rows,
             incoming_rows,
             projection,
@@ -584,9 +752,10 @@ def hc_prepare(
             flat,
             statistics,
             blas,
+            *grouping,
         )
     else:
-        module.hc_prepare(
+        prepare(
             residual_rows,
             incoming_rows,
             projection,
@@ -600,6 +769,7 @@ def hc_prepare(
             workspace["flat"][:rows],
             workspace["statistics"][:rows],
             workspace["blas"][: module.workspace_size(rows)],
+            *grouping,
         )
     return (
         collapsed.reshape(*leading, 5120),

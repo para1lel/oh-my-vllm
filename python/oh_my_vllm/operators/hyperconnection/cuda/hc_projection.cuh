@@ -52,6 +52,24 @@ inline cublasHandle_t handle(int device, cudaStream_t stream) {
   return found->second->handle;
 }
 
+inline cublasHandle_t bind(int device, TensorView workspace, cudaStream_t stream) {
+  auto blas = handle(device, stream);
+  check_blas(cublasSetStream(blas, stream));
+  check_blas(cublasSetWorkspace(blas, workspace.data_ptr(), BlasBytes));
+  return blas;
+}
+
+inline void multiply(cublasHandle_t blas, const float *input, const float *weight, float *output,
+                     int rows, int width, int outputs, int logical_rows) {
+  int steps = rows / logical_rows;
+  float alpha = 1.f, beta = 0.f;
+  // A step keeps its source SGEMM shape without copying batch-major inputs.
+  for (int step = 0; step < steps; ++step)
+    check_blas(cublasSgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, outputs, logical_rows, width, &alpha,
+                           weight, width, input + step * width, steps * width, &beta,
+                           output + step * outputs, steps * outputs));
+}
+
 template <int X>
 __global__ void prepare_kernel(const __nv_bfloat16 *residual, float *flat, float *statistics) {
   constexpr int Y = 512 / X;
@@ -111,15 +129,14 @@ void prepare(const __nv_bfloat16 *input, float *flat, float *statistics, int row
 }
 
 inline void project(TensorView residual, TensorView weight, TensorView mixed, TensorView flat,
-                    TensorView statistics, TensorView workspace, int rows, cudaStream_t stream) {
-  auto blas = handle(residual.device().device_id, stream);
-  check_blas(cublasSetStream(blas, stream));
-  check_blas(cublasSetWorkspace(blas, workspace.data_ptr(), BlasBytes));
+                    TensorView statistics, TensorView workspace, int rows, int logical_rows,
+                    cudaStream_t stream) {
+  auto blas = bind(residual.device().device_id, workspace, stream);
   auto input = static_cast<const __nv_bfloat16 *>(residual.data_ptr());
   auto values = static_cast<float *>(flat.data_ptr());
   auto stats = static_cast<float *>(statistics.data_ptr());
   int height = 1;
-  while (height < 16 && height * 2 <= rows)
+  while (height < 16 && height * 2 <= logical_rows)
     height *= 2;
   // The complete logical row count selects the released reduction tree.
   switch (height) {
@@ -140,10 +157,8 @@ inline void project(TensorView residual, TensorView weight, TensorView mixed, Te
     break;
   }
   check_cuda(cudaGetLastError());
-  float alpha = 1.f, beta = 0.f;
-  check_blas(cublasSgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, Mixes, rows, FlatWidth, &alpha,
-                         static_cast<const float *>(weight.data_ptr()), FlatWidth, values,
-                         FlatWidth, &beta, static_cast<float *>(mixed.data_ptr()), Mixes));
+  multiply(blas, values, static_cast<const float *>(weight.data_ptr()),
+           static_cast<float *>(mixed.data_ptr()), rows, FlatWidth, Mixes, logical_rows);
   normalize_kernel<<<(rows * Mixes + 255) / 256, 256, 0, stream>>>(
       static_cast<float *>(mixed.data_ptr()), stats, rows);
   check_cuda(cudaGetLastError());

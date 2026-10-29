@@ -3,6 +3,7 @@
 #include <cuda_fp8.h>
 #include <limits>
 #include "../../runtime/cuda/contracts.cuh"
+#include "engram.cuh"
 
 namespace {
 
@@ -243,19 +244,29 @@ void quantize(TensorView values, TensorView output, TensorView scales, int64_t b
   check_cuda(cudaGetLastError());
 }
 
-void rms(TensorView values, TensorView weight, TensorView output, double epsilon) {
+namespace {
+
+void rms_impl(TensorView values, TensorView weight, TensorView output, double epsilon,
+              int64_t logical_rows, bool grouped) {
   values_contract(values, output);
-  TVM_FFI_ICHECK(values.size(1) == 512 || values.size(1) == 1024 || values.size(1) == 1280 ||
-                 values.size(1) == 5120);
+  TVM_FFI_ICHECK(values.size(1) == 128 || values.size(1) == 512 || values.size(1) == 1024 ||
+                 values.size(1) == 1280 || values.size(1) == 5120);
   TVM_FFI_ICHECK(epsilon == 1e-20 || epsilon == 1e-6);
+  TVM_FFI_ICHECK(values.size(0) <= std::numeric_limits<int>::max());
   int rows = values.size(0), width = values.size(1);
+  if (grouped) {
+    TVM_FFI_ICHECK(rows ? logical_rows > 0 && logical_rows <= rows && rows % logical_rows == 0
+                        : logical_rows == 0);
+  } else {
+    logical_rows = rows;
+  }
   tensor_contract(weight, values, kDLBfloat, 16, {width});
   disjoint(weight, output);
   if (!rows)
     return;
   tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
-  switch (rms_threads(rows, width)) {
+  switch (rms_threads(static_cast<int>(logical_rows), width)) {
   case 32:
     launch_rms<32>(values, weight, output, rows, width / 2, epsilon, stream);
     break;
@@ -270,6 +281,57 @@ void rms(TensorView values, TensorView weight, TensorView output, double epsilon
     break;
   case 512:
     launch_rms<512>(values, weight, output, rows, width / 2, epsilon, stream);
+    break;
+  }
+  check_cuda(cudaGetLastError());
+}
+
+} // namespace
+
+void rms(TensorView values, TensorView weight, TensorView output, double epsilon) {
+  rms_impl(values, weight, output, epsilon, 0, false);
+}
+
+void rms_grouped(TensorView values, TensorView weight, TensorView output, double epsilon,
+                 int64_t logical_rows) {
+  rms_impl(values, weight, output, epsilon, logical_rows, true);
+}
+
+void engram(TensorView residual, TensorView kv, TensorView q_weight, TensorView k_weight,
+            TensorView token_mask, TensorView output, int64_t logical_rows) {
+  TVM_FFI_ICHECK(residual.ndim() == 3 && residual.size(0) >= 0 && residual.size(0) <= 32768);
+  int rows = residual.size(0);
+  TVM_FFI_ICHECK(residual.device().device_id >= 0);
+  TVM_FFI_ICHECK(rows ? logical_rows >= 0 && logical_rows <= rows &&
+                            (logical_rows == 0 || rows % logical_rows == 0)
+                      : logical_rows == 0);
+  tensor_contract(residual, residual, kDLBfloat, 16, {rows, 4, 5120});
+  tensor_contract(kv, residual, kDLBfloat, 16, {rows, 25600});
+  tensor_contract(q_weight, residual, kDLBfloat, 16, {4, 5120});
+  tensor_contract(k_weight, residual, kDLBfloat, 16, {4, 5120});
+  tensor_contract(output, residual, kDLBfloat, 16, {rows, 4, 5120});
+  TVM_FFI_ICHECK(token_mask.ndim() == 1 && (token_mask.size(0) == 0 || token_mask.size(0) == rows));
+  tensor_contract(token_mask, residual, kDLUInt, 8, {token_mask.size(0)});
+  disjoint(residual, output);
+  disjoint(kv, output);
+  disjoint(q_weight, output);
+  disjoint(k_weight, output);
+  if (token_mask.size(0))
+    disjoint(token_mask, output);
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(residual.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, residual.device().device_id));
+  int threads = rms_threads(4 * static_cast<int>(logical_rows ? logical_rows : rows), 5120);
+  switch (threads) {
+  case 32:
+    launch_engram<32>(residual, kv, q_weight, k_weight, token_mask, output, rows, stream);
+    break;
+  case 64:
+    launch_engram<64>(residual, kv, q_weight, k_weight, token_mask, output, rows, stream);
+    break;
+  case 128:
+    launch_engram<128>(residual, kv, q_weight, k_weight, token_mask, output, rows, stream);
     break;
   }
   check_cuda(cudaGetLastError());

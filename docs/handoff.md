@@ -43,7 +43,7 @@ Native routing keeps the released softplus and selected-score sum order.
 
 In-place quantization rounds before dequantization.
 The native quantizer writes encoded values and scales without context-sized temporary tensors.
-Native attention uses separate window and compressed KV tables.
+Native attention keeps window and compressed KV in two tables.
 It reads the model's BF16 tables without quantization.
 The reference path joins their tables before computation.
 
@@ -55,20 +55,25 @@ Sinkhorn mixing adds epsilon before the first column normalization.
 Native mHC keeps the released product, sum, and row-count-dependent mean order.
 Its FP32 projection uses the tensor runtime's cuBLAS images and an explicit 32 MiB workspace.
 Prepared HC workspaces keep FP32 input and statistics storage for Eager or Graph execution.
+Nonzero target chunks keep source-step projection and reduction layouts.
+Their target attention and MoE execution stay batched.
+Native Engram arithmetic uses the logical request batch for its per-copy reductions.
+
 Sparse attention rounds unnormalized probabilities to BF16 in ordered 64-slot blocks before multiplication by V.
 Its denominator uses the released cross-warp sum order and FMA.
 The sink enters the denominator after these blocks and does not change their running maximum.
 
 An independent development reference uses official MP4 placement and a recorded quantizer synchronization patch.
-Frozen text fixtures contain complete vocabulary vectors, DSpark5 proposal and verification vectors, and fresh accepted-only restoration endpoints.
-The current candidate does not satisfy these text endpoint checks.
+Frozen text fixtures contain full vocabulary vectors, DSpark5 proposal and verification vectors, and fresh accepted-only restoration endpoints.
+TP4 does not satisfy these text endpoint checks.
 
 Sparse attention status failures disable the native path and use the reference path.
-Short-query native sparse attention is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
+Native sparse attention is the default for supported inputs.
+Set `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0` to select reference attention for short queries.
 Long queries use native sparse attention because the reference path scales poorly.
 
 DeepSeek token pages keep compressed KV, index keys, and Engram history across request slots.
-Accepted-state pages keep target windows, MTP windows, and compressor tails at an exact endpoint.
+Accepted-state pages keep target windows, MTP windows, and compressor tails at the accepted endpoint.
 Cache operations support logical block store, load, drop, partial prefix copy, and
 page-backed host snapshots.
 
@@ -84,7 +89,7 @@ TP4 and TEP4 FP4 routed experts use native grouped projection for
 the two up projections and the down projection.
 Multi-rank TP4 down projections keep FP32 partial sums through routed accumulation and rank reduction.
 Up projections and TEP4 down projections keep BF16 output.
-Single-rank grouped down projections return complete BF16 expert outputs.
+Single-rank grouped down projections return full BF16 expert outputs.
 
 Grouped projection calculates row offsets on the device and does not upload host descriptors.
 The grouped path keeps the local token order and falls back to the reference
@@ -93,14 +98,15 @@ The MoE processes at most 1024 token rows per routed expert batch.
 Static packed-expert pointer arrays use a bounded LRU cache.
 
 Native projections share compatible encoded weight storage.
-Packed scales and padded weights keep separate storage.
+Packed scales and padded weights use different storage.
+Prepared cache entries keep their original weight and scale owners.
 DEP4 still uses the TEP4 executor fallback and has no rank-owned dispatch.
 
 Non-final prefill skips the vocabulary projection.
 DSpark keeps only the target hidden tail needed by its MTP window.
 Ordinary execution does not collect target hidden states.
 
-Complete initial prompts can run as one aligned request batch.
+Full initial prompts can run as one aligned request batch.
 Shared query attention state resets at each target call.
 Index sources always publish the cache view for the current request slots.
 Compressed KV sources publish selected slots after the current cache write.
@@ -129,7 +135,7 @@ Rank-local parameters use 16-byte-aligned contiguous storage.
 GPU startup copies required tensor ranges from each safetensors shard through a
 bounded staging buffer and skips unused Engram payload ranges.
 Set `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` to override this startup setting.
-External startup traces use `OH_MY_VLLM_STARTUP_TRACE` and use a separate location from the repository.
+External startup traces use `OH_MY_VLLM_STARTUP_TRACE` and use a location external to the repository.
 
 ## Current evidence
 
@@ -166,20 +172,20 @@ The rank-local weight load took about 19-20 seconds, and the service had zero re
 The approved DeepSeek workload definitions are available in [deepseek matrix](../development/serving/deepseek_matrix.py).
 The HTTP runner defines 36 DSpark5 cases and 2 ordinary TP4 cases.
 The AgentX runner defines TP4/4, TEP4/16, and DEP4/64 cases.
-No complete approved HTTP or AgentX result set is recorded yet.
+No full result set is recorded for approved HTTP or AgentX workloads.
 CodeGraph 1.6.2 is installed in Codex.
 This repository has a local CodeGraph index and ignores `.codegraph/`.
 
 ## Next work
 
-- Measure exact-endpoint window storage with the approved long-context workloads.
+- Measure window storage at each state endpoint with the approved long-context workloads.
 - Measure persistent encoded KV storage against direct BF16 table reads.
-- Define explicit ownership for raw weights and padded projection copies.
+- Measure raw and prepared projection storage before long-context capacity tuning.
 - Correct candidate differences against the independent frozen DeepSeek text endpoints before performance acceptance.
-- Do a check of the complete TP4 K32 accumulation and rank reduction order against the reference.
+- Do a check of the full TP4 K32 accumulation and rank reduction order against the reference.
 - Reduce duplicate cuBLAS workspace storage before long-context capacity tuning.
 - Add independent image endpoints before image acceptance.
-- Keep the configured context limit separate from the observed AgentX request lengths.
+- Report the configured context limit and the observed AgentX request lengths independently.
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
 - Add per-request varlen position metadata and batch decode before DeepSeek CUDA Graph capture.
 - Run higher-capacity AgentX cases after increasing physical cache and sequence capacity.
@@ -192,5 +198,5 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 - Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
 - Get an independent code review before delivery.
 
-Keep raw reports, host settings, model paths, and temporary process records in a separate location.
-Use `LOCAL.md` for host settings.
+Keep raw reports and temporary process records external to the repository.
+Put host settings and model paths in `LOCAL.md`.

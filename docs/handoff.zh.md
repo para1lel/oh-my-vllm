@@ -44,7 +44,7 @@ Native routing 保持发布参考的 softplus 和 selected-score sum 顺序.
 
 In-place quantization 先舍入再反量化.
 Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 temporary tensor.
-Native attention 使用独立的 window KV 和 compressed KV table.
+Native attention 将 window KV 和 compressed KV 保存在两张 table 中.
 它读取模型的 BF16 table, 不执行量化.
 Reference path 在计算之前合并这些 table.
 
@@ -56,20 +56,25 @@ Sinkhorn mixing 在第一次 column normalization 之前加上 epsilon.
 Native mHC 保持发布参考的 product, sum 和取决于 row 数的 mean 顺序.
 其 FP32 projection 使用 tensor runtime 的 cuBLAS image 和显式 32 MiB workspace.
 Prepared HC workspace 为 Eager 或 Graph execution 保留 FP32 input 和 statistics storage.
+Nonzero target chunk 保持 source-step projection 和 reduction layout.
+其 target attention 和 MoE execution 保持批量执行.
+Native Engram arithmetic 使用 logical request batch 执行每份 copy 的 reduction.
+
 Sparse attention 按顺序处理 64-slot block, 在与 V 相乘之前将未归一化的 probability 舍入到 BF16.
 其 denominator 使用发布参考的 cross-warp sum 顺序和 FMA.
 这些 block 完成后, sink 才计入 denominator, 不改变它们的 running maximum.
 
 独立的 development reference 使用官方 MP4 placement, 并记录 quantizer synchronization patch.
 冻结的 text fixture 包含完整 vocabulary vector, DSpark5 proposal 和 verification vector, 以及全新 accepted-only 重放的 restoration endpoint.
-当前 candidate 不满足这些 text endpoint 检查.
+TP4 不满足这些 text endpoint 检查.
 
 sparse attention status failure 会禁用 native path, 并使用 reference path.
-short query 的 native sparse attention 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
+Native sparse attention 是 supported input 的默认路径.
+设置 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0`, 为 short query 选择 reference attention.
 long query 使用 native sparse attention, 因为 reference path 的扩展性较差.
 
 DeepSeek token page 在 request slot 之间保存 compressed KV, index key 和 Engram history.
-Accepted-state page 在精确的 endpoint 保存 target window, MTP window 和 compressor tail.
+Accepted-state page 在 accepted endpoint 保存 target window, MTP window 和 compressor tail.
 cache operation 支持 logical block store, load, drop, partial prefix copy 和
 page-backed host snapshot.
 
@@ -94,7 +99,8 @@ MoE 每个 routed expert batch 最多处理 1024 个 token row.
 Static packed-expert pointer array 使用有界的 LRU cache.
 
 Native projection 共享兼容的 encoded weight storage.
-Packed scale 和 padded weight 保留独立的 storage.
+Packed scale 和 padded weight 使用不同的 storage.
+Prepared cache entry 保留其原始 weight 和 scale 的 owner.
 DEP4 仍使用 TEP4 executor fallback, 还没有 rank-owned dispatch.
 
 非 final prefill 会跳过 vocabulary projection.
@@ -130,7 +136,7 @@ rank-local parameter 使用 16-byte aligned contiguous storage.
 GPU startup 通过 bounded staging buffer 从每个 safetensors shard copy 所需
 tensor range, 并跳过未使用的 Engram payload range.
 设置 `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` 可以覆盖此 startup setting.
-外部 startup trace 使用 `OH_MY_VLLM_STARTUP_TRACE`, 并使用与 repository 分开的 location.
+外部 startup trace 使用 `OH_MY_VLLM_STARTUP_TRACE`, 并使用 repository 外部的 location.
 
 ## 当前证据
 
@@ -166,20 +172,20 @@ rank-local weight load 约用时 19-20 秒, service 没有 worker replacement.
 [DeepSeek matrix](../development/serving/deepseek_matrix.py) 中有批准的 workload definition.
 HTTP runner 定义 36 个 DSpark5 case 和 2 个 ordinary TP4 case.
 AgentX runner 定义 TP4/4, TEP4/16 和 DEP4/64 case.
-当前还没有记录完整的 approved HTTP 或 AgentX result set.
+批准的 HTTP 或 AgentX workload 尚未记录完整的 result set.
 CodeGraph 1.6.2 已安装到 Codex.
 repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 
 ## 下一步
 
-- 在 approved long-context workload 中测量 exact-endpoint window storage.
+- 在 approved long-context workload 中测量每个 state endpoint 的 window storage.
 - 比较 persistent encoded KV storage 与直接 BF16 table read 的测量结果.
-- 为 raw weight 和 padded projection copy 定义明确的 ownership.
+- 在 long-context capacity 调整前, 测量 raw 和 prepared projection storage.
 - 在 performance acceptance 之前修正 candidate 与独立 DeepSeek text frozen endpoint 的差异.
 - 按 reference 检查完整的 TP4 K32 accumulation 和 rank reduction 顺序.
 - 在 long-context capacity 调整之前, 减少重复的 cuBLAS workspace storage.
 - 在 image acceptance 之前增加独立的 image endpoint.
-- 将配置的 context limit 与观测到的 AgentX request length 分开记录.
+- 分别报告配置的 context limit 和观测到的 AgentX request length.
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
 - 在 DeepSeek CUDA Graph capture 之前增加 per-request varlen position metadata 和 batch decode.
 - 增加 physical cache 和 sequence capacity 后, 运行更高容量的 AgentX case.
@@ -192,5 +198,5 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 - 在 GPU 0 以外的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
 - 交付前取得 independent code review.
 
-原始报告, host settings, model paths 和临时 process records 保留在 repository 外.
-host settings 放在 `LOCAL.md` 中.
+原始报告和临时 process records 保留在 repository 外部.
+Host settings 和 model paths 放在 `LOCAL.md` 中.
