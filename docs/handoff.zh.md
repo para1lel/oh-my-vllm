@@ -39,6 +39,10 @@ Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 
 Native attention 使用独立的 window KV 和 compressed KV table.
 Reference path 在计算之前合并这些 table.
 
+独立的 development reference 使用官方 MP4 placement, 并记录 quantizer synchronization patch.
+冻结的 text fixture 包含完整 vocabulary vector, DSpark5 proposal 和 verification vector, 以及全新 accepted-only 重放的 restoration endpoint.
+当前 candidate 不满足这些 text endpoint 检查.
+
 sparse attention status failure 会禁用 native path, 并使用 reference path.
 short query 的 native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
 long query 使用 native sparse packing, 因为 reference path 的扩展性较差.
@@ -145,7 +149,8 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 - 在 approved long-context workload 中测量 exact-endpoint window storage.
 - 在 consumer 之间复用 encoded KV, 避免重复转换完整 context 的格式.
 - 为 raw weight 和 padded projection copy 定义明确的 ownership.
-- 在 full-model numerical acceptance 之前增加独立的 DeepSeek endpoint frozen fixture.
+- 在 performance acceptance 之前修正 candidate 与独立 DeepSeek text frozen endpoint 的差异.
+- 在 image acceptance 之前增加独立的 image endpoint.
 - 将配置的 context limit 与观测到的 AgentX request length 分开记录.
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
 - 在 DeepSeek CUDA Graph capture 之前增加 per-request varlen position metadata 和 batch decode.

@@ -1,3 +1,4 @@
+import math
 import unittest
 from dataclasses import replace
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
 from oh_my_vllm.models.deepseek_v41.model import (
     Attention,
     Compressor,
+    Gate,
     ModelArgs,
     MoE,
     ParallelEngramEmbedding,
@@ -21,6 +23,32 @@ from oh_my_vllm.models.deepseek_v41.model import (
 
 
 class DeepSeekModel(unittest.TestCase):
+    def test_router_keeps_float32_projection_before_expert_selection(self):
+        args = ModelArgs(
+            dim=2,
+            n_routed_experts=6,
+            n_activated_experts=3,
+            route_scale=1.5,
+            score_func="sqrtsoftplus",
+            vision_n_layers=0,
+        )
+        gate = Gate(0, args)
+        gate.weight = torch.nn.Parameter(
+            torch.tensor(
+                [[1, 1 / 256], [1, 0], [2, 0], [3, 0], [-1, 0], [-2, 0]],
+                dtype=torch.bfloat16,
+            )
+        )
+        with torch.no_grad():
+            gate.bias.zero_()
+        weights, indices = gate(torch.ones((1, 2), dtype=torch.bfloat16))
+        scores = [math.sqrt(math.log1p(math.exp(value))) for value in (3, 2, 257 / 256)]
+        expected = torch.tensor(
+            [[value / sum(scores) * 1.5 for value in scores]], dtype=torch.float32
+        )
+        self.assertTrue(torch.equal(indices, torch.tensor([[3, 2, 0]])))
+        torch.testing.assert_close(weights, expected, rtol=2e-7, atol=2e-7)
+
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_lazy_cache_keeps_empty_context_storage_dense(self):
         from oh_my_vllm.models.deepseek_v41.storage import sequence_cache

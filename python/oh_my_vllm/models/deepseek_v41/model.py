@@ -1038,7 +1038,7 @@ class Gate(nn.Module):
         self, x: torch.Tensor, image_mask: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """x: [n, dim]; image_mask: [n] bool, True for tokens inside an image span."""
-        logits = linear(x, self.weight) / self.gate_temp
+        logits = linear(x.float(), self.weight.float()) / self.gate_temp
         if (
             x.is_cuda
             and self.score_func == "sqrtsoftplus"

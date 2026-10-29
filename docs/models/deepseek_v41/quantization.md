@@ -43,6 +43,9 @@ Each 128-channel activation scale repeats across four native groups.
 Reference FP8 projection expands weight scales across row and column groups.
 FP32 scale inputs use the reference projection path, not the native UE8M0 byte interface.
 
+The [router](../../../python/oh_my_vllm/models/deepseek_v41/model.py) projects inputs and weights in FP32 before score calculation.
+Do not round router logits to BF16 before expert selection.
+
 ## Execution
 
 The [model quantizer](../../../python/oh_my_vllm/models/deepseek_v41/quantization.py) selects the native BF16 path or reference computation.
@@ -69,3 +72,18 @@ The [quantization checks](../../../tests/test_deepseek_quantization.py) use inde
 They check scale rules, nearest-even ties, signed zero, exponent boundaries, and projection scale groups.
 CUDA cases check stream order, invalid metadata, empty history, and temporary storage bounds.
 These checks do not replace independent full-model endpoint fixtures or the approved HTTP and AgentX workloads.
+
+## Reference execution
+
+Use an isolated development environment for the released TileLang reference.
+Do not add TileLang to inference dependencies.
+With this quantizer source, TileLang 0.1.8 can reuse input shared storage before all input stores complete.
+Use a CUDA block barrier before each reference quantizer writes its output shared storage.
+Add `T.sync_threads()` immediately before `T.copy(y_local, y_shared)` in `act_quant_kernel` and `fp4_quant_kernel`.
+Do not change the equations, casts, or original checkpoint files.
+
+Record the original source, patch, modified source, compiler, and runtime identities in each reference manifest.
+Check packed and in-place formats with Compute Sanitizer Racecheck before you generate expected arrays.
+Do not freeze arrays unless repeated target and DSpark endpoints are bit-exact.
+Identify this backend as a reference with a synchronization patch, not an unmodified release.
+Do not import candidate modules to generate expected arrays.

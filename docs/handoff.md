@@ -39,6 +39,10 @@ The native quantizer writes encoded values and scales without context-sized temp
 Native attention uses separate window and compressed KV tables.
 The reference path joins their tables before computation.
 
+An independent development reference uses official MP4 placement and a recorded quantizer synchronization patch.
+Frozen text fixtures contain complete vocabulary vectors, DSpark5 proposal and verification vectors, and fresh accepted-only restoration endpoints.
+The current candidate does not satisfy these text endpoint checks.
+
 Sparse attention status failures disable the native path and use the reference path.
 Short-query native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
 Long queries use native sparse packing because the reference path scales poorly.
@@ -146,7 +150,8 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 - Measure exact-endpoint window storage with the approved long-context workloads.
 - Reuse encoded KV across consumers without repeated full-context format conversion.
 - Define explicit ownership for raw weights and padded projection copies.
-- Add independent frozen DeepSeek endpoint fixtures before full-model numerical acceptance.
+- Correct candidate differences against the independent frozen DeepSeek text endpoints before performance acceptance.
+- Add independent image endpoints before image acceptance.
 - Keep the configured context limit separate from the observed AgentX request lengths.
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
 - Add per-request varlen position metadata and batch decode before DeepSeek CUDA Graph capture.
