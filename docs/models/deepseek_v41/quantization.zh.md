@@ -43,7 +43,11 @@ Native projection 使用每 32 个 channel 一组的 activation scale.
 Reference FP8 projection 沿 row 和 column group 两个维度展开 weight scale.
 FP32 scale 输入使用 reference projection path, 而不是 native UE8M0 byte interface.
 
-Dense FP8 projection 使用 raw K32 dot product 和 FP32 accumulator.
+Dense 和 grouped projection 使用 raw K32 dot product 和 FP32 accumulator.
+FP4 weight 在每个 raw dot 前精确转换为 FP8.
+FP4 weight scale 应用于每个输出行.
+FP8 weight scale 应用于 32 行组.
+
 每个 raw dot 从零开始.
 执行 `scaled = mul_rn(raw_dot, activation_scale)`.
 执行 `sum = fma_rn(scaled, weight_scale, sum)`.
@@ -121,7 +125,14 @@ Native manifest 记录 tensor runtime package 的 cuBLAS library image 和 heade
 Tensor preparation 可以生成一个对齐的 contiguous input copy.
 Encoded output 和 scale 使用独立 storage.
 
-Metadata failure 在 launch 之前发生.
+Dense projection 不使用 device scratch storage.
+Grouped projection 使用 device row offset, 不上传 host descriptor.
+每个 device count 必须在零与准备的最大行数之间.
+这些 count 的总和必须等于完整输入行数.
+无效 device count 生成 NaN output, 且不访问 input 或 weight.
+Prepared weight storage 必须保持有效, 直到执行完成或 Graph 释放.
+
+Host metadata failure 在 launch 之前发生.
 无效 device value 或 scale 产生无效 scale code.
 Native attention 在接受 output 之前检查这些 code.
 Input 必须产生 interface 规定的有限 reconstruction result.

@@ -34,7 +34,8 @@ Native SwiGLU 支持最多 1048576 个 routed row.
 DeepSeek rank worker 为 prefill input copy 复用 pinned host 和 device token buffer.
 
 DeepSeek 使用发布模型的 FP4 和 FP8 scale rule, 并对数值使用最近偶数舍入.
-Dense FP8 projection 在 scale multiplication 和 FP32 accumulation 之前, 为每个 K32 group 重置 raw dot product.
+Dense 和 grouped projection 在 scale multiplication 和 FP32 accumulation 之前, 为每个 K32 group 重置 raw dot product.
+FP4 weight 在 raw dot 前精确转换为 FP8.
 
 Native RMS 保持发布参考的 square-sum reduction 和 reciprocal multiplication 顺序.
 Native routing 保持发布参考的 softplus 和 selected-score sum 顺序.
@@ -74,8 +75,9 @@ target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以�
 aligned prefill batch 最多使用四个 request 组成一个 subbatch.
 
 MoE dispatch 只对 sorted routed row 做一次 gather, 并为 local expert 重用 slice.
-TP4 和 TEP4 的 FP4 routed expert 使用 CUTLASS pointer-array grouped GEMM
+TP4 和 TEP4 的 FP4 routed expert 使用 native grouped projection
 执行两个 up projection 和一个 down projection.
+Grouped projection 在 device 上计算 row offset, 不上传 host descriptor.
 Grouped path 保持 local token order, 对 non-FP4 weight 和 test expert
 回退到 reference expert loop.
 MoE 每个 routed expert batch 最多处理 1024 个 token row.

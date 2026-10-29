@@ -43,7 +43,11 @@ Each 128-channel activation scale repeats across four native groups.
 Reference FP8 projection expands weight scales across row and column groups.
 FP32 scale inputs use the reference projection path, not the native UE8M0 byte interface.
 
-Dense FP8 projections use raw K32 dot products with FP32 accumulators.
+Dense and grouped projections use raw K32 dot products with FP32 accumulators.
+FP4 weights convert accurately to FP8 before each raw dot.
+FP4 weight scales apply to each output row.
+FP8 weight scales apply to 32-row groups.
+
 Start each raw dot at zero.
 Apply `scaled = mul_rn(raw_dot, activation_scale)`.
 Apply `sum = fma_rn(scaled, weight_scale, sum)`.
@@ -121,7 +125,14 @@ The native manifest records cuBLAS library image and header identities for the t
 Tensor preparation can make an aligned contiguous input copy.
 Encoded output and scales have separate storage.
 
-Metadata failures occur before launch.
+Dense projection does not use device scratch storage.
+Grouped projection uses device row offsets without host descriptor uploads.
+Each device count must be between zero and the prepared maximum row count.
+The counts must sum to the full input row count.
+Invalid device counts produce NaN output without input or weight access.
+Prepared weight storage must stay valid until execution completes or the Graph is released.
+
+Host metadata failures occur before launch.
 Invalid device values or scales produce invalid scale codes.
 Native attention checks these codes before it accepts the output.
 Inputs must have finite reconstruction results, as specified by the interface.

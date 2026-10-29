@@ -6,9 +6,14 @@ are prepared once outside capture; their stored values stay unchanged.
 Dense project accepts BF16 or FP32 output storage. FP32 output keeps partial
 sums for a later rank reduction. Grouped project keeps BF16 output storage.
 The dense workspace query covers both output types.
-Dense FP8 resets its raw FP32 dot for each K32 group, then applies the
-activation scale with MUL and the weight scale with FMA into the running
-sum. It reads prepared weight scales and needs no device scratch.
+Dense and grouped projections reset the raw FP32 dot for each K32 group.
+The activation scale uses MUL. The weight scale uses FMA into the running
+sum. FP4 values convert accurately to FP8 before the raw dot. FP4 weight scales
+apply to each output row; FP8 weight scales apply to 32-row groups.
+Dense projection needs no device scratch. Grouped scratch holds device row
+offsets, rounded to 16 bytes. Device counts must be within max_rows and sum
+to the input rows; otherwise, the output is NaN. Host metadata and storage overlap
+failures occur before launch. Grouped calls do not upload host descriptors.
 """
 
 from typing import NamedTuple

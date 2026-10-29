@@ -34,7 +34,8 @@ This keeps six-route 8192-row prefill chunks on the native activation path.
 DeepSeek rank workers reuse pinned host and device token buffers for prefill input copies.
 
 DeepSeek uses the released FP4 and FP8 scale rules and nearest-even value rounding.
-Dense FP8 projections reset raw dot products for each K32 group before scale multiplication and FP32 accumulation.
+Dense and grouped projections reset raw dot products for each K32 group before scale multiplication and FP32 accumulation.
+FP4 weights convert accurately to FP8 before the raw dot.
 
 Native RMS keeps the released square-sum reduction and reciprocal multiplication order.
 Native routing keeps the released softplus and selected-score sum order.
@@ -74,8 +75,9 @@ Target and MTP seed chunks keep the total native rows below the operator limit.
 Aligned prefill batches use subbatches of at most four requests.
 
 MoE dispatch gathers sorted routed rows once and reuses slices for local experts.
-TP4 and TEP4 FP4 routed experts use a CUTLASS pointer-array grouped GEMM for
+TP4 and TEP4 FP4 routed experts use native grouped projection for
 the two up projections and the down projection.
+Grouped projection calculates row offsets on the device and does not upload host descriptors.
 The grouped path keeps the local token order and falls back to the reference
 expert loop for non-FP4 weights and test experts.
 The MoE processes at most 1024 token rows per routed expert batch.
