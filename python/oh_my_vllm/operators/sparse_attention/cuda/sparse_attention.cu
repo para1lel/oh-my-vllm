@@ -9,7 +9,7 @@
 
 namespace {
 
-constexpr int SharedBytes = (16 * 512 + 64 * 512 + 16 * 64) * 2 + 2 * 8 * 16 * 4 + 64 * 4;
+constexpr int SharedBytes = (16 * 512 + 64 * 512 + 16 * 64) * 2 + (8 * 16 + 2 * 256) * 4 + 64 * 4;
 
 __device__ __forceinline__ int address(int row, int column, int stride) {
   return row * stride + (column ^ ((row & 7) * 8));
@@ -59,6 +59,7 @@ __device__ void reject(__nv_bfloat16 *output, uint8_t *status) {
     *status = 1;
 }
 
+template <bool Bf16Tables>
 __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, const int32_t *indices,
                               const uint8_t *window, const uint8_t *window_scales,
                               const uint8_t *compressed, const uint8_t *compressed_scales,
@@ -70,7 +71,7 @@ __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, con
   auto *p = kv + 64 * 512;
   auto *maxima = reinterpret_cast<float *>(p + 16 * 64);
   auto *sums = maxima + 8 * 16;
-  auto *ids = reinterpret_cast<int32_t *>(sums + 8 * 16);
+  auto *ids = reinterpret_cast<int32_t *>(sums + 2 * 256);
   int row = blockIdx.x, head = blockIdx.y * 16;
   int lane = threadIdx.x % 32, warp = threadIdx.x / 32;
   int fr = lane / 4, fc = (lane % 4) * 2;
@@ -101,10 +102,19 @@ __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, con
       reject(output, status);
       return;
     }
+    if (__syncthreads_count(threadIdx.x < 64 && ids[threadIdx.x] >= 0) == 0)
+      continue;
     for (int i = threadIdx.x; i < 64 * 512; i += blockDim.x) {
       int id = ids[i / 512], channel = i % 512;
       float restored = 0.f;
-      if (id >= 0 && id < window_rows) {
+      if constexpr (Bf16Tables) {
+        if (id >= 0) {
+          const auto *table =
+              reinterpret_cast<const __nv_bfloat16 *>(id < window_rows ? window : compressed);
+          int64_t index = id < window_rows ? id : id - window_rows;
+          restored = __bfloat162float(table[index * 512 + channel]);
+        }
+      } else if (id >= 0 && id < window_rows) {
         uint8_t code = window[int64_t(id) * 512 + channel];
         uint8_t scale = window_scales[int64_t(id) * 16 + channel / 32];
         invalid |= (code & 127) == 127 || scale == 255;
@@ -154,7 +164,7 @@ __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, con
       reject(output, status);
       return;
     }
-    float alpha[2];
+    float alpha[2], block_sum[2];
 #pragma unroll
     for (int rg = 0; rg < 2; ++rg) {
       int r = fr + rg * 8;
@@ -171,18 +181,25 @@ __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, con
         sum += probability;
         p[address(r, warp * 8 + fc + j, 64)] = __float2bfloat16_rn(probability);
       }
-      sum += __shfl_xor_sync(0xffffffff, sum, 1);
-      sum += __shfl_xor_sync(0xffffffff, sum, 2);
-      if (lane % 4 == 0)
-        sums[warp * 16 + r] = sum;
+      block_sum[rg] = sum;
     }
-    __syncthreads();
+    // Both independent row groups use the same cross-warp barriers.
+#pragma unroll
+    for (int offset = 128; offset >= 32; offset >>= 1) {
+      sums[threadIdx.x] = block_sum[0];
+      sums[256 + threadIdx.x] = block_sum[1];
+      __syncthreads();
+      block_sum[0] = __fadd_rn(block_sum[0], sums[threadIdx.x ^ offset]);
+      block_sum[1] = __fadd_rn(block_sum[1], sums[256 + (threadIdx.x ^ offset)]);
+      if (offset != 32)
+        __syncthreads();
+    }
 #pragma unroll
     for (int rg = 0; rg < 2; ++rg) {
-      denominator[rg] *= alpha[rg];
-#pragma unroll
-      for (int w = 0; w < 8; ++w)
-        denominator[rg] += sums[w * 16 + fr + rg * 8];
+      float sum = block_sum[rg];
+      sum = __fadd_rn(sum, __shfl_xor_sync(0xffffffff, sum, 2));
+      sum = __fadd_rn(sum, __shfl_xor_sync(0xffffffff, sum, 1));
+      denominator[rg] = __fmaf_rn(denominator[rg], alpha[rg], sum);
     }
 #pragma unroll
     for (int tile = 0; tile < 8; ++tile)
@@ -221,6 +238,24 @@ __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, con
     *status = 0;
 }
 
+template <bool Bf16Tables>
+void launch_attention(TensorView query, TensorView sink, TensorView indices, TensorView window,
+                      TensorView window_scales, TensorView compressed, TensorView compressed_scales,
+                      TensorView output, TensorView status, cudaStream_t stream) {
+  check_cuda(cudaFuncSetAttribute(attend_kernel<Bf16Tables>,
+                                  cudaFuncAttributeMaxDynamicSharedMemorySize, SharedBytes));
+  attend_kernel<Bf16Tables><<<dim3(query.size(0), query.size(1) / 16), 256, SharedBytes, stream>>>(
+      static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+      static_cast<const float *>(sink.data_ptr()), static_cast<const int32_t *>(indices.data_ptr()),
+      static_cast<const uint8_t *>(window.data_ptr()),
+      static_cast<const uint8_t *>(window_scales.data_ptr()),
+      static_cast<const uint8_t *>(compressed.data_ptr()),
+      static_cast<const uint8_t *>(compressed_scales.data_ptr()),
+      static_cast<__nv_bfloat16 *>(output.data_ptr()), static_cast<uint8_t *>(status.data_ptr()),
+      query.size(1), indices.size(1), window.size(0), compressed.size(0));
+  check_cuda(cudaGetLastError());
+}
+
 } // namespace
 
 void attend(TensorView query, TensorView sink, TensorView indices, TensorView window,
@@ -236,10 +271,12 @@ void attend(TensorView query, TensorView sink, TensorView indices, TensorView wi
   tensor_contract(query, query, kDLBfloat, 16, {rows, heads, 512});
   tensor_contract(sink, query, kDLFloat, 32, {heads});
   tensor_contract(indices, query, kDLInt, 32, {rows, slots});
-  tensor_contract(window, query, kDLUInt, 8, {window_rows, 512});
-  tensor_contract(window_scales, query, kDLUInt, 8, {window_rows, 16});
-  tensor_contract(compressed, query, kDLUInt, 8, {compressed_rows, 256});
-  tensor_contract(compressed_scales, query, kDLUInt, 8, {compressed_rows, 32});
+  bool bf16 = window.dtype().code == kDLBfloat && window.dtype().bits == 16;
+  tensor_contract(window, query, bf16 ? kDLBfloat : kDLUInt, bf16 ? 16 : 8, {window_rows, 512});
+  tensor_contract(window_scales, query, kDLUInt, 8, {window_rows, bf16 ? 0 : 16});
+  tensor_contract(compressed, query, bf16 ? kDLBfloat : kDLUInt, bf16 ? 16 : 8,
+                  {compressed_rows, bf16 ? 512 : 256});
+  tensor_contract(compressed_scales, query, kDLUInt, 8, {compressed_rows, bf16 ? 0 : 32});
   tensor_contract(output, query, kDLBfloat, 16, {rows, heads, 512});
   tensor_contract(status, query, kDLUInt, 8, {rows, heads / 16});
   for (auto input : {query, sink, indices, window, window_scales, compressed, compressed_scales}) {
@@ -251,16 +288,10 @@ void attend(TensorView query, TensorView sink, TensorView indices, TensorView wi
     return;
   tvm::ffi::CUDADeviceGuard guard(query.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, query.device().device_id));
-  check_cuda(cudaFuncSetAttribute(attend_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                  SharedBytes));
-  attend_kernel<<<dim3(rows, heads / 16), 256, SharedBytes, stream>>>(
-      static_cast<const __nv_bfloat16 *>(query.data_ptr()),
-      static_cast<const float *>(sink.data_ptr()), static_cast<const int32_t *>(indices.data_ptr()),
-      static_cast<const uint8_t *>(window.data_ptr()),
-      static_cast<const uint8_t *>(window_scales.data_ptr()),
-      static_cast<const uint8_t *>(compressed.data_ptr()),
-      static_cast<const uint8_t *>(compressed_scales.data_ptr()),
-      static_cast<__nv_bfloat16 *>(output.data_ptr()), static_cast<uint8_t *>(status.data_ptr()),
-      heads, slots, window_rows, compressed_rows);
-  check_cuda(cudaGetLastError());
+  if (bf16)
+    launch_attention<true>(query, sink, indices, window, window_scales, compressed,
+                           compressed_scales, output, status, stream);
+  else
+    launch_attention<false>(query, sink, indices, window, window_scales, compressed,
+                            compressed_scales, output, status, stream);
 }

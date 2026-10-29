@@ -511,7 +511,7 @@ def get_window_topk_idxs(window_size: int, bsz: int, seqlen: int, start_pos: int
 
     The cache is a ring of `window_size` slots. Prefill needs one row per query, each seeing its own
     causal window. A decode step has a single query that sees the whole ring, listed oldest first.
-    Order within a row does not matter to `sparse_attn`, which handles every slot independently.
+    Keep slot order and masked positions for block-wise probability rounding.
     """
     if start_pos == 0:
         end = torch.arange(seqlen).unsqueeze(1)
@@ -532,13 +532,12 @@ def get_prefill_window_topk_idxs(
     """Build causal indices for a chunk after the first prefill chunk.
 
     The key rows contain the previous ring window followed by the current chunk.
+    Leading empty ring slots keep the one-token decode block boundaries.
     """
     previous = min(window_size, start_pos)
     end = (previous + torch.arange(seqlen)).unsqueeze(1)
-    indices = (end - window_size + 1).clamp_min(0) + torch.arange(
-        min(window_size, previous + seqlen)
-    )
-    indices = torch.where(indices <= end, indices, -1)
+    indices = end - window_size + 1 + torch.arange(window_size)
+    indices = torch.where(indices >= 0, indices, -1)
     return indices.int().unsqueeze(0).expand(bsz, -1, -1).contiguous()
 
 
@@ -1145,7 +1144,6 @@ class MoE(nn.Module):
         self.n_routed_experts = n_routed_experts
         self.expert_parallel = args.parallel_strategy in ("TEP4", "DEP4")
         self.tensor_parallel = args.parallel_strategy == "TP4"
-        shared_tensor_parallel = args.parallel_strategy in ("TP4", "TEP4")
         self.n_local_experts = (
             n_routed_experts // world_size if self.expert_parallel else n_routed_experts
         )
@@ -1175,7 +1173,6 @@ class MoE(nn.Module):
             args.dim,
             args.moe_inter_dim,
             swiglu_limit=args.swiglu_limit,
-            tensor_parallel=shared_tensor_parallel,
         )
 
     def _grouped_routed(
@@ -1528,11 +1525,9 @@ def get_dspark_topk_idxs(window_size: int, bsz: int, block_size: int, start_pos:
     assert start_pos > 0
     window = torch.arange(min(window_size, start_pos + 1))
     drafts = window_size + torch.arange(block_size)
-    drafts = drafts.view(1, -1).expand(block_size, -1).clone()
-    future = torch.arange(block_size).view(1, -1) > torch.arange(block_size).view(-1, 1)
-    drafts.masked_fill_(future, -1)
-    matrix = torch.cat([window.view(1, -1).expand(block_size, -1), drafts], dim=-1)
-    return matrix.int().unsqueeze(0).expand(bsz, -1, -1).contiguous()
+    # Proposal rows share the full draft block, unlike causal target rows.
+    indices = torch.cat((window, drafts))
+    return indices.int().view(1, 1, -1).expand(bsz, block_size, -1).contiguous()
 
 
 class DSparkAttention(Attention):

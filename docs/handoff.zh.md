@@ -18,6 +18,7 @@ prefill 默认使用最多 8192 个 total row 的 working chunk.
 完成的 chunk 会在下一次 native call 之前释放 hidden tail.
 
 DSpark verification 会将 accepted prefix 和 draft row 放入一次 target call.
+DSpark proposal query 共享完整的 draft-index block.
 它只投影需要的 logit, 并在一次 MTP operation 中 seed accepted target hidden state.
 rejected draft 保持 private state, 并输出 target correction.
 Engram table 使用 file-backed host mapping.
@@ -43,15 +44,19 @@ Native routing 保持发布参考的 softplus 和 selected-score sum 顺序.
 In-place quantization 先舍入再反量化.
 Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 temporary tensor.
 Native attention 使用独立的 window KV 和 compressed KV table.
+它读取模型的 BF16 table, 不执行量化.
 Reference path 在计算之前合并这些 table.
 
-Shared-expert tensor-parallel down projection 保留 FP32 partial sum, 直到 rank reduction 完成.
+Shared expert 使用完整复制的 FP8 weight 和 scale.
+其输出在 routed rank reduction 后添加.
+Shared output 不执行跨 rank reduction.
 Sinkhorn mixing 在第一次 column normalization 之前加上 epsilon.
 
 Native mHC 保持发布参考的 product, sum 和取决于 row 数的 mean 顺序.
 其 FP32 projection 使用 tensor runtime 的 cuBLAS image 和显式 32 MiB workspace.
 Prepared HC workspace 为 Eager 或 Graph execution 保留 FP32 input 和 statistics storage.
 Sparse attention 按顺序处理 64-slot block, 在与 V 相乘之前将未归一化的 probability 舍入到 BF16.
+其 denominator 使用发布参考的 cross-warp sum 顺序和 FMA.
 这些 block 完成后, sink 才计入 denominator, 不改变它们的 running maximum.
 
 独立的 development reference 使用官方 MP4 placement, 并记录 quantizer synchronization patch.
@@ -59,8 +64,8 @@ Sparse attention 按顺序处理 64-slot block, 在与 V 相乘之前将未归�
 当前 candidate 不满足这些 text endpoint 检查.
 
 sparse attention status failure 会禁用 native path, 并使用 reference path.
-short query 的 native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
-long query 使用 native sparse packing, 因为 reference path 的扩展性较差.
+short query 的 native sparse attention 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
+long query 使用 native sparse attention, 因为 reference path 的扩展性较差.
 
 DeepSeek token page 在 request slot 之间保存 compressed KV, index key 和 Engram history.
 Accepted-state page 在精确的 endpoint 保存 target window, MTP window 和 compressor tail.
@@ -163,9 +168,10 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 ## 下一步
 
 - 在 approved long-context workload 中测量 exact-endpoint window storage.
-- 在 consumer 之间复用 encoded KV, 避免重复转换完整 context 的格式.
+- 比较 persistent encoded KV storage 与直接 BF16 table read 的测量结果.
 - 为 raw weight 和 padded projection copy 定义明确的 ownership.
 - 在 performance acceptance 之前修正 candidate 与独立 DeepSeek text frozen endpoint 的差异.
+- 在 rank reduction 之前, 将 grouped TP4 down-projection partial sum 保持在 FP32.
 - 在 long-context capacity 调整之前, 减少重复的 cuBLAS workspace storage.
 - 在 image acceptance 之前增加独立的 image endpoint.
 - 将配置的 context limit 与观测到的 AgentX request length 分开记录.

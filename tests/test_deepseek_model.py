@@ -1,12 +1,17 @@
+import hashlib
+import json
 import math
+import tempfile
 import unittest
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
 from oh_my_vllm.models.deepseek_v41.engram import NgramHashState
 from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
+from oh_my_vllm.models.deepseek_v41.loader import RankLoader
 from oh_my_vllm.models.deepseek_v41.model import (
     Attention,
     Compressor,
@@ -22,9 +27,161 @@ from oh_my_vllm.models.deepseek_v41.model import (
     select_candidate_blocks,
     shared_attn,
 )
+from safetensors.torch import save_file
 
 
 class DeepSeekModel(unittest.TestCase):
+    def test_shared_expert_forward_uses_full_weights_after_routed_reduction(self):
+        args = ModelArgs(
+            dim=2,
+            moe_inter_dim=8,
+            n_layers=1,
+            n_routed_experts=4,
+            n_activated_experts=1,
+            dspark_n_routed_experts=8,
+            expert_dtype=None,
+        )
+        values = torch.ones((1, 1, 2), dtype=torch.bfloat16)
+        gate_weight = torch.tensor([[0.5, 0.5]] * 8, dtype=torch.bfloat16)
+        up_weight = torch.tensor([[1.0, 0.0]] * 8, dtype=torch.bfloat16)
+        down_weight = torch.tensor([[0.125] * 8] * 2, dtype=torch.bfloat16)
+        product = torch.nn.functional.silu(torch.ones(1, 8)).to(torch.bfloat16)
+        shared_output = torch.nn.functional.linear(product, down_weight)
+        expected = (shared_output.float() + 3).to(torch.bfloat16).view_as(values)
+        for strategy in ("TP4", "TEP4", "DEP4"):
+            for rank in range(4):
+                for layer in (0, 1):
+                    with (
+                        self.subTest(strategy=strategy, rank=rank, layer=layer),
+                        patch("oh_my_vllm.models.deepseek_v41.model.world_size", 4),
+                        patch("oh_my_vllm.models.deepseek_v41.model.rank", rank),
+                        patch(
+                            "oh_my_vllm.models.deepseek_v41.model.default_dtype",
+                            torch.bfloat16,
+                        ),
+                    ):
+                        moe = MoE(layer, replace(args, parallel_strategy=strategy))
+                        shared = moe.shared_experts
+                        self.assertEqual(tuple(shared.w1.weight.shape), (8, 2))
+                        self.assertEqual(tuple(shared.w2.weight.shape), (2, 8))
+                        self.assertEqual(tuple(shared.w3.weight.shape), (8, 2))
+                        with torch.no_grad():
+                            for parameter in moe.parameters():
+                                parameter.zero_()
+                            shared.w1.weight.copy_(gate_weight)
+                            shared.w2.weight.copy_(down_weight)
+                            shared.w3.weight.copy_(up_weight)
+
+                        reductions = []
+
+                        def reduce_routed(
+                            value, reductions=reductions, strategy=strategy
+                        ):
+                            self.assertTrue(torch.equal(value, torch.zeros_like(value)))
+                            reductions.append(value)
+                            if strategy != "TP4" or len(reductions) == 2:
+                                value.fill_(3)
+
+                        with patch(
+                            "oh_my_vllm.models.deepseek_v41.model.dist.all_reduce",
+                            side_effect=reduce_routed,
+                        ):
+                            actual = moe(values)
+                        self.assertEqual(len(reductions), 2 if strategy == "TP4" else 1)
+                        self.assertTrue(torch.equal(actual, expected))
+
+    def test_rank_loader_preserves_full_shared_fp8_values_and_scales(self):
+        config = json.loads(
+            (Path(__file__).parent / "fixtures/deepseek_v41/config.json").read_text()
+        )
+        shapes = {
+            "w1.weight": ((128, 128), "F8_E4M3", torch.float8_e4m3fn),
+            "w1.scale": ((4, 4), "F8_E8M0", torch.float8_e8m0fnu),
+            "w2.weight": ((128, 128), "F8_E4M3", torch.float8_e4m3fn),
+            "w2.scale": ((4, 4), "F8_E8M0", torch.float8_e8m0fnu),
+            "w3.weight": ((128, 128), "F8_E4M3", torch.float8_e4m3fn),
+            "w3.scale": ((4, 4), "F8_E8M0", torch.float8_e8m0fnu),
+        }
+        layout, source, expected = {}, {}, {}
+        for namespace in ("layers", "mtp"):
+            for index, (suffix, (shape, dtype, torch_dtype)) in enumerate(
+                shapes.items()
+            ):
+                name = f"{namespace}.0.ffn.shared_experts.{suffix}"
+                layout[name] = {"shape": list(shape), "dtype": dtype}
+                raw = (torch.arange(math.prod(shape)) % 16 + 112 + index).to(
+                    torch.uint8
+                )
+                expected[name] = raw.reshape(shape)
+                source_name = name.replace("ffn", "mlp").replace(
+                    ".scale", ".weight_scale_inv"
+                )
+                source[f"model.{source_name}"] = raw.view(torch_dtype).reshape(shape)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shard = root / "model-00001-of-00048.safetensors"
+            save_file(source, shard)
+            (root / "model.safetensors.index.json").write_text(
+                json.dumps({"weight_map": dict.fromkeys(source, shard.name)})
+            )
+            before = hashlib.sha256(shard.read_bytes()).digest()
+            for strategy in ("TP4", "TEP4", "DEP4"):
+                for rank in range(4):
+                    with (
+                        self.subTest(strategy=strategy, rank=rank),
+                        patch(
+                            "oh_my_vllm.models.deepseek_v41.loader.tensor_layout",
+                            return_value=layout,
+                        ),
+                        patch("oh_my_vllm.models.deepseek_v41.model.world_size", 4),
+                        patch("oh_my_vllm.models.deepseek_v41.model.rank", rank),
+                        patch(
+                            "oh_my_vllm.models.deepseek_v41.model.default_dtype",
+                            torch.float8_e4m3fn,
+                        ),
+                    ):
+                        model = torch.nn.Module()
+                        for namespace in ("layers", "mtp"):
+                            block = torch.nn.Module()
+                            block.ffn = torch.nn.Module()
+                            block.ffn.shared_experts = MoE(
+                                0,
+                                ModelArgs(
+                                    dim=128,
+                                    moe_inter_dim=128,
+                                    n_routed_experts=4,
+                                    parallel_strategy=strategy,
+                                ),
+                            ).shared_experts
+                            model.add_module(namespace, torch.nn.ModuleList([block]))
+                        loader = RankLoader(
+                            root, config, rank, strategy=strategy, tile_rows=17
+                        )
+                        try:
+                            for name, value in expected.items():
+                                self.assertEqual(
+                                    loader.specs[name]["shape"], tuple(value.shape)
+                                )
+                            info = loader.load_into(model)
+                            self.assertEqual(info["parameter_count"], 12)
+                            for name, value in model.named_parameters():
+                                self.assertTrue(
+                                    torch.equal(
+                                        value.view(torch.uint8), expected[name]
+                                    ),
+                                    name,
+                                )
+                            for blocks in (model.layers, model.mtp):
+                                for projection in ("w1", "w2", "w3"):
+                                    linear = getattr(
+                                        blocks[0].ffn.shared_experts, projection
+                                    )
+                                    self.assertIs(linear.weight.scale, linear.scale)
+                        finally:
+                            loader.close()
+            self.assertEqual(hashlib.sha256(shard.read_bytes()).digest(), before)
+
     def test_expert_down_projection_rounds_after_tensor_parallel_reduction(self):
         with patch("oh_my_vllm.models.deepseek_v41.model.world_size", 4):
             expert = Expert(2, 8, dtype=torch.bfloat16, tensor_parallel=True)
@@ -704,6 +861,20 @@ class DeepSeekModel(unittest.TestCase):
         self.assertTrue(torch.equal(indices[0, 1], torch.tensor([2, 3, 4, 5])))
         self.assertTrue(torch.equal(indices[0, 2], torch.tensor([3, 4, 5, 6])))
 
+        indices = get_prefill_window_topk_idxs(8, 2, 6, 4)
+        expected = torch.tensor(
+            [
+                [-1, -1, -1, 0, 1, 2, 3, 4],
+                [-1, -1, 0, 1, 2, 3, 4, 5],
+                [-1, 0, 1, 2, 3, 4, 5, 6],
+                [0, 1, 2, 3, 4, 5, 6, 7],
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                [2, 3, 4, 5, 6, 7, 8, 9],
+            ],
+            dtype=torch.int32,
+        )
+        self.assertTrue(torch.equal(indices, expected.expand(2, -1, -1)))
+
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_engram_table_stays_on_host_for_cuda_lookup(self):
         previous_device = torch.get_default_device()
@@ -735,16 +906,14 @@ class DeepSeekModel(unittest.TestCase):
             torch.set_default_device(previous_device)
             torch.set_default_dtype(previous_dtype)
 
-    def test_dspark_draft_attention_masks_future_draft_positions(self):
-        indices = get_dspark_topk_idxs(8, 1, 5, 4)
+    def test_dspark_draft_attention_keeps_the_full_proposal_block_visible(self):
+        indices = get_dspark_topk_idxs(8, 2, 5, 4)
 
-        self.assertEqual(indices.shape, (1, 5, 10))
-        self.assertTrue(
-            torch.equal(indices[0, 0, 5:], torch.tensor([8, -1, -1, -1, -1]))
-        )
-        self.assertTrue(
-            torch.equal(indices[0, 4, 5:], torch.tensor([8, 9, 10, 11, 12]))
-        )
+        expected = torch.tensor([0, 1, 2, 3, 4, 8, 9, 10, 11, 12], dtype=torch.int32)
+        self.assertEqual(indices.dtype, torch.int32)
+        self.assertEqual(indices.shape, (2, 5, 10))
+        self.assertTrue(torch.equal(indices, expected.expand(2, 5, 10)))
+        self.assertTrue(indices.is_contiguous())
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_tiny_cuda_fp8_projection_path_returns_finite_logits(self):

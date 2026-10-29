@@ -12,7 +12,8 @@ import torch.nn.functional as F
 
 from ...operators.hyperconnection.api import FUNCTIONS as HYPERCONNECTION_FUNCTIONS
 from ...operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
-from .quantization import act_quant, fp4_act_quant, fp4_values
+from .quantization import act_quant, fp4_values
+from .quantization import fp4_act_quant as fp4_act_quant
 
 _PROJECTION_MODULE = None
 _ROUTING_MODULE = None
@@ -701,16 +702,6 @@ def route(logits, bias, bias_vl, image_mask):
     return coefficients, ids
 
 
-def _pack_fp8_kv(values):
-    encoded, scales = act_quant(values, 32, "ue8m0", torch.float8_e8m0fnu)
-    return encoded.view(torch.uint8), scales.view(torch.uint8)
-
-
-def _pack_fp4_kv(values):
-    encoded, scales = fp4_act_quant(values, 16, scale_dtype=torch.float8_e4m3fn)
-    return encoded.view(torch.uint8), scales.view(torch.uint8)
-
-
 def _sparse_native_available(query, indices, window, compressed):
     return (
         query.is_cuda
@@ -739,10 +730,14 @@ def _sparse_native_available(query, indices, window, compressed):
 def _sparse_attn_native(query, sink, indices, window, compressed):
     batch, sequence, heads, _ = query.shape
     window_length, compressed_length = window.size(1), compressed.size(1)
-    packed_window, window_scales = _pack_fp8_kv(window)
-    packed_compressed, compressed_scales = _pack_fp4_kv(compressed)
     window_rows = batch * window_length
     compressed_rows = batch * compressed_length
+    window_scales = torch.empty(
+        (window_rows, 0), dtype=torch.uint8, device=query.device
+    )
+    compressed_scales = torch.empty(
+        (compressed_rows, 0), dtype=torch.uint8, device=query.device
+    )
     ids = indices.to(torch.int32).clone()
     batch_offset = torch.arange(batch, device=query.device, dtype=torch.int32).view(
         batch, 1, 1
@@ -767,17 +762,13 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
     if not sink.is_contiguous():
         sink = sink.contiguous()
     module = _sparse_attention_module()
-    packed_window = packed_window.reshape(window_rows, 512)
-    window_scales = window_scales.reshape(window_rows, 16)
-    packed_compressed = packed_compressed.reshape(compressed_rows, 256)
-    compressed_scales = compressed_scales.reshape(compressed_rows, 32)
     module.attend(
         query_rows,
         sink,
         ids,
-        packed_window,
+        window.reshape(window_rows, 512),
         window_scales,
-        packed_compressed,
+        compressed.reshape(compressed_rows, 512),
         compressed_scales,
         output,
         status,

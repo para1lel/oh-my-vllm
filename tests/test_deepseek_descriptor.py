@@ -10,6 +10,8 @@ from oh_my_vllm.models.deepseek_v41.adapter import (
     validate_config,
 )
 from oh_my_vllm.models.deepseek_v41.descriptor import build_descriptor
+from oh_my_vllm.models.deepseek_v41.layout import tensor_layout
+from oh_my_vllm.models.deepseek_v41.placement import rank_plan, weight_placements
 from oh_my_vllm.models.descriptor import validate_descriptor
 from oh_my_vllm.models.registry import select
 
@@ -37,6 +39,41 @@ def tokenizer_identity():
 
 
 class DeepSeekDescriptor(unittest.TestCase):
+    def test_shared_expert_values_and_scales_have_full_rank_placements(self):
+        layout = tensor_layout(MODEL_CONFIG)
+        shapes = {
+            "w1.weight": (2304, 5120),
+            "w1.scale": (72, 160),
+            "w2.weight": (5120, 2304),
+            "w2.scale": (160, 72),
+            "w3.weight": (2304, 5120),
+            "w3.scale": (72, 160),
+        }
+        for strategy in ("TP4", "TEP4", "DEP4"):
+            placements = weight_placements(MODEL_CONFIG, layout, strategy)
+            plans = [
+                rank_plan(MODEL_CONFIG, layout, strategy, rank) for rank in range(4)
+            ]
+            for namespace, count in (("layers", 40), ("mtp", 3)):
+                for layer in range(count):
+                    for suffix, shape in shapes.items():
+                        name = f"{namespace}.{layer}.ffn.shared_experts.{suffix}"
+                        with self.subTest(strategy=strategy, name=name):
+                            placement = placements[name]
+                            self.assertEqual(placement["placement"], "replicated")
+                            self.assertIsNone(placement["shard_axis"])
+                            self.assertIsNone(placement["owner_rank"])
+                            self.assertIsNone(placement["rank_shard_ranges"])
+                            size = shape[0] * shape[1]
+                            self.assertEqual(placement["rank_source_bytes"], [size] * 4)
+                            self.assertEqual(
+                                placement["rank_resident_bytes"], [size] * 4
+                            )
+                            for plan in plans:
+                                selection = plan.selections[name]
+                                self.assertEqual(tuple(selection.start), (0, 0))
+                                self.assertEqual(tuple(selection.stop), shape)
+
     def test_config_validation_accepts_the_released_checkpoint_contract(self):
         validate_config(MODEL_CONFIG)
         self.assertEqual(hashlib.sha256(RAW_CONFIG).hexdigest(), CONFIG_SHA256)

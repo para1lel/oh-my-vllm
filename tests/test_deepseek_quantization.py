@@ -248,14 +248,14 @@ class DeepSeekQuantizationCUDA(DeepSeekQuantization):
         torch.testing.assert_close(consumed, torch.full_like(consumed, 0x77))
         torch.testing.assert_close(scales.float(), torch.ones((64, 1)), atol=0, rtol=0)
 
-    def test_kv_packing_accepts_empty_history(self):
+    def test_encoded_quantization_accepts_empty_history(self):
         values = torch.empty((2, 0, 512), dtype=torch.bfloat16)
-        for pack, width, groups in (
-            (kernel._pack_fp4_kv, 256, 32),
-            (kernel._pack_fp8_kv, 512, 16),
+        for quantize, block, dtype, width, groups in (
+            (kernel.fp4_act_quant, 16, torch.float8_e4m3fn, 256, 32),
+            (kernel.act_quant, 32, torch.float8_e8m0fnu, 512, 16),
         ):
-            with self.subTest(pack=pack.__name__):
-                codes, scales = pack(values)
+            with self.subTest(quantize=quantize.__name__):
+                codes, scales = quantize(values, block, scale_dtype=dtype)
                 self.assertEqual(codes.shape, (2, 0, width))
                 self.assertEqual(scales.shape, (2, 0, groups))
 
@@ -396,10 +396,13 @@ class DeepSeekQuantizationIntegration(unittest.TestCase):
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
 class DeepSeekQuantizationMemory(unittest.TestCase):
-    def test_kv_packing_scratch_does_not_grow_with_history(self):
+    def test_encoded_quantization_scratch_does_not_grow_with_history(self):
         for rows in (4096, 8192):
-            for pack in (kernel._pack_fp4_kv, kernel._pack_fp8_kv):
-                with self.subTest(rows=rows, pack=pack.__name__):
+            for quantize, block, dtype in (
+                (kernel.fp4_act_quant, 16, torch.float8_e4m3fn),
+                (kernel.act_quant, 32, torch.float8_e8m0fnu),
+            ):
+                with self.subTest(rows=rows, quantize=quantize.__name__):
                     values = torch.zeros(
                         (2, rows, 512), device="cuda", dtype=torch.bfloat16
                     )
@@ -407,7 +410,7 @@ class DeepSeekQuantizationMemory(unittest.TestCase):
                     baseline = torch.cuda.memory_allocated()
                     torch.cuda.reset_peak_memory_stats()
 
-                    codes, scales = pack(values)
+                    codes, scales = quantize(values, block, scale_dtype=dtype)
                     torch.cuda.synchronize()
 
                     output_bytes = codes.numel() + scales.numel()

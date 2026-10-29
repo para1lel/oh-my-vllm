@@ -111,12 +111,9 @@ def _block_rules(rules, name, text, layer, experts, strategy):
                 owner,
                 quant="fp4",
             )
-    # Shared experts follow the dense layout, not routed-expert ownership.
+    # Released MP4 keeps full shared experts on each rank, outside routed reduction.
     for projection in ("w1", "w2", "w3"):
-        axis = (1 if projection == "w2" else 0) if dense_tp else None
-        _linear_rules(
-            rules, f"{name}.ffn.shared_experts.{projection}", axis, quant="fp8"
-        )
+        _linear_rules(rules, f"{name}.ffn.shared_experts.{projection}", quant="fp8")
 
 
 def _placement_rules(model, strategy):

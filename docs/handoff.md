@@ -18,6 +18,7 @@ Set `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` to select a value up to 8192.
 Completed chunks release their hidden tail before the next native call.
 
 DSpark verification sends the accepted prefix and draft rows to one target call.
+DSpark proposal queries share the full draft-index block.
 It projects only the required logits and seeds accepted target hidden states in one MTP operation.
 Rejected drafts stay private and the target correction is emitted.
 Engram tables use file-backed host mappings.
@@ -43,15 +44,19 @@ Native routing keeps the released softplus and selected-score sum order.
 In-place quantization rounds before dequantization.
 The native quantizer writes encoded values and scales without context-sized temporary tensors.
 Native attention uses separate window and compressed KV tables.
+It reads the model's BF16 tables without quantization.
 The reference path joins their tables before computation.
 
-Shared-expert tensor-parallel down projections keep FP32 partial sums until rank reduction.
+Shared experts use full replicated FP8 weights and scales.
+Their output is added after routed rank reduction.
+The shared output is not reduced across ranks.
 Sinkhorn mixing adds epsilon before the first column normalization.
 
 Native mHC keeps the released product, sum, and row-count-dependent mean order.
 Its FP32 projection uses the tensor runtime's cuBLAS images and an explicit 32 MiB workspace.
 Prepared HC workspaces keep FP32 input and statistics storage for Eager or Graph execution.
 Sparse attention rounds unnormalized probabilities to BF16 in ordered 64-slot blocks before multiplication by V.
+Its denominator uses the released cross-warp sum order and FMA.
 The sink enters the denominator after these blocks and does not change their running maximum.
 
 An independent development reference uses official MP4 placement and a recorded quantizer synchronization patch.
@@ -59,8 +64,8 @@ Frozen text fixtures contain complete vocabulary vectors, DSpark5 proposal and v
 The current candidate does not satisfy these text endpoint checks.
 
 Sparse attention status failures disable the native path and use the reference path.
-Short-query native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
-Long queries use native sparse packing because the reference path scales poorly.
+Short-query native sparse attention is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
+Long queries use native sparse attention because the reference path scales poorly.
 
 DeepSeek token pages keep compressed KV, index keys, and Engram history across request slots.
 Accepted-state pages keep target windows, MTP windows, and compressor tails at an exact endpoint.
@@ -164,9 +169,10 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 ## Next work
 
 - Measure exact-endpoint window storage with the approved long-context workloads.
-- Reuse encoded KV across consumers without repeated full-context format conversion.
+- Measure persistent encoded KV storage against direct BF16 table reads.
 - Define explicit ownership for raw weights and padded projection copies.
 - Correct candidate differences against the independent frozen DeepSeek text endpoints before performance acceptance.
+- Keep grouped TP4 down-projection partial sums in FP32 before rank reduction.
 - Reduce duplicate cuBLAS workspace storage before long-context capacity tuning.
 - Add independent image endpoints before image acceptance.
 - Keep the configured context limit separate from the observed AgentX request lengths.

@@ -436,12 +436,62 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             actual, torch.full_like(query, 0.26953125), rtol=0, atol=0
         )
 
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_native_sparse_preserves_bf16_kv_without_requantization(self):
+        query = torch.zeros((1, 1, 16, 512), dtype=torch.bfloat16, device="cuda")
+        sink = torch.zeros(16, dtype=torch.float32, device="cuda")
+        indices = torch.zeros((1, 1, 1), dtype=torch.int32, device="cuda")
+        for compressed, value in ((False, 1.0078125), (True, 0.015625)):
+            with self.subTest(compressed=compressed):
+                table = torch.full_like(query[:, :, 0], value)
+                empty = table[:, :0]
+                window, history = (empty, table) if compressed else (table, empty)
+                actual = kernel._sparse_attn_native(
+                    query, sink, indices, window, history
+                )
+                # One zero-score key and a zero sink each contribute one unit.
+                torch.testing.assert_close(
+                    actual, torch.full_like(query, value / 2), rtol=0, atol=0
+                )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_native_sparse_keeps_source_denominator_reduction_order(self):
+        generator = torch.Generator(device="cpu").manual_seed(20261030)
+        query = (
+            torch.randint(-8, 9, (1, 64, 16, 512), generator=generator, device="cpu")
+            .float()
+            .mul(0.125)
+            .to(device="cuda", dtype=torch.bfloat16)
+        )
+        table = (
+            torch.randint(-8, 9, (1, 128, 512), generator=generator, device="cpu")
+            .float()
+            .mul(0.25)
+            .to(device="cuda", dtype=torch.bfloat16)
+        )
+        sink = torch.full((16,), 0.25, dtype=torch.float32, device="cuda")
+        indices = torch.arange(128, device="cuda", dtype=torch.int32)
+        indices = indices.view(1, 1, 128).expand(1, 64, 128).contiguous()
+        actual = kernel._sparse_attn_native(query, sink, indices, table, table[:, :0])
+        # Independent released-kernel outputs for this checkpoint-free recipe.
+        for row, head, column, expected in (
+            (2, 4, 416, 0.025390625),
+            (15, 11, 338, -0.220703125),
+            (19, 2, 288, 0.314453125),
+            (28, 11, 53, 0.050048828125),
+            (58, 5, 392, -0.169921875),
+            (62, 8, 94, -0.169921875),
+        ):
+            with self.subTest(row=row, head=head, column=column):
+                self.assertEqual(float(actual[0, row, head, column]), expected)
+
     def test_sparse_attention_preserves_ordered_blocks_and_masked_slots(self):
         devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
         # Released reference: one block and a later maximum have different rounding.
         cases = (
             ([1, 0], -2.0, 0.3125),
             ([1] + [-1] * 63 + [0], -2.0, 0.310546875),
+            ([1] + [-1] * 127 + [0], -2.0, 0.310546875),
             ([0] * 65, -2.0, 0.99609375),
             ([-1] * 65, -2.0, 0.0),
             ([-1] * 65, -1e31, 0.0),
@@ -1082,7 +1132,7 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         torch.testing.assert_close(actual, torch.zeros_like(gate))
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_cuda_sparse_attention_native_path_matches_quantized_reference(self):
+    def test_cuda_sparse_attention_native_path_matches_bf16_reference(self):
         device = torch.device("cuda")
         generator = torch.Generator(device=device).manual_seed(19)
         query = torch.randn(
@@ -1100,37 +1150,9 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         indices[:, :, 7:] = torch.tensor((7, 8), device=device, dtype=torch.int32)
 
         native = kernel._sparse_attn_native(query, sink, indices, window, compressed)
-        window_codes, window_scales = kernel._pack_fp8_kv(window)
-        window_values = window_codes.view(torch.float8_e4m3fn).float()
-        window_scale_values = window_scales.view(torch.float8_e8m0fnu).float()
-        window_scale_values = window_scale_values.unsqueeze(-1).expand(
-            *window_scale_values.shape, 32
-        )
-        window_values = window_values * window_scale_values.reshape_as(window_values)
-        compressed_codes, compressed_scales = kernel._pack_fp4_kv(compressed)
-        low = (compressed_codes & 15).long()
-        high = (compressed_codes >> 4).long()
-        levels = torch.tensor(
-            (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0),
-            device=device,
-        )
-        compressed_values = torch.stack(
-            (
-                levels[low & 7] * torch.where((low & 8).bool(), -1.0, 1.0),
-                levels[high & 7] * torch.where((high & 8).bool(), -1.0, 1.0),
-            ),
-            dim=-1,
-        ).flatten(-2, -1)
-        compressed_scale_values = compressed_scales.view(torch.float8_e4m3fn).float()
-        compressed_scale_values = compressed_scale_values.unsqueeze(-1).expand(
-            *compressed_scale_values.shape, 16
-        )
-        compressed_values = compressed_values * compressed_scale_values.reshape_as(
-            compressed_values
-        )
         reference = kernel.sparse_attn(
             query,
-            torch.cat((window_values, compressed_values), dim=1),
+            torch.cat((window, compressed), dim=1),
             sink,
             indices,
             512**-0.5,
@@ -1300,37 +1322,9 @@ class DeepSeekOperatorContracts(unittest.TestCase):
                     native_compressed=compressed,
                 )
 
-        window_codes, window_scales = kernel._pack_fp8_kv(window)
-        window_values = window_codes.view(torch.float8_e4m3fn).float()
-        window_scale_values = window_scales.view(torch.float8_e8m0fnu).float()
-        window_scale_values = window_scale_values.unsqueeze(-1).expand(
-            *window_scale_values.shape, 32
-        )
-        window_values = window_values * window_scale_values.reshape_as(window_values)
-        compressed_codes, compressed_scales = kernel._pack_fp4_kv(compressed)
-        low = (compressed_codes & 15).long()
-        high = (compressed_codes >> 4).long()
-        levels = torch.tensor(
-            (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0),
-            device=device,
-        )
-        compressed_values = torch.stack(
-            (
-                levels[low & 7] * torch.where((low & 8).bool(), -1.0, 1.0),
-                levels[high & 7] * torch.where((high & 8).bool(), -1.0, 1.0),
-            ),
-            dim=-1,
-        ).flatten(-2, -1)
-        compressed_scale_values = compressed_scales.view(torch.float8_e4m3fn).float()
-        compressed_scale_values = compressed_scale_values.unsqueeze(-1).expand(
-            *compressed_scale_values.shape, 16
-        )
-        compressed_values = compressed_values * compressed_scale_values.reshape_as(
-            compressed_values
-        )
         reference = kernel.sparse_attn(
             query,
-            torch.cat((window_values, compressed_values), dim=1),
+            torch.cat((window, compressed), dim=1),
             sink,
             indices,
             512**-0.5,

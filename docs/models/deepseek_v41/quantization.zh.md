@@ -74,8 +74,15 @@ Expert selection 之前不要将 router logits 舍入到 BF16.
 Corrected score 相等时, native routing 选择最小的 global expert ID.
 对于这种 tie, 发布参考的 top-k 可能选择不同 ID.
 
-Tensor-parallel shared-expert down projection 保留 FP32 partial sum, 直到 rank reduction 完成.
+Tensor-parallel expert down projection 必须保留 FP32 partial sum, 直到 rank reduction 完成.
+Non-grouped path 保留这些 FP32 partial sum.
+Grouped TP4 path 返回 BF16 partial sum.
+在数值验收前修正该路径.
 将归约结果舍入到 BF16.
+
+Shared expert 在每个 rank 上保留完整权重.
+在 routed rank reduction 后添加其输出.
+不对 shared output 执行跨 rank reduction.
 Attention output projection 保留其 FP32 rank reduction 之前的 local BF16 舍入.
 
 Sparse attention 按原顺序处理 selected index, 每个 block 包含 64 个 slot.
@@ -85,11 +92,18 @@ Maximum 改变时, 每个 block 对之前的 FP32 numerator 和 denominator 重�
 未舍入的 exponential 计入 denominator.
 与 V 相乘之前, 将这些 exponential 舍入到 BF16.
 
+Denominator 先使用 XOR offset `128, 64, 32` 跨 warp 求和.
+然后使用 XOR offset `2, 1` 跨四个 lane 求和.
+Denominator 更新使用 `fma_rn(previous_sum, scale, block_sum)`.
+
 所有 selected block 完成后, 将 sink exponential 加入 denominator.
 将 numerator 除以 denominator.
 将 output 舍入到 BF16.
 保留 duplicate index 和 masked slot 的原始位置.
 Empty row 和 fully masked row 返回零, 即使 finite sink exponential 下溢也如此.
+
+DSpark proposal query 共享完整的 draft-index block.
+Target attention 保持其因果 index 规则.
 
 在 Sinkhorn mixing 中, 第一次 column normalization 之前, 给 row softmax value 加上 `hc_eps`.
 发布模型使用 `hc_eps=1e-6`.
@@ -138,6 +152,8 @@ Native attention 在接受 output 之前检查这些 code.
 Input 必须产生 interface 规定的有限 reconstruction result.
 
 Native attention 中的 window KV 和 compressed KV 保持分离.
+Attention call 不量化这些 BF16 table.
+算子也接受 encoded table 及其 scale array.
 Reference path 在计算之前连接两张 BF16 table.
 Short-query native selection 和 attention status fallback 保留现有规则.
 

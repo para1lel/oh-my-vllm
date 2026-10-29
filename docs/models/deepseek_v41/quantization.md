@@ -74,8 +74,15 @@ Multiply the quotient by `1.5`.
 Native routing selects the lowest global expert ID when corrected scores are equal.
 Released top-k can select different IDs for such ties.
 
-Tensor-parallel shared-expert down projections keep FP32 partial sums until rank reduction.
+Tensor-parallel expert down projections must keep FP32 partial sums until rank reduction.
+The non-grouped path keeps these FP32 partial sums.
+The grouped TP4 path returns BF16 partial sums.
+Correct this path before numerical acceptance.
 Round the reduced result to BF16.
+
+Shared experts keep full weights on each rank.
+Add their output after routed rank reduction.
+Do not reduce the shared output across ranks.
 Attention output projections keep their local BF16 rounding before FP32 rank reduction.
 
 Sparse attention processes selected indices in their original order, in blocks of 64.
@@ -85,11 +92,18 @@ Each block rescales the earlier FP32 numerator and denominator when the maximum 
 Unrounded exponentials contribute to the denominator.
 Round these exponentials to BF16 before multiplication by V.
 
+The denominator first sums across warps with XOR offsets `128, 64, 32`.
+It then sums across four lanes with XOR offsets `2, 1`.
+Use `fma_rn(previous_sum, scale, block_sum)` for the denominator update.
+
 After all selected blocks, add the sink exponential to the denominator.
 Divide the numerator by the denominator.
 Round the output to BF16.
 Keep duplicate indices and masked slots in their original positions.
 Empty and fully masked rows return zero, even when a finite sink exponential underflows.
+
+DSpark proposal queries share the full draft-index block.
+Target attention keeps its causal index rules.
 
 Add `hc_eps` to row softmax values before the first column normalization in Sinkhorn mixing.
 Use `hc_eps=1e-6` for the released model.
@@ -138,6 +152,8 @@ Native attention checks these codes before it accepts the output.
 Inputs must have finite reconstruction results, as specified by the interface.
 
 Native attention uses separate window and compressed KV tables.
+The attention call does not quantize these BF16 tables.
+The operator also accepts encoded tables with their scale arrays.
 The reference path joins their BF16 tables before computation.
 Short-query native selection and attention status fallback keep their existing rules.
 
