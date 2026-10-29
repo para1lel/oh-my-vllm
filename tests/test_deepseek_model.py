@@ -84,6 +84,61 @@ class DeepSeekModel(unittest.TestCase):
         )
         torch.testing.assert_close(result, expected)
 
+    def test_moe_bounds_routed_rows_without_changing_outputs(self):
+        class FixedGate(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def forward(self, value, image_mask=None):
+                self.calls += 1
+                weights = torch.tensor(
+                    ((0.25, 0.75),),
+                    dtype=value.dtype,
+                    device=value.device,
+                ).expand(value.size(0), -1)
+                indices = torch.tensor(
+                    ((0, 1),),
+                    dtype=torch.long,
+                    device=value.device,
+                ).expand(value.size(0), -1)
+                return weights, indices
+
+        class FixedExpert(torch.nn.Module):
+            def __init__(self, offset):
+                super().__init__()
+                self.offset = offset
+
+            def forward(self, value, weights):
+                return (value + self.offset) * weights
+
+        class ZeroExpert(torch.nn.Module):
+            def forward(self, value):
+                return torch.zeros_like(value)
+
+        args = ModelArgs(
+            dim=2,
+            moe_inter_dim=4,
+            n_routed_experts=2,
+            n_activated_experts=2,
+            n_shared_experts=1,
+            dtype="bf16",
+            expert_dtype=None,
+            parallel_strategy="TP4",
+        )
+        moe = MoE(0, args)
+        gate = FixedGate()
+        moe.gate = gate
+        moe.experts = torch.nn.ModuleList(FixedExpert(index + 1) for index in range(2))
+        moe.shared_experts = ZeroExpert()
+        value = torch.tensor((1.0, 2.0)).expand(1025, 1, 2)
+
+        result = moe(value)
+
+        expected = torch.tensor((2.75, 3.75)).expand_as(result)
+        torch.testing.assert_close(result, expected)
+        self.assertGreater(gate.calls, 1)
+
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_moe_grouped_fp4_path_matches_expert_reference(self):
         previous_device = torch.get_default_device()

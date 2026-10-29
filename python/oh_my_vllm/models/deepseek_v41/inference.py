@@ -29,7 +29,15 @@ from .tokenizer import Tokenization
 DEFAULT_CACHE_CONTEXT = 65536
 MAX_NATIVE_ROWS = 384
 MAX_PREFILL_ROWS = 8192
+DEFAULT_PREFILL_ROWS = MAX_PREFILL_ROWS
 MAX_PREFILL_SUBBATCH = 4
+
+
+def prefill_row_limit(value=None):
+    rows = DEFAULT_PREFILL_ROWS if value is None else int(value)
+    if not 1 <= rows <= MAX_PREFILL_ROWS:
+        raise ValueError("DeepSeek prefill row limit must be between one and 8192")
+    return rows
 
 
 class _StartupTrace:
@@ -93,11 +101,9 @@ class Worker:
         self.root = root
         self.strategy = strategy
         self.dspark = config["num_speculative_tokens"] == 5
-        self.prefill_rows = int(
-            os.environ.get("OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS", MAX_PREFILL_ROWS)
+        self.prefill_rows = prefill_row_limit(
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS")
         )
-        if not 1 <= self.prefill_rows <= MAX_PREFILL_ROWS:
-            raise ValueError("DeepSeek prefill row limit is out of bounds")
         self.rank = dist.get_rank()
         self.startup_trace = _StartupTrace(self.rank)
         self.startup_trace.record("process_group_ready")
@@ -323,7 +329,7 @@ class Worker:
         cache_slots = torch.tensor([slot], device=self.device)
         output_ids = logits = main_hidden = None
         logit_chunks = [] if full_logits else None
-        limit_rows = getattr(self, "prefill_rows", MAX_PREFILL_ROWS)
+        limit_rows = getattr(self, "prefill_rows", DEFAULT_PREFILL_ROWS)
         for offset in range(0, len(token_ids), limit_rows):
             inputs = self._input_tokens((token_ids[offset : offset + limit_rows],))
             output_ids, chunk_logits, chunk_hidden = self.model(
@@ -421,7 +427,7 @@ class Worker:
         if full_logits and not compute_logits:
             raise ValueError("full logits require vocab projection")
         length = len(token_batches[0])
-        limit_rows = getattr(self, "prefill_rows", MAX_PREFILL_ROWS)
+        limit_rows = getattr(self, "prefill_rows", DEFAULT_PREFILL_ROWS)
         chunk_size = max(1, limit_rows // len(token_batches))
         output_ids = logits = main_hidden = None
         logit_chunks = [] if full_logits else None

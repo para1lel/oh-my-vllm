@@ -38,6 +38,7 @@ fp8_block_size = 32  # one fp8 scale per 32x32 weight block / 32 activations
 fp4_block_size = 32  # one fp4 scale per 32 elements along K
 scale_fmt = "ue8m0"
 scale_dtype = torch.float8_e8m0fnu
+MAX_MOE_ROWS = 1024
 
 
 @contextmanager
@@ -1200,11 +1201,9 @@ class MoE(nn.Module):
         )
         return local_tokens, routed
 
-    def forward(
+    def _forward_rows(
         self, x: torch.Tensor, image_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
-        shape = x.size()
-        x = x.view(-1, self.dim)
         weights, indices = self.gate(
             x, None if image_mask is None else image_mask.flatten()
         )
@@ -1246,7 +1245,24 @@ class MoE(nn.Module):
         if (self.expert_parallel or self.tensor_parallel) and world_size > 1:
             dist.all_reduce(y)
         y += self.shared_experts(x)
-        return y.type_as(x).view(shape)
+        return y.type_as(x)
+
+    def forward(
+        self, x: torch.Tensor, image_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        shape = x.size()
+        rows = x.view(-1, self.dim)
+        mask = None if image_mask is None else image_mask.flatten()
+        if rows.size(0) <= MAX_MOE_ROWS:
+            return self._forward_rows(rows, mask).view(shape)
+        output = torch.empty_like(rows)
+        for first in range(0, rows.size(0), MAX_MOE_ROWS):
+            last = min(first + MAX_MOE_ROWS, rows.size(0))
+            output[first:last] = self._forward_rows(
+                rows[first:last],
+                None if mask is None else mask[first:last],
+            )
+        return output.view(shape)
 
 
 class Block(nn.Module):

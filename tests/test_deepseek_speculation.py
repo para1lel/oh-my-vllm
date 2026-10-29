@@ -5,7 +5,12 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import torch
-from oh_my_vllm.models.deepseek_v41.inference import Worker
+from oh_my_vllm.models.deepseek_v41.inference import (
+    DEFAULT_PREFILL_ROWS,
+    MAX_PREFILL_ROWS,
+    Worker,
+    prefill_row_limit,
+)
 from oh_my_vllm.models.deepseek_v41.speculation import verify_greedy_drafts
 
 
@@ -262,6 +267,7 @@ class DeepSeekSpeculation(unittest.TestCase):
     def test_target_keeps_long_prefill_in_one_native_call(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")
+        worker.prefill_rows = MAX_PREFILL_ROWS
         worker.model = Mock(
             side_effect=[
                 ("last", "last logits", "last hidden"),
@@ -276,6 +282,30 @@ class DeepSeekSpeculation(unittest.TestCase):
             [call.kwargs["start_pos"] for call in worker.model.call_args_list],
             [7],
         )
+
+    def test_target_default_prefill_limit_bounds_model_chunks(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+        worker.model = Mock(
+            side_effect=[
+                ("first", None, None),
+                ("last", None, None),
+            ]
+        )
+
+        worker._target([1] * (DEFAULT_PREFILL_ROWS + 1), 7, 3, compute_logits=False)
+
+        self.assertEqual(worker.model.call_count, 2)
+        self.assertEqual(
+            [call.kwargs["start_pos"] for call in worker.model.call_args_list],
+            [7, 7 + DEFAULT_PREFILL_ROWS],
+        )
+
+    def test_prefill_row_limit_keeps_explicit_operator_bound(self):
+        self.assertEqual(prefill_row_limit(None), DEFAULT_PREFILL_ROWS)
+        self.assertEqual(prefill_row_limit(str(MAX_PREFILL_ROWS)), MAX_PREFILL_ROWS)
+        with self.assertRaisesRegex(ValueError, "prefill row limit"):
+            prefill_row_limit(str(MAX_PREFILL_ROWS + 1))
 
     def test_target_releases_completed_prefill_hidden_chunks(self):
         worker = Worker.__new__(Worker)
