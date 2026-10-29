@@ -29,6 +29,7 @@ OH_MY_VLLM_GPU_COUNT=4 scripts/with-env.sh scripts/with-gpu.sh python -m develop
 
 使用 `development/serving/deepseek_matrix.py` 中的 identifier 传给 `--case` 选择子集.
 使用 runner 的 `--cache-context` option 设置 `OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT`.
+对于 long-context throughput, 设置 `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS=32768`.
 runner 记录 source, executable, native module, checkpoint, tokenizer, topology 和 configuration identity.
 它还记录测试程序的 Python, PyTorch, CUDA, NCCL 和数值设置.
 这些设置不独立标识每个工作进程的运行时.

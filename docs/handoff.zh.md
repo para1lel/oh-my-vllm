@@ -14,7 +14,7 @@ bridge 支持 `tp4`, `tep4` 以及已明确记录的 DEP4 executor fallback.
 
 adapter 使用 DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention 和 transformer support.
 prefill 默认使用最多 8192 个 total row 的 working chunk.
-设置 `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` 可以选择最多 8192 个 row.
+设置 `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` 可以选择最多 32768 个 row.
 完成的 chunk 会在下一次 native call 之前释放 hidden tail.
 
 DSpark verification 会将 accepted prefix 和 draft row 放入一次 target call.
@@ -27,7 +27,7 @@ Lookup 只将选中的 row 分阶段传到 GPU.
 released DeepSeek shape 支持 native projection, routing, activation, mHC, RMS 和 sparse attention path.
 native contract 支持长 row range.
 较少行数的输入使用有界 workspace.
-配置为大 chunk 的 prefill 使用最多 8192-row 的有界 launch.
+配置为大 chunk 的 prefill 使用最多 32768-row 的有界 launch.
 默认值会减少 long-context launch count. 环境覆盖值可以降低 temporary storage.
 
 Native SwiGLU 支持最多 1048576 个 routed row.

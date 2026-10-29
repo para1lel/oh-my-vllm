@@ -671,7 +671,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
 
     def test_prefill_row_limit_keeps_explicit_operator_bound(self):
-        self.assertEqual(prefill_row_limit(None), MAX_PREFILL_ROWS)
+        self.assertEqual(prefill_row_limit(None), DEFAULT_PREFILL_ROWS)
         self.assertEqual(prefill_row_limit(str(MAX_PREFILL_ROWS)), MAX_PREFILL_ROWS)
         with self.assertRaisesRegex(ValueError, "prefill row limit"):
             prefill_row_limit(str(MAX_PREFILL_ROWS + 1))
@@ -692,7 +692,9 @@ class DeepSeekSpeculation(unittest.TestCase):
             return torch.empty(1, dtype=torch.long), None, hidden
 
         worker.model = Mock(side_effect=model)
-        result = worker._target([1] * 8193, 7, 3, compute_logits=False)
+        result = worker._target(
+            [1] * (MAX_PREFILL_ROWS + 1), 7, 3, compute_logits=False
+        )
 
         self.assertEqual(tuple(result[2].shape), (1, 2, 2))
         self.assertEqual(worker.model.call_count, 2)
@@ -723,7 +725,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         worker.prefill_rows = MAX_PREFILL_ROWS
 
         def model(inputs, **_):
-            self.assertLessEqual(inputs.size(0) * inputs.size(1), 8192)
+            self.assertLessEqual(inputs.size(0) * inputs.size(1), MAX_PREFILL_ROWS)
             return None, None, None
 
         worker.model = Mock(side_effect=model)
@@ -774,7 +776,7 @@ class DeepSeekSpeculation(unittest.TestCase):
 
         def model(inputs, **_):
             self.assertLessEqual(inputs.size(0), 4)
-            self.assertLessEqual(inputs.size(0) * inputs.size(1), 8192)
+            self.assertLessEqual(inputs.size(0) * inputs.size(1), MAX_PREFILL_ROWS)
             return None, None, None
 
         worker.model = Mock(side_effect=model)
