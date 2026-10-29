@@ -1462,10 +1462,16 @@ class ParallelHead(nn.Module):
             torch.empty(self.part_vocab_size, self.dim, dtype=torch.float32)
         )
 
-    def forward(self, x: torch.Tensor, full_logits=False):
+    def forward(self, x: torch.Tensor, full_logits=False, logit_start=0):
         """x: [b, s, d]. Generation only needs the last position, so that is the default."""
         if not full_logits:
+            if logit_start:
+                raise ValueError("logit_start requires full logits")
             x = x[:, -1]
+        elif type(logit_start) is not int or not 0 <= logit_start < x.size(1):
+            raise ValueError("logit_start is outside the hidden sequence")
+        else:
+            x = x[:, logit_start:]
         logits = F.linear(x.float(), self.weight)
         if world_size > 1:
             all_logits = [torch.empty_like(logits) for _ in range(world_size)]
@@ -1780,6 +1786,8 @@ class Transformer(nn.Module):
         full_logits: bool = False,
         compute_logits: bool = True,
         collect_main_hidden: bool = True,
+        logit_start: int = 0,
+        sample_output: bool = True,
     ):
         """input_ids: [b, s], every entry a real token id -- generate.py only ever passes positions it
         has already filled, so the padding it uses internally never reaches here. token_types /
@@ -1819,8 +1827,20 @@ class Transformer(nn.Module):
             h, pre_mix = layer(h, start_pos, pre_mix, image_mask, cache_slots)
         h = layer.hc_pre(h, pre_mix)
         if compute_logits:
-            logits = self.head(self.norm(h), full_logits=full_logits)
-            output_ids = sample(logits, self.temperature)
+            logits = self.head(
+                self.norm(h),
+                full_logits=full_logits,
+                logit_start=logit_start,
+            )
+            output_ids = (
+                sample(logits, self.temperature)
+                if sample_output
+                else torch.empty(
+                    input_ids.size(0),
+                    dtype=torch.long,
+                    device=input_ids.device,
+                )
+            )
         else:
             logits = None
             output_ids = torch.empty(

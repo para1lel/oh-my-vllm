@@ -640,6 +640,22 @@ class DeepSeekModel(unittest.TestCase):
                 atol=1e-5,
                 rtol=1e-3,
             )
+            selected = Transformer(args)
+            selected.load_state_dict(sequential.state_dict())
+            selected(prompt, cache_slots=torch.tensor([0]))
+            selected_logits = selected(
+                continuation,
+                start_pos=4,
+                cache_slots=torch.tensor([0]),
+                full_logits=True,
+                logit_start=1,
+            )[1]
+            torch.testing.assert_close(
+                selected_logits,
+                chunked_logits[:, 1:],
+                atol=1e-5,
+                rtol=1e-3,
+            )
         finally:
             torch.set_default_device(previous_device)
             torch.set_default_dtype(previous_dtype)

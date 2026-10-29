@@ -152,13 +152,7 @@ class DeepSeekSpeculation(unittest.TestCase):
             torch.nn.functional.one_hot(torch.tensor([6]), 8).float(),
             torch.nn.functional.one_hot(torch.tensor([7]), 8).float(),
         ]
-        worker._target = Mock(
-            side_effect=[
-                (None, logits[0], torch.ones(1)),
-                (None, logits[1], None),
-                (None, logits[2], None),
-            ]
-        )
+        worker._target = Mock(return_value=(None, torch.stack(logits, dim=1), None))
 
         result = worker._execute_row(
             {
@@ -170,6 +164,9 @@ class DeepSeekSpeculation(unittest.TestCase):
 
         self.assertEqual(result["token_ids"], [5, 6, 7])
         self.assertEqual(result["num_accepted_draft_tokens"], 2)
+        worker._target.assert_called_once()
+        self.assertTrue(worker._target.call_args.kwargs["full_logits"])
+        self.assertEqual(worker._target.call_args.kwargs["logit_start"], 1)
 
     def test_worker_proposes_from_the_last_target_token_in_a_prefill_chunk(self):
         worker = Worker.__new__(Worker)
@@ -224,7 +221,7 @@ class DeepSeekSpeculation(unittest.TestCase):
             cache_slot=0,
             append=Mock(return_value=([6, 7], "ok")),
         )
-        hidden = [torch.ones(1, 1, 3), torch.full((1, 1, 3), 2)]
+        hidden = torch.arange(9, dtype=torch.float32).view(1, 3, 3)
         worker.requests = {1: request}
         worker.dspark = True
         worker.device = torch.device("cpu")
@@ -233,18 +230,17 @@ class DeepSeekSpeculation(unittest.TestCase):
         worker._proposal = Mock(return_value=[])
         worker.trace = SimpleNamespace(record=Mock())
         worker._target = Mock(
-            side_effect=[
-                (
-                    None,
-                    torch.nn.functional.one_hot(torch.tensor([[6]]), 8).float(),
-                    hidden[0],
+            return_value=(
+                None,
+                torch.stack(
+                    [
+                        torch.nn.functional.one_hot(torch.tensor([6]), 8).float(),
+                        torch.nn.functional.one_hot(torch.tensor([6]), 8).float(),
+                    ],
+                    dim=1,
                 ),
-                (
-                    None,
-                    torch.nn.functional.one_hot(torch.tensor([[6]]), 8).float(),
-                    hidden[1],
-                ),
-            ]
+                hidden,
+            )
         )
 
         worker._execute_row(
@@ -255,13 +251,17 @@ class DeepSeekSpeculation(unittest.TestCase):
             }
         )
 
-        self.assertEqual(worker.model.forward_spec_seed.call_count, 2)
+        self.assertEqual(worker.model.forward_spec_seed.call_count, 1)
         self.assertEqual(
             [
                 call.kwargs["start_pos"]
                 for call in worker.model.forward_spec_seed.call_args_list
             ],
-            [0, 2],
+            [0],
+        )
+        self.assertEqual(
+            worker.model.forward_spec_seed.call_args.args[0].shape[1],
+            3,
         )
 
     def test_target_keeps_long_prefill_in_one_native_call(self):
@@ -302,7 +302,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
 
     def test_prefill_row_limit_keeps_explicit_operator_bound(self):
-        self.assertEqual(prefill_row_limit(None), DEFAULT_PREFILL_ROWS)
+        self.assertEqual(prefill_row_limit(None), MAX_PREFILL_ROWS)
         self.assertEqual(prefill_row_limit(str(MAX_PREFILL_ROWS)), MAX_PREFILL_ROWS)
         with self.assertRaisesRegex(ValueError, "prefill row limit"):
             prefill_row_limit(str(MAX_PREFILL_ROWS + 1))

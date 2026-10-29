@@ -13,18 +13,20 @@ adapter 使用原始 48 shard checkpoint 和 rank-local placement.
 bridge 支持 `tp4`, `tep4` 以及已明确记录的 DEP4 executor fallback.
 
 adapter 使用 DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention 和 transformer support.
-prefill 默认使用最多 384 个 total row 的 working chunk.
+prefill 默认使用最多 8192 个 total row 的 working chunk.
 设置 `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` 可以选择最多 8192 个 row.
 完成的 chunk 会在下一次 native call 之前释放 hidden tail.
 
-DSpark verification 保持 rejected draft 为 private state, 并输出 target correction.
+DSpark verification 会将 accepted prefix 和 draft row 放入一次 target call.
+它只投影需要的 logit, 并在一次 MTP operation 中 seed accepted target hidden state.
+rejected draft 保持 private state, 并输出 target correction.
 Engram table 使用 file-backed host mapping.
 Lookup 只将选中的 row 分阶段传到 GPU.
 
 released DeepSeek shape 支持 native projection, routing, activation, mHC, RMS 和 sparse attention path.
 native contract 支持长 row range.
 配置为大 chunk 的 prefill 使用最多 8192-row 的有界 launch.
-较小的默认值会限制 multi-request temporary storage.
+默认值会减少 long-context launch count. 环境覆盖值可以降低 temporary storage.
 
 Native SwiGLU 支持最多 1048576 个 routed row.
 这使 six-route 8192-row prefill chunk 保持在 native activation path.
@@ -124,6 +126,7 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 ## 下一步
 
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
+- 在 DeepSeek CUDA Graph capture 之前增加 per-request varlen position metadata 和 batch decode.
 - 增加 physical cache 和 sequence capacity 后, 运行更高容量的 AgentX case.
 - 用稳定的 request ownership 和 expert dispatch 替换 DEP4 fallback.
 - 将 native DeepSeek path 与 reference path 和公开 baseline 做性能比较.

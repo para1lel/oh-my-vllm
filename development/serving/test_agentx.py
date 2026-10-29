@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from . import agentx, agentx_data
+from .deepseek_agentx import profile_command as deepseek_profile_command
 from .deepseek_agentx import workload_identity
 
 
@@ -203,6 +204,27 @@ class AgentXTests(unittest.TestCase):
                 ):
                     agentx.arguments()
                 self.assertEqual(error.exception.code, 2)
+
+    def test_deepseek_profile_command_supports_a_million_token_context(self):
+        command = deepseek_profile_command(
+            "/env/python",
+            "/model",
+            "/run",
+            1234,
+            900,
+            42,
+            max_context=1048576,
+            concurrency=16,
+        )
+
+        self.assertEqual(
+            command[command.index("--max-context-length") + 1],
+            "1048576",
+        )
+        self.assertEqual(
+            command[command.index("--concurrency") + 1],
+            "16",
+        )
 
 
 if __name__ == "__main__":

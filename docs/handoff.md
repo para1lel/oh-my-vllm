@@ -13,18 +13,20 @@ It supports text target execution and DSpark5 greedy proposal verification.
 The bridge supports `tp4`, `tep4`, and a documented DEP4 executor fallback.
 
 The adapter uses the DeepSeek descriptor, cache groups, tokenizer identity, inference-config identity, native projection, routing, activation, mHC, RMS, sparse attention, and transformer support.
-Prefill uses working chunks of at most 384 total rows by default.
+Prefill uses working chunks of at most 8192 total rows by default.
 Set `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` to select a value up to 8192.
 Completed chunks release their hidden tail before the next native call.
 
-DSpark verification keeps rejected drafts private and emits the target correction.
+DSpark verification sends the accepted prefix and draft rows to one target call.
+It projects only the required logits and seeds accepted target hidden states in one MTP operation.
+Rejected drafts stay private and the target correction is emitted.
 Engram tables use file-backed host mappings.
 Lookup stages only the selected rows on the GPU.
 
 Released DeepSeek shapes support native projection, routing, activation, mHC, RMS, and sparse attention paths.
 The native contracts accept long row ranges. Small rows use bounded workspaces.
 Configured large prefill calls use bounded launches up to 8192 rows.
-The smaller default keeps multi-request temporary storage bounded.
+The default reduces long-context launch count. The environment override can lower temporary storage.
 
 Native SwiGLU accepts up to 1048576 routed rows.
 This keeps six-route 8192-row prefill chunks on the native activation path.
@@ -125,6 +127,7 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 ## Next work
 
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
+- Add per-request varlen position metadata and batch decode before DeepSeek CUDA Graph capture.
 - Run higher-capacity AgentX cases after increasing physical cache and sequence capacity.
 - Replace the DEP4 fallback with stable request ownership and expert dispatch.
 - Measure the native DeepSeek paths against the reference path and public baselines.

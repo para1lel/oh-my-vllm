@@ -29,7 +29,7 @@ from .tokenizer import Tokenization
 DEFAULT_CACHE_CONTEXT = 65536
 MAX_NATIVE_ROWS = 384
 MAX_PREFILL_ROWS = 8192
-DEFAULT_PREFILL_ROWS = MAX_NATIVE_ROWS
+DEFAULT_PREFILL_ROWS = MAX_PREFILL_ROWS
 MAX_PREFILL_SUBBATCH = 4
 
 
@@ -325,6 +325,7 @@ class Worker:
         *,
         full_logits=False,
         compute_logits=True,
+        logit_start=0,
     ):
         cache_slots = torch.tensor([slot], device=self.device)
         output_ids = logits = main_hidden = None
@@ -332,6 +333,7 @@ class Worker:
         limit_rows = getattr(self, "prefill_rows", DEFAULT_PREFILL_ROWS)
         for offset in range(0, len(token_ids), limit_rows):
             inputs = self._input_tokens((token_ids[offset : offset + limit_rows],))
+            chunk_logit_start = max(0, logit_start - offset) if full_logits else 0
             output_ids, chunk_logits, chunk_hidden = self.model(
                 inputs,
                 start_pos=start_pos + offset,
@@ -339,6 +341,8 @@ class Worker:
                 full_logits=full_logits,
                 compute_logits=compute_logits,
                 collect_main_hidden=getattr(self, "dspark", False),
+                logit_start=chunk_logit_start,
+                sample_output=not full_logits,
             )
             logits = chunk_logits
             if logit_chunks is not None:
@@ -692,64 +696,69 @@ class Worker:
             known = token_ids[:known_count]
             if not known:
                 raise ValueError("DeepSeek execution row has no accepted input")
-            _, logits, main_hidden = self._target(known, start_pos, slot)
-            mtp_state_updated = self._seed_mtp(
-                main_hidden,
-                start_pos,
-                slot,
-                source_length=self._mtp_source_length(len(known)),
-            )
-            target_predictions = [int(logits.argmax(dim=-1).item())]
             drafts = token_ids[known_count:]
-            accepted_drafts = []
-            current_logits = logits
-            mismatch = None
-            for index, draft in enumerate(drafts):
-                target = int(current_logits.argmax(dim=-1).item())
-                target_predictions[index] = target
-                if draft != target:
-                    mismatch = index
-                    break
-                accepted_drafts.append(draft)
-                _, current_logits, current_hidden = self._target(
-                    [draft],
-                    start_pos + known_count + index,
+            if drafts:
+                _, logits, main_hidden = self._target(
+                    token_ids,
+                    start_pos,
                     slot,
+                    full_logits=True,
+                    logit_start=known_count - 1,
                 )
-                mtp_state_updated |= self._seed_mtp(
-                    current_hidden,
-                    start_pos + known_count + index,
+                if (
+                    not isinstance(logits, torch.Tensor)
+                    or logits.ndim != 3
+                    or logits.size(0) != 1
+                    or logits.size(1) != len(drafts) + 1
+                ):
+                    raise ValueError(
+                        "DeepSeek batched verification returned invalid logits"
+                    )
+                target_predictions = logits[0].argmax(dim=-1).tolist()
+                verification = verify_greedy_drafts(drafts, target_predictions)
+                emitted = list(verification.token_ids)
+                tokens, text = request.append(emitted)
+                accepted = min(
+                    verification.accepted_draft_tokens,
+                    max(0, len(tokens) - 1),
+                )
+                accepted_input_count = known_count + accepted
+                accepted_hidden = (
+                    main_hidden[:, :accepted_input_count]
+                    if isinstance(main_hidden, torch.Tensor)
+                    else None
+                )
+                mtp_state_updated = self._seed_mtp(
+                    accepted_hidden,
+                    start_pos,
                     slot,
-                    source_length=self._mtp_source_length(1),
+                    source_length=accepted_input_count,
                 )
-                target_predictions.append(int(current_logits.argmax(dim=-1).item()))
-            if not drafts:
-                target_predictions = [int(logits.argmax(dim=-1).item())]
-                verified_drafts = []
-            elif mismatch is not None:
-                target_predictions.append(target_predictions[-1])
-                verified_drafts = drafts[: mismatch + 1]
+                accepted_end = start_pos + accepted_input_count
+                proposals = []
             else:
-                verified_drafts = drafts
-            verification = verify_greedy_drafts(verified_drafts, target_predictions)
-            emitted = list(verification.token_ids)
-            tokens, text = request.append(emitted)
-            accepted = min(
-                verification.accepted_draft_tokens,
-                max(0, len(tokens) - 1),
-            )
-            accepted_end = start_pos + known_count + accepted
-            proposals = []
-            if not drafts and self.dspark and not request.finish:
-                mtp_state_updated = True
-                proposals = self._proposal(
-                    int(target_predictions[0]),
-                    main_hidden[:, -1:],
-                    start_pos + known_count - 1,
+                _, logits, main_hidden = self._target(known, start_pos, slot)
+                mtp_state_updated = self._seed_mtp(
+                    main_hidden,
+                    start_pos,
                     slot,
+                    source_length=self._mtp_source_length(len(known)),
                 )
-                remaining = max(0, request.limit - request.generated)
-                proposals = proposals[: max(0, remaining - 1)]
+                target_predictions = [int(logits.argmax(dim=-1).item())]
+                accepted_end = start_pos + known_count
+                tokens, text = request.append(target_predictions)
+                accepted = 0
+                proposals = []
+                if self.dspark and not request.finish:
+                    mtp_state_updated = True
+                    proposals = self._proposal(
+                        int(target_predictions[0]),
+                        main_hidden[:, -1:],
+                        start_pos + known_count - 1,
+                        slot,
+                    )
+                    remaining = max(0, request.limit - request.generated)
+                    proposals = proposals[: max(0, remaining - 1)]
         if hasattr(self, "cache"):
             self.cache.commit(
                 row["request_id"],
