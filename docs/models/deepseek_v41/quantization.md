@@ -50,8 +50,25 @@ Apply `sum = fma_rn(scaled, weight_scale, sum)`.
 Do not multiply the two scales before the dot product.
 Round only the completed sum to the selected output type.
 
+RMS normalization rounds each square before it adds the square to an accumulator.
+Use the full logical row count and width to select the mean reduction layout.
+Multiply the sum by `FP32(1 / width)` after the reduction.
+Do not replace this multiplication with division.
+
+Multiply each input by the inverse RMS in FP32.
+Multiply this FP32 result by its weight in FP32.
+Round the result to BF16.
+
 The [router](../../../python/oh_my_vllm/models/deepseek_v41/model.py) projects inputs and weights in FP32 before score calculation.
 Do not round router logits to BF16 before expert selection.
+Use `sqrt(x > 20 ? x : log1p(exp(x)))` for each score.
+
+The six-score sum is `((s0 + s4) + s2) + ((s1 + s5) + s3)`.
+The three-score sum is `(s0 + s2) + s1`.
+Divide each selected score by `sum + 1e-20`.
+Multiply the quotient by `1.5`.
+Native routing selects the lowest global expert ID when corrected scores are equal.
+Released top-k can select different IDs for such ties.
 
 Tensor-parallel shared-expert down projections keep FP32 partial sums until rank reduction.
 Round the reduced result to BF16.

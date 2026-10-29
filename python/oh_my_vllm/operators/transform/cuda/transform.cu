@@ -114,33 +114,67 @@ void quantization_span(TensorView tensor, int64_t bytes) {
       << "quantization tensor address overflow";
 }
 
-__device__ float warp_sum(float value) {
-  for (int offset = 16; offset; offset >>= 1)
-    value += __shfl_xor_sync(0xffffffff, value, offset);
-  return value;
-}
-
+template <int Threads>
 __global__ void rms_kernel(const __nv_bfloat162 *values, const __nv_bfloat162 *weight,
                            __nv_bfloat162 *output, int pairs, float epsilon) {
-  int row = blockIdx.x, lane = threadIdx.x % 32, warp = threadIdx.x / 32;
-  float sum = 0.f;
-  for (int column = threadIdx.x; column < pairs; column += blockDim.x) {
-    float2 value = __bfloat1622float2(values[row * pairs + column]);
-    sum += value.x * value.x + value.y * value.y;
+  int row = blockIdx.x, thread = threadIdx.x;
+  float sums[4] = {};
+  for (int vector = thread; vector < pairs / 2; vector += Threads) {
+    float2 first = __bfloat1622float2(values[row * pairs + vector * 2]);
+    float2 second = __bfloat1622float2(values[row * pairs + vector * 2 + 1]);
+    sums[0] = __fadd_rn(sums[0], __fmul_rn(first.x, first.x));
+    sums[1] = __fadd_rn(sums[1], __fmul_rn(first.y, first.y));
+    sums[2] = __fadd_rn(sums[2], __fmul_rn(second.x, second.x));
+    sums[3] = __fadd_rn(sums[3], __fmul_rn(second.y, second.y));
   }
-  __shared__ float totals[8];
-  sum = warp_sum(sum);
-  if (lane == 0)
-    totals[warp] = sum;
+  float sum = sums[0];
+  for (int i = 1; i < 4; ++i)
+    sum = __fadd_rn(sum, sums[i]);
+  __shared__ float partials[Threads], inverse;
+  if constexpr (Threads > 32) {
+    partials[thread] = sum;
+    for (int offset = Threads / 2; offset >= 32; offset >>= 1) {
+      __syncthreads();
+      if (thread < offset) {
+        sum = __fadd_rn(sum, partials[thread + offset]);
+        partials[thread] = sum;
+      }
+    }
+  }
   __syncthreads();
-  sum = warp_sum(lane < 8 ? totals[lane] : 0.f);
-  float inverse = rsqrtf(sum / (2 * pairs) + epsilon);
-  for (int column = threadIdx.x; column < pairs; column += blockDim.x) {
+  for (int offset = 16; offset; offset >>= 1)
+    sum = __fadd_rn(sum, __shfl_down_sync(0xffffffff, sum, offset));
+  if (thread == 0) {
+    float mean = __fmul_rn(sum, 1.f / (2 * pairs));
+    inverse = rsqrtf(__fadd_rn(mean, epsilon));
+  }
+  __syncthreads();
+  for (int column = thread; column < pairs; column += Threads) {
     float2 value = __bfloat1622float2(values[row * pairs + column]);
     float2 scale = __bfloat1622float2(weight[column]);
     output[row * pairs + column] =
-        __floats2bfloat162_rn((value.x * inverse) * scale.x, (value.y * inverse) * scale.y);
+        __floats2bfloat162_rn(__fmul_rn(__fmul_rn(value.x, inverse), scale.x),
+                              __fmul_rn(__fmul_rn(value.y, inverse), scale.y));
   }
+}
+
+int rms_threads(int rows, int width) {
+  int height = 1, threads = 32;
+  while (height < 16 && height * 2 <= rows)
+    height *= 2;
+  while (threads < 512 && threads * 2 <= width / 4)
+    threads *= 2;
+  // Source mean assigns y to different rows, not to a second reduction.
+  return std::min(threads, 512 / height);
+}
+
+template <int Threads>
+void launch_rms(TensorView values, TensorView weight, TensorView output, int rows, int pairs,
+                float epsilon, cudaStream_t stream) {
+  rms_kernel<Threads><<<rows, Threads, 0, stream>>>(
+      static_cast<const __nv_bfloat162 *>(values.data_ptr()),
+      static_cast<const __nv_bfloat162 *>(weight.data_ptr()),
+      static_cast<__nv_bfloat162 *>(output.data_ptr()), pairs, epsilon);
 }
 
 __global__ void rope_kernel(const __nv_bfloat162 *values, const float2 *coefficients,
@@ -221,10 +255,23 @@ void rms(TensorView values, TensorView weight, TensorView output, double epsilon
     return;
   tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
-  rms_kernel<<<rows, 256, 0, stream>>>(static_cast<const __nv_bfloat162 *>(values.data_ptr()),
-                                       static_cast<const __nv_bfloat162 *>(weight.data_ptr()),
-                                       static_cast<__nv_bfloat162 *>(output.data_ptr()), width / 2,
-                                       epsilon);
+  switch (rms_threads(rows, width)) {
+  case 32:
+    launch_rms<32>(values, weight, output, rows, width / 2, epsilon, stream);
+    break;
+  case 64:
+    launch_rms<64>(values, weight, output, rows, width / 2, epsilon, stream);
+    break;
+  case 128:
+    launch_rms<128>(values, weight, output, rows, width / 2, epsilon, stream);
+    break;
+  case 256:
+    launch_rms<256>(values, weight, output, rows, width / 2, epsilon, stream);
+    break;
+  case 512:
+    launch_rms<512>(values, weight, output, rows, width / 2, epsilon, stream);
+    break;
+  }
   check_cuda(cudaGetLastError());
 }
 

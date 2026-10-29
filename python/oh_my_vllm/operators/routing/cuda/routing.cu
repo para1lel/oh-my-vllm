@@ -11,7 +11,7 @@ __global__ void route_kernel(const float *logits, const float *bias, const float
   __shared__ float scores[384], corrected[384];
   for (int expert = threadIdx.x; expert < experts; expert += blockDim.x) {
     float value = logits[row * experts + expert];
-    float score = sqrtf(fmaxf(value, 0.f) + log1pf(expf(-fabsf(value))));
+    float score = sqrtf(value > 20.f ? value : log1pf(expf(value)));
     scores[expert] = score;
     corrected[expert] = score + selected_bias[expert];
   }
@@ -31,7 +31,7 @@ __global__ void route_kernel(const float *logits, const float *bias, const float
     return;
   }
 
-  float selected[6], sum = 0.f;
+  float selected[6];
   for (int slot = 0; slot < topk; ++slot) {
     int best = -1;
     float peak = -CUDART_INF_F;
@@ -44,9 +44,15 @@ __global__ void route_kernel(const float *logits, const float *bias, const float
     }
     expert_ids[row * topk + slot] = best;
     selected[slot] = scores[best];
-    sum += selected[slot];
     corrected[best] = -CUDART_INF_F;
   }
+  float sum;
+  // The released reduction uses four lanes for six values and two for three.
+  if (topk == 6)
+    sum = __fadd_rn(__fadd_rn(__fadd_rn(selected[0], selected[4]), selected[2]),
+                    __fadd_rn(__fadd_rn(selected[1], selected[5]), selected[3]));
+  else
+    sum = __fadd_rn(__fadd_rn(selected[0], selected[2]), selected[1]);
   for (int slot = 0; slot < topk; ++slot)
     coefficients[row * topk + slot] = selected[slot] / (sum + 1e-20f) * 1.5f;
 }

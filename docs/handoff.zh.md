@@ -35,6 +35,10 @@ DeepSeek rank worker 为 prefill input copy 复用 pinned host 和 device token 
 
 DeepSeek 使用发布模型的 FP4 和 FP8 scale rule, 并对数值使用最近偶数舍入.
 Dense FP8 projection 在 scale multiplication 和 FP32 accumulation 之前, 为每个 K32 group 重置 raw dot product.
+
+Native RMS 保持发布参考的 square-sum reduction 和 reciprocal multiplication 顺序.
+Native routing 保持发布参考的 softplus 和 selected-score sum 顺序.
+
 In-place quantization 先舍入再反量化.
 Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 temporary tensor.
 Native attention 使用独立的 window KV 和 compressed KV table.

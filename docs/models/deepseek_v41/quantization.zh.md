@@ -50,8 +50,25 @@ Dense FP8 projection 使用 raw K32 dot product 和 FP32 accumulator.
 不要在 dot product 之前将两个 scale 相乘.
 仅将完成的总和舍入到所选 output type.
 
+RMS normalization 在将 square 加入 accumulator 之前, 对每个 square 舍入.
+使用完整逻辑 row 数和 width 选择 mean reduction layout.
+Reduction 完成后, 将 sum 乘以 `FP32(1 / width)`.
+不要用 division 替换此 multiplication.
+
+在 FP32 中将每个 input 乘以 inverse RMS.
+在 FP32 中将这个 FP32 result 乘以其 weight.
+将 result 舍入到 BF16.
+
 [Router](../../../python/oh_my_vllm/models/deepseek_v41/model.py) 在 score calculation 之前, 使用 FP32 input 和 weight 执行 projection.
 Expert selection 之前不要将 router logits 舍入到 BF16.
+每个 score 使用 `sqrt(x > 20 ? x : log1p(exp(x)))`.
+
+六个 score 的 sum 为 `((s0 + s4) + s2) + ((s1 + s5) + s3)`.
+三个 score 的 sum 为 `(s0 + s2) + s1`.
+将每个 selected score 除以 `sum + 1e-20`.
+将 quotient 乘以 `1.5`.
+Corrected score 相等时, native routing 选择最小的 global expert ID.
+对于这种 tie, 发布参考的 top-k 可能选择不同 ID.
 
 Tensor-parallel shared-expert down projection 保留 FP32 partial sum, 直到 rank reduction 完成.
 将归约结果舍入到 BF16.

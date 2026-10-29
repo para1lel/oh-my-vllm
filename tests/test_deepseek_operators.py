@@ -70,7 +70,129 @@ def projection_reference(encoded, input_scales, weight, scales, bits):
     return F.linear(inputs, values).to(torch.bfloat16)
 
 
+def rms_rounding_case(rows):
+    values = torch.zeros((rows, 5120), dtype=torch.bfloat16, device="cuda")
+    expected = torch.zeros_like(values)
+    for column, value, normalized in (
+        (4864, 2.609375, 0.0908203125),
+        (3137, 20.75, 0.71875),
+        (3789, 21.125, 0.734375),
+        (1459, 21.0, 0.73046875),
+        (4219, 50.25, 1.7421875),
+        (3520, 3.640625, 0.1259765625),
+        (3919, 0.291015625, 0.0101318359375),
+        (2109, 0.019775390625, 0.0006866455078125),
+    ):
+        values[:, column] = value
+        expected[:, column] = normalized
+    weight = torch.full((5120,), 0.0301513671875, dtype=torch.bfloat16, device="cuda")
+    return values, weight, expected
+
+
 class DeepSeekOperatorContracts(unittest.TestCase):
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_routing_keeps_source_softplus_and_selected_sum_order(self):
+        for rows in (1, 33):
+            for logit in (-0.25, 0.25):
+                with self.subTest(rows=rows, logit=logit):
+                    logits = torch.full(
+                        (rows, 384), -100.0, dtype=torch.float32, device="cuda"
+                    )
+                    logits[:, :6] = logit
+                    bias = torch.full(
+                        (384,), -100.0, dtype=torch.float32, device="cuda"
+                    )
+                    bias[:6] = torch.tensor(
+                        [12, 10, 8, 6, 4, 2], dtype=torch.float32, device="cuda"
+                    )
+                    coefficients, ids = kernel.route(logits, bias, bias, None)
+                    torch.testing.assert_close(
+                        ids,
+                        torch.arange(6, dtype=torch.int32, device="cuda").expand(
+                            rows, 6
+                        ),
+                        atol=0,
+                        rtol=0,
+                    )
+                    torch.testing.assert_close(
+                        coefficients,
+                        torch.full_like(coefficients, 0.25),
+                        atol=0,
+                        rtol=0,
+                    )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_rms_keeps_source_reduction_and_mean_rounding(self):
+        for rows in (1, 2, 33, 125, 126, 385):
+            for epsilon in (1e-20, 1e-6):
+                with self.subTest(rows=rows, epsilon=epsilon):
+                    values, weight, expected = rms_rounding_case(rows)
+                    if epsilon == 1e-6:
+                        expected[:, 4864] = 0.09033203125
+                    actual = kernel.rms(values, weight, epsilon)
+                    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_rms_graph_replays_on_the_caller_stream(self):
+        module = kernel._transform_module()
+        for rows in (1, 33):
+            with self.subTest(rows=rows):
+                values, weight, expected = rms_rounding_case(rows)
+                output = torch.empty_like(values)
+                stream = torch.cuda.Stream()
+                stream.wait_stream(torch.cuda.current_stream())
+                graph = torch.cuda.CUDAGraph()
+                try:
+                    with torch.cuda.graph(graph, stream=stream):
+                        module.rms(values, weight, output, 1e-20)
+                    for factor in (1, 2):
+                        with torch.cuda.stream(stream):
+                            weight.fill_(0.0301513671875 * factor)
+                            output.fill_(-7)
+                            graph.replay()
+                            observed = output.clone()
+                            finished = torch.cuda.Event()
+                            finished.record()
+                        finished.synchronize()
+                        torch.testing.assert_close(
+                            observed, expected * factor, atol=0, rtol=0
+                        )
+                finally:
+                    stream.synchronize()
+                    graph.reset()
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_rms_rejects_metadata_and_aliases_before_writes(self):
+        module = kernel._transform_module()
+        values, weight, _ = rms_rounding_case(2)
+        original = values.clone()
+        output = torch.full_like(values, -7)
+        strided = torch.full((2, 10240), -7, dtype=torch.bfloat16, device="cuda")[
+            :, ::2
+        ]
+        invalid = (
+            (values.float(), weight, output, 1e-20),
+            (values, weight.float(), output, 1e-20),
+            (values, weight[:-1], output, 1e-20),
+            (values, weight.cpu(), output, 1e-20),
+            (values, weight, strided, 1e-20),
+            (values, weight, values, 1e-20),
+            (values, weight, output, 1e-5),
+        )
+        for arguments in invalid:
+            with self.subTest(shapes=[getattr(v, "shape", v) for v in arguments]):
+                with self.assertRaisesRegex(Exception, "Check failed"):
+                    module.rms(*arguments)
+                torch.testing.assert_close(
+                    output, torch.full_like(output, -7), atol=0, rtol=0
+                )
+                torch.testing.assert_close(
+                    strided, torch.full_like(strided, -7), atol=0, rtol=0
+                )
+                torch.testing.assert_close(values, original, atol=0, rtol=0)
+        module.rms(values[:0], weight, output[:0], 1e-20)
+        torch.testing.assert_close(output, torch.full_like(output, -7), atol=0, rtol=0)
+
     def test_hc_vendor_identity_uses_tensor_runtime_libraries(self):
         from oh_my_vllm.operators.runtime import native
 

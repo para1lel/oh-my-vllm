@@ -35,6 +35,10 @@ DeepSeek rank workers reuse pinned host and device token buffers for prefill inp
 
 DeepSeek uses the released FP4 and FP8 scale rules and nearest-even value rounding.
 Dense FP8 projections reset raw dot products for each K32 group before scale multiplication and FP32 accumulation.
+
+Native RMS keeps the released square-sum reduction and reciprocal multiplication order.
+Native routing keeps the released softplus and selected-score sum order.
+
 In-place quantization rounds before dequantization.
 The native quantizer writes encoded values and scales without context-sized temporary tensors.
 Native attention uses separate window and compressed KV tables.
