@@ -71,6 +71,73 @@ def projection_reference(encoded, input_scales, weight, scales, bits):
 
 
 class DeepSeekOperatorContracts(unittest.TestCase):
+    def test_sparse_reference_rounds_unnormalized_probabilities_before_values(self):
+        query = torch.zeros((1, 1, 16, 512), dtype=torch.bfloat16)
+        query[..., 0] = 32
+        kv = torch.zeros((1, 2, 512), dtype=torch.bfloat16)
+        kv[0, :, 0] = torch.tensor([0.0, -0.5])
+        kv[0, :, 1] = torch.tensor([1.0, -1.0])
+        sink = torch.full((16,), -2.0)
+        indices = torch.tensor([[[0, 1]]], dtype=torch.int32)
+        actual = kernel.sparse_attn(query, kv, sink, indices, 512**-0.5)
+        torch.testing.assert_close(
+            actual[..., 1],
+            torch.full((1, 1, 16), 0.3125, dtype=torch.bfloat16),
+            rtol=0,
+            atol=0,
+        )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_native_sparse_sink_does_not_change_probability_rounding(self):
+        query = torch.zeros((1, 1, 16, 512), dtype=torch.bfloat16, device="cuda")
+        window = torch.ones((1, 1, 512), dtype=torch.bfloat16, device="cuda")
+        sink = torch.ones(16, dtype=torch.float32, device="cuda")
+        indices = torch.zeros((1, 1, 1), dtype=torch.int32, device="cuda")
+        actual = kernel._sparse_attn_native(query, sink, indices, window, window[:, :0])
+        self.assertIsNotNone(actual)
+        torch.testing.assert_close(
+            actual, torch.full_like(query, 0.26953125), rtol=0, atol=0
+        )
+
+    def test_sparse_attention_preserves_ordered_blocks_and_masked_slots(self):
+        devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
+        # Released reference: one block and a later maximum have different rounding.
+        cases = (
+            ([1, 0], -2.0, 0.3125),
+            ([1] + [-1] * 63 + [0], -2.0, 0.310546875),
+            ([0] * 65, -2.0, 0.99609375),
+            ([-1] * 65, -2.0, 0.0),
+            ([-1] * 65, -1e31, 0.0),
+            ([], -1e31, 0.0),
+        )
+        for device in devices:
+            query = torch.zeros((1, 1, 16, 512), dtype=torch.bfloat16, device=device)
+            query[..., 0] = 32
+            kv = torch.zeros((1, 2, 512), dtype=torch.bfloat16, device=device)
+            kv[0, 1, 0] = -0.5
+            kv[0, 0, 1], kv[0, 1, 1] = 1, -1
+            for selected, sink_value, expected in cases:
+                with self.subTest(device=device, indices=selected, sink=sink_value):
+                    sink = torch.full((16,), sink_value, device=device)
+                    indices = torch.tensor(
+                        [[selected]], dtype=torch.int32, device=device
+                    )
+                    actual = kernel.sparse_attn(query, kv, sink, indices, 512**-0.5)
+                    torch.testing.assert_close(
+                        actual[..., 1],
+                        torch.full_like(actual[..., 1], expected),
+                        atol=0,
+                        rtol=0,
+                    )
+                    if expected == 0:
+                        torch.testing.assert_close(actual, torch.zeros_like(actual))
+                    if device == "cuda":
+                        native = kernel._sparse_attn_native(
+                            query, sink, indices, kv, kv[:, :0]
+                        )
+                        self.assertIsNotNone(native)
+                        torch.testing.assert_close(native, actual, atol=0, rtol=0)
+
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_fp32_projection_replays_on_caller_stream(self):
         encoded = torch.ones((2, 128), device="cuda").to(torch.float8_e4m3fn)
@@ -244,11 +311,20 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             torch.einsum("bshd,bskd->bshk", query.float(), gathered.float()) * 32**-0.5
         )
         scores = scores.masked_fill(~valid.unsqueeze(2), float("-inf"))
-        scores = torch.cat([scores, sink.view(1, 1, -1, 1).expand(1, 2, -1, 1)], dim=-1)
-        weights = torch.softmax(scores, dim=-1)[..., :-1]
-        expected = torch.einsum("bshk,bskd->bshd", weights, gathered.float()).to(
-            torch.bfloat16
+        maximum = scores.amax(-1, keepdim=True)
+        probabilities = (scores - maximum).exp()
+        denominator = (
+            probabilities.sum(-1, keepdim=True)
+            + (sink.view(1, 1, -1, 1) - maximum).exp()
         )
+        expected = (
+            torch.einsum(
+                "bshk,bskd->bshd",
+                probabilities.to(torch.bfloat16).float(),
+                gathered.float(),
+            )
+            / denominator
+        ).to(torch.bfloat16)
         torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
     def test_hyperconnection_reference_path_matches_the_operator_contract(self):

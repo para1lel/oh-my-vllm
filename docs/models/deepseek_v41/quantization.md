@@ -50,6 +50,19 @@ Tensor-parallel shared-expert down projections keep FP32 partial sums until rank
 Round the reduced result to BF16.
 Attention output projections keep their local BF16 rounding before FP32 rank reduction.
 
+Sparse attention processes selected indices in their original order, in blocks of 64.
+QK and probability-V products use BF16 operands with FP32 accumulation.
+The running maximum starts at `-1e30` and does not include the sink.
+Each block rescales the earlier FP32 numerator and denominator when the maximum changes.
+Unrounded exponentials contribute to the denominator.
+Round these exponentials to BF16 before multiplication by V.
+
+After all selected blocks, add the sink exponential to the denominator.
+Divide the numerator by the denominator.
+Round the output to BF16.
+Keep duplicate indices and masked slots in their original positions.
+Empty and fully masked rows return zero, even when a finite sink exponential underflows.
+
 Add `hc_eps` to row softmax values before the first column normalization in Sinkhorn mixing.
 Use `hc_eps=1e-6` for the released model.
 

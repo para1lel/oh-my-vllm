@@ -50,6 +50,19 @@ Tensor-parallel shared-expert down projection 保留 FP32 partial sum, 直到 ra
 将归约结果舍入到 BF16.
 Attention output projection 保留其 FP32 rank reduction 之前的 local BF16 舍入.
 
+Sparse attention 按原顺序处理 selected index, 每个 block 包含 64 个 slot.
+QK 和 probability-V product 使用 BF16 operand, 并以 FP32 累加.
+Running maximum 从 `-1e30` 开始, 不包含 sink.
+Maximum 改变时, 每个 block 对之前的 FP32 numerator 和 denominator 重新缩放.
+未舍入的 exponential 计入 denominator.
+与 V 相乘之前, 将这些 exponential 舍入到 BF16.
+
+所有 selected block 完成后, 将 sink exponential 加入 denominator.
+将 numerator 除以 denominator.
+将 output 舍入到 BF16.
+保留 duplicate index 和 masked slot 的原始位置.
+Empty row 和 fully masked row 返回零, 即使 finite sink exponential 下溢也如此.
+
 在 Sinkhorn mixing 中, 第一次 column normalization 之前, 给 row softmax value 加上 `hc_eps`.
 发布模型使用 `hc_eps=1e-6`.
 

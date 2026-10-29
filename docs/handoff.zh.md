@@ -41,6 +41,8 @@ Reference path 在计算之前合并这些 table.
 
 Shared-expert tensor-parallel down projection 保留 FP32 partial sum, 直到 rank reduction 完成.
 Sinkhorn mixing 在第一次 column normalization 之前加上 epsilon.
+Sparse attention 按顺序处理 64-slot block, 在与 V 相乘之前将未归一化的 probability 舍入到 BF16.
+这些 block 完成后, sink 才计入 denominator, 不改变它们的 running maximum.
 
 独立的 development reference 使用官方 MP4 placement, 并记录 quantizer synchronization patch.
 冻结的 text fixture 包含完整 vocabulary vector, DSpark5 proposal 和 verification vector, 以及全新 accepted-only 重放的 restoration endpoint.

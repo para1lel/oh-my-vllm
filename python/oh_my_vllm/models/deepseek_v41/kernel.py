@@ -796,23 +796,51 @@ def sparse_attn(
         _SPARSE_NATIVE_DISABLED = True
     if kv is None:
         kv = torch.cat((native_window, native_compressed), dim=1)
-    indices = topk_idxs.clamp_min(0).long()
-    gathered = torch.gather(
-        kv.unsqueeze(1).expand(-1, q.size(1), -1, -1),
-        2,
-        indices.unsqueeze(-1).expand(-1, -1, -1, kv.size(-1)),
-    )
-    valid = topk_idxs >= 0
-    scores = (
-        torch.einsum("bshd,bskd->bshk", q.float(), gathered.float()) * softmax_scale
-    )
-    scores = scores.masked_fill(~valid.unsqueeze(2), float("-inf"))
-    scores = torch.cat(
-        [scores, attn_sink.view(1, 1, -1, 1).expand(q.size(0), q.size(1), -1, 1)],
-        dim=-1,
-    )
-    weights = torch.softmax(scores, dim=-1)[..., :-1]
-    return torch.einsum("bshk,bskd->bshd", weights, gathered.float()).to(q.dtype)
+    maximum = torch.full(q.shape[:-1], -1e30, dtype=torch.float32, device=q.device)
+    denominator = torch.zeros_like(maximum)
+    accumulated = torch.zeros_like(q, dtype=torch.float32)
+    use_bf16_mma = q.is_cuda and q.dtype == kv.dtype == torch.bfloat16
+    query = q.flatten(0, 1) if use_bf16_mma else q.float()
+    for start in range(0, topk_idxs.size(-1), 64):
+        selected = topk_idxs[..., start : start + 64]
+        valid = selected >= 0
+        gathered = torch.gather(
+            kv.unsqueeze(1).expand(-1, q.size(1), -1, -1),
+            2,
+            selected.clamp_min(0).long().unsqueeze(-1).expand(-1, -1, -1, kv.size(-1)),
+        )
+        gathered = gathered.masked_fill(~valid.unsqueeze(-1), 0)
+        if use_bf16_mma:
+            scores = torch.bmm(
+                query, gathered.flatten(0, 1).transpose(1, 2), out_dtype=torch.float32
+            ).view(*q.shape[:-1], -1)
+        else:
+            gathered = gathered.float()
+            scores = torch.einsum("bshd,bskd->bshk", query, gathered)
+        scores = scores * softmax_scale
+        scores = scores.masked_fill(~valid.unsqueeze(2), float("-inf"))
+        previous_maximum = maximum
+        maximum = torch.maximum(maximum, scores.amax(-1))
+        rescale = (previous_maximum - maximum).exp()
+        probabilities = (scores - maximum.unsqueeze(-1)).exp()
+        denominator = denominator * rescale + probabilities.sum(-1)
+        # Released attention rounds each unnormalized 64-slot block before V.
+        rounded = probabilities.to(torch.bfloat16)
+        accumulated = accumulated * rescale.unsqueeze(-1)
+        if use_bf16_mma:
+            accumulated = torch.baddbmm(
+                accumulated.flatten(0, 1),
+                rounded.flatten(0, 1),
+                gathered.flatten(0, 1),
+                out_dtype=torch.float32,
+            ).view_as(accumulated)
+        else:
+            accumulated = accumulated + torch.einsum(
+                "bshk,bskd->bshd", rounded.float(), gathered
+            )
+    denominator = denominator + (attn_sink.view(1, 1, -1) - maximum).exp()
+    safe_denominator = torch.where(denominator == 0, 1, denominator)
+    return (accumulated / safe_denominator.unsqueeze(-1)).to(q.dtype)
 
 
 def hc_split_sinkhorn(mixes, hc_scale, hc_base, hc_mult=4, sinkhorn_iters=20, eps=1e-6):

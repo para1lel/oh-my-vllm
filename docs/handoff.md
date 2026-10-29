@@ -41,6 +41,8 @@ The reference path joins their tables before computation.
 
 Shared-expert tensor-parallel down projections keep FP32 partial sums until rank reduction.
 Sinkhorn mixing adds epsilon before the first column normalization.
+Sparse attention rounds unnormalized probabilities to BF16 in ordered 64-slot blocks before multiplication by V.
+The sink enters the denominator after these blocks and does not change their running maximum.
 
 An independent development reference uses official MP4 placement and a recorded quantizer synchronization patch.
 Frozen text fixtures contain complete vocabulary vectors, DSpark5 proposal and verification vectors, and fresh accepted-only restoration endpoints.

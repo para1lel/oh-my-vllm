@@ -88,8 +88,8 @@ __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, con
     reject(output, status);
     return;
   }
-  float maximum[2] = {sink[head + fr], sink[head + fr + 8]};
-  float denominator[2] = {1.f, 1.f};
+  float maximum[2] = {-1e30f, -1e30f};
+  float denominator[2] = {0.f, 0.f};
   float accumulated[8][4] = {};
   for (int base = 0; base < slots; base += 64) {
     if (threadIdx.x < 64) {
@@ -202,10 +202,16 @@ __global__ void attend_kernel(const __nv_bfloat16 *query, const float *sink, con
     __syncthreads();
   }
 #pragma unroll
+  for (int rg = 0; rg < 2; ++rg)
+    denominator[rg] += expf(sink[head + fr + rg * 8] - maximum[rg]);
+#pragma unroll
   for (int tile = 0; tile < 8; ++tile)
 #pragma unroll
     for (int j = 0; j < 4; ++j) {
-      auto value = __float2bfloat16_rn(accumulated[tile][j] / denominator[j / 2]);
+      // A finite sink can underflow for an all-masked row.
+      float normalized =
+          denominator[j / 2] == 0.f ? 0.f : accumulated[tile][j] / denominator[j / 2];
+      auto value = __float2bfloat16_rn(normalized);
       invalid |= !isfinite(__bfloat162float(value));
       output[(fr + (j / 2) * 8) * 512 + (tile * 8 + warp) * 8 + fc + j % 2] = value;
     }
