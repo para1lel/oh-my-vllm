@@ -141,8 +141,22 @@ class DeepSeekModel(unittest.TestCase):
             for parameter in model.parameters():
                 torch.nn.init.normal_(parameter, mean=0, std=0.02)
             reference.load_state_dict(model.state_dict())
+            cache = DeepSeekCache(model, block_tokens=2, max_seq_len=args.max_seq_len)
+            row = {"fa_block_table": [1, 2], "mamba_block_table": [0, 4]}
+            cache.begin_step(row, 63, start_pos=0, end_pos=4)
+            cache.begin_step(
+                {"fa_block_table": [5, 6], "mamba_block_table": [0, 7]},
+                2,
+                start_pos=0,
+                end_pos=4,
+            )
             tokens = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
-            output = model(tokens, cache_slots=torch.tensor([63, 2]), full_logits=True)
+            output = model(
+                tokens,
+                cache_slots=torch.tensor([63, 2]),
+                cache_slots_cpu=(63, 2),
+                full_logits=True,
+            )
             expected = reference(tokens, full_logits=True)
             torch.testing.assert_close(output[1], expected[1], atol=2e-4, rtol=2e-3)
             active = mapped_bytes() - before
@@ -150,15 +164,15 @@ class DeepSeekModel(unittest.TestCase):
             self.assertLess(active, 64 * 1024 * 1024)
             attention = model.layers[0].attn
             saved = attention.compress_kv_cache[2, :2].clone()
-            cache = DeepSeekCache(model, block_tokens=2, max_seq_len=args.max_seq_len)
-            row = {"fa_block_table": [1, 2], "mamba_block_table": [3, 4]}
             restored = attention.compress_kv_cache[63, :2].clone()
+            restored_window = attention.window_kv_cache[63].clone()
             cache.commit(7, row, 63, accepted_end=4)
             cache.clear_slot(63)
             self.assertEqual(mapped_bytes() - before, active // 2)
             torch.testing.assert_close(attention.compress_kv_cache[2, :2], saved)
             cache.restore(7, 10, row, start_pos=4)
             torch.testing.assert_close(attention.compress_kv_cache[10, :2], restored)
+            torch.testing.assert_close(attention.window_kv_cache[10], restored_window)
             self.assertEqual(mapped_bytes() - before, active)
             cache.clear_slot(10)
             cache.clear_slot(2)

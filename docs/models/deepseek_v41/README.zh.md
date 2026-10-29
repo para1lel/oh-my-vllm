@@ -23,9 +23,20 @@ target path 使用 Eager execution.
 
 physical cache 在 Rust logical block table 后面保存 model page.
 它支持 prefix reuse, partial block copy, host snapshot 和 restoration.
-adapter 会在 verification 和 restore 期间保存 accepted DSpark MTP state.
-Verification rollback 尚不能在每个 accepted endpoint 恢复已覆盖的 window row 和 compressor tail.
+Accepted-state page 在精确的 endpoint 保存 target window, MTP window 和 compressor tail.
+Restoration 在清空 active slot 前拒绝不匹配的 endpoint.
+FA prefix copy 只包含 compressed KV, index key 和 Engram history.
 由于 coordinated multi-rank Graph replay 尚未接入, DeepSeek 当前仍使用 Eager execution.
+
+Verification 在覆盖 recurrent storage 前, 为每个可能接受的 endpoint 保存 private state.
+Commit 只发布 accepted state 和 scheduled checkpoint.
+Prefill 在释放 hidden row 前导出已知 checkpoint state.
+Verification 最多额外保留五个 hidden row, 用于 accepted MTP seed state.
+Window storage 随 checkpoint capacity 增长, 不随 FA token-page capacity 增长.
+
+Native [projection preparation](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py) 共享兼容的 encoded weight storage.
+Packed scale 和 padded weight 保留独立的 storage.
+Reference path 仍可使用 raw parameter.
 
 CUDA sequence staging 为 compressed KV, index key 和 Engram history 使用按需映射的 storage.
 每个 request slot 只映射其 active context range.

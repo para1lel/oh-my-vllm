@@ -190,7 +190,7 @@ pub(in crate::models) fn validate_ready(
     validate_group(
         cache_group(descriptor, "window")?,
         CacheKind::SlidingWindow,
-        "deepseek_v41_sliding_window_kv_bf16",
+        "deepseek_v41_window_checkpoint_bf16",
         &(0..40).collect::<Vec<_>>(),
     )?;
     validate_group(
@@ -208,7 +208,7 @@ pub(in crate::models) fn validate_ready(
     validate_group(
         cache_group(descriptor, "accepted_state")?,
         CacheKind::ModelCheckpoint,
-        "deepseek_v41_accepted_state_v1",
+        "deepseek_v41_accepted_state_v2",
         &(0..40).collect::<Vec<_>>(),
     )
 }
@@ -270,11 +270,13 @@ pub(in crate::models) fn validate_runtime_ready(
         "expected DeepSeek cache groups",
     )?;
     require_ready(
-        cache_group(descriptor, "window")?.capacity_blocks == u64::from(logical_num_blocks)
+        cache_group(descriptor, "window")?.capacity_blocks == u64::from(mamba_blocks)
             && cache_group(descriptor, "accepted_state")?.capacity_blocks
                 == u64::from(mamba_blocks)
-            && cache_group(descriptor, "compressed_kv")?.capacity_blocks > 0
-            && cache_group(descriptor, "index_keys")?.capacity_blocks > 0
+            && cache_group(descriptor, "compressed_kv")?.capacity_blocks
+                == u64::from(logical_num_blocks)
+            && cache_group(descriptor, "index_keys")?.capacity_blocks
+                == u64::from(logical_num_blocks)
             && descriptor
                 .cache_schema
                 .groups

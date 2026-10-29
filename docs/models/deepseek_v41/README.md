@@ -23,9 +23,20 @@ It does not provide DEP4 request ownership or expert dispatch.
 
 The physical cache keeps model pages behind the Rust logical block tables.
 It supports prefix reuse, partial block copies, host snapshots, and restoration.
-The adapter keeps accepted DSpark MTP state during verification and restore.
-Verification rollback does not yet restore overwritten window rows and compressor tails at each accepted endpoint.
+Accepted-state pages keep target windows, MTP windows, and compressor tails at an exact endpoint.
+Restoration rejects a different endpoint before it clears an active slot.
+FA prefix copies contain only compressed KV, index keys, and Engram history.
 DeepSeek still uses Eager execution because coordinated multi-rank Graph replay is not connected.
+
+Verification keeps private state for each possible accepted endpoint before it overwrites recurrent storage.
+Commit publishes only accepted states and scheduled checkpoints.
+Prefill exports known checkpoint states before it releases their hidden rows.
+Verification keeps at most five additional hidden rows for accepted MTP seed state.
+Window storage grows with checkpoint capacity, not with FA token-page capacity.
+
+Native [projection preparation](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py) shares compatible encoded weight storage.
+Packed scales and padded weights keep separate storage.
+The reference path can still use the raw parameters.
 
 CUDA sequence staging uses demand-mapped storage for compressed KV, index keys, and Engram history.
 Each request slot maps only its active context range.

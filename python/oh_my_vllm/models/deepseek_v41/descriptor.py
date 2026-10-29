@@ -123,6 +123,8 @@ def build_descriptor(
         raise ValueError("DeepSeek cache capacities must name all cache groups")
     if any(type(value) is not int or value < 1 for value in cache_capacities.values()):
         raise ValueError("DeepSeek cache capacities must be positive integers")
+    if cache_capacities["window"] != cache_capacities["accepted_state"]:
+        raise ValueError("DeepSeek window and accepted-state capacities must match")
 
     descriptor = {
         "schema_version": 1,
@@ -146,7 +148,7 @@ def build_descriptor(
                 _group(
                     "window",
                     "sliding_window",
-                    "deepseek_v41_sliding_window_kv_bf16",
+                    "deepseek_v41_window_checkpoint_bf16",
                     list(range(NUM_LAYERS)),
                     cache_capacities["window"],
                 ),
@@ -167,7 +169,7 @@ def build_descriptor(
                 _group(
                     "accepted_state",
                     "model_checkpoint",
-                    "deepseek_v41_accepted_state_v1",
+                    "deepseek_v41_accepted_state_v2",
                     list(range(NUM_LAYERS)),
                     cache_capacities["accepted_state"],
                 ),

@@ -37,13 +37,14 @@ Sparse attention status failures disable the native path and use the reference p
 Short-query native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
 Long queries use native sparse packing because the reference path scales poorly.
 
-DeepSeek physical pages now keep window KV, compressed KV, index keys, Engram
-hash state, and compressor tails across request slots.
+DeepSeek token pages keep compressed KV, index keys, and Engram history across request slots.
+Accepted-state pages keep target windows, MTP windows, and compressor tails at an exact endpoint.
 Cache operations support logical block store, load, drop, partial prefix copy, and
 page-backed host snapshots.
 
 Accepted DSpark target states seed the MTP window.
-Bounded undo state is necessary for exact rollback of overwritten target windows and compressor tails.
+Private endpoint snapshots keep overwritten target windows and compressor tails during verification.
+Commit selects the accepted endpoint before it restores the active state.
 Nonzero multi-token prefill uses the fused chunk path.
 Target and MTP seed chunks keep the total native rows below the operator limit.
 Aligned prefill batches use subbatches of at most four requests.
@@ -55,6 +56,9 @@ The grouped path keeps the local token order and falls back to the reference
 expert loop for non-FP4 weights and test experts.
 The MoE processes at most 1024 token rows per routed expert batch.
 Static packed-expert pointer arrays use a bounded LRU cache.
+
+Native projections share compatible encoded weight storage.
+Packed scales and padded weights keep separate storage.
 DEP4 still uses the TEP4 executor fallback and has no rank-owned dispatch.
 
 Non-final prefill skips the vocabulary projection.
@@ -133,9 +137,10 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 
 ## Next work
 
-- Move window snapshots from FA pages to exact accepted-state endpoints.
-- Keep bounded verification undo state for window KV and compressor tails before publishing accepted snapshots.
-- Measure and remove duplicate GPU checkpoint and packed projection storage.
+- Measure exact-endpoint window storage with the approved long-context workloads.
+- Bound compressed-KV packing workspaces and avoid repeated full-context format conversion.
+- Define explicit ownership for raw weights and padded projection copies.
+- Add independent frozen DeepSeek endpoint fixtures before full-model numerical acceptance.
 - Keep the configured context limit separate from the observed AgentX request lengths.
 - Tune AgentX physical block and temporary workspace capacity for 100K to 200K token traces at concurrency 16.
 - Add per-request varlen position metadata and batch decode before DeepSeek CUDA Graph capture.

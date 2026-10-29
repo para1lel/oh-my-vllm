@@ -11,6 +11,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -280,9 +281,10 @@ class Service:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
-        self.ipc = Path(f"/tmp/oh-my-vllm-deepseek-{os.getpid()}.ipc")
         self.trace = arguments.artifacts / f"{mode}-{strategy}-execution.jsonl"
         self.log = (arguments.artifacts / f"{mode}-{strategy}-service.log").open("x")
+        self._ipc_directory = tempfile.TemporaryDirectory(prefix="omv-deepseek-")
+        self.ipc = Path(self._ipc_directory.name) / "worker.ipc"
         environment = dict(
             os.environ,
             OH_MY_VLLM_DEEPSEEK_STRATEGY=strategy,
@@ -321,14 +323,19 @@ class Service:
             "--shutdown-grace-seconds",
             str(SHUTDOWN_GRACE_SECONDS),
         ]
-        self.process = subprocess.Popen(
-            command,
-            env=environment,
-            cwd=ROOT,
-            stdout=self.log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        try:
+            self.process = subprocess.Popen(
+                command,
+                env=environment,
+                cwd=ROOT,
+                stdout=self.log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        except BaseException:
+            self.log.close()
+            self._ipc_directory.cleanup()
+            raise
 
     def ready(self):
         deadline = time.monotonic() + 1800
@@ -357,7 +364,9 @@ class Service:
                 os.killpg(self.process.pid, signal.SIGKILL)
                 self.process.wait()
         self.log.close()
-        if self.ipc.exists():
+        stale_socket = self.ipc.exists()
+        self._ipc_directory.cleanup()
+        if stale_socket:
             raise RuntimeError("DeepSeek service did not remove its IPC socket")
 
     def run(self, tokenizer, case, prompt_seed):

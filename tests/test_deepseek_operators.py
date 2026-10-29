@@ -1,3 +1,4 @@
+import gc
 import hashlib
 import json
 import struct
@@ -21,6 +22,52 @@ from oh_my_vllm.operators.sparse_attention.plan import (
     make_plan as make_sparse_attention_plan,
 )
 from oh_my_vllm.operators.transform.plan import make_plan as make_transform_plan
+
+
+def projection_weight(bits, outputs, width, *, offset=0, seed=43):
+    generator = torch.Generator(device="cuda").manual_seed(seed)
+    columns = width * bits // 8
+    storage = torch.empty(outputs * columns + offset, dtype=torch.uint8, device="cuda")
+    raw = storage[offset:].view(outputs, columns)
+    if bits == 4:
+        raw.copy_(
+            torch.randint(
+                0, 256, raw.shape, generator=generator, device="cuda", dtype=torch.uint8
+            )
+        )
+        weight = raw.view(torch.float4_e2m1fn_x2)
+    else:
+        values = torch.randn(raw.shape, generator=generator, device="cuda")
+        raw.copy_(values.to(torch.float8_e4m3fn).view(torch.uint8))
+        weight = raw.view(torch.float8_e4m3fn)
+    shape = (outputs if bits == 4 else outputs // 32, width // 32)
+    scales = torch.randint(
+        125, 129, shape, generator=generator, device="cuda", dtype=torch.uint8
+    ).view(torch.float8_e8m0fnu)
+    return weight, scales
+
+
+def projection_reference(encoded, input_scales, weight, scales, bits):
+    if bits == 4:
+        raw = weight.view(torch.uint8)
+        levels = torch.tensor(
+            (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0), device=weight.device
+        )
+        low, high = raw & 15, raw >> 4
+        values = torch.stack(
+            (
+                levels[(low & 7).long()] * torch.where((low & 8).bool(), -1.0, 1.0),
+                levels[(high & 7).long()] * torch.where((high & 8).bool(), -1.0, 1.0),
+            ),
+            dim=-1,
+        ).flatten(-2)
+        weight_scales = scales.float()
+    else:
+        values = weight.float()
+        weight_scales = scales.float().repeat_interleave(32, dim=0)
+    values = values * weight_scales.repeat_interleave(32, dim=-1)
+    inputs = encoded.float() * input_scales.float().repeat_interleave(32, dim=-1)
+    return F.linear(inputs, values).to(torch.bfloat16)
 
 
 class DeepSeekOperatorContracts(unittest.TestCase):
@@ -244,6 +291,176 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             )
         ).to(actual.dtype)
         torch.testing.assert_close(actual, expected, atol=0.01, rtol=0.01)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_packing_reuses_compatible_encoded_storage(self):
+        for bits, outputs, width, offset in (
+            (4, 32, 128, 64),
+            (4, 576, 128, 64),
+            (8, 64, 128, 16),
+            (8, 64, 576, 16),
+        ):
+            with self.subTest(bits=bits, outputs=outputs, width=width):
+                weight, scales = projection_weight(bits, outputs, width, offset=offset)
+                raw_before = weight.view(torch.uint8).clone()
+                scales_before = scales.view(torch.uint8).clone()
+                with patch.dict(kernel._PACKED_WEIGHTS, clear=True):
+                    packed = kernel._packed_weight(weight, scales, bits)
+                    self.assertIs(kernel._packed_weight(weight, scales, bits), packed)
+                    self.assertEqual(packed[0].data_ptr(), weight.data_ptr())
+                    self.assertEqual(
+                        packed[0].untyped_storage().data_ptr(),
+                        weight.untyped_storage().data_ptr(),
+                    )
+                    self.assertNotEqual(packed[1].data_ptr(), scales.data_ptr())
+                    torch.testing.assert_close(weight.view(torch.uint8), raw_before)
+                    torch.testing.assert_close(scales.view(torch.uint8), scales_before)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_alias_retains_source_storage(self):
+        for bits in (4, 8):
+            with (
+                self.subTest(bits=bits),
+                patch.dict(kernel._PACKED_WEIGHTS, clear=True),
+            ):
+                weight, scales = projection_weight(bits, 32, 128, offset=64)
+                pointer = weight.data_ptr()
+                storage_pointer = weight.untyped_storage().data_ptr()
+                expected = weight.view(torch.uint8).clone()
+                key = (pointer, scales.data_ptr(), bits, weight.device.index)
+                kernel._packed_weight(weight, scales, bits)
+                del weight, scales
+                gc.collect()
+                retained = kernel._PACKED_WEIGHTS[key][0]
+                self.assertEqual(retained.data_ptr(), pointer)
+                self.assertEqual(retained.untyped_storage().data_ptr(), storage_pointer)
+                torch.testing.assert_close(retained, expected)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_packing_keeps_incompatible_values_separate(self):
+        for width, offset, overlap in (
+            (576, 0, False),
+            (128, 16, False),
+            (128, 0, True),
+        ):
+            with self.subTest(width=width, offset=offset, overlap=overlap):
+                weight, scales = projection_weight(4, 32, width, offset=offset)
+                if overlap:
+                    scales = (
+                        weight.view(torch.uint8)
+                        .flatten()[: 32 * (width // 32)]
+                        .view(32, width // 32)
+                        .view(torch.float8_e8m0fnu)
+                    )
+                raw_before = weight.view(torch.uint8).clone()
+                scales_before = scales.view(torch.uint8).clone()
+                with patch.dict(kernel._PACKED_WEIGHTS, clear=True):
+                    packed = kernel._packed_weight(weight, scales, 4)
+                    self.assertNotEqual(packed[0].data_ptr(), weight.data_ptr())
+                    padded_width = (width + 127) // 128 * 128
+                    self.assertEqual(tuple(packed[0].shape), (32, padded_width // 2))
+                    torch.testing.assert_close(packed[0][:, : width // 2], raw_before)
+                    torch.testing.assert_close(
+                        packed[0][:, width // 2 :],
+                        torch.zeros_like(packed[0][:, width // 2 :]),
+                    )
+                    torch.testing.assert_close(weight.view(torch.uint8), raw_before)
+                    torch.testing.assert_close(scales.view(torch.uint8), scales_before)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_packing_rejects_invalid_source_views(self):
+        weight, scales = projection_weight(4, 32, 128)
+        unaligned, _ = projection_weight(4, 32, 128, offset=1)
+        for invalid in (unaligned, weight.transpose(0, 1)):
+            with (
+                self.subTest(stride=invalid.stride()),
+                patch.dict(kernel._PACKED_WEIGHTS, clear=True),
+                self.assertRaises(RuntimeError),
+            ):
+                kernel._packed_weight(invalid, scales, 4)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_projection_alias_matches_copy_and_quantized_reference(self):
+        for bits, width in ((4, 128), (4, 576), (8, 128), (8, 576)):
+            with self.subTest(bits=bits, width=width):
+                weight, scales = projection_weight(
+                    bits, 64, width, offset=64 if bits == 4 else 16
+                )
+                values = torch.linspace(-2, 2, 3 * width, device="cuda").view(3, width)
+                encoded, input_scales = kernel.act_quant(
+                    values, 32, "ue8m0", torch.float8_e8m0fnu
+                )
+                raw_before = weight.view(torch.uint8).clone()
+                scales_before = scales.view(torch.uint8).clone()
+                with patch.dict(kernel._PACKED_WEIGHTS, clear=True):
+                    actual = kernel._projection_gemm(
+                        encoded, input_scales, weight, scales, bits
+                    )
+                    packed = kernel._packed_weight(weight, scales, bits)
+                    copy = torch.empty_like(packed[0])
+                    copied_scales = torch.empty_like(packed[1])
+                    kernel._projection_module().pack_weights(
+                        weight.view(torch.uint8),
+                        scales.view(torch.uint8),
+                        copy,
+                        copied_scales,
+                        bits,
+                    )
+                    with patch.object(
+                        kernel,
+                        "_packed_weight",
+                        return_value=(copy, copied_scales, width),
+                    ):
+                        copied_output = kernel._projection_gemm(
+                            encoded, input_scales, weight, scales, bits
+                        )
+                    torch.testing.assert_close(actual, copied_output, atol=0, rtol=0)
+                    expected = projection_reference(
+                        encoded, input_scales, weight, scales, bits
+                    )
+                    torch.testing.assert_close(actual, expected, atol=0.1, rtol=0.02)
+                    torch.testing.assert_close(weight.view(torch.uint8), raw_before)
+                    torch.testing.assert_close(scales.view(torch.uint8), scales_before)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_grouped_fp4_reuses_values_and_matches_quantized_reference(self):
+        width = 128
+        weights = [projection_weight(4, 64, width, seed=seed) for seed in (7, 11, 13)]
+        counts = torch.tensor((2, 0, 3), device="cuda", dtype=torch.int32)
+        values = torch.linspace(-2, 2, 5 * width, device="cuda").view(5, width)
+        encoded, input_scales = kernel.act_quant(
+            values, 32, "ue8m0", torch.float8_e8m0fnu
+        )
+        snapshots = [
+            (w.view(torch.uint8).clone(), s.view(torch.uint8).clone())
+            for w, s in weights
+        ]
+        with (
+            patch.dict(kernel._PACKED_WEIGHTS, clear=True),
+            patch.dict(kernel._GROUPED_POINTERS, clear=True),
+        ):
+            actual = kernel.grouped_fp4_gemm(values, counts, weights)
+            expected = []
+            first = 0
+            for count, (weight, scale), (raw_before, scale_before) in zip(
+                (2, 0, 3), weights, snapshots, strict=True
+            ):
+                if count:
+                    packed = kernel._packed_weight(weight, scale, 4)
+                    self.assertEqual(packed[0].data_ptr(), weight.data_ptr())
+                    expected.append(
+                        projection_reference(
+                            encoded[first : first + count],
+                            input_scales[first : first + count],
+                            weight,
+                            scale,
+                            4,
+                        )
+                    )
+                torch.testing.assert_close(weight.view(torch.uint8), raw_before)
+                torch.testing.assert_close(scale.view(torch.uint8), scale_before)
+                first += count
+            torch.testing.assert_close(actual, torch.cat(expected), atol=0.1, rtol=0.02)
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_grouped_fp4_matches_individual_projections(self):

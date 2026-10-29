@@ -53,9 +53,9 @@ class DeepSeekDescriptor(unittest.TestCase):
             tokenizer_identity=tokenizer_identity(),
             strategy="dep4",
             cache_capacities={
-                "window": 17,
-                "compressed_kv": 11,
-                "index_keys": 13,
+                "window": 7,
+                "compressed_kv": 17,
+                "index_keys": 17,
                 "accepted_state": 7,
             },
         )
@@ -100,10 +100,10 @@ class DeepSeekDescriptor(unittest.TestCase):
                 "name": "window",
                 "kind": "sliding_window",
                 "block_tokens": 128,
-                "capacity_blocks": 17,
+                "capacity_blocks": 7,
                 "storage": {
                     "type": "layout",
-                    "id": "deepseek_v41_sliding_window_kv_bf16",
+                    "id": "deepseek_v41_window_checkpoint_bf16",
                     "version": 1,
                 },
                 "layers": list(range(40)),
@@ -112,7 +112,34 @@ class DeepSeekDescriptor(unittest.TestCase):
         )
         self.assertEqual(groups["compressed_kv"]["layers"], [2, 8, 14, 20])
         self.assertEqual(groups["index_keys"]["layers"], [2, 8, 14, 20, 24, 28, 32, 36])
+        self.assertEqual(groups["compressed_kv"]["capacity_blocks"], 17)
+        self.assertEqual(groups["index_keys"]["capacity_blocks"], 17)
         self.assertEqual(groups["accepted_state"]["kind"], "model_checkpoint")
+        self.assertEqual(groups["accepted_state"]["capacity_blocks"], 7)
+        self.assertEqual(
+            groups["accepted_state"]["storage"],
+            {"type": "layout", "id": "deepseek_v41_accepted_state_v2", "version": 1},
+        )
+
+    def test_window_capacity_must_match_accepted_state_capacity(self):
+        for window, accepted in ((17, 7), (7, 17)):
+            with (
+                self.subTest(window=window, accepted=accepted),
+                self.assertRaisesRegex(ValueError, "window.*accepted"),
+            ):
+                build_descriptor(
+                    MODEL_CONFIG,
+                    raw_config=RAW_CONFIG,
+                    checkpoint_identity=checkpoint_identity(),
+                    tokenizer_identity=tokenizer_identity(),
+                    strategy="tp4",
+                    cache_capacities={
+                        "window": window,
+                        "compressed_kv": 17,
+                        "index_keys": 17,
+                        "accepted_state": accepted,
+                    },
+                )
 
     def test_config_and_loaded_identities_are_immutable_contract_inputs(self):
         config = copy.deepcopy(MODEL_CONFIG)
@@ -129,7 +156,7 @@ class DeepSeekDescriptor(unittest.TestCase):
             tokenizer_identity=tokenizer_identity(),
             strategy="tp4",
             cache_capacities={
-                "window": 17,
+                "window": 7,
                 "compressed_kv": 11,
                 "index_keys": 13,
                 "accepted_state": 7,
@@ -142,7 +169,7 @@ class DeepSeekDescriptor(unittest.TestCase):
             tokenizer_identity=tokenizer_identity(),
             strategy="tp4",
             cache_capacities={
-                "window": 17,
+                "window": 7,
                 "compressed_kv": 11,
                 "index_keys": 13,
                 "accepted_state": 7,

@@ -586,6 +586,9 @@ class Compressor(nn.Module):
         if prefix:
             kv = torch.cat((self.kv_state[cache_slots, :prefix], kv), dim=1)
             score = torch.cat((self.score_state[cache_slots, :prefix], score), dim=1)
+        export = getattr(self, "_state_export", None)
+        if export is not None:
+            export.tail(self.kv_state, self.score_state, kv, score, start_pos)
         complete = kv.size(1) // ratio * ratio
         remainder = kv.size(1) - complete
         if remainder:
@@ -865,6 +868,9 @@ class Attention(nn.Module):
         kv = self.kv_norm(self.wkv(x))
         apply_rotary_emb(kv[..., -self.rope_head_dim :], freqs_cis)
         act_quant(kv, fp8_block_size, scale_fmt, scale_dtype, True)
+        export = getattr(self, "_state_export", None)
+        if export is not None:
+            export.window(self.window_kv_cache, kv, start_pos)
         if (
             start_pos == 0
         ):  # prefill: attend over this chunk, seeding the ring buffer for decode
@@ -1522,6 +1528,9 @@ class DSparkAttention(Attention):
         main_kv = self.kv_norm(self.wkv(main_x))
         apply_rotary_emb(main_kv[..., -rd:], freqs_cis)
         act_quant(main_kv, fp8_block_size, scale_fmt, scale_dtype, True)
+        export = getattr(self, "_state_export", None)
+        if export is not None:
+            export.window(self.window_kv_cache, main_kv, start_pos)
         if start_pos == 0:
             if seqlen <= win:
                 self.window_kv_cache[cache_slots, :seqlen] = main_kv
@@ -1791,6 +1800,13 @@ class Transformer(nn.Module):
             for slot in slots:
                 value._paged_storage.reserve(slot, rows)
 
+    def _bind_state_exports(self, cache_slots, cache_slots_cpu=None):
+        export = getattr(self, "_state_export", None)
+        if export is not None and export.steps:
+            export.bind(
+                cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
+            )
+
     @torch.inference_mode()
     def encode_image(
         self, patches: torch.Tensor, n_vit_h: int, n_vit_w: int
@@ -1836,6 +1852,7 @@ class Transformer(nn.Module):
         shared_attn.reset_query_state()
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
+        self._bind_state_exports(cache_slots, cache_slots_cpu)
         if self._sequence_caches:
             slots = cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
             self.reserve_cache(slots, start_pos + input_ids.size(1))
@@ -1901,6 +1918,9 @@ class Transformer(nn.Module):
         cache_slots: torch.Tensor | None = None,
     ):
         shared_attn.reset_query_state()
+        if cache_slots is None:
+            cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
+        self._bind_state_exports(cache_slots)
         h, main_x = self.mtp[0].forward_embed(main_hidden, input_ids)
         pre_mix = make_identity_pre_mix(h, self.hc_mult)
         for layer in self.mtp:
@@ -1921,6 +1941,7 @@ class Transformer(nn.Module):
             return
         if cache_slots is None:
             cache_slots = torch.arange(main_hidden.size(0), device=main_hidden.device)
+        self._bind_state_exports(cache_slots)
         first = self.mtp[0]
         main_x = first.main_norm(first.main_proj(main_hidden))
         for layer in self.mtp:

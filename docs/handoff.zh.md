@@ -37,13 +37,14 @@ sparse attention status failure 会禁用 native path, 并使用 reference path.
 short query 的 native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
 long query 使用 native sparse packing, 因为 reference path 的扩展性较差.
 
-DeepSeek physical page 现在会在 request slot 之间保存 window KV, compressed KV,
-index key, Engram hash state 和 compressor tail.
+DeepSeek token page 在 request slot 之间保存 compressed KV, index key 和 Engram history.
+Accepted-state page 在精确的 endpoint 保存 target window, MTP window 和 compressor tail.
 cache operation 支持 logical block store, load, drop, partial prefix copy 和
 page-backed host snapshot.
 
 accepted DSpark target state 会 seed MTP window.
-精确回滚已覆盖的 target window 和 compressor tail 必须有 bounded undo state.
+Private endpoint snapshot 在 verification 期间保存已覆盖的 target window 和 compressor tail.
+Commit 先选择 accepted endpoint, 再恢复 active state.
 nonzero multi-token prefill 使用 fused chunk path.
 target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
 aligned prefill batch 最多使用四个 request 组成一个 subbatch.
@@ -55,6 +56,9 @@ Grouped path 保持 local token order, 对 non-FP4 weight 和 test expert
 回退到 reference expert loop.
 MoE 每个 routed expert batch 最多处理 1024 个 token row.
 Static packed-expert pointer array 使用有界的 LRU cache.
+
+Native projection 共享兼容的 encoded weight storage.
+Packed scale 和 padded weight 保留独立的 storage.
 DEP4 仍使用 TEP4 executor fallback, 还没有 rank-owned dispatch.
 
 非 final prefill 会跳过 vocabulary projection.
@@ -132,9 +136,10 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 
 ## 下一步
 
-- 将 window snapshot 从 FA page 移到精确的 accepted-state endpoint.
-- 发布 accepted snapshot 前, 为 window KV 和 compressor tail 保留有界 verification undo state.
-- 测量并移除重复的 GPU checkpoint 和 packed projection storage.
+- 在 approved long-context workload 中测量 exact-endpoint window storage.
+- 限制 compressed-KV packing workspace, 避免重复转换完整 context 的格式.
+- 为 raw weight 和 padded projection copy 定义明确的 ownership.
+- 在 full-model numerical acceptance 之前增加独立的 DeepSeek endpoint frozen fixture.
 - 将配置的 context limit 与观测到的 AgentX request length 分开记录.
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary workspace capacity.
 - 在 DeepSeek CUDA Graph capture 之前增加 per-request varlen position metadata 和 batch decode.

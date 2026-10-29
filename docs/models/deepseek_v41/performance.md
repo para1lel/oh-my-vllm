@@ -3,6 +3,8 @@
 Use four B200 GPUs and the full Rust service.
 Set the selected GPUs apart from GPU 0.
 Keep raw artifacts in a separate location.
+Set `TMPDIR` to a directory with write permission.
+The directory must have a short path for Unix sockets.
 
 The approved matrix has 38 cases.
 

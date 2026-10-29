@@ -114,9 +114,20 @@ def _packed_weight(weight, scales, bits):
     outputs, stored_width = raw_weight.shape
     width = stored_width * (8 // bits)
     padded = _round128(width) if bits == 4 else width
-    packed_weight = torch.empty(
-        (outputs, padded * bits // 8), dtype=torch.uint8, device=weight.device
-    )
+    if (
+        padded == width
+        and raw_weight.is_contiguous()
+        and raw_weight.data_ptr() % (64 if bits == 4 else 16) == 0
+        and (
+            raw_weight.data_ptr() + raw_weight.numel() <= raw_scales.data_ptr()
+            or raw_scales.data_ptr() + raw_scales.numel() <= raw_weight.data_ptr()
+        )
+    ):
+        packed_weight = raw_weight
+    else:
+        packed_weight = torch.empty(
+            (outputs, padded * bits // 8), dtype=torch.uint8, device=weight.device
+        )
     packed_scales = torch.empty(
         (_scale_bytes(outputs, width),), dtype=torch.uint8, device=weight.device
     )

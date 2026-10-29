@@ -5,6 +5,7 @@ from math import ceil
 
 import torch
 
+from .state import StateExports
 from .storage import release_sequence_slot, reserve_sequence_slot
 
 
@@ -50,20 +51,20 @@ def _operation(operation):
 
 @dataclass
 class _FaPage:
-    window: list[torch.Tensor]
-    mtp_window: list[torch.Tensor]
     compressed: list[torch.Tensor]
     index: list[torch.Tensor]
     engram: list[torch.Tensor]
-    tails: list[tuple[torch.Tensor, torch.Tensor]]
     valid_tokens: int = 0
 
 
 @dataclass
 class _MambaPage:
+    window: list[torch.Tensor]
+    mtp_window: list[torch.Tensor]
     engram: list[torch.Tensor]
     tails: list[tuple[torch.Tensor, torch.Tensor]]
     valid_tokens: int = 0
+    endpoint: int = 0
 
 
 @dataclass
@@ -122,6 +123,8 @@ class DeepSeekCache:
         self._index = []
         self._engram = []
         self._tails = []
+        self.exports = StateExports()
+        model._state_export = self.exports
         for layer in getattr(model, "layers", ()):
             attention = getattr(layer, "attn", None)
             if attention is None:
@@ -129,11 +132,13 @@ class DeepSeekCache:
             window = getattr(attention, "window_kv_cache", None)
             if window is not None:
                 self._window.append(window)
+                attention._state_export = self.exports
         for layer in getattr(model, "mtp", ()):
             attention = getattr(layer, "attn", None)
             window = getattr(attention, "window_kv_cache", None)
             if window is not None:
                 self._mtp_window.append(window)
+                attention._state_export = self.exports
         for layer in getattr(model, "layers", ()):
             attention = getattr(layer, "attn", None)
             if attention is None:
@@ -154,6 +159,7 @@ class DeepSeekCache:
             score_state = getattr(compressor, "score_state", None)
             if kv_state is not None and score_state is not None:
                 self._tails.append((kv_state, score_state))
+                compressor._state_export = self.exports
         engram = getattr(getattr(model, "engram_hash", None), "cache", None)
         if engram is not None:
             self._engram.append(engram)
@@ -200,22 +206,6 @@ class DeepSeekCache:
         return _FaPage(
             [
                 torch.zeros(
-                    (self.block_tokens, value.shape[-1]),
-                    dtype=value.dtype,
-                    device=value.device,
-                )
-                for value in self._window
-            ],
-            [
-                torch.zeros(
-                    (self.block_tokens, value.shape[-1]),
-                    dtype=value.dtype,
-                    device=value.device,
-                )
-                for value in self._mtp_window
-            ],
-            [
-                torch.zeros(
                     (ceil(self.block_tokens / ratio), *value.shape[2:]),
                     dtype=value.dtype,
                     device=value.device,
@@ -232,36 +222,24 @@ class DeepSeekCache:
             ],
             [
                 torch.zeros(
-                    (self.block_tokens,),
-                    dtype=value.dtype,
-                    device=value.device,
+                    (self.block_tokens,), dtype=value.dtype, device=value.device
                 )
                 for value in self._engram
-            ],
-            [
-                (
-                    torch.zeros_like(kv[0]),
-                    torch.full_like(score[0], -torch.inf),
-                )
-                for kv, score in self._tails
             ],
         )
 
     def _new_mamba_page(self):
         return _MambaPage(
+            [torch.zeros_like(value[0]) for value in self._window],
+            [torch.zeros_like(value[0]) for value in self._mtp_window],
             [
                 torch.zeros(
-                    (self.block_tokens,),
-                    dtype=value.dtype,
-                    device=value.device,
+                    (self.block_tokens,), dtype=value.dtype, device=value.device
                 )
                 for value in self._engram
             ],
             [
-                (
-                    torch.zeros_like(kv[0]),
-                    torch.full_like(score[0], -torch.inf),
-                )
+                (torch.zeros_like(kv[0]), torch.full_like(score[0], -torch.inf))
                 for kv, score in self._tails
             ],
         )
@@ -319,6 +297,7 @@ class DeepSeekCache:
                 self._mamba_page(block)
 
     def clear_slot(self, slot):
+        self.exports.discard(slot)
         for value in self._window:
             value[slot].zero_()
         for value in self._mtp_window:
@@ -339,15 +318,90 @@ class DeepSeekCache:
         for value in self._engram:
             reserve_sequence_slot(value, slot, end)
 
+    def _state_destinations(self, row, start_pos, end_pos, mamba_blocks):
+        destinations = {}
+        for index, block in enumerate(mamba_blocks):
+            endpoint = (index + 1) * self.block_tokens
+            if block and start_pos < endpoint <= end_pos:
+                destinations[block] = endpoint
+        tail = mamba_blocks[(end_pos - 1) // self.block_tokens]
+        if not tail:
+            raise ValueError("DeepSeek accepted endpoint has no state page")
+        destinations[tail] = end_pos
+        checkpoint = row.get("cache_checkpoint")
+        if checkpoint is not None:
+            if (
+                not isinstance(checkpoint, (list, tuple))
+                or len(checkpoint) != 2
+                or type(checkpoint[0]) is not int
+                or not 0 < checkpoint[0] <= self.max_seq_len
+            ):
+                raise ValueError("invalid DeepSeek cache checkpoint")
+            endpoint, block = checkpoint
+            self._validate_block_id(block, self.mamba_capacity, "checkpoint")
+            if not block:
+                raise ValueError("DeepSeek checkpoint must name a physical page")
+            if start_pos < endpoint <= end_pos:
+                if block in destinations and destinations[block] != endpoint:
+                    raise ValueError("DeepSeek state page has conflicting endpoints")
+                destinations[block] = endpoint
+        return destinations
+
+    def begin_step(self, row, slot, *, start_pos, end_pos, minimum_end=None):
+        if not 0 <= start_pos < end_pos <= self.max_seq_len:
+            raise ValueError("DeepSeek state export range is out of bounds")
+        _fa, mamba = self._validate_row(row, end=end_pos)
+        minimum_end = end_pos if minimum_end is None else minimum_end
+        if type(minimum_end) is not int or not start_pos < minimum_end <= end_pos:
+            raise ValueError("invalid DeepSeek minimum accepted endpoint")
+        if end_pos - minimum_end > 5:
+            raise ValueError("DeepSeek verification exceeds five draft tokens")
+        endpoints = set(
+            self._state_destinations(row, start_pos, end_pos, mamba).values()
+        )
+        endpoints.update(range(minimum_end, end_pos + 1))
+        self.exports.begin(slot, start_pos, endpoints, minimum_end=minimum_end)
+
+    def mtp_checkpoint_ends(self, slots, first, last, final_end):
+        return sorted(
+            {
+                end
+                for slot in slots
+                for end in self.exports.endpoints(slot)
+                if first < end <= last
+                and end < final_end
+                and end < self.exports.steps[slot].minimum_end
+            }
+        )
+
+    def _captured_state(self, slot, endpoint, accepted_end, include_mtp):
+        if slot in self.exports.steps:
+            return (
+                [
+                    self.exports.window_state(slot, endpoint, value)
+                    for value in self._window
+                ],
+                [
+                    self.exports.window_state(slot, endpoint, value)
+                    for value in self._mtp_window
+                ]
+                if include_mtp
+                else (),
+                [
+                    self.exports.tail_state(slot, endpoint, kv)
+                    for kv, _score in self._tails
+                ],
+            )
+        if endpoint != accepted_end:
+            raise ValueError("DeepSeek intermediate endpoint was not exported")
+        return (
+            [value[slot] for value in self._window],
+            [value[slot] for value in self._mtp_window] if include_mtp else (),
+            [(kv[slot], score[slot]) for kv, score in self._tails],
+        )
+
     def commit(
-        self,
-        request_id,
-        row,
-        slot,
-        *,
-        start_pos=0,
-        accepted_end,
-        include_mtp=False,
+        self, request_id, row, slot, *, start_pos=0, accepted_end, include_mtp=False
     ):
         if type(start_pos) is not int or type(accepted_end) is not int:
             raise ValueError("DeepSeek cache positions must be integers")
@@ -355,162 +409,83 @@ class DeepSeekCache:
             raise ValueError("DeepSeek cache positions are out of range")
         fa_blocks, mamba_blocks = self._validate_row(row, end=accepted_end)
         if accepted_end == 0:
+            self.exports.discard(slot)
             return
+        destinations = self._state_destinations(
+            row, start_pos, accepted_end, mamba_blocks
+        )
+        prefix_state = row.get("prefix_state_slot")
+        if prefix_state is not None and start_pos:
+            self._validate_block_id(prefix_state, self.mamba_capacity, "prefix")
+            prefix = self.mamba_pages.get(prefix_state)
+            if prefix is None or prefix.endpoint != start_pos:
+                raise ValueError(
+                    "DeepSeek prefix state endpoint differs from the schedule"
+                )
+            if prefix_state in destinations and destinations[prefix_state] != start_pos:
+                raise ValueError(
+                    "DeepSeek prefix state requires a private continuation"
+                )
+        states = {
+            end: self._captured_state(slot, end, accepted_end, include_mtp)
+            for end in set(destinations.values())
+        }
         first_page = start_pos // self.block_tokens
         last_page = (accepted_end - 1) // self.block_tokens
         for page_index in range(first_page, last_page + 1):
             page_start = page_index * self.block_tokens
             page_end = min(accepted_end, page_start + self.block_tokens)
             block = fa_blocks[page_index]
-            if block == 0:
+            if not block:
                 continue
             page = self._fa_page(block)
-            page.valid_tokens = max(page.valid_tokens, page_end - page_start)
-            for value, destination in zip(self._window, page.window, strict=True):
-                positions = torch.arange(
-                    max(start_pos, page_start),
-                    page_end,
-                    device=value.device,
-                )
-                offsets = positions - page_start
-                source = value[slot, positions.remainder(value.shape[1])]
-                destination[offsets] = source
-            if include_mtp:
-                for value, destination in zip(
-                    self._mtp_window, page.mtp_window, strict=True
-                ):
-                    positions = torch.arange(
-                        max(start_pos, page_start),
-                        page_end,
-                        device=value.device,
+            for sources, targets in (
+                (self._compressed, page.compressed),
+                (self._index, page.index),
+            ):
+                for (value, ratio), destination in zip(sources, targets, strict=True):
+                    first = max(start_pos // ratio, page_start // ratio)
+                    last = min(accepted_end // ratio, ceil(page_end / ratio))
+                    if first < last:
+                        offset = page_start // ratio
+                        destination[first - offset : last - offset].copy_(
+                            value[slot, first:last]
+                        )
+            for value, destination in zip(self._engram, page.engram, strict=True):
+                first = max(start_pos, page_start)
+                if first < page_end:
+                    destination[first - page_start : page_end - page_start].copy_(
+                        value[slot, first:page_end]
                     )
-                    offsets = positions - page_start
-                    source = value[slot, positions.remainder(value.shape[1])]
-                    destination[offsets] = source
-            for (value, ratio), destination in zip(
-                self._compressed, page.compressed, strict=True
-            ):
-                first_row = max(start_pos // ratio, page_start // ratio)
-                last_row = min(accepted_end // ratio, (page_end + ratio - 1) // ratio)
-                if first_row < last_row:
-                    source = value[slot, first_row:last_row]
-                    destination[
-                        first_row - page_start // ratio : last_row - page_start // ratio
-                    ] = source
-            for (value, ratio), destination in zip(
-                self._index, page.index, strict=True
-            ):
-                first_row = max(start_pos // ratio, page_start // ratio)
-                last_row = min(accepted_end // ratio, (page_end + ratio - 1) // ratio)
-                if first_row < last_row:
-                    source = value[slot, first_row:last_row]
-                    destination[
-                        first_row - page_start // ratio : last_row - page_start // ratio
-                    ] = source
-            for value, destination in zip(self._engram, page.engram, strict=True):
-                first = max(start_pos, page_start)
-                last = min(accepted_end, page_end)
-                if first < last:
-                    destination[first - page_start : last - page_start] = value[
-                        slot, first:last
-                    ]
-        prefix_state = row.get("prefix_state_slot")
-        if prefix_state is not None and start_pos:
-            self._validate_block_id(prefix_state, self.mamba_capacity, "prefix")
-            if prefix_state == 0:
-                raise ValueError("DeepSeek prefix state must name a physical page")
-            prefix_page = self.mamba_pages.get(prefix_state)
-            if prefix_page is None:
-                raise ValueError("DeepSeek prefix state page is unavailable")
-            page_index = (start_pos - 1) // self.block_tokens
-            destination_block = mamba_blocks[page_index]
-            if destination_block == 0:
-                raise ValueError("DeepSeek prefix destination has no physical page")
-            destination_page = self._mamba_page(destination_block)
-            page_start = page_index * self.block_tokens
-            prefix_length = start_pos - page_start
-            if prefix_page.valid_tokens < prefix_length:
-                raise ValueError("DeepSeek prefix state page is incomplete")
-            for source, destination in zip(
-                prefix_page.engram, destination_page.engram, strict=True
-            ):
-                destination[:prefix_length].copy_(source[:prefix_length])
-            for (source_kv, source_score), (
-                destination_kv,
-                destination_score,
-            ) in zip(prefix_page.tails, destination_page.tails, strict=True):
-                destination_kv.copy_(source_kv)
-                destination_score.copy_(source_score)
-            destination_page.valid_tokens = max(
-                destination_page.valid_tokens, prefix_length
-            )
-        for page_index in range(first_page, last_page + 1):
-            page_start = page_index * self.block_tokens
-            page_end = min(accepted_end, page_start + self.block_tokens)
-            block = mamba_blocks[page_index]
-            if block == 0:
-                continue
-            page = self._mamba_page(block)
             page.valid_tokens = max(page.valid_tokens, page_end - page_start)
-            for value, destination in zip(self._engram, page.engram, strict=True):
-                first = max(start_pos, page_start)
-                last = min(accepted_end, page_end)
-                if first < last:
-                    destination[first - page_start : last - page_start] = value[
-                        slot, first:last
-                    ]
-        tail_block = next(
-            (
-                block
-                for block in reversed(
-                    mamba_blocks[: (accepted_end - 1) // self.block_tokens + 1]
+        for block, endpoint in destinations.items():
+            page = self._mamba_page(block)
+            window, mtp_window, tails = states[endpoint]
+            for source, destination in zip(window, page.window, strict=True):
+                destination.copy_(source)
+            if include_mtp:
+                for source, destination in zip(
+                    mtp_window, page.mtp_window, strict=True
+                ):
+                    destination.copy_(source)
+            for (source_kv, source_score), (target_kv, target_score) in zip(
+                tails, page.tails, strict=True
+            ):
+                target_kv.copy_(source_kv)
+                target_score.copy_(source_score)
+            page_start = (endpoint - 1) // self.block_tokens * self.block_tokens
+            for source, destination in zip(self._engram, page.engram, strict=True):
+                destination.zero_()
+                destination[: endpoint - page_start].copy_(
+                    source[slot, page_start:endpoint]
                 )
-                if block
-            ),
-            None,
-        )
-        checkpoint = row.get("cache_checkpoint")
-        checkpoint_block = None
-        if checkpoint is not None:
-            if (
-                not isinstance(checkpoint, (list, tuple))
-                or len(checkpoint) != 2
-                or type(checkpoint[0]) is not int
-                or not 0 <= checkpoint[0] <= self.max_seq_len
-            ):
-                raise ValueError("invalid DeepSeek cache checkpoint")
-            checkpoint_block = checkpoint[1]
-            self._validate_block_id(checkpoint_block, self.mamba_capacity, "checkpoint")
-            if checkpoint_block == 0:
-                raise ValueError("DeepSeek checkpoint must name a physical page")
-            if checkpoint[0] > accepted_end:
-                checkpoint_block = None
-        for block in (tail_block, checkpoint_block):
-            if block is None:
-                continue
-            tail_page = self._mamba_page(block)
-            for (kv, score), (destination_kv, destination_score) in zip(
-                self._tails, tail_page.tails, strict=True
-            ):
-                destination_kv.copy_(kv[slot])
-                destination_score.copy_(score[slot])
-        tail_fa_block = next(
-            (
-                block
-                for block in reversed(
-                    fa_blocks[: (accepted_end - 1) // self.block_tokens + 1]
-                )
-                if block
-            ),
-            None,
-        )
-        if tail_fa_block is not None:
-            tail_fa_page = self._fa_page(tail_fa_block)
-            for (kv, score), (destination_kv, destination_score) in zip(
-                self._tails, tail_fa_page.tails, strict=True
-            ):
-                destination_kv.copy_(kv[slot])
-                destination_score.copy_(score[slot])
+        for block, endpoint in destinations.items():
+            page = self.mamba_pages[block]
+            page.endpoint = endpoint
+            page.valid_tokens = (
+                endpoint - (endpoint - 1) // self.block_tokens * self.block_tokens
+            )
+        self.exports.discard(slot)
 
     def restore(self, request_id, slot, row, *, start_pos, use_prefix_state=True):
         if type(start_pos) is not int or not 0 <= start_pos <= self.max_seq_len:
@@ -521,122 +496,72 @@ class DeepSeekCache:
             self._validate_block_id(state_source, self.mamba_capacity, "prefix")
             if state_source == 0:
                 raise ValueError("DeepSeek prefix state must name a physical page")
+        state = None
         if start_pos:
             last_page = (start_pos - 1) // self.block_tokens
-            source_index = last_page
             if state_source is None:
-                source_index = next(
+                state_source = next(
                     (
-                        index
-                        for index in range(last_page, -1, -1)
-                        if mamba_blocks[index]
+                        block
+                        for block in reversed(mamba_blocks[: last_page + 1])
+                        if block
                     ),
                     None,
                 )
-                if source_index is None:
-                    raise ValueError("DeepSeek restore has no accepted state page")
-                state_source = mamba_blocks[source_index]
-            source_page = self.mamba_pages.get(state_source)
-            if source_page is None:
+            state = self.mamba_pages.get(state_source)
+            if state is None:
                 raise ValueError("DeepSeek restore state page is unavailable")
-            source_start = source_index * self.block_tokens
-            required_tokens = (
-                min(start_pos, source_start + self.block_tokens) - source_start
-            )
-            if source_page.valid_tokens < required_tokens:
-                raise ValueError("DeepSeek restore state page is incomplete")
+            if state.endpoint != start_pos:
+                raise ValueError(
+                    "DeepSeek restore state endpoint differs from the schedule"
+                )
+            for index, block in enumerate(fa_blocks[: last_page + 1]):
+                if block:
+                    page = self.fa_pages.get(block)
+                    required = min(
+                        self.block_tokens, start_pos - index * self.block_tokens
+                    )
+                    if page is None or page.valid_tokens < required:
+                        raise ValueError(
+                            "DeepSeek restore FA page is unavailable or incomplete"
+                        )
         self.clear_slot(slot)
-        if start_pos == 0:
+        if not start_pos:
             return
         self.reserve_slot(slot, start_pos)
         for page_index, block in enumerate(fa_blocks):
             page_start = page_index * self.block_tokens
             if page_start >= start_pos:
                 break
+            if not block:
+                continue
+            page = self.fa_pages[block]
             page_end = min(start_pos, page_start + self.block_tokens)
-            if block == 0:
-                continue
-            page = self.fa_pages.get(block)
-            if page is None:
-                raise ValueError("DeepSeek restore references an unknown FA page")
-            for value, source in zip(self._window, page.window, strict=True):
-                for position in range(page_start, page_end):
-                    value[slot, position % value.shape[1]] = source[
-                        position - page_start
-                    ]
-            for value, source in zip(self._mtp_window, page.mtp_window, strict=True):
-                for position in range(page_start, page_end):
-                    value[slot, position % value.shape[1]] = source[
-                        position - page_start
-                    ]
-            for (value, ratio), source in zip(
-                self._compressed, page.compressed, strict=True
+            for targets, sources in (
+                (self._compressed, page.compressed),
+                (self._index, page.index),
             ):
-                first_row = page_start // ratio
-                last_row = min(start_pos // ratio, (page_end + ratio - 1) // ratio)
-                if first_row < last_row:
-                    value[slot, first_row:last_row] = source[: last_row - first_row]
-            for (value, ratio), source in zip(self._index, page.index, strict=True):
-                first_row = page_start // ratio
-                last_row = min(start_pos // ratio, (page_end + ratio - 1) // ratio)
-                if first_row < last_row:
-                    value[slot, first_row:last_row] = source[: last_row - first_row]
+                for (value, ratio), source in zip(targets, sources, strict=True):
+                    first = page_start // ratio
+                    last = min(start_pos // ratio, ceil(page_end / ratio))
+                    if first < last:
+                        value[slot, first:last].copy_(source[: last - first])
             for value, source in zip(self._engram, page.engram, strict=True):
-                value[slot, page_start:page_end] = source[: page_end - page_start]
-        for page_index, block in enumerate(fa_blocks):
-            page_start = page_index * self.block_tokens
-            if page_start >= start_pos:
-                break
-            if block == 0:
-                continue
-            page = self.fa_pages.get(block)
-            if page is None:
-                continue
-            for (kv, score), (source_kv, source_score) in zip(
-                self._tails, page.tails, strict=True
-            ):
-                if page_start + page.valid_tokens >= start_pos:
-                    kv[slot].copy_(source_kv)
-                    score[slot].copy_(source_score)
-        for page_index, block in enumerate(mamba_blocks):
-            page_start = page_index * self.block_tokens
-            if page_start >= start_pos:
-                break
-            page_end = min(start_pos, page_start + self.block_tokens)
-            if block == 0:
-                continue
-            page = self.mamba_pages.get(block)
-            if page is None:
-                continue
-            for value, source in zip(self._engram, page.engram, strict=True):
-                value[slot, page_start:page_end] = source[: page_end - page_start]
-        if state_source:
-            source_page = self.mamba_pages.get(state_source)
-            source_start = (start_pos - 1) // self.block_tokens * self.block_tokens
-            if source_page is None:
-                raise ValueError("DeepSeek prefix state page is unavailable")
-            source_end = min(start_pos, source_start + self.block_tokens)
-            for value, source in zip(self._engram, source_page.engram, strict=True):
-                value[slot, source_start:source_end] = source[
-                    : source_end - source_start
-                ]
-            for (kv, score), (source_kv, source_score) in zip(
-                self._tails, source_page.tails, strict=True
-            ):
-                kv[slot].copy_(source_kv)
-                score[slot].copy_(source_score)
-        tail_page = None
-        if not state_source:
-            for block in reversed(mamba_blocks[: ceil(start_pos / self.block_tokens)]):
-                tail_page = self.mamba_pages.get(block)
-                if tail_page is not None:
-                    break
-        if tail_page is not None:
-            for (kv, score), (source_kv, source_score) in zip(
-                self._tails, tail_page.tails, strict=True
-            ):
-                kv[slot].copy_(source_kv)
-                score[slot].copy_(source_score)
+                value[slot, page_start:page_end].copy_(source[: page_end - page_start])
+        for targets, sources in (
+            (self._window, state.window),
+            (self._mtp_window, state.mtp_window),
+        ):
+            for value, source in zip(targets, sources, strict=True):
+                value[slot].copy_(source)
+        for (kv, score), (source_kv, source_score) in zip(
+            self._tails, state.tails, strict=True
+        ):
+            kv[slot].copy_(source_kv)
+            score[slot].copy_(source_score)
+        page_start = (start_pos - 1) // self.block_tokens * self.block_tokens
+        for value, source in zip(self._engram, state.engram, strict=True):
+            value[slot, page_start:start_pos].copy_(source[: start_pos - page_start])
 
     def copy_prefix(self, copies):
         for source, destination, length in copies:
@@ -647,50 +572,31 @@ class DeepSeekCache:
                 or source <= 0
                 or destination <= 0
                 or source == destination
-                or length <= 0
-                or length > self.block_tokens
+                or not 0 < length <= self.block_tokens
             ):
                 raise ValueError("invalid DeepSeek FA prefix copy")
             self._validate_block_id(source, self.fa_capacity, "FA source")
             self._validate_block_id(destination, self.fa_capacity, "FA destination")
             source_page = self.fa_pages.get(source)
-            if source_page is None:
-                raise ValueError("DeepSeek prefix copy references an unknown page")
+            if source_page is None or source_page.valid_tokens < length:
+                raise ValueError(
+                    "DeepSeek prefix copy references an unknown or incomplete page"
+                )
             destination_page = self._fa_page(destination)
-            destination_page.valid_tokens = max(destination_page.valid_tokens, length)
-            for source_value, destination_value in zip(
-                source_page.window, destination_page.window, strict=True
+            for spec, sources, targets in (
+                (self._compressed, source_page.compressed, destination_page.compressed),
+                (self._index, source_page.index, destination_page.index),
             ):
-                destination_value[:length].copy_(source_value[:length])
-            for source_value, destination_value in zip(
-                source_page.mtp_window, destination_page.mtp_window, strict=True
-            ):
-                destination_value[:length].copy_(source_value[:length])
-            for (_value, ratio), source_value, destination_value in zip(
-                self._compressed,
-                source_page.compressed,
-                destination_page.compressed,
-                strict=True,
-            ):
-                count = min(destination_value.shape[0], ceil(length / ratio))
-                destination_value[:count].copy_(source_value[:count])
-            for (_value, ratio), source_value, destination_value in zip(
-                self._index,
-                source_page.index,
-                destination_page.index,
-                strict=True,
-            ):
-                count = min(destination_value.shape[0], ceil(length / ratio))
-                destination_value[:count].copy_(source_value[:count])
-            for source_value, destination_value in zip(
+                for (_value, ratio), source_value, target in zip(
+                    spec, sources, targets, strict=True
+                ):
+                    count = min(target.shape[0], ceil(length / ratio))
+                    target[:count].copy_(source_value[:count])
+            for source_value, target in zip(
                 source_page.engram, destination_page.engram, strict=True
             ):
-                destination_value[:length].copy_(source_value[:length])
-            for (source_kv, source_score), (destination_kv, destination_score) in zip(
-                source_page.tails, destination_page.tails, strict=True
-            ):
-                destination_kv.copy_(source_kv)
-                destination_score.copy_(source_score)
+                target[:length].copy_(source_value[:length])
+            destination_page.valid_tokens = length
 
     @staticmethod
     def _host_tensor(value):
@@ -705,26 +611,23 @@ class DeepSeekCache:
 
     def _clone_fa(self, page):
         return _FaPage(
-            [self._host_tensor(value) for value in page.window],
-            [self._host_tensor(value) for value in page.mtp_window],
             [self._host_tensor(value) for value in page.compressed],
             [self._host_tensor(value) for value in page.index],
             [self._host_tensor(value) for value in page.engram],
-            [
-                (self._host_tensor(kv), self._host_tensor(score))
-                for kv, score in page.tails
-            ],
             page.valid_tokens,
         )
 
     def _clone_mamba(self, page):
         return _MambaPage(
+            [self._host_tensor(value) for value in page.window],
+            [self._host_tensor(value) for value in page.mtp_window],
             [self._host_tensor(value) for value in page.engram],
             [
                 (self._host_tensor(kv), self._host_tensor(score))
                 for kv, score in page.tails
             ],
             page.valid_tokens,
+            page.endpoint,
         )
 
     @staticmethod
@@ -739,67 +642,50 @@ class DeepSeekCache:
         return size * torch.empty((), dtype=dtype).element_size()
 
     def _fa_page_bytes(self):
-        total = sum(
-            self._shape_size((self.block_tokens, value.shape[-1]), value.dtype)
-            for value in self._window
-        )
-        total += sum(
-            self._shape_size((self.block_tokens, value.shape[-1]), value.dtype)
-            for value in self._mtp_window
-        )
-        total += sum(
+        return sum(
             self._shape_size(
                 (ceil(self.block_tokens / ratio), *value.shape[2:]), value.dtype
             )
-            for value, ratio in self._compressed
-        )
-        total += sum(
-            self._shape_size(
-                (ceil(self.block_tokens / ratio), *value.shape[2:]), value.dtype
-            )
-            for value, ratio in self._index
-        )
-        total += sum(
+            for value, ratio in (*self._compressed, *self._index)
+        ) + sum(
             self._shape_size((self.block_tokens,), value.dtype)
             for value in self._engram
         )
-        total += sum(
-            self._tensor_size(kv[0]) + self._tensor_size(score[0])
-            for kv, score in self._tails
-        )
-        return total
 
     def _mamba_page_bytes(self):
-        total = sum(
-            self._shape_size((self.block_tokens,), value.dtype)
-            for value in self._engram
+        return (
+            sum(
+                self._tensor_size(value[0])
+                for value in (*self._window, *self._mtp_window)
+            )
+            + sum(
+                self._shape_size((self.block_tokens,), value.dtype)
+                for value in self._engram
+            )
+            + sum(
+                self._tensor_size(kv[0]) + self._tensor_size(score[0])
+                for kv, score in self._tails
+            )
         )
-        total += sum(
-            self._tensor_size(kv[0]) + self._tensor_size(score[0])
-            for kv, score in self._tails
-        )
-        return total
 
     def _snapshot_size(self, fa, mamba):
-        total = 0
-        for page in fa:
-            for value in (
-                *page.window,
-                *page.mtp_window,
-                *page.compressed,
-                *page.index,
-            ):
-                total += self._tensor_size(value)
-            for value in page.engram:
-                total += self._tensor_size(value)
-            for kv, score in page.tails:
-                total += self._tensor_size(kv) + self._tensor_size(score)
-        for page in mamba:
-            for value in page.engram:
-                total += self._tensor_size(value)
-            for kv, score in page.tails:
-                total += self._tensor_size(kv) + self._tensor_size(score)
-        return total
+        return (
+            sum(
+                self._tensor_size(value)
+                for page in fa
+                for value in (*page.compressed, *page.index, *page.engram)
+            )
+            + sum(
+                self._tensor_size(value)
+                for page in mamba
+                for value in (*page.window, *page.mtp_window, *page.engram)
+            )
+            + sum(
+                self._tensor_size(kv) + self._tensor_size(score)
+                for page in mamba
+                for kv, score in page.tails
+            )
+        )
 
     def _release_request_slot(self, request_id):
         if self.requests is None or self.free_slots is None:
@@ -860,38 +746,32 @@ class DeepSeekCache:
         self._validate_load(operation, snapshot)
         for block, source in zip(operation["fa_blocks"], snapshot.fa, strict=True):
             destination = self._fa_page(block)
-            for target, value in zip(destination.window, source.window, strict=True):
-                target.copy_(self._device_tensor(value, target))
-            for target, value in zip(
-                destination.mtp_window, source.mtp_window, strict=True
+            for targets, values in (
+                (destination.compressed, source.compressed),
+                (destination.index, source.index),
+                (destination.engram, source.engram),
             ):
-                target.copy_(self._device_tensor(value, target))
-            for target, value in zip(
-                destination.compressed, source.compressed, strict=True
-            ):
-                target.copy_(self._device_tensor(value, target))
-            for target, value in zip(destination.index, source.index, strict=True):
-                target.copy_(self._device_tensor(value, target))
-            for target, value in zip(destination.engram, source.engram, strict=True):
-                target.copy_(self._device_tensor(value, target))
-            for (target_kv, target_score), (value_kv, value_score) in zip(
-                destination.tails, source.tails, strict=True
-            ):
-                target_kv.copy_(self._device_tensor(value_kv, target_kv))
-                target_score.copy_(self._device_tensor(value_score, target_score))
+                for target, value in zip(targets, values, strict=True):
+                    target.copy_(self._device_tensor(value, target))
             destination.valid_tokens = source.valid_tokens
         for block, source in zip(
             operation["mamba_blocks"], snapshot.mamba, strict=True
         ):
             destination = self._mamba_page(block)
-            for target, value in zip(destination.engram, source.engram, strict=True):
-                target.copy_(self._device_tensor(value, target))
+            for targets, values in (
+                (destination.window, source.window),
+                (destination.mtp_window, source.mtp_window),
+                (destination.engram, source.engram),
+            ):
+                for target, value in zip(targets, values, strict=True):
+                    target.copy_(self._device_tensor(value, target))
             for (target_kv, target_score), (value_kv, value_score) in zip(
                 destination.tails, source.tails, strict=True
             ):
                 target_kv.copy_(self._device_tensor(value_kv, target_kv))
                 target_score.copy_(self._device_tensor(value_score, target_score))
             destination.valid_tokens = source.valid_tokens
+            destination.endpoint = source.endpoint
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         self.load_bytes += snapshot.bytes
@@ -989,6 +869,7 @@ class DeepSeekCache:
         return completed
 
     def close(self):
+        self.exports.clear()
         for value in (
             *(value for value, _ in self._compressed),
             *(value for value, _ in self._index),

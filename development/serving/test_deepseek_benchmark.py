@@ -1,5 +1,6 @@
 import hashlib
 import json
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from unittest.mock import patch
 
 from .deepseek_agentx import service_max_num_seqs
 from .deepseek_benchmark import (
+    Service,
     artifact_identity,
     effective_cache_configuration,
     effective_service_configuration,
@@ -18,6 +20,102 @@ from .deepseek_benchmark import (
 
 
 class DeepSeekBenchmark(unittest.TestCase):
+    def test_stale_service_socket_reports_failure_after_directory_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            arguments = SimpleNamespace(
+                artifacts=root,
+                model=root,
+                binary=root / "service",
+                cache_context=1048576,
+                blocks=32,
+                mamba_blocks=8,
+            )
+
+            class FinishedProcess:
+                def poll(self):
+                    return 0
+
+            with patch(
+                "development.serving.deepseek_benchmark.subprocess.Popen",
+                return_value=FinishedProcess(),
+            ):
+                service = Service(arguments, "ordinary", "tp4")
+            directory = service.ipc.parent
+            with socket.socket(socket.AF_UNIX) as stale:
+                stale.bind(str(service.ipc))
+            with self.assertRaisesRegex(RuntimeError, "did not remove.*IPC"):
+                service.close()
+            self.assertFalse(directory.exists())
+
+    def test_failed_service_launch_removes_its_temporary_ipc_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            arguments = SimpleNamespace(
+                artifacts=root,
+                model=root,
+                binary=root / "service",
+                cache_context=1048576,
+                blocks=32,
+                mamba_blocks=8,
+            )
+            directories = []
+
+            def fail(command, **kwargs):
+                directories.append(Path(command[command.index("--socket") + 1]).parent)
+                raise OSError("cannot start test worker")
+
+            with (
+                patch("tempfile.tempdir", str(root)),
+                patch(
+                    "development.serving.deepseek_benchmark.subprocess.Popen",
+                    side_effect=fail,
+                ),
+                self.assertRaisesRegex(OSError, "cannot start"),
+            ):
+                Service(arguments, "ordinary", "tp4")
+            self.assertEqual(len(directories), 1)
+            self.assertFalse(directories[0].exists())
+
+    def test_services_use_distinct_temporary_ipc_directories_and_remove_them(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            arguments = SimpleNamespace(
+                artifacts=root,
+                model=root,
+                binary=root / "service",
+                cache_context=1048576,
+                blocks=32,
+                mamba_blocks=8,
+            )
+
+            class FinishedProcess:
+                def poll(self):
+                    return 0
+
+            with (
+                patch("tempfile.tempdir", str(root)),
+                patch(
+                    "development.serving.deepseek_benchmark.subprocess.Popen",
+                    return_value=FinishedProcess(),
+                ),
+            ):
+                services = [
+                    Service(arguments, "ordinary", "tp4"),
+                    Service(arguments, "dspark5", "tep4"),
+                ]
+            try:
+                self.assertTrue(
+                    all(service.ipc.is_relative_to(root) for service in services)
+                )
+                self.assertNotEqual(services[0].ipc, services[1].ipc)
+                directories = [service.ipc.parent for service in services]
+                self.assertTrue(all(directory.is_dir() for directory in directories))
+            finally:
+                for service in services:
+                    service.close()
+            self.assertTrue(all(not directory.exists() for directory in directories))
+
     def test_numeric_runtime_changes_invalidate_the_measurement_identity(self):
         import torch
 

@@ -14,6 +14,7 @@ import torch.distributed as dist
 from ...worker.trace import Trace
 from .adapter import (
     CONFIG_SHA256,
+    DS_PARK_DRAFT_TOKENS,
     INFERENCE_CONFIG_SHA256,
     MAX_CONTEXT_TOKENS,
     validate_config,
@@ -179,18 +180,14 @@ class Worker:
                 tokenizer_identity=self.tokenizer.identity,
                 strategy=model_strategy,
                 cache_capacities={
-                    "window": config.get("num_gpu_blocks") or 2048,
+                    "window": config.get("mamba_blocks") or 128,
                     "compressed_kv": config.get("num_gpu_blocks") or 2048,
                     "index_keys": config.get("num_gpu_blocks") or 2048,
                     "accepted_state": config.get("mamba_blocks") or 128,
                 },
             )
-        self.logical_num_blocks = self.descriptor["cache_schema"]["groups"][0][
-            "capacity_blocks"
-        ]
-        self.mamba_blocks = self.descriptor["cache_schema"]["groups"][-1][
-            "capacity_blocks"
-        ]
+        self.logical_num_blocks = self.cache.fa_capacity
+        self.mamba_blocks = self.cache.mamba_capacity
         with self.startup_trace.measure("execution_trace"):
             self.trace = Trace(
                 config,
@@ -350,6 +347,14 @@ class Worker:
             if logit_chunks is not None:
                 logit_chunks.append(chunk_logits)
             if isinstance(chunk_hidden, torch.Tensor):
+                self._seed_mtp_checkpoints(
+                    chunk_hidden,
+                    main_hidden,
+                    start_pos + offset,
+                    cache_slots,
+                    (slot,),
+                    start_pos + len(token_ids),
+                )
                 if isinstance(main_hidden, torch.Tensor):
                     main_hidden = torch.cat((main_hidden, chunk_hidden), dim=1)
                 else:
@@ -359,6 +364,7 @@ class Worker:
                     "window_size",
                     MAX_NATIVE_ROWS,
                 )
+                limit += DS_PARK_DRAFT_TOKENS if full_logits else 0
                 main_hidden = main_hidden[:, -limit:].clone()
             elif main_hidden is None:
                 main_hidden = chunk_hidden
@@ -455,6 +461,14 @@ class Worker:
             if logit_chunks is not None:
                 logit_chunks.append(chunk_logits)
             if isinstance(chunk_hidden, torch.Tensor):
+                self._seed_mtp_checkpoints(
+                    chunk_hidden,
+                    main_hidden,
+                    start_pos + offset,
+                    cache_slots,
+                    cache_slots_cpu,
+                    start_pos + length,
+                )
                 if isinstance(main_hidden, torch.Tensor):
                     main_hidden = torch.cat((main_hidden, chunk_hidden), dim=1)
                 else:
@@ -464,6 +478,7 @@ class Worker:
                     "window_size",
                     MAX_NATIVE_ROWS,
                 )
+                limit += DS_PARK_DRAFT_TOKENS if full_logits else 0
                 main_hidden = main_hidden[:, -limit:].clone()
             elif main_hidden is None:
                 main_hidden = chunk_hidden
@@ -505,6 +520,24 @@ class Worker:
         )
         return length if length > window_size else None
 
+    def _seed_mtp_checkpoints(
+        self, hidden, previous, start_pos, slots, slots_cpu, final_end
+    ):
+        if not getattr(self, "dspark", False) or not hasattr(self, "cache"):
+            return
+        ends = self.cache.mtp_checkpoint_ends(
+            slots_cpu, start_pos, start_pos + hidden.size(1), final_end
+        )
+        width = self.args.window_size
+        for end in ends:
+            count = end - start_pos
+            selected = hidden[:, max(0, count - width) : count]
+            if selected.size(1) < width and isinstance(previous, torch.Tensor):
+                selected = torch.cat(
+                    (previous[:, -(width - selected.size(1)) :], selected), dim=1
+                )
+            self._seed_mtp_batch(selected, end - selected.size(1), slots)
+
     def _seed_mtp_batch(
         self,
         main_hidden,
@@ -529,6 +562,9 @@ class Worker:
             "window_size",
             hidden_length,
         )
+        export = getattr(getattr(self, "cache", None), "exports", None)
+        if export is not None and export.steps:
+            window_size += DS_PARK_DRAFT_TOKENS
         hidden_start = start_pos + source_length - hidden_length
         if hidden_length > window_size:
             main_hidden = main_hidden[:, -window_size:]
@@ -594,6 +630,14 @@ class Worker:
             for row in rows:
                 request, slot, token_ids, start_pos = self._prepare_row(row)
                 prepared.append((row, request, slot, token_ids, start_pos))
+                if hasattr(self, "cache"):
+                    self.cache.begin_step(
+                        row,
+                        slot,
+                        start_pos=start_pos,
+                        end_pos=start_pos + len(token_ids),
+                        minimum_end=start_pos + len(token_ids),
+                    )
             start_pos = prepared[0][4]
             length = len(prepared[0][3])
             if any(item[4] != start_pos or len(item[3]) != length for item in prepared):
@@ -680,6 +724,14 @@ class Worker:
         accepted_end = start_pos
         mtp_state_updated = False
         if not final:
+            if hasattr(self, "cache"):
+                self.cache.begin_step(
+                    row,
+                    slot,
+                    start_pos=start_pos,
+                    end_pos=start_pos + len(token_ids),
+                    minimum_end=start_pos + len(token_ids),
+                )
             _, _, main_hidden = self._target(
                 token_ids,
                 start_pos,
@@ -701,6 +753,14 @@ class Worker:
             if not known:
                 raise ValueError("DeepSeek execution row has no accepted input")
             drafts = token_ids[known_count:]
+            if hasattr(self, "cache"):
+                self.cache.begin_step(
+                    row,
+                    slot,
+                    start_pos=start_pos,
+                    end_pos=start_pos + len(token_ids),
+                    minimum_end=start_pos + known_count,
+                )
             if drafts:
                 _, logits, main_hidden = self._target(
                     token_ids,
@@ -727,16 +787,22 @@ class Worker:
                     max(0, len(tokens) - 1),
                 )
                 accepted_input_count = known_count + accepted
-                accepted_hidden = (
-                    main_hidden[:, :accepted_input_count]
-                    if isinstance(main_hidden, torch.Tensor)
-                    else None
-                )
+                hidden_start = start_pos
+                hidden_count = accepted_input_count
+                accepted_hidden = None
+                if isinstance(main_hidden, torch.Tensor):
+                    hidden_start = start_pos + len(token_ids) - main_hidden.size(1)
+                    hidden_count = start_pos + accepted_input_count - hidden_start
+                    if not 0 < hidden_count <= main_hidden.size(1):
+                        raise ValueError(
+                            "DeepSeek accepted hidden state is unavailable"
+                        )
+                    accepted_hidden = main_hidden[:, :hidden_count]
                 mtp_state_updated = self._seed_mtp(
                     accepted_hidden,
-                    start_pos,
+                    hidden_start,
                     slot,
-                    source_length=accepted_input_count,
+                    source_length=hidden_count,
                 )
                 accepted_end = start_pos + accepted_input_count
                 proposals = []
