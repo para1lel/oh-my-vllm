@@ -27,6 +27,8 @@ native contract 支持长 row range.
 Native SwiGLU 支持最多 1048576 个 routed row.
 这使 six-route 8192-row prefill chunk 保持在 native activation path.
 
+DeepSeek rank worker 为 prefill input copy 复用 pinned host 和 device token buffer.
+
 sparse attention status failure 会禁用 native path, 并使用 reference path.
 short query 的 native sparse packing 通过 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1` opt-in.
 long query 使用 native sparse packing, 因为 reference path 的扩展性较差.

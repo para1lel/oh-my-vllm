@@ -127,6 +127,15 @@ class Worker:
         )
         with self.startup_trace.measure("model_construct"), torch.device(self.device):
             self.model = Transformer(args, self.tokenizer.tokenizer)
+        self._input_host = self._host_input_buffer(
+            config["max_num_seqs"], self.prefill_rows
+        )
+        self._input_device = torch.empty(
+            (config["max_num_seqs"], self.prefill_rows),
+            dtype=torch.long,
+            device=self.device,
+        )
+        self._input_copy_event = None
         with self.startup_trace.measure("loader_construct"):
             self.weights = RankLoader(
                 root,
@@ -212,6 +221,46 @@ class Worker:
             },
         }
 
+    @staticmethod
+    def _host_input_buffer(rows, columns):
+        try:
+            return torch.empty(
+                (rows, columns),
+                dtype=torch.long,
+                device="cpu",
+                pin_memory=True,
+            )
+        except RuntimeError:
+            return torch.empty((rows, columns), dtype=torch.long, device="cpu")
+
+    def _input_tokens(self, token_batches):
+        rows = len(token_batches)
+        if not hasattr(self, "_input_device"):
+            return torch.tensor(token_batches, device=self.device, dtype=torch.long)
+        if not rows:
+            raise ValueError("DeepSeek token input must contain a row")
+        length = len(token_batches[0])
+        if (
+            length < 1
+            or any(len(tokens) != length for tokens in token_batches)
+            or rows > self._input_device.size(0)
+            or length > self._input_device.size(1)
+        ):
+            raise ValueError("DeepSeek token input exceeds the prepared buffer")
+        event = self._input_copy_event
+        if event is not None:
+            event.synchronize()
+        source = torch.as_tensor(token_batches, dtype=torch.long, device="cpu")
+        host = self._input_host[:rows, :length]
+        host.copy_(source)
+        device = self._input_device[:rows, :length]
+        device.copy_(host, non_blocking=True)
+        if event is None:
+            event = torch.cuda.Event()
+        event.record(torch.cuda.current_stream(self.device))
+        self._input_copy_event = event
+        return device
+
     def _slot(self, request_id):
         request = self.requests[request_id]
         if getattr(request, "cache_slot", None) is None:
@@ -276,11 +325,7 @@ class Worker:
         logit_chunks = [] if full_logits else None
         limit_rows = getattr(self, "prefill_rows", MAX_PREFILL_ROWS)
         for offset in range(0, len(token_ids), limit_rows):
-            inputs = torch.tensor(
-                [token_ids[offset : offset + limit_rows]],
-                device=self.device,
-                dtype=torch.long,
-            )
+            inputs = self._input_tokens((token_ids[offset : offset + limit_rows],))
             output_ids, chunk_logits, chunk_hidden = self.model(
                 inputs,
                 start_pos=start_pos + offset,
@@ -381,10 +426,8 @@ class Worker:
         output_ids = logits = main_hidden = None
         logit_chunks = [] if full_logits else None
         for offset in range(0, length, chunk_size):
-            inputs = torch.tensor(
-                [tokens[offset : offset + chunk_size] for tokens in token_batches],
-                device=self.device,
-                dtype=torch.long,
+            inputs = self._input_tokens(
+                [tokens[offset : offset + chunk_size] for tokens in token_batches]
             )
             output_ids, chunk_logits, chunk_hidden = self.model(
                 inputs,

@@ -27,6 +27,8 @@ Large prefill calls use bounded 8192-row launches to keep temporary storage boun
 Native SwiGLU accepts up to 1048576 routed rows.
 This keeps six-route 8192-row prefill chunks on the native activation path.
 
+DeepSeek rank workers reuse pinned host and device token buffers for prefill input copies.
+
 Sparse attention status failures disable the native path and use the reference path.
 Short-query native sparse packing is opt-in through `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=1`.
 Long queries use native sparse packing because the reference path scales poorly.
