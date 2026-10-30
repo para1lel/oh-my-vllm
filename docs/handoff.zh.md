@@ -83,7 +83,7 @@ Private endpoint snapshot 在 verification 期间保存已覆盖的 target windo
 Commit 先选择 accepted endpoint, 再恢复 active state.
 nonzero multi-token prefill 使用 fused chunk path.
 target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
-aligned prefill batch 最多使用四个 request 组成一个 subbatch.
+aligned prefill batch 默认最多使用四个 request 组成一个 subbatch, 使用 32768-row setting 时最多使用 16 个 request.
 
 MoE dispatch 只对 sorted routed row 做一次 gather, 并为 local expert 重用 slice.
 TP4 和 TEP4 的 FP4 routed expert 使用 native grouped projection

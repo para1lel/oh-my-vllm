@@ -31,7 +31,7 @@ DEFAULT_CACHE_CONTEXT = 65536
 MAX_NATIVE_ROWS = 384
 MAX_PREFILL_ROWS = 32768
 DEFAULT_PREFILL_ROWS = 8192
-MAX_PREFILL_SUBBATCH = 4
+MAX_PREFILL_SUBBATCH = 16
 
 
 def prefill_row_limit(value=None):
@@ -39,6 +39,10 @@ def prefill_row_limit(value=None):
     if not 1 <= rows <= MAX_PREFILL_ROWS:
         raise ValueError("DeepSeek prefill row limit must be between one and 32768")
     return rows
+
+
+def prefill_subbatch_limit(rows):
+    return min(MAX_PREFILL_SUBBATCH, max(4, rows // 2048))
 
 
 class _StartupTrace:
@@ -402,12 +406,15 @@ class Worker:
         if length < 1 or any(len(tokens) != length for tokens in token_batches):
             raise ValueError("DeepSeek target batch rows must have one length")
         groups = []
-        for offset in range(0, len(token_batches), MAX_PREFILL_SUBBATCH):
+        subbatch_limit = prefill_subbatch_limit(
+            getattr(self, "prefill_rows", DEFAULT_PREFILL_ROWS)
+        )
+        for offset in range(0, len(token_batches), subbatch_limit):
             groups.append(
                 self._target_batch_group(
-                    token_batches[offset : offset + MAX_PREFILL_SUBBATCH],
+                    token_batches[offset : offset + subbatch_limit],
                     start_pos,
-                    cache_slots[offset : offset + MAX_PREFILL_SUBBATCH],
+                    cache_slots[offset : offset + subbatch_limit],
                     full_logits=full_logits,
                     compute_logits=compute_logits,
                 )

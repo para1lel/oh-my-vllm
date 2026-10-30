@@ -82,7 +82,7 @@ Private endpoint snapshots keep overwritten target windows and compressor tails 
 Commit selects the accepted endpoint before it restores the active state.
 Nonzero multi-token prefill uses the fused chunk path.
 Target and MTP seed chunks keep the total native rows below the operator limit.
-Aligned prefill batches use subbatches of at most four requests.
+Aligned prefill batches use four-request subbatches by default and up to 16 requests with the 32768-row setting.
 
 MoE dispatch gathers sorted routed rows once and reuses slices for local experts.
 TP4 and TEP4 FP4 routed experts use native grouped projection for
