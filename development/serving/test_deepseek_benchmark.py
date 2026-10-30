@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import socket
 import tempfile
 import unittest
@@ -132,6 +133,7 @@ class DeepSeekBenchmark(unittest.TestCase):
             tokenizer = SimpleNamespace(identity={"tokenizer": "fixed"})
             precision = torch.get_float32_matmul_precision()
             with (
+                patch.dict("os.environ"),
                 patch(
                     "development.serving.deepseek_benchmark.native_identity",
                     return_value={},
@@ -145,7 +147,18 @@ class DeepSeekBenchmark(unittest.TestCase):
                     return_value=[],
                 ),
             ):
+                os.environ.pop("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", None)
                 expected = artifact_identity(arguments, tokenizer, (), workload={})
+                self.assertEqual(expected["configuration"]["native_sparse"], "1")
+                for override in ("0", "1"):
+                    os.environ["OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE"] = override
+                    actual = artifact_identity(arguments, tokenizer, (), workload={})
+                    self.assertEqual(actual["configuration"]["native_sparse"], override)
+                    if override == "0":
+                        with self.assertRaisesRegex(RuntimeError, "changed"):
+                            verify_artifact_identity(
+                                arguments, tokenizer, (), expected, workload={}
+                            )
                 try:
                     torch.set_float32_matmul_precision(
                         "high" if precision != "high" else "highest"

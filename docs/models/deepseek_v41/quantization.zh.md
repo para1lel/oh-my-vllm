@@ -74,17 +74,22 @@ Expert selection 之前不要将 router logits 舍入到 BF16.
 Corrected score 相等时, native routing 选择最小的 global expert ID.
 对于这种 tie, 发布参考的 top-k 可能选择不同 ID.
 
-Tensor-parallel expert down projection 必须保留 FP32 partial sum, 直到 rank reduction 完成.
-Grouped 和 non-grouped TP4 path 保留这些 FP32 partial sum.
-将归约结果舍入到 BF16.
+TP4 对每个路由投影按输出通道分片.
+在下投影前收集 BF16 激活乘积.
+每个计算进程为其输出通道计算完整的 K32 和.
+在 FP32 词元求和前, 将每个完整的专家输出舍入到 BF16.
+按进程顺序收集这些 FP32 词元和.
+在分组执行和逐个专家循环中保持相同操作.
 
-Grouped up projection 和 TEP4 down projection 保留 BF16 output.
-Single-rank grouped down projection 返回完整的 BF16 expert output, 而不是 rank partial sum.
-Grouped interface 接受 BF16 或 FP32 output, 不改变 workspace 大小.
-这些 output type 不能规定完整的 tensor-parallel accumulation order.
+不要将下投影的 K32 和拆成各进程本地的部分和.
+多行收集操作在通道重排期间可能同时持有两个完整的收集结果张量.
+临时存储估算必须计入这两个张量.
+
+分组上投影和所有完整的下投影保留 BF16 输出.
+分组接口还接受 FP32 输出, 不改变工作区大小.
 
 Shared expert 在每个 rank 上保留完整权重.
-在 routed rank reduction 后添加其输出.
+在路由输出交换后添加其输出.
 不对 shared output 执行跨 rank reduction.
 Attention output projection 保留其 FP32 rank reduction 之前的 local BF16 舍入.
 

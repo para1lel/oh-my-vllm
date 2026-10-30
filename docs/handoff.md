@@ -68,7 +68,7 @@ The sink enters the denominator after these blocks and does not change their run
 
 An independent development reference uses official MP4 placement and a recorded quantizer synchronization patch.
 Frozen text fixtures contain full vocabulary vectors, DSpark5 proposal and verification vectors, and fresh accepted-only restoration endpoints.
-TP4 does not satisfy these text endpoint checks.
+The fixtures and numerical limits stay fixed during candidate acceptance.
 
 Sparse attention status failures disable the native path and use the reference path.
 Native sparse attention is the default for supported inputs.
@@ -90,9 +90,15 @@ Aligned prefill batches use four-request subbatches by default and up to 16 requ
 MoE dispatch gathers sorted routed rows once and reuses slices for local experts.
 TP4 and TEP4 FP4 routed experts use native grouped projection for
 the two up projections and the down projection.
-Multi-rank TP4 down projections keep FP32 partial sums through routed accumulation and rank reduction.
-Up projections and TEP4 down projections keep BF16 output.
-Single-rank grouped down projections return full BF16 expert outputs.
+TP4 routed weights and scales use output-channel shards for all three projections.
+TP4 gathers the BF16 activation product before complete-K32 down computation.
+Each expert output rounds to BF16 before the local FP32 token sum.
+
+TP4 gathers the FP32 token sums before adding the replicated shared output.
+TEP4 keeps its routed rank reduction.
+
+DeepSeek permits preemption and restart of the same request in one Execute.
+Finished requests cannot also be scheduled or preempted in that Execute.
 
 Grouped projection calculates row offsets on the device and does not upload host descriptors.
 The grouped path keeps the local token order and falls back to the reference
@@ -184,8 +190,8 @@ This repository has a local CodeGraph index and ignores `.codegraph/`.
 - Measure window storage at each state endpoint with the approved long-context workloads.
 - Measure persistent encoded KV storage against direct BF16 table reads.
 - Measure raw and prepared projection storage before long-context capacity tuning.
-- Correct candidate differences against the independent frozen DeepSeek text endpoints before performance acceptance.
-- Do a check of the full TP4 K32 accumulation and rank reduction order against the reference.
+- Keep the independent frozen DeepSeek text endpoint checks before performance acceptance.
+- Measure TP4 activation and output gathers and their temporary storage before long-context capacity tuning.
 - Reduce duplicate cuBLAS workspace storage before long-context capacity tuning.
 - Add independent image endpoints before image acceptance.
 - Report the configured context limit and the observed AgentX request lengths independently.

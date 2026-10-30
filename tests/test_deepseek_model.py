@@ -15,7 +15,6 @@ from oh_my_vllm.models.deepseek_v41.loader import RankLoader
 from oh_my_vllm.models.deepseek_v41.model import (
     Attention,
     Compressor,
-    Expert,
     Gate,
     ModelArgs,
     MoE,
@@ -31,9 +30,65 @@ from safetensors.torch import save_file
 
 
 class DeepSeekModel(unittest.TestCase):
-    def test_shared_expert_forward_uses_full_weights_after_routed_reduction(self):
+    def test_rank_loader_keeps_full_down_k_and_matching_output_row_scales(self):
+        config = json.loads(
+            (Path(__file__).parent / "fixtures/deepseek_v41/config.json").read_text()
+        )
+        layout, source, expected = {}, {}, {}
+        for prefix in ("layers.0", "mtp.2"):
+            name = f"{prefix}.ffn.experts.0.w2"
+            weight = (torch.arange(128)[None, :] + torch.arange(128)[:, None] * 3).to(
+                torch.int8
+            )
+            scales = (torch.arange(128) % 15 + 120).to(torch.uint8)
+            scales = scales[:, None].expand(128, 8).contiguous()
+            for suffix, value, dtype in (
+                ("weight", weight, "I8"),
+                ("scale", scales.view(torch.float8_e8m0fnu), "F8_E8M0"),
+            ):
+                key = f"{name}.{suffix}"
+                layout[key] = {"dtype": dtype, "shape": list(value.shape)}
+                source[key] = value
+                expected[key] = value.view(torch.uint8)
+        devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            save_file(source, root / "weights.safetensors")
+            (root / "model.safetensors.index.json").write_text(
+                json.dumps({"weight_map": dict.fromkeys(source, "weights.safetensors")})
+            )
+            for rank in range(4):
+                with patch(
+                    "oh_my_vllm.models.deepseek_v41.loader.tensor_layout",
+                    return_value=layout,
+                ):
+                    loader = RankLoader(root, config, rank, strategy="TP4")
+                try:
+                    for name, value in expected.items():
+                        for device in devices:
+                            with self.subTest(rank=rank, name=name, device=device):
+                                destination = torch.empty(
+                                    (32, value.size(1)),
+                                    dtype=(
+                                        torch.float4_e2m1fn_x2
+                                        if name.endswith("weight")
+                                        else torch.float8_e8m0fnu
+                                    ),
+                                    device=device,
+                                )
+                                loader._copy_parameter(name, destination)
+                                self.assertTrue(
+                                    torch.equal(
+                                        destination.cpu().view(torch.uint8),
+                                        value[rank * 32 : (rank + 1) * 32],
+                                    )
+                                )
+                finally:
+                    loader.close()
+
+    def test_shared_expert_forward_uses_full_weights_after_routed_exchange(self):
         args = ModelArgs(
-            dim=2,
+            dim=4,
             moe_inter_dim=8,
             n_layers=1,
             n_routed_experts=4,
@@ -41,10 +96,10 @@ class DeepSeekModel(unittest.TestCase):
             dspark_n_routed_experts=8,
             expert_dtype=None,
         )
-        values = torch.ones((1, 1, 2), dtype=torch.bfloat16)
-        gate_weight = torch.tensor([[0.5, 0.5]] * 8, dtype=torch.bfloat16)
-        up_weight = torch.tensor([[1.0, 0.0]] * 8, dtype=torch.bfloat16)
-        down_weight = torch.tensor([[0.125] * 8] * 2, dtype=torch.bfloat16)
+        values = torch.ones((1, 1, 4), dtype=torch.bfloat16)
+        gate_weight = torch.tensor([[0.5, 0.5, 0, 0]] * 8, dtype=torch.bfloat16)
+        up_weight = torch.tensor([[1.0, 0.0, 0, 0]] * 8, dtype=torch.bfloat16)
+        down_weight = torch.tensor([[0.125] * 8] * 4, dtype=torch.bfloat16)
         product = torch.nn.functional.silu(torch.ones(1, 8)).to(torch.bfloat16)
         shared_output = torch.nn.functional.linear(product, down_weight)
         expected = (shared_output.float() + 3).to(torch.bfloat16).view_as(values)
@@ -62,9 +117,9 @@ class DeepSeekModel(unittest.TestCase):
                     ):
                         moe = MoE(layer, replace(args, parallel_strategy=strategy))
                         shared = moe.shared_experts
-                        self.assertEqual(tuple(shared.w1.weight.shape), (8, 2))
-                        self.assertEqual(tuple(shared.w2.weight.shape), (2, 8))
-                        self.assertEqual(tuple(shared.w3.weight.shape), (8, 2))
+                        self.assertEqual(tuple(shared.w1.weight.shape), (8, 4))
+                        self.assertEqual(tuple(shared.w2.weight.shape), (4, 8))
+                        self.assertEqual(tuple(shared.w3.weight.shape), (8, 4))
                         with torch.no_grad():
                             for parameter in moe.parameters():
                                 parameter.zero_()
@@ -72,22 +127,25 @@ class DeepSeekModel(unittest.TestCase):
                             shared.w2.weight.copy_(down_weight)
                             shared.w3.weight.copy_(up_weight)
 
-                        reductions = []
-
-                        def reduce_routed(
-                            value, reductions=reductions, strategy=strategy
-                        ):
+                        def reduce_routed(value):
                             self.assertTrue(torch.equal(value, torch.zeros_like(value)))
-                            reductions.append(value)
-                            if strategy != "TP4" or len(reductions) == 2:
-                                value.fill_(3)
+                            value.fill_(3)
 
-                        with patch(
-                            "oh_my_vllm.models.deepseek_v41.model.dist.all_reduce",
-                            side_effect=reduce_routed,
+                        def gather_routed(output, value):
+                            self.assertTrue(torch.equal(value, torch.zeros_like(value)))
+                            output.fill_(3 if value.dtype == torch.float32 else 0)
+
+                        with (
+                            patch(
+                                "oh_my_vllm.models.deepseek_v41.model.dist.all_reduce",
+                                side_effect=reduce_routed,
+                            ),
+                            patch(
+                                "oh_my_vllm.models.deepseek_v41.model.dist.all_gather_into_tensor",
+                                side_effect=gather_routed,
+                            ),
                         ):
                             actual = moe(values)
-                        self.assertEqual(len(reductions), 2 if strategy == "TP4" else 1)
                         self.assertTrue(torch.equal(actual, expected))
 
     def test_rank_loader_preserves_full_shared_fp8_values_and_scales(self):
@@ -182,39 +240,25 @@ class DeepSeekModel(unittest.TestCase):
                             loader.close()
             self.assertEqual(hashlib.sha256(shard.read_bytes()).digest(), before)
 
-    def test_expert_down_projection_rounds_after_tensor_parallel_reduction(self):
+    def test_attention_output_rounds_before_tensor_parallel_reduction(self):
         with patch("oh_my_vllm.models.deepseek_v41.model.world_size", 4):
-            expert = Expert(2, 8, dtype=torch.bfloat16, tensor_parallel=True)
             attention = RowParallelLinear(8, 2, dtype=torch.bfloat16)
-            for layer, partial, result in (
-                (expert.w2, 257 / 256, 1 / 256),
-                (attention, 1, 0),
+            with torch.no_grad():
+                attention.weight.copy_(torch.tensor([[1, 1 / 256]] * 2))
+
+            def reduce(value):
+                self.assertEqual(value.dtype, torch.float32)
+                torch.testing.assert_close(value, torch.ones((1, 2)), rtol=0, atol=0)
+                value.sub_(1)
+
+            with patch(
+                "oh_my_vllm.models.deepseek_v41.model.dist.all_reduce",
+                side_effect=reduce,
             ):
-                with self.subTest(expert=layer is expert.w2):
-                    with torch.no_grad():
-                        layer.weight.copy_(torch.tensor([[1, 1 / 256]] * 2))
-
-                    def reduce(value, partial=partial):
-                        self.assertEqual(value.dtype, torch.float32)
-                        torch.testing.assert_close(
-                            value,
-                            torch.full((1, 2), partial, dtype=torch.float32),
-                            rtol=0,
-                            atol=0,
-                        )
-                        value.sub_(1)
-
-                    with patch(
-                        "oh_my_vllm.models.deepseek_v41.model.dist.all_reduce",
-                        side_effect=reduce,
-                    ):
-                        actual = layer(torch.ones((1, 2), dtype=torch.bfloat16))
-                    torch.testing.assert_close(
-                        actual,
-                        torch.full((1, 2), result, dtype=torch.bfloat16),
-                        rtol=0,
-                        atol=0,
-                    )
+                actual = attention(torch.ones((1, 2), dtype=torch.bfloat16))
+            torch.testing.assert_close(
+                actual, torch.zeros((1, 2), dtype=torch.bfloat16), rtol=0, atol=0
+            )
 
     def test_router_keeps_float32_projection_before_expert_selection(self):
         args = ModelArgs(

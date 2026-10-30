@@ -319,16 +319,10 @@ class RowParallelLinear(Linear):
             f"Input features must be divisible by world size (world_size={world_size})"
         )
         self.part_in_features = in_features // world_size
-        self.reduce_before_rounding = False
         super().__init__(self.part_in_features, out_features, bias, dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        y = linear(
-            x,
-            self.weight,
-            None,
-            output_dtype=torch.float32 if self.reduce_before_rounding else None,
-        )
+        y = linear(x, self.weight)
         if world_size > 1:
             y = y.float()
             dist.all_reduce(y)
@@ -1128,6 +1122,16 @@ class Gate(nn.Module):
         return weights, indices
 
 
+def _gather_channels(value: torch.Tensor) -> torch.Tensor:
+    if world_size == 1:
+        return value
+    shards = torch.empty(
+        (world_size, *value.shape), dtype=value.dtype, device=value.device
+    )
+    dist.all_gather_into_tensor(shards.flatten(0, 1), value.contiguous())
+    return shards.movedim(0, -2).flatten(-2)
+
+
 class Expert(nn.Module):
     """One SwiGLU FFN. The clamps come straight from training, where they keep fp8/fp4 activations in
     range: the up branch is clamped on both sides, the gate branch only from above."""
@@ -1141,12 +1145,10 @@ class Expert(nn.Module):
         tensor_parallel=False,
     ):
         super().__init__()
+        self.tensor_parallel = tensor_parallel
         linear_cls = ColumnParallelLinear if tensor_parallel else Linear
-        output_cls = RowParallelLinear if tensor_parallel else Linear
         self.w1 = linear_cls(dim, inter_dim, dtype=dtype)
-        self.w2 = output_cls(inter_dim, dim, dtype=dtype)
-        if tensor_parallel:
-            self.w2.reduce_before_rounding = True
+        self.w2 = linear_cls(inter_dim, dim, dtype=dtype)
         self.w3 = linear_cls(dim, inter_dim, dtype=dtype)
         self.swiglu_limit = swiglu_limit
 
@@ -1159,17 +1161,20 @@ class Expert(nn.Module):
         gate = self.w1(x)
         up = self.w3(x)
         if x.is_cuda and gate.size(-1) in (576, 2304):
-            return self.w2(swiglu(gate, up, weights, self.swiglu_limit))
-
-        gate = gate.float()
-        up = up.float()
-        if self.swiglu_limit > 0:
-            up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)
-            gate = torch.clamp(gate, max=self.swiglu_limit)
-        x = F.silu(gate) * up
-        if weights is not None:
-            x = weights * x
-        return self.w2(x.to(dtype))
+            product = swiglu(gate, up, weights, self.swiglu_limit)
+        else:
+            gate = gate.float()
+            up = up.float()
+            if self.swiglu_limit > 0:
+                up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)
+                gate = torch.clamp(gate, max=self.swiglu_limit)
+            product = F.silu(gate) * up
+            if weights is not None:
+                product = weights * product
+            product = product.to(dtype)
+        if self.tensor_parallel:
+            product = _gather_channels(product)
+        return self.w2(product)
 
 
 class MoE(nn.Module):
@@ -1276,16 +1281,14 @@ class MoE(nn.Module):
             gate_value = gate.float().clamp_max(limit) if limit else gate.float()
             up_value = up.float().clamp(-limit, limit) if limit else up.float()
             product = (F.silu(gate_value) * up_value * local_weights).to(gate.dtype)
+        if self.tensor_parallel:
+            # Full K32 accumulation must precede each expert's BF16 rounding.
+            product = _gather_channels(product)
         routed = grouped_fp4_gemm(
             product,
             local_count_tensor,
             tuple((expert.w2.weight, expert.w2.scale) for expert in experts),
             counts_list=local_counts,
-            output_dtype=(
-                torch.float32
-                if self.tensor_parallel and world_size > 1
-                else torch.bfloat16
-            ),
         )
         return local_tokens, routed
 
@@ -1295,7 +1298,8 @@ class MoE(nn.Module):
         if routing is None:
             routing = self.gate(x, None if image_mask is None else image_mask.flatten())
         weights, indices = routing
-        y = torch.zeros_like(x, dtype=torch.float32)
+        output_width = x.size(-1) // world_size if self.tensor_parallel else x.size(-1)
+        y = torch.zeros((x.size(0), output_width), dtype=torch.float32, device=x.device)
         flat_indices = indices.flatten()
         order = torch.argsort(flat_indices)
         sorted_tokens = (
@@ -1330,7 +1334,9 @@ class MoE(nn.Module):
         else:
             local_tokens, routed = grouped
             y.index_add_(0, local_tokens, routed.float())
-        if (self.expert_parallel or self.tensor_parallel) and world_size > 1:
+        if self.tensor_parallel:
+            y = _gather_channels(y)
+        elif self.expert_parallel and world_size > 1:
             dist.all_reduce(y)
         y += self.shared_experts(x)
         return y.type_as(x)

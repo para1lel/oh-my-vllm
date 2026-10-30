@@ -103,7 +103,7 @@ def _block_rules(rules, name, text, layer, experts, strategy):
     for expert in range(experts):
         owner = None if strategy == "TP4" else expert // (experts // 4)
         for projection in ("w1", "w2", "w3"):
-            axis = (1 if projection == "w2" else 0) if strategy == "TP4" else None
+            axis = 0 if strategy == "TP4" else None
             _linear_rules(
                 rules,
                 f"{name}.ffn.experts.{expert}.{projection}",

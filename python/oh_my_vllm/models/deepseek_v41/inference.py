@@ -304,12 +304,16 @@ class Worker:
             if len(values) != len(set(values)):
                 raise ValueError(f"DeepSeek {name} request IDs must be unique")
         scheduled_set = set(scheduled_ids)
-        if scheduled_set & (set(finished_ids) | set(preempted_ids)):
+        preempted_set = set(preempted_ids)
+        if set(finished_ids) & (scheduled_set | preempted_set):
             raise ValueError("DeepSeek request lifecycle sets overlap")
         for request_id in (*scheduled_ids, *finished_ids, *preempted_ids):
             if request_id not in self.requests:
                 raise ValueError("DeepSeek execute references an unknown request")
         for row in scheduled:
+            if row["request_id"] in preempted_set:
+                # Preemption releases the resident position before this row is restored.
+                continue
             request = self.requests[row["request_id"]]
             if getattr(request, "cache_slot", None) is not None:
                 expected = int(row["num_computed_tokens"])

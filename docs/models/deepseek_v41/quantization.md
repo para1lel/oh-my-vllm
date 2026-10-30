@@ -74,17 +74,22 @@ Multiply the quotient by `1.5`.
 Native routing selects the lowest global expert ID when corrected scores are equal.
 Released top-k can select different IDs for such ties.
 
-Tensor-parallel expert down projections must keep FP32 partial sums until rank reduction.
-The grouped and non-grouped TP4 paths keep these FP32 partial sums.
-Round the reduced result to BF16.
+TP4 shards each routed projection by output channels.
+Gather the BF16 activation product before the down projection.
+Each rank computes the complete K32 sum for its output channels.
+Round each complete expert output to BF16 before the FP32 token sum.
+Gather these FP32 token sums in rank order.
+Keep the same operations in grouped execution and the expert loop.
 
-Grouped up projections and TEP4 down projections keep BF16 output.
-Single-rank grouped down projections return full BF16 expert outputs, not rank partial sums.
-The grouped interface accepts BF16 or FP32 output without a workspace size change.
-These output types do not specify the full tensor-parallel accumulation order.
+Do not split the down projection's K32 sum into rank-local partial sums.
+Multi-row gathers can hold two full gathered tensors during channel reordering.
+Count these two tensors in temporary-storage estimates.
+
+Grouped up projections and all complete down projections keep BF16 output.
+The grouped interface also accepts FP32 output without a workspace size change.
 
 Shared experts keep full weights on each rank.
-Add their output after routed rank reduction.
+Add their output after the routed output exchange.
 Do not reduce the shared output across ranks.
 Attention output projections keep their local BF16 rounding before FP32 rank reduction.
 

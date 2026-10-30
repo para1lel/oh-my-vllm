@@ -244,7 +244,7 @@ def artifact_identity(arguments, tokenizer, uuids, *, workload):
             "cache_context": arguments.cache_context,
             **cache_configuration,
             **service_configuration,
-            "native_sparse": os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "0"),
+            "native_sparse": os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "1"),
         },
     }
 

@@ -81,6 +81,30 @@ def run_grouped(module, case, *, output=None):
 
 
 class GroupedProjectionPrecision(unittest.TestCase):
+    def test_channel_gather_keeps_rank_order_for_strided_and_empty_rows(self):
+        values = torch.tensor([[0, -1, 1, -1], [2, -1, 3, -1]])[:, ::2]
+        expected = torch.tensor(
+            [[0, 1, 10, 11, 20, 21, 30, 31], [2, 3, 12, 13, 22, 23, 32, 33]]
+        )
+
+        def gather(output, value):
+            output.copy_(torch.cat([value + offset for offset in (0, 10, 20, 30)]))
+
+        with (
+            patch.object(model, "world_size", 4),
+            patch.object(model.dist, "all_gather_into_tensor", side_effect=gather),
+        ):
+            for value in (values, values[:0], values):
+                actual = model._gather_channels(value)
+                torch.testing.assert_close(
+                    actual, expected[: value.size(0)], rtol=0, atol=0
+                )
+                self.assertTrue(actual.is_contiguous())
+        with patch.object(model, "world_size", 1):
+            torch.testing.assert_close(
+                model._gather_channels(values), values, rtol=0, atol=0
+            )
+
     def test_adapter_output_dtype_keeps_unrounded_values_and_empty_shape(self):
         devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
         for device in devices:
@@ -112,60 +136,168 @@ class GroupedProjectionPrecision(unittest.TestCase):
                     values, counts, weights, output_dtype=torch.float16
                 )
 
-    def test_moe_tp4_keeps_fp32_through_routed_sum_until_rank_reduce(self):
+    def test_moe_tp4_rounds_complete_down_outputs_before_six_route_merge(self):
         devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
         for device in devices:
-            up_raw = torch.zeros((64, 16), dtype=torch.uint8, device=device)
-            up_raw[:, 0] = 2
-            down_raw = torch.zeros((32, 32), dtype=torch.uint8, device=device)
-            down_raw[:, 0] = down_raw[:, 16] = 2
-            up_scale = torch.ones((64, 1), device=device).to(torch.float8_e8m0fnu)
-            down_scale = torch.tensor([1, 1 / 256], device=device).expand(32, 2)
-            down_scale = down_scale.contiguous().to(torch.float8_e8m0fnu)
-            up = SimpleNamespace(
-                weight=up_raw.view(torch.float4_e2m1fn_x2), scale=up_scale
-            )
-            down = SimpleNamespace(
-                weight=down_raw.view(torch.float4_e2m1fn_x2), scale=down_scale
-            )
-            expert = SimpleNamespace(w1=up, w3=up, w2=down, swiglu_limit=0)
-            values = torch.zeros((1, 32), dtype=torch.bfloat16, device=device)
-            values[:, 0] = 1
-            for tp, partial in ((True, 1.505859375), (False, 1.5078125)):
-                with self.subTest(device=device, tensor_parallel=tp):
-                    moe = SimpleNamespace(
-                        experts=[expert, expert],
-                        experts_start_idx=0,
-                        experts_end_idx=2,
-                        n_routed_experts=2,
-                        tensor_parallel=tp,
-                        expert_parallel=not tp,
-                        gate=lambda x, mask, device=device: (
-                            torch.ones((1, 2), device=device),
-                            torch.tensor([[0, 1]], device=device),
-                        ),
-                        shared_experts=torch.zeros_like,
-                    )
-                    moe._grouped_routed = MethodType(model.MoE._grouped_routed, moe)
+            with self.subTest(device=device), patch.object(model, "world_size", 4):
+                expert = model.Expert(
+                    128, 256, dtype=torch.float4_e2m1fn_x2, tensor_parallel=True
+                ).to(device)
+                self.assertEqual(expert.w2.in_features, 256)
+                gate_raw = torch.zeros((64, 64), dtype=torch.uint8, device=device)
+                gate_raw[0, 0] = 6
+                up_raw = torch.zeros_like(gate_raw)
+                up_raw[0, 0] = 2
+                down_raw = torch.zeros((32, 128), dtype=torch.uint8, device=device)
+                down_raw[:, 0] = down_raw[:, 32] = 2
+                down_raw[:, 64] = 10
+                down_scales = torch.ones((32, 8), device=device)
+                down_scales[:, 0] = 1 / 4
+                down_scales[:, 2] = 1 / 1024
+                down_scales[:, 4] = 1 / 4096
+                with torch.no_grad():
+                    expert.w1.weight.copy_(gate_raw.view(torch.float4_e2m1fn_x2))
+                    expert.w3.weight.copy_(up_raw.view(torch.float4_e2m1fn_x2))
+                    expert.w2.weight.copy_(down_raw.view(torch.float4_e2m1fn_x2))
+                    expert.w1.scale.fill_(1)
+                    expert.w3.scale.fill_(1)
+                    expert.w2.scale.copy_(down_scales.to(torch.float8_e8m0fnu))
+                moe = SimpleNamespace(
+                    experts=[expert] * 6,
+                    experts_start_idx=0,
+                    experts_end_idx=6,
+                    n_routed_experts=6,
+                    tensor_parallel=True,
+                    expert_parallel=False,
+                    gate=lambda x, mask, device=device: (
+                        torch.ones((1, 6), device=device),
+                        torch.arange(6, device=device).view(1, 6),
+                    ),
+                    shared_experts=torch.zeros_like,
+                )
+                moe._grouped_routed = MethodType(model.MoE._grouped_routed, moe)
+                values = torch.zeros((1, 128), dtype=torch.bfloat16, device=device)
+                values[:, 0] = 1
 
-                    def reduce_routed(output, partial=partial):
-                        torch.testing.assert_close(
-                            output, torch.full_like(output, partial), rtol=0, atol=0
+                def gather(output, value):
+                    output.copy_(value.repeat(4, 1))
+
+                with patch.object(
+                    model.dist, "all_gather_into_tensor", side_effect=gather
+                ):
+                    actual = model.MoE._forward_rows(moe, values)
+                # Each complete expert gives 1 + 1/256 - 1/1024, rounded to 1.
+                # Rounding only after the six-route merge would give 6.03125.
+                torch.testing.assert_close(
+                    actual, torch.full_like(values, 6), rtol=0, atol=0
+                )
+
+    def test_tp4_fallback_gathers_product_and_merged_output_channels(self):
+        devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
+        for device in devices:
+            with self.subTest(device=device), patch.object(model, "world_size", 4):
+                expert = model.Expert(
+                    4, 128, dtype=torch.bfloat16, tensor_parallel=True
+                ).to(device)
+                self.assertEqual(expert.w2.in_features, 128)
+                with torch.no_grad():
+                    for parameter in expert.parameters():
+                        parameter.zero_()
+                    expert.w1.weight[0, 0] = expert.w3.weight[0, 0] = 1
+                    expert.w2.weight[:, ::32] = 1
+                moe = SimpleNamespace(
+                    experts=[expert] * 4,
+                    experts_start_idx=0,
+                    experts_end_idx=4,
+                    n_routed_experts=4,
+                    tensor_parallel=True,
+                    expert_parallel=False,
+                    gate=lambda x, mask, device=device: (
+                        torch.ones((2, 1), device=device),
+                        torch.zeros((2, 1), dtype=torch.long, device=device),
+                    ),
+                    shared_experts=torch.zeros_like,
+                )
+                moe._grouped_routed = MethodType(model.MoE._grouped_routed, moe)
+                values = torch.zeros((2, 4), dtype=torch.bfloat16, device=device)
+                values[:, 0] = torch.tensor([1, 2], device=device)
+
+                def gather(output, value):
+                    if value.dtype == torch.bfloat16:
+                        output.copy_(value.repeat(4, 1))
+                    else:
+                        output.copy_(
+                            torch.cat([value * factor for factor in (1, 2, 3, 4)])
                         )
-                        self.assertEqual(output.dtype, torch.float32)
-                        output.sub_(1.5)
 
-                    with (
-                        patch.object(model, "world_size", 4),
-                        patch.object(
-                            model.dist, "all_reduce", side_effect=reduce_routed
-                        ) as reduce,
-                    ):
-                        actual = model.MoE._forward_rows(moe, values)
-                    reduce.assert_called_once()
-                    torch.testing.assert_close(
-                        actual, torch.full_like(values, partial - 1.5), rtol=0, atol=0
+                with patch.object(
+                    model.dist, "all_gather_into_tensor", side_effect=gather
+                ):
+                    actual = model.MoE._forward_rows(moe, values)
+                torch.testing.assert_close(
+                    actual,
+                    torch.tensor(
+                        [
+                            [2.921875, 5.84375, 8.75, 11.6875],
+                            [14.0625, 28.125, 42.25, 56.25],
+                        ],
+                        dtype=torch.bfloat16,
+                        device=device,
+                    ),
+                    rtol=0,
+                    atol=0,
+                )
+
+    def test_grouped_tp4_gathers_distinct_channels_with_uneven_routes(self):
+        devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
+        for device in devices:
+            with self.subTest(device=device), patch.object(model, "world_size", 4):
+                up_raw = torch.zeros((64, 64), dtype=torch.uint8, device=device)
+                up_raw[0, 0] = 2
+                down_raw = torch.zeros((32, 128), dtype=torch.uint8, device=device)
+                down_raw[:, ::32] = torch.tensor([2, 4, 5, 6], device=device)
+                up = SimpleNamespace(
+                    weight=up_raw.view(torch.float4_e2m1fn_x2),
+                    scale=torch.ones((64, 4), device=device).to(torch.float8_e8m0fnu),
+                )
+                down = SimpleNamespace(
+                    weight=down_raw.view(torch.float4_e2m1fn_x2),
+                    scale=torch.ones((32, 8), device=device).to(torch.float8_e8m0fnu),
+                )
+                expert = SimpleNamespace(w1=up, w3=up, w2=down, swiglu_limit=0)
+                moe = SimpleNamespace(
+                    experts=[expert] * 4,
+                    experts_start_idx=0,
+                    experts_end_idx=4,
+                    n_routed_experts=4,
+                    tensor_parallel=True,
+                    expert_parallel=False,
+                    shared_experts=torch.zeros_like,
+                )
+                moe._grouped_routed = MethodType(model.MoE._grouped_routed, moe)
+                values = torch.ones((3, 128), dtype=torch.bfloat16, device=device)
+                weights = torch.ones((3, 2), device=device)
+                indices = torch.tensor([[0, 1], [0, 3], [0, 1]], device=device)
+
+                def gather(output, value):
+                    output.copy_(torch.cat([value * factor for factor in (1, 2, 3, 4)]))
+
+                with patch.object(
+                    model.dist, "all_gather_into_tensor", side_effect=gather
+                ):
+                    actual = model.MoE._forward_rows(
+                        moe, values, routing=(weights, indices)
                     )
+                # Quantized channel values are .75, 1.5, 2.25, 3; down weights
+                # are 1, 2, 3, 4. Each expert gives 22.5 before two-route merging.
+                expected = torch.cat(
+                    [
+                        torch.full((3, 32), value, dtype=torch.bfloat16, device=device)
+                        for value in (45, 90, 135, 180)
+                    ],
+                    dim=-1,
+                )
+                torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
@@ -221,6 +353,31 @@ class ProjectionPrecisionCuda(unittest.TestCase):
                     torch.testing.assert_close(
                         output, (factors * value).to(dtype), rtol=0, atol=0
                     )
+
+    def test_complete_down_k_keeps_small_terms_in_source_order(self):
+        values = torch.zeros((3, 2304), dtype=torch.bfloat16, device="cuda")
+        values[:, (0, 576, 1152)] = 1
+        raw = torch.zeros((1280, 1152), dtype=torch.uint8, device="cuda")
+        raw[:, 0] = raw[:, 288] = 2
+        raw[:, 576] = 10
+        weight = raw.view(torch.float4_e2m1fn_x2)
+        scales = torch.ones((1280, 72), device="cuda")
+        scales[:, 18] = 2**-25
+        scales = scales.to(torch.float8_e8m0fnu)
+        # FP32 source order is (1 + 2**-25) - 1 = 0, not 2**-25.
+        actual = kernel.grouped_fp4_gemm(
+            values,
+            torch.tensor([1, 0, 2], dtype=torch.int32, device="cuda"),
+            [(weight, scales)] * 3,
+        )
+        torch.testing.assert_close(actual, torch.zeros_like(actual), rtol=0, atol=0)
+        encoded, input_scales = kernel.act_quant(
+            values, 32, "ue8m0", torch.float8_e8m0fnu
+        )
+        actual = kernel.fp4_gemm(
+            encoded, input_scales, weight, scales, act_block_size=32
+        )
+        torch.testing.assert_close(actual, torch.zeros_like(actual), rtol=0, atol=0)
 
     def test_grouped_fp4_rounding_replays_with_changed_counts(self):
         for dtype, value in ((torch.bfloat16, 648), (torch.float32, 646)):

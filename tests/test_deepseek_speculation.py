@@ -403,6 +403,55 @@ class DeepSeekSpeculation(unittest.TestCase):
                 }
             )
 
+    def test_execute_restarts_a_preempted_request_in_the_same_step(self):
+        worker, scheduled = _verification_worker([1])
+        request = worker.requests[1]
+        request.state_position = 4
+        attention = worker.model.layers[0].attn
+        attention.window_kv_cache[0].fill_(99)
+        scheduled["token_ids"] = [10, 10, 10]
+        scheduled["mamba_block_table"] = [1, 2, 3, 4, 5, 6, 7]
+
+        result = worker.execute(
+            {
+                "rpc_id": 7,
+                "finished_request_ids": [],
+                "preempted_request_ids": [1],
+                "scheduled": [scheduled],
+            }
+        )
+
+        self.assertEqual(result["outputs"][0]["token_ids"], [])
+        self.assertEqual(request.state_position, 3)
+        self.assertIsNotNone(request.cache_slot)
+        torch.testing.assert_close(
+            attention.window_kv_cache[request.cache_slot, :, 0],
+            torch.tensor([0.0, 1, 2, 0]),
+            rtol=0,
+            atol=0,
+        )
+
+    def test_execute_rejects_finished_request_reuse_before_state_changes(self):
+        row = {"request_id": 1, "token_ids": [], "num_computed_tokens": 4}
+        for scheduled, preempted in (([row], []), ([], [1])):
+            with self.subTest(preempted=preempted):
+                worker = Worker.__new__(Worker)
+                request = SimpleNamespace(cache_slot=0, state_position=4)
+                worker.requests = {1: request}
+                worker.slots = {1}
+                with self.assertRaisesRegex(ValueError, "overlap"):
+                    worker.execute(
+                        {
+                            "rpc_id": 7,
+                            "finished_request_ids": [1],
+                            "preempted_request_ids": preempted,
+                            "scheduled": scheduled,
+                        }
+                    )
+                self.assertIs(worker.requests[1], request)
+                self.assertEqual(request.cache_slot, 0)
+                self.assertEqual(worker.slots, {1})
+
     def test_execute_rejects_unknown_lifecycle_request(self):
         worker = Worker.__new__(Worker)
         worker.requests = {}

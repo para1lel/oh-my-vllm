@@ -69,7 +69,7 @@ Sparse attention 按顺序处理 64-slot block, 在与 V 相乘之前将未归�
 
 独立的 development reference 使用官方 MP4 placement, 并记录 quantizer synchronization patch.
 冻结的 text fixture 包含完整 vocabulary vector, DSpark5 proposal 和 verification vector, 以及全新 accepted-only 重放的 restoration endpoint.
-TP4 不满足这些 text endpoint 检查.
+候选实现验收期间, 固定的参考数据和数值误差限保持不变.
 
 sparse attention status failure 会禁用 native path, 并使用 reference path.
 Native sparse attention 是 supported input 的默认路径.
@@ -91,9 +91,15 @@ aligned prefill batch 默认最多使用四个 request 组成一个 subbatch, �
 MoE dispatch 只对 sorted routed row 做一次 gather, 并为 local expert 重用 slice.
 TP4 和 TEP4 的 FP4 routed expert 使用 native grouped projection
 执行两个 up projection 和一个 down projection.
-Multi-rank TP4 down projection 在 routed accumulation 和 rank reduction 期间保留 FP32 partial sum.
-Up projection 和 TEP4 down projection 保留 BF16 output.
-Single-rank grouped down projection 返回完整的 BF16 expert output.
+TP4 路由专家的权重和缩放因子对全部三个投影都按输出通道分片.
+TP4 在使用完整 K32 累加的下投影计算前, 收集 BF16 激活乘积.
+每个专家输出在本地 FP32 词元求和前舍入到 BF16.
+
+TP4 在添加各计算进程复制的共享专家输出前, 收集 FP32 词元和.
+TEP4 保留路由结果的跨进程归约.
+
+DeepSeek 允许在同一个 Execute 中抢占并重新启动同一个请求.
+已结束的请求不能在该 Execute 中同时被调度或抢占.
 
 Grouped projection 在 device 上计算 row offset, 不上传 host descriptor.
 Grouped path 保持 local token order, 对 non-FP4 weight 和 test expert
@@ -184,8 +190,8 @@ repository 已有 local CodeGraph index, 并忽略 `.codegraph/`.
 - 在 approved long-context workload 中测量每个 state endpoint 的 window storage.
 - 比较 persistent encoded KV storage 与直接 BF16 table read 的测量结果.
 - 在 long-context capacity 调整前, 测量 raw 和 prepared projection storage.
-- 在 performance acceptance 之前修正 candidate 与独立 DeepSeek text frozen endpoint 的差异.
-- 按 reference 检查完整的 TP4 K32 accumulation 和 rank reduction 顺序.
+- 性能验收前, 保留独立且固定的 DeepSeek 文本端点检查.
+- 在长上下文容量调优前, 测量 TP4 激活和输出的收集操作及其临时存储.
 - 在 long-context capacity 调整之前, 减少重复的 cuBLAS workspace storage.
 - 在 image acceptance 之前增加独立的 image endpoint.
 - 分别报告配置的 context limit 和观测到的 AgentX request length.
