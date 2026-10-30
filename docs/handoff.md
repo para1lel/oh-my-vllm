@@ -37,6 +37,9 @@ DeepSeek rank workers reuse pinned host and device token buffers for prefill inp
 DeepSeek uses the released FP4 and FP8 scale rules and nearest-even value rounding.
 Dense and grouped projections reset raw dot products for each K32 group before scale multiplication and FP32 accumulation.
 FP4 weights convert accurately to FP8 before the raw dot.
+The FP4 conversion uses a register lookup table and keeps each sign bit.
+The FP8 path reuses each weight tile for two 16-row input tiles when the input has at least 32 rows.
+This reuse does not apply when the output width is at most 1024 and the input width is at least 1024.
 
 Native RMS keeps the released square-sum reduction and reciprocal multiplication order.
 Native routing keeps the released softplus and selected-score sum order.

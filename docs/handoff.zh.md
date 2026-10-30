@@ -38,6 +38,9 @@ DeepSeek rank worker 为 prefill input copy 复用 pinned host 和 device token 
 DeepSeek 使用发布模型的 FP4 和 FP8 scale rule, 并对数值使用最近偶数舍入.
 Dense 和 grouped projection 在 scale multiplication 和 FP32 accumulation 之前, 为每个 K32 group 重置 raw dot product.
 FP4 weight 在 raw dot 前精确转换为 FP8.
+FP4 转换使用寄存器查找表, 并保留每个符号位.
+输入至少有 32 行时, FP8 路径会在两个各有 16 行的输入块之间复用每个权重块.
+输出宽度至多为 1024 且输入宽度至少为 1024 时, 不使用此复用方式.
 
 Native RMS 保持发布参考的 square-sum reduction 和 reciprocal multiplication 顺序.
 Native routing 保持发布参考的 softplus 和 selected-score sum 顺序.

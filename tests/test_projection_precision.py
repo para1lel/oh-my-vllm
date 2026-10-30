@@ -170,10 +170,42 @@ class GroupedProjectionPrecision(unittest.TestCase):
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
 class ProjectionPrecisionCuda(unittest.TestCase):
+    def test_fp4_projection_decodes_every_packed_four_value_word(self):
+        encoded = torch.zeros((4, 32), dtype=torch.float32, device="cuda")
+        encoded[:, :4] = torch.eye(4, device="cuda")
+        encoded = encoded.to(torch.float8_e4m3fn)
+        input_scales = torch.ones((4, 1), device="cuda").to(torch.float8_e8m0fnu)
+        levels = torch.tensor(
+            (0, 0.5, 1, 1.5, 2, 3, 4, 6, 0, -0.5, -1, -1.5, -2, -3, -4, -6),
+            device="cuda",
+        )
+        weight_scales = torch.ones((32768, 1), device="cuda").to(torch.float8_e8m0fnu)
+        for first in (0, 32768):
+            words = torch.arange(first, first + 32768, device="cuda")
+            raw = torch.zeros((32768, 16), dtype=torch.uint8, device="cuda")
+            raw[:, 0] = (words & 255).to(torch.uint8)
+            raw[:, 1] = (words >> 8).to(torch.uint8)
+            expected = levels[
+                (words[None, :] >> (4 * torch.arange(4, device="cuda")[:, None])) & 15
+            ]
+            for dtype in (torch.bfloat16, torch.float32):
+                with self.subTest(first=first, dtype=dtype):
+                    actual = kernel.fp4_gemm(
+                        encoded,
+                        input_scales,
+                        raw.view(torch.float4_e2m1fn_x2),
+                        weight_scales,
+                        act_block_size=32,
+                        output_dtype=dtype,
+                    )
+                    torch.testing.assert_close(
+                        actual, expected.to(dtype), rtol=0, atol=0
+                    )
+
     def test_fp4_scales_each_k32_dot_before_accumulation(self):
         # Released FP32 and BF16 results are 646 and 648. Power-of-two scaling
         # preserves these rounded values without overflow or underflow.
-        for rows in (1, 33, 125, 126):
+        for rows in (1, 16, 17, 31, 32, 33, 63, 64, 65, 125, 126):
             encoded, scales, weight, weight_scales, factors = fp4_literal(rows)
             for dtype, value in ((torch.float32, 646), (torch.bfloat16, 648)):
                 with self.subTest(rows=rows, dtype=dtype):

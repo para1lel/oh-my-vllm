@@ -365,9 +365,13 @@ class DeepSeekOperatorContracts(unittest.TestCase):
     def test_cuda_fp8_projection_scales_each_k32_dot_before_accumulation(self):
         # Raw K32 dots are -1 and 323. Their scaled FP32 sum rounds to 646,
         # then the BF16 midpoint rounds to 648, not 644.
-        for rows in (1, 33, 125, 126):
-            inputs = torch.zeros((rows, 64), device="cuda")
-            weight = torch.zeros((160, 64), device="cuda")
+        for rows, width, outputs in (
+            (rows, width, outputs)
+            for rows in (1, 16, 17, 31, 32, 33, 63, 64, 65, 125, 126)
+            for width, outputs in ((64, 160), (1024, 1280), (1056, 1088))
+        ):
+            inputs = torch.zeros((rows, width), device="cuda")
+            weight = torch.zeros((outputs, width), device="cuda")
             for column, left, right in (
                 (8, -1, 1),
                 (32, 16, 16),
@@ -379,14 +383,20 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             inputs = inputs.to(torch.float8_e4m3fn)
             weight = weight.to(torch.float8_e4m3fn)
             row_shifts = torch.arange(rows, device="cuda") % 3 - 1
-            group_shifts = torch.arange(5, device="cuda") - 2
+            group_shifts = torch.arange(outputs // 32, device="cuda") % 5 - 2
             input_scales = (
-                (torch.tensor([113, 127], device="cuda") + row_shifts[:, None])
+                (
+                    torch.tensor([113] + [127] * (width // 32 - 1), device="cuda")
+                    + row_shifts[:, None]
+                )
                 .to(torch.uint8)
                 .view(torch.float8_e8m0fnu)
             )
             weight_scales = (
-                (torch.tensor([126, 128], device="cuda") + group_shifts[:, None])
+                (
+                    torch.tensor([126, 128] + [127] * (width // 32 - 2), device="cuda")
+                    + group_shifts[:, None]
+                )
                 .to(torch.uint8)
                 .view(torch.float8_e8m0fnu)
             )
@@ -395,7 +405,7 @@ class DeepSeekOperatorContracts(unittest.TestCase):
                 + group_shifts.repeat_interleave(32)[None, :].float()
             )
             for dtype, value in ((torch.float32, 646), (torch.bfloat16, 648)):
-                with self.subTest(rows=rows, dtype=dtype):
+                with self.subTest(rows=rows, width=width, outputs=outputs, dtype=dtype):
                     actual = kernel.fp8_gemm(
                         inputs,
                         input_scales,
@@ -528,9 +538,15 @@ class DeepSeekOperatorContracts(unittest.TestCase):
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_fp32_projection_replays_on_caller_stream(self):
-        for width, outputs in ((128, 32), (1024, 512)):
-            encoded = torch.ones((2, width), device="cuda").to(torch.float8_e4m3fn)
-            scales = torch.ones((2, width // 32), device="cuda").to(
+        for rows, width, outputs in (
+            (2, 128, 32),
+            (2, 1024, 512),
+            (32, 1024, 1280),
+            (33, 1056, 1088),
+            (65, 1056, 1088),
+        ):
+            encoded = torch.ones((rows, width), device="cuda").to(torch.float8_e4m3fn)
+            scales = torch.ones((rows, width // 32), device="cuda").to(
                 torch.float8_e8m0fnu
             )
             weight = torch.ones((outputs, width), device="cuda").to(torch.float8_e4m3fn)
@@ -551,6 +567,9 @@ class DeepSeekOperatorContracts(unittest.TestCase):
                 )
             arguments = proxy.project.call_args.args
             torch.cuda.synchronize()
+            torch.testing.assert_close(
+                output, torch.full_like(output, width), rtol=0, atol=0
+            )
             graph = torch.cuda.CUDAGraph()
             try:
                 with torch.cuda.graph(graph):

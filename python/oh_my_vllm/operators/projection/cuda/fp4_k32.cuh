@@ -1,18 +1,14 @@
 #pragma once
 
-#include <cuda_fp4.h>
-#include <cuda_fp8.h>
-
 #include "fp8_k32.cuh"
 
 namespace encoded_projection {
 
 __device__ __forceinline__ uint32_t fp4_to_fp8_four(uint16_t packed) {
-  auto low = __nv_cvt_halfraw2_to_fp8x2(__nv_cvt_fp4x2_to_halfraw2(packed & 255, __NV_E2M1),
-                                        __NV_SATFINITE, __NV_E4M3);
-  auto high = __nv_cvt_halfraw2_to_fp8x2(__nv_cvt_fp4x2_to_halfraw2(packed >> 8, __NV_E2M1),
-                                         __NV_SATFINITE, __NV_E4M3);
-  return uint32_t(low) | (uint32_t(high) << 16);
+  // E2M1 magnitudes have exact E4M3 codes. Move their sign bits separately.
+  uint32_t values = __byte_perm(0x3c383000u, 0x4c484440u, packed & 0x7777u);
+  uint32_t signs = __byte_perm(packed, uint32_t(packed) << 4, 0x1504u) & 0x80808080u;
+  return values | signs;
 }
 
 __global__ void fp4_group_offsets(const int32_t *counts, int32_t *offsets, int groups, int rows,
