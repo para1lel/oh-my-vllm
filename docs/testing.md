@@ -34,6 +34,7 @@ Do not use inference outputs as their own reference.
 | Adapter | Numerical and state scope | Performance scope |
 |---|---|---|
 | Qwen | [Full-model endpoints](models/qwen38/evaluation.md), [operator cases](models/qwen38/operators.md), applicable MTP, media, and restoration cases | [24 HTTP cases](models/qwen38/performance.md), [AgentX](models/qwen38/agentx.md) |
+| DeepSeek V4.1 | Text target, DSpark5 verification, four-rank readiness, and model-local operator contracts | [38 HTTP cases](models/deepseek_v41/performance.md), [AgentX](models/deepseek_v41/agentx.md) |
 
 Shared runtime changes use applicable adapter regressions.
 Qwen runtime delivery includes its 24 HTTP cases.

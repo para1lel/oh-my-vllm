@@ -24,7 +24,11 @@ use crate::protocol::{
 
 pub(crate) mod lifecycle;
 
-use lifecycle::{Binding, IpcPath, ManagedChild, PENDING_REAPS, worker_group_alive};
+use lifecycle::{
+    Binding, IpcPath, ManagedChild, PENDING_REAPS, cleanup_diagnostics, worker_group_alive,
+};
+
+const WORKER_CLEANUP_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
@@ -64,7 +68,7 @@ impl WorkerConfig {
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("python3")),
-            init_timeout: Duration::from_secs(300),
+            init_timeout: Duration::from_secs(defaults.init_timeout_seconds),
             torch_profile: None,
         }
     }
@@ -550,7 +554,7 @@ impl WorkerClient {
     pub async fn shutdown(&mut self) -> Result<()> {
         info!("sending worker shutdown");
         Self::send_raw(&mut self.sock, &RustMessage::Shutdown).await?;
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let deadline = Instant::now() + WORKER_CLEANUP_TIMEOUT;
         loop {
             if self._child.has_exited()? {
                 self._child.kill_group()?;
@@ -625,30 +629,89 @@ impl WorkerClient {
 
     pub async fn terminate(&mut self) -> Result<()> {
         self.reader.abort();
-        self._child.kill_group()?;
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while self._child.child().try_wait()?.is_none() {
-            if Instant::now() >= deadline {
-                return Err(Error::Timeout);
+        let pid = self._child.child().id();
+        let kill_error = self._child.kill_group().err();
+        let deadline = Instant::now() + WORKER_CLEANUP_TIMEOUT;
+        let mut status = None;
+        let mut wait_error = None;
+        loop {
+            match self._child.child().try_wait() {
+                Ok(Some(exit)) => {
+                    status = Some(exit);
+                    break;
+                }
+                Ok(None) if Instant::now() < deadline => {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                Ok(None) => break,
+                Err(error) => {
+                    wait_error = Some(error);
+                    break;
+                }
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        self.wait_for_worker_group().await?;
+        let group_error = if status.is_some() {
+            self.wait_for_worker_group_until(deadline, pid).await.err()
+        } else {
+            None
+        };
         self.binding.close().await;
         let _ = (&mut self.reader).await;
+        if let Some(exit) = &status {
+            debug!(worker_pid = pid, ?exit, "worker direct child reaped");
+        }
+
+        let mut reasons = Vec::new();
+        if let Some(error) = wait_error {
+            reasons.push(format!("direct child wait failed: {error}"));
+        } else if status.is_none() {
+            reasons.push(format!(
+                "direct child did not exit within {}s",
+                WORKER_CLEANUP_TIMEOUT.as_secs()
+            ));
+        }
+        if let Some(error) = kill_error {
+            reasons.push(format!("process-group cleanup failed: {error}"));
+        }
+        if let Some(error) = group_error {
+            reasons.push(format!("process group wait failed: {error}"));
+        }
+        if !reasons.is_empty() {
+            let reason = format!("{}; {}", reasons.join("; "), cleanup_diagnostics(pid));
+            warn!(worker_pid = pid, "{reason}");
+            return Err(Error::WorkerCleanupUnconfirmed { pid, reason });
+        }
         Ok(())
     }
 
     async fn wait_for_worker_group(&mut self) -> Result<()> {
         let pid = self._child.child().id();
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while worker_group_alive(pid)? {
+        let deadline = Instant::now() + WORKER_CLEANUP_TIMEOUT;
+        self.wait_for_worker_group_until(deadline, pid)
+            .await
+            .map_err(|reason| {
+                let reason = format!("{reason}; {}", cleanup_diagnostics(pid));
+                warn!(worker_pid = pid, "{reason}");
+                Error::WorkerCleanupUnconfirmed { pid, reason }
+            })
+    }
+
+    async fn wait_for_worker_group_until(
+        &mut self,
+        deadline: Instant,
+        pid: u32,
+    ) -> std::result::Result<(), String> {
+        loop {
+            let alive = worker_group_alive(pid)
+                .map_err(|error| format!("worker process group scan failed: {error}"))?;
+            if !alive {
+                return Ok(());
+            }
             if Instant::now() >= deadline {
-                return Err(Error::Timeout);
+                return Err(format!("worker process group {pid} is still alive"));
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        Ok(())
     }
 
     pub async fn wait_for_reapers() -> Result<()> {

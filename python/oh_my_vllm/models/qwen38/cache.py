@@ -114,7 +114,7 @@ class Cache:
                         )
                         for block in (source, destination)
                     ]
-                    self.device.module.copy_bytes(views[1], views[0])
+                    self.device.copy(views[1], views[0])
 
     def batch(self, scheduled, requests, verify):
         starts, reads, writes, checkpoints, checkpoint_slots = (

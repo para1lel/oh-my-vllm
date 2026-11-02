@@ -50,17 +50,16 @@ EOS token 计入输出上限, 不停止生成.
 ## 运行
 
 按[服务指南](../../serving.zh.md#启动)构建服务和原生模块.
-为测试工具使用独立环境.
-将 `AGENTX_ENV` 和 `ARTIFACT_ROOT` 设为仓库外的新目录.
+测试工具使用 repository 的 `oh-my-vllm` Conda environment.
+将 `OH_MY_VLLM_CONDA_PREFIX` 设为该 environment, 将 `ARTIFACT_ROOT` 设为仓库外的新目录.
 将 `MODEL_ROOT` 设为本地 checkpoint 目录.
 测量时使用 [GPU 包装脚本](performance.zh.md#测量命令).
 
 ```bash
-scripts/with-env.sh uv venv "$AGENTX_ENV" --python "$CONDA_PREFIX/bin/python"
-scripts/with-env.sh uv pip install --python "$AGENTX_ENV/bin/python" -r requirements/agentx.lock
+export OH_MY_VLLM_CONDA_PREFIX="$CONDA_PREFIX"
 scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.agentx \
   --model "$MODEL_ROOT" \
-  --agentx-python "$AGENTX_ENV/bin/python" \
+  --agentx-python "$OH_MY_VLLM_CONDA_PREFIX/bin/python" \
   --artifacts "$ARTIFACT_ROOT" \
   --csv docs/models/qwen38/assets/agentx-mtp4.csv \
   --figure docs/models/qwen38/assets/agentx-mtp4.png
@@ -109,7 +108,7 @@ FA 容量使用[服务显存设置](cache.zh.md#cache-内存)中的固定 MTP4 �
 从 CSV 重新生成图片:
 
 ```bash
-scripts/with-env.sh "$AGENTX_ENV/bin/python" -m development.serving.agentx_plot \
+scripts/with-env.sh python -m development.serving.agentx_plot \
   --csv docs/models/qwen38/assets/agentx-mtp4.csv \
   --figure docs/models/qwen38/assets/agentx-mtp4.png
 ```

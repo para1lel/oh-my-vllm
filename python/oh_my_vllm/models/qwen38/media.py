@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 import av
 import numpy as np
-import tvm_ffi
+import torch
 from PIL import Image, ImageOps
 
 from ...operators.vision import api as vision
@@ -202,14 +202,18 @@ class MediaProcessor:
         return expanded, items, positions, delta
 
     def encode(self, item):
-        if isinstance(item.embedding, np.ndarray):
-            source = np.require(item.embedding, requirements=["C", "W"])
+        embedding = item.embedding
+        if isinstance(embedding, np.ndarray):
+            embedding = torch.from_numpy(np.require(embedding, requirements=["C", "W"]))
+        if isinstance(embedding, torch.Tensor) and embedding.device.type == "cpu":
+            source = embedding.contiguous()
             value = self.device.scratch(source.shape, "bfloat16")
-            self.device.module.copy_bytes(value, tvm_ffi.from_dlpack(source))
+            self.device.copy(value, source)
             self.device.synchronize_compute()
             item.embedding = value
-        if item.embedding is not None:
-            return item.embedding
+            embedding = value
+        if embedding is not None:
+            return embedding
         d, weights = self.device, self.weights.vision()
         frames, height, width, _ = item.pixels.shape
         tokens = math.prod(item.grid)
@@ -244,15 +248,16 @@ class MediaProcessor:
                     value = operation.run(bindings[layer], vision.Inputs(value)).hidden
                 value = operations[3].run(bindings[26], vision.Inputs(value)).hidden
                 destination = d.view(result, value.shape, first * tokens // 4 * 5120)
-                d.module.copy_bytes(destination, value)
+                d.copy(destination, value)
                 d.synchronize_compute()
         item.embedding, item.pixels = result, None
         return result
 
     def offload(self, request):
         for item in request.media:
-            if item.embedding is not None and not isinstance(
-                item.embedding, np.ndarray
+            if (
+                isinstance(item.embedding, torch.Tensor)
+                and item.embedding.device.type == "cuda"
             ):
                 item.embedding = self.device.download(item.embedding, np.uint16)
 
@@ -281,7 +286,7 @@ class MediaProcessor:
                 self.encode(item), (last - cursor, 5120), first * 5120
             )
             destination = self.device.view(output, (last - cursor, 5120), cursor * 5120)
-            self.device.module.copy_bytes(destination, source)
+            self.device.copy(destination, source)
             indices.extend(value[0] for value in selected[cursor:last])
             cursor = last
         return output, self.device.upload(np.asarray(indices, np.int32))

@@ -40,7 +40,7 @@ impl ModelDescriptor {
             "must be positive",
         )?;
         bounded_unique(&self.capabilities, 8, "capabilities")?;
-        bounded_unique(&self.weight_formats, 3, "weight_formats")?;
+        bounded_unique(&self.weight_formats, 5, "weight_formats")?;
         require(
             !self.weight_formats.is_empty(),
             "weight_formats",

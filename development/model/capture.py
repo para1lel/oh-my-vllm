@@ -121,7 +121,7 @@ def run(model_path, *, decode_token=None, mode="decode"):
                 replay = resources.enter_context(device.graph(project))
                 replay()
             logits = sample.outputs.logits
-            bits = device.download(logits, np.uint16).reshape(-1)
+            bits = device.download(logits, np.uint16).numpy().reshape(-1)
         value = (bits.astype(np.uint32) << 16).view(np.float32)
         if value.shape != (248320,) or not np.isfinite(value).all():
             raise ValueError("model returned invalid endpoint logits")

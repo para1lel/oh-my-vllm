@@ -6,6 +6,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -160,6 +161,41 @@ class Contracts(unittest.TestCase):
         actual = reference.copy()
         actual[0] += 0.5
         self.assertFalse(compare({"hidden": actual}, fixture, limits).passed)
+
+    def test_state_snapshot_export_uses_logical_dtype(self):
+        import torch
+
+        from .run import PreparedCase
+
+        class HostDevice:
+            def download(self, value, dtype):
+                target = getattr(torch, dtype)
+                return value if value.dtype == target else value.view(target)
+
+        bits = np.array(
+            [[0x3F80, 0xC000, 0x3F00], [0x0000, 0x3F80, 0xC000]], dtype=np.uint16
+        )
+        expected = torch.from_numpy(bits).view(torch.bfloat16).double().numpy()
+        fixture = Fixture(
+            {
+                "writes": {
+                    "cache": {"indices": [1], "layout": "rows", "output": "cache"}
+                }
+            },
+            {},
+            {"cache": bits},
+            {"cache": expected[1:]},
+        )
+        prepared = object.__new__(PreparedCase)
+        prepared.closed = False
+        prepared.fixture = fixture
+        prepared.case = SimpleNamespace(outputs=("cache",))
+        prepared.state = {"cache": torch.from_numpy(bits).view(torch.bfloat16)}
+        prepared.inputs, prepared.outputs, prepared.observers = {}, {}, {}
+        prepared.device = HostDevice()
+        actual = prepared.observe()
+        self.assertEqual(actual["cache"].dtype, np.float64)
+        np.testing.assert_array_equal(actual["cache"], expected[1:])
 
     def test_fixture_loading_is_strict_and_reference_free(self):
         case = next(

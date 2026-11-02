@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from .native import load
+from .torch_adapter import native_shape, native_tensors
 
 FUNCTIONS = (
     "collective_unique_id",
@@ -59,8 +60,8 @@ class Route:
 
 
 class PreparedCollective:
-    def __init__(self, module, handle):
-        self._module, self._handle = module, handle
+    def __init__(self, module, handle, owners):
+        self._module, self._handle, self._owners = module, handle, owners
 
     def run(self):
         self._module.collective_submit(self._handle)
@@ -108,20 +109,18 @@ class Communicator:
         self._module.collective_record_completion(self._handle)
 
     def _prepare(self, kind, tensors, directions=(), peers=()):
-        import tvm_ffi
-
         from .device import FUNCTIONS as DEVICE_FUNCTIONS
 
         device = load("device", DEVICE_FUNCTIONS)[0]
         handle = self._module.collective_prepare(
             self._handle,
             kind,
-            tvm_ffi.convert(tensors),
-            tvm_ffi.Shape(directions),
-            tvm_ffi.Shape(peers),
+            native_tensors(tensors),
+            native_shape(directions),
+            native_shape(peers),
             device.allocate,
         )
-        return PreparedCollective(self._module, handle)
+        return PreparedCollective(self._module, handle, tuple(tensors))
 
     def prepare(self, kind, source, destination):
         if kind not in ("all_reduce", "all_gather", "reduce_scatter"):

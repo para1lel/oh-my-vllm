@@ -1,7 +1,9 @@
+from collections import OrderedDict
 from contextlib import ExitStack
 from threading import get_ident
 
 import numpy as np
+import torch
 
 from ...operators.fa import api as fa
 from ...operators.mtp import api as mtp
@@ -9,6 +11,7 @@ from ...operators.mtp.plan import accept_plan, context_plan, draft_plan
 from ...operators.mtp.workspace import prepare_accept, prepare_context, prepare_draft
 from ...worker.metadata import Metadata
 from .draft_chain import DraftChain, can_chain
+from .model import MAX_GRAPH_WORKSPACES
 from .sampling import Sampling
 
 
@@ -25,10 +28,12 @@ class GraphOperation:
         self.resources.close()
 
     def copy(self, destination, source):
-        if isinstance(source, np.ndarray):
-            self.host_uploads.copy(destination, source)
+        if not isinstance(source, torch.Tensor):
+            source = torch.as_tensor(source)
+        if source.device.type == "cpu":
+            self.host_uploads.copy(destination, source.contiguous())
         else:
-            self.device.module.copy_bytes(destination, source)
+            self.device.copy(destination, source)
 
     def execute(self, graph):
         if not graph:
@@ -136,8 +141,8 @@ class Draft(GraphOperation):
         self.attention, self.ffn = self.operation.attention, self.operation.ffn
         self.hidden = device.empty((batch, 5120), "bfloat16")
         self.zero = device.zeros((batch, 5120), "bfloat16")
-        self.rows = device.upload(np.arange(batch, dtype=np.int32))
-        self.boundary_rows = device.upload(np.zeros(batch, dtype=np.int32))
+        self.rows = device.upload(torch.arange(batch, dtype=torch.int32))
+        self.boundary_rows = device.upload(torch.zeros(batch, dtype=torch.int32))
         arrays = tuple(
             np.zeros(shape, dtype=dtype)
             for shape, dtype in (
@@ -241,7 +246,7 @@ class Acceptance(GraphOperation):
 class Speculation:
     def __init__(self, device, weights, cache, media, trace):
         self.device, self.weights, self.cache = device, weights, cache
-        self.context_decode = {}
+        self.context_decode = OrderedDict()
         self.context_prefill = None
         self.context_key = None
         self.drafts = {}
@@ -314,25 +319,25 @@ class Speculation:
                 if request.proposals is None:
                     raise ValueError("stochastic drafts require proposal probabilities")
                 operation.copy(destination, request.proposals)
-        operation.copy(operation.gather, np.asarray(target_rows, np.int32))
+        operation.copy(operation.gather, torch.tensor(target_rows, dtype=torch.int32))
         d.module.gather_rows(
             operation.target_token_rows if operation.greedy else operation.target_rows,
             sampler.token_rows if operation.greedy else probability,
             operation.gather,
         )
-        operation.copy(operation.drafts, np.asarray(drafts, np.int64))
-        operation.copy(operation.slots, np.asarray(slots, np.int32))
-        operation.copy(operation.rng, np.asarray(random, np.uint64))
+        operation.copy(operation.drafts, torch.tensor(drafts, dtype=torch.int64))
+        operation.copy(operation.slots, torch.tensor(slots, dtype=torch.int32))
+        operation.copy(operation.rng, torch.tensor(random, dtype=torch.uint64))
         operation.capacity = self.cache.slots
         operation.execute(graph)
-        kept = d.download(operation.operation.outputs.tokens, np.int64)
+        kept = d.download(operation.operation.outputs.tokens, None)
         counts = kept[:, 5]
-        counters = kept.view(np.uint64)[:, 6]
+        counters = kept.view(torch.uint64)[:, 6]
         result = []
         for index, request in enumerate(requests):
             request.accept_offset = int(counters[index])
             request.drafts = []
-            result.append(kept[index, : counts[index]].tolist())
+            result.append(kept[index, : int(counts[index])].tolist())
         return result
 
     def context(self, batch, hidden, graph, final):
@@ -404,6 +409,9 @@ class Speculation:
         created = False
         if staged_decode:
             if key not in self.context_decode:
+                if len(self.context_decode) >= MAX_GRAPH_WORKSPACES:
+                    _, evicted = self.context_decode.popitem(last=False)
+                    evicted.close()
                 self.context_decode[key] = Context(
                     self.device,
                     self.weights,
@@ -414,6 +422,8 @@ class Speculation:
                     True,
                 )
                 created = True
+            else:
+                self.context_decode.move_to_end(key)
             operation = self.context_decode[key]
         else:
             if self.context_key != key:
@@ -492,7 +502,7 @@ class Speculation:
         for index in active:
             request = batch.requests[index]
             request.drafts = []
-            request.drafts_greedy = request.parameters()[0] == 0
+            request.drafts_greedy = bool(request.parameters()[0] == 0)
             if not request.drafts_greedy and request.proposals is None:
                 request.proposals = d.scratch((4, 248320), "float32")
                 request.proposal_rows = tuple(

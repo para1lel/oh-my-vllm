@@ -43,7 +43,7 @@ def timing_identity():
             name: file_digest(module.__file__)
             for name, module in (("timing", timing), ("graph", timing_graph))
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": timing.TARGET_SECONDS,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups",

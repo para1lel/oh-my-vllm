@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import llguidance
 import numpy as np
+import torch
 from oh_my_vllm.models.qwen38.request import Request
 from oh_my_vllm.models.qwen38.tool_grammar import tool_grammar
 from oh_my_vllm.worker.constraints import Constraint, batch_masks
@@ -24,6 +25,14 @@ class ChainDevice:
         self.module = SimpleNamespace(copy_bytes=self.copy, gather_rows=self.gather)
 
     def empty(self, shape, dtype):
+        if isinstance(dtype, torch.dtype):
+            dtype = {
+                torch.bfloat16: np.float32,
+                torch.float32: np.float32,
+                torch.int64: np.int64,
+                torch.int32: np.int32,
+                torch.uint8: np.uint8,
+            }[dtype]
         return np.empty(shape, np.float32 if dtype == "bfloat16" else dtype)
 
     def scratch(self, shape, dtype):
@@ -143,6 +152,62 @@ class ChainDraft:
 
 
 class Constraints(unittest.TestCase):
+    def test_sampling_inputs_use_contiguous_cpu_torch_tensors(self):
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
+
+        inputs = SamplingInputs(2)
+        for value in (
+            inputs.full_history,
+            inputs.presence_history,
+            inputs.mask,
+            inputs.parameters,
+            inputs.random,
+        ):
+            with self.subTest(dtype=value.dtype):
+                self.assertIsInstance(value, torch.Tensor)
+                self.assertEqual(value.device.type, "cpu")
+                self.assertTrue(value.is_contiguous())
+        empty = SamplingInputs(2)
+        empty.update([], [], "target")
+        self.assertEqual(empty.parameters.shape, (2, 7))
+        self.assertEqual(torch.count_nonzero(empty.parameters).item(), 0)
+        self.assertTrue(empty.random.eq(0).all())
+        self.assertFalse(empty.history_needed)
+        self.assertTrue(empty.compact)
+        zero = SamplingInputs(0)
+        zero.update([], [], "target")
+        self.assertEqual(zero.parameters.numel(), 0)
+
+    def test_sampling_inputs_preserve_uint64_seed_bits(self):
+        from oh_my_vllm.models.qwen38.sampling import SamplingInputs
+
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=258,
+            think_end=257,
+            generation={},
+            decode_bytes=bytes,
+        )
+
+        def update(seed, stream):
+            request = Request(
+                tokenizer,
+                [],
+                {"max_tokens": 8, "sampling": {"seed": seed}},
+            )
+            inputs = SamplingInputs(1)
+            inputs.update([request], [[]], stream)
+            return inputs.random[0].tolist()
+
+        proposal_seed = 7
+        self.assertEqual(
+            update(proposal_seed, "proposal"),
+            [proposal_seed ^ 0x9E3779B97F4A7C15, 0],
+        )
+        target_seed = (1 << 63) + 5
+        self.assertEqual(update(target_seed, "target"), [target_seed, 0])
+
     def test_tool_constraints_require_a_model_grammar(self):
         vocabulary = {
             value: index
@@ -353,7 +418,7 @@ class Constraints(unittest.TestCase):
         inputs.update([request, request], [[6, 6], [7, 8]], "target")
         self.assertTrue(inputs.history_needed)
         self.assertTrue(inputs.compact)
-        self.assertEqual(inputs.history.dtype, np.uint8)
+        self.assertEqual(inputs.history.dtype, torch.uint8)
         self.assertEqual(inputs.history.shape, (2, 248320 // 8))
         self.assertEqual(inputs.history[:, 0].tolist(), [0b01100000, 0b10100000])
         self.assertEqual(inputs.history[:, 1].tolist(), [0, 1])
@@ -559,6 +624,96 @@ class Constraints(unittest.TestCase):
                 with self.subTest(table=table):
                     self.assertFalse(can_chain(batch, [0], True, cache.blocks))
             speculation.close()
+
+    def test_accept_packs_greedy_flag_into_torch_drafts_metadata(self):
+        from oh_my_vllm.models.qwen38.speculation import Speculation
+
+        class AcceptDevice(ChainDevice):
+            def __init__(self):
+                super().__init__()
+                self.module = SimpleNamespace(
+                    copy_bytes=self.copy, gather_rows=lambda *arguments: None
+                )
+
+            def download(self, value, dtype):
+                if dtype is not None:
+                    return super().download(value, dtype)
+                self.downloads += 1
+                return torch.as_tensor(value)
+
+        class PackedAcceptance:
+            def __init__(self, kept):
+                self.greedy = False
+                self.capacity = None
+                self.proposal_rows = ("proposal",)
+                self.gather, self.drafts = "gather", "drafts"
+                self.slots, self.rng = "slots", "rng"
+                self.target_token_rows = None
+                self.copied = {}
+                self.operation = SimpleNamespace(outputs=SimpleNamespace(tokens=kept))
+
+            def copy(self, destination, source):
+                self.copied[destination] = source
+
+            def execute(self, graph):
+                pass
+
+            def close(self):
+                pass
+
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={},
+            decode_bytes=lambda tokens: bytes(tokens),
+        )
+        options = {
+            "max_tokens": 32,
+            "min_tokens": 16,
+            "stop": [],
+            "sampling": {"temperature": 0, "repetition_guard": False},
+        }
+        first = Request(tokenizer, [4, 4], options)
+        first.append([5])
+        first.state_position = 2
+        device = AcceptDevice()
+        cache = SimpleNamespace(
+            fa=[None], blocks=8, slots=8, private_slots=lambda *_: []
+        )
+        trace = SimpleNamespace(record=lambda *args, **kwargs: None)
+        speculation = Speculation(device, None, cache, None, trace)
+        batch = SimpleNamespace(
+            requests=[first],
+            scheduled=[{"request_id": 1, "fa_block_table": [1]}],
+            metadata=(None, None, np.ones((1, 335), np.int32)),
+        )
+        endpoints = {0: (np.full((1, 5120), 2, np.float32), None)}
+        with (
+            patch("oh_my_vllm.models.qwen38.speculation.Draft", ChainDraft),
+            patch("oh_my_vllm.models.qwen38.sampling.prepare", ChainSample),
+        ):
+            speculation.propose(batch, endpoints, True)
+        acceptance = PackedAcceptance(torch.zeros((1, 7), dtype=torch.int64))
+        speculation.acceptance[1] = acceptance
+        proposed = list(first.drafts)
+        batch.schedule = SimpleNamespace(sequence_rows=[0, 5], read_slots=[0])
+        batch.tokens = np.asarray([5, *proposed], dtype=np.int64)
+        batch.writes = np.zeros(5, np.int32)
+        sampler = SimpleNamespace(
+            greedy=True, token_rows=None, select=lambda *args, **kwargs: (None, None)
+        )
+        speculation.accept(batch, None, None, sampler, False)
+        self.assertIs(type(first.drafts_greedy), bool)
+        packed = acceptance.copied["drafts"]
+        self.assertIsInstance(packed, torch.Tensor)
+        self.assertEqual(packed.dtype, torch.int64)
+        self.assertEqual(
+            packed.tolist(),
+            [[*proposed, *([-1] * (4 - len(proposed))), 1]],
+        )
+        speculation.close()
 
     def test_stochastic_chain_requires_prefix_independent_masks(self):
         from oh_my_vllm.models.qwen38.draft_chain import can_chain

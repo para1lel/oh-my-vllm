@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from contextlib import ExitStack
 from functools import partial
 from threading import get_ident
@@ -20,6 +21,7 @@ from ...worker.metadata import Metadata
 
 PREFILL_GRAPH_ROWS = 1024
 PREFILL_GRAPH_REUSE = 4
+MAX_GRAPH_WORKSPACES = 8
 
 
 def metadata_arrays(batch):
@@ -80,7 +82,7 @@ class Workspace:
         )
         self.input = device.scratch((batch.rows, 5120), "bfloat16")
         self.zero = device.scratch((batch.rows, 5120), "bfloat16")
-        device.module.zero(self.zero)
+        device.zero(self.zero)
         self.metadata_inputs = Metadata(device, metadata_arrays(batch))
         metadata = self.metadata_inputs.arrays
         self.tokens = metadata[5]
@@ -201,7 +203,7 @@ class Workspace:
 class Model:
     def __init__(self, device, weights, cache, mtp, media):
         self.device, self.weights, self.cache, self.mtp = device, weights, cache, mtp
-        self.decode = {}
+        self.decode = OrderedDict()
         self.prefill = None
         self.prefill_key = None
         self.media = media
@@ -218,10 +220,15 @@ class Model:
         created = False
         if batch.schedule.verify:
             if key not in self.decode:
+                if len(self.decode) >= MAX_GRAPH_WORKSPACES:
+                    _, workspace = self.decode.popitem(last=False)
+                    workspace.close()
                 self.decode[key] = Workspace(
                     self.device, self.weights, self.cache, batch, plans
                 )
                 created = True
+            else:
+                self.decode.move_to_end(key)
             workspace = self.decode[key]
         else:
             if self.prefill_key != key:

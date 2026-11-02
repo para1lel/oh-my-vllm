@@ -6,11 +6,9 @@ Worker 加载本地 checkpoint, 使用仓库内的 CUDA 模块.
 ## 启动
 
 使用[开发环境](development.zh.md).
-安装运行时包:
-
-```bash
-scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/runtime.txt -r requirements/kernels.txt
-```
+`requirements/runtime.txt` 提供 service 和推理包.
+`requirements/development.txt` 包含 runtime 文件.
+一次 development 安装即可.
 
 构建可执行文件:
 
@@ -31,7 +29,7 @@ scripts/with-env.sh scripts/with-gpu.sh target/release/oh-my-vllm-zmq-worker --m
 默认值和缓存容量由所选[模型适配器](adapters.zh.md)提供.
 调度优先级见[运行时契约](requirements.zh.md).
 
-使用不同的 `--socket` 路径.
+每个服务进程使用不同的 `--socket` 路径.
 使用 `serve --listen` 设置地址. 默认地址为 `127.0.0.1:8000`.
 
 服务没有身份认证. 主机地址保存在被忽略的本地配置中.

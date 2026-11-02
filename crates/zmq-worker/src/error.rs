@@ -35,6 +35,9 @@ pub enum Error {
     #[error("timeout waiting for Python worker")]
     Timeout,
 
+    #[error("worker cleanup unconfirmed for PID {pid}: {reason}")]
+    WorkerCleanupUnconfirmed { pid: u32, reason: String },
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }

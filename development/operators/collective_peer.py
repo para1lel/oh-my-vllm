@@ -1,7 +1,6 @@
 """Native communication peer for the Rust four-rank correctness example."""
 
 import argparse
-import ctypes
 import json
 import os
 import sys
@@ -11,7 +10,6 @@ from pathlib import Path
 
 import msgpack
 import numpy as np
-import tvm_ffi
 import zmq
 from oh_my_vllm.operators.runtime.collectives import (
     FUNCTIONS,
@@ -98,47 +96,6 @@ def expected_values(operation, rank, iteration, count):
             for peer in range(4)
         ]
     )
-
-
-def clone_capture(device, operation):
-    stream, graph, clone, executable, cloned = (ctypes.c_void_p() for _ in range(5))
-    runtime = device.runtime
-    runtime.cudaGraphClone.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p]
-    runtime.cudaGraphClone.restype = ctypes.c_int
-    temporary = (
-        ("cudaGraphDestroy", clone),
-        ("cudaGraphDestroy", graph),
-        ("cudaStreamDestroy", stream),
-    )
-    try:
-        device.checked(runtime.cudaStreamCreateWithFlags(ctypes.byref(stream), 1))
-        with tvm_ffi.use_raw_stream(tvm_ffi.device("cuda:0"), stream.value):
-            device.checked(runtime.cudaStreamBeginCapture(stream, 1))
-            try:
-                operation()
-            except BaseException:
-                runtime.cudaStreamEndCapture(stream, ctypes.byref(graph))
-                raise
-            device.checked(runtime.cudaStreamEndCapture(stream, ctypes.byref(graph)))
-        device.checked(runtime.cudaGraphClone(ctypes.byref(clone), graph))
-        for source, target in ((graph, executable), (clone, cloned)):
-            device.checked(
-                runtime.cudaGraphInstantiateWithFlags(ctypes.byref(target), source, 0)
-            )
-        for name, handle in temporary:
-            device.checked(getattr(runtime, name)(handle))
-            handle.value = None
-        return executable, cloned
-    except BaseException:
-        device.destroy_handles(
-            (
-                ("cudaGraphExecDestroy", executable),
-                ("cudaGraphExecDestroy", cloned),
-                *temporary,
-            ),
-            suppress=True,
-        )
-        raise
 
 
 class DiscardCapture(Exception):
@@ -243,7 +200,7 @@ class Probe:
             self.plan.operations, self.buffers, strict=True
         ):
             dtype = np.uint16 if operation.dtype == "bf16" else DTYPES[operation.dtype]
-            actual = self.device.download(destination, dtype)
+            actual = self.device.download(destination, dtype).numpy()
             expected = encode(
                 expected_values(operation, self.rank, iteration, destination.shape[0]),
                 operation.dtype,
@@ -277,23 +234,23 @@ class Probe:
         self.wait_graph_release()
         for prepared in self.prepared:
             prepared.prepare_capture()
-        executable, cloned = clone_capture(self.device, self.run)
-        try:
-            for iteration, handle in ((3, executable), (4, cloned)):
+        with ExitStack() as graphs:
+            for prepared in self.prepared:
+                prepared.prepare_capture()
+            first = graphs.enter_context(self.device.graph(self.run))
+            for prepared in self.prepared:
+                prepared.prepare_capture()
+            second = graphs.enter_context(self.device.graph(self.run))
+            for iteration, replay in ((3, first), (4, second)):
                 if self.communicator.abort_ready():
                     raise AssertionError("live graph executable did not retain owners")
                 self.fill(iteration)
-                stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
-                self.device.checked(self.device.runtime.cudaGraphLaunch(handle, stream))
+                replay()
                 self.communicator.record_completion()
                 wait_ready(self.communicator)
                 self.check_outputs(iteration)
-                self.device.release_graph(handle)
-                handle.value = None
-        finally:
-            for handle in (executable, cloned):
-                if handle:
-                    self.device.release_graph(handle)
+            self.communicator.record_completion()
+            wait_ready(self.communicator)
         self.wait_graph_release()
         return {
             "failed_capture_cleanup": True,

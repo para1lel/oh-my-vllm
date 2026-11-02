@@ -3,7 +3,12 @@ import csv
 from pathlib import Path
 
 
-def plot(csv_path, figure_path):
+def plot(
+    csv_path,
+    figure_path,
+    title="AgentX  |  MTP4  |  One NVIDIA B200",
+    subtitle=None,
+):
     import matplotlib
 
     matplotlib.use("Agg")
@@ -58,7 +63,7 @@ def plot(csv_path, figure_path):
     axis.grid(color="#344153", alpha=0.48, linewidth=0.7)
     axis.spines[["top", "right"]].set_visible(False)
     axis.set_title(
-        "AgentX  |  MTP4  |  One NVIDIA B200",
+        title,
         loc="left",
         fontsize=20,
         fontweight="bold",
@@ -67,8 +72,11 @@ def plot(csv_path, figure_path):
     axis.text(
         0,
         1.025,
-        "4 session trees  /  Up to 4 scheduled requests  /  "
-        f"{len(rows):,} completed requests",
+        subtitle
+        or (
+            "4 session trees  /  Up to 4 scheduled requests  /  "
+            f"{len(rows):,} completed requests"
+        ),
         transform=axis.transAxes,
         color="#aebdcd",
         fontsize=11,
@@ -91,8 +99,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--figure", type=Path, required=True)
+    parser.add_argument("--title", default="AgentX  |  MTP4  |  One NVIDIA B200")
+    parser.add_argument("--subtitle")
     arguments = parser.parse_args()
-    plot(arguments.csv, arguments.figure)
+    plot(arguments.csv, arguments.figure, arguments.title, arguments.subtitle)
 
 
 if __name__ == "__main__":

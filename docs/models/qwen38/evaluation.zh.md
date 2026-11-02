@@ -30,12 +30,12 @@ BF16 checkpoint 值精确转换为 FP64.
 Prefill 变化时, 使用 `--mode prefill` 比较同一提示的末行.
 保存的 artifact 包含两个 endpoint 向量及其 checkpoint identity.
 下方新增用例检查长上下文, MTP 和 vision 计算.
-协议和状态所有权检查与数值对照分开.
+协议, 状态所有权和数值结果使用不同的检查.
 
 ## 新增固定用例
 
 [用例定义](../../../development/model/cases.py)规定存储的输入及完整词表输出.
-常规测试加载仓库 fixture, 不使用 PyTorch.
+常规测试加载仓库 fixture.
 
 | 用例 | 固定输入 | 词表输出 |
 |---|---|---|
@@ -45,7 +45,7 @@ Prefill 变化时, 使用 `--mode prefill` 比较同一提示的末行.
 
 恢复用例在验证前清除请求的私有状态引用.
 验证读取逻辑 784-token checkpoint.
-状态选择提交前两行输入.
+state commit 接受前两行输入.
 下一次 target 计算读取该选中状态.
 MTP context 使用存储的边界 hidden 行及选中的验证行.
 两次 draft 输入使用固定 token.
@@ -108,7 +108,7 @@ Top-1 是否相同仅用于诊断, 因为小误差可能交换接近的 logits.
 短用例保留原有门槛.
 新增门槛采用 [vLLM commit 86129933](https://github.com/vllm-project/vllm/commit/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af) 以及选定的项目实现, 使用同一 checkpoint, 仓库存储的输入及 FP64 参考.
 对每个用例, 取其所有 endpoint 行中最大的 NRMSE 和绝对误差, 以及最小的余弦相似度.
-分别按 0.01, 0.1 和 0.001 的步长向外取整.
+将 NRMSE 和绝对误差按 0.01 和 0.1 的步长向外取整, 余弦相似度按 0.001 的步长向外取整.
 各用例独立设定门槛. 取这两个实现中较大的误差上限和较小的余弦下限.
 
 选定的项目实现使用 FP32 FFN residual, 按列乘 beta 的 GDN inverse, 以及带缩放的 BF16 GDN attention 系数.

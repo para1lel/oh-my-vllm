@@ -103,10 +103,11 @@ impl HybridCoordinator {
         } else {
             fa_required + state_required < self.pool.num_blocks() as usize
         };
+        // A block-aligned end is already cached by the full-block path. Keep the
+        // checkpoint before the last prompt token in every other case.
         (self.pool.enable_caching()
             && request.record_partial_prefix()
             && fits
-            && !request.num_prompt_tokens().is_multiple_of(self.block_size)
             && !end.is_multiple_of(self.block_size))
         .then_some(end)
     }

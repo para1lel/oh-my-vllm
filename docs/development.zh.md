@@ -1,31 +1,33 @@
 # 开发环境
 
-开发使用 Python 3.12, Rust, uv, 以及 Node 24 或更新版本.
+开发使用 Python 3.15.2, Rust, pip, 以及 Node 24 或更新版本.
 Conda 定义提供 Python 和 Rust.
-使用 Python 和 JavaScript 锁文件中的 hook 依赖版本.
-
-开发和运行时依赖使用不同文件.
+`requirements/runtime.txt` 提供推理包.
+`requirements/development.txt` 提供开发包, 并包含 runtime 文件.
 
 ## 安装
 
-先安装 Conda, uv 和 Node.
+先安装 Conda 和 Node.
 执行以下命令:
 
 ```bash
 conda env create -f environment.yml
 conda activate oh-my-vllm
-uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/development.txt -r requirements/runtime.txt
+export OH_MY_VLLM_CONDA_PREFIX="$CONDA_PREFIX"
+PYZMQ_BACKEND=cffi python -m pip install --ignore-requires-python -r requirements/development.txt
 npm --prefix development/javascript ci --ignore-scripts --no-audit --no-fund
 scripts/with-env.sh pre-commit install
 ```
 
 已有可用环境时, 执行最后四条命令.
-wrapper 依次选择 `OH_MY_VLLM_CONDA_PREFIX`, `CONDA_PREFIX`, `VIRTUAL_ENV`, 仓库内的 `.venv`.
+wrapper 只接受 `OH_MY_VLLM_CONDA_PREFIX` 和 `oh-my-vllm` Conda environment.
+`PYZMQ_BACKEND=cffi` 设置使 CPython 3.15 binding 使用所选 Conda ZeroMQ library 构建.
+由于当前 AgentX wheel 有过时的 Python 上限, 必须使用 `--ignore-requires-python`.
 
 Python 和 Cargo 命令通过 `scripts/with-env.sh` 执行.
 wrapper 配置可执行文件路径, Python 模块路径, worker 解释器和 Cargo 构建输出.
-
-开发服务时安装[运行时包](../requirements/runtime.txt).
+不要创建 repository virtual environment.
+development 安装包含 runtime 包.
 
 ## Git hooks
 
@@ -56,16 +58,11 @@ Cargo hooks 包含所有自有 manifest. 每个 workspace 只处理一次.
 
 ## 原生模块
 
-使用 CUDA 13.1. 主机路径保存在忽略的 `LOCAL.md` 中.
+原生构建使用 CUDA 13.4 toolkit. 主机路径保存在忽略的 `LOCAL.md` 中.
 将 `CUDA_HOME` 设为 CUDA 安装目录.
-安装 kernel 开发包:
+development 文件安装原生构建包, 并包含 `requirements/runtime.txt`.
+如果没有 CUDA 13.4, 在原生 rebuild 前停止. 不要将 CUDA 13.2 headers 与 CUDA 13.4 Torch runtime 混用.
 
-```bash
-scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/kernel-development.txt
-```
-
-推理绑定位于 `requirements/kernels.txt`.
-开发包不是 worker 依赖.
 将 `CUTLASS_ROOT` 设为外部依赖目录.
 获取指定头文件:
 

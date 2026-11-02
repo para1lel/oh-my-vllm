@@ -1,12 +1,14 @@
 import ctypes
 import os
-from contextlib import ExitStack, contextmanager, suppress
+from contextlib import ExitStack, contextmanager
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+import torch
 import tvm_ffi
 
+from . import torch_adapter
 from .native import load
 from .uploads import UploadPool, Uploads
 
@@ -30,6 +32,18 @@ FUNCTIONS = (
 @lru_cache(maxsize=128)
 def tensor_shape(dimensions):
     return tvm_ffi.Shape(dimensions)
+
+
+def torch_dtype(dtype):
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    if isinstance(dtype, str):
+        dtype = dtype.removeprefix("torch.")
+        try:
+            return getattr(torch, dtype)
+        except AttributeError as error:
+            raise ValueError(f"unsupported torch dtype: {dtype}") from error
+    return torch.from_numpy(np.empty((), dtype=dtype)).dtype
 
 
 class Device:
@@ -71,19 +85,6 @@ class Device:
             "cudaStreamQuery": [ctypes.c_void_p],
             "cudaStreamSynchronize": [ctypes.c_void_p],
             "cudaStreamWaitEvent": [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint],
-            "cudaStreamBeginCapture": [ctypes.c_void_p, ctypes.c_int],
-            "cudaStreamEndCapture": [
-                ctypes.c_void_p,
-                ctypes.POINTER(ctypes.c_void_p),
-            ],
-            "cudaGraphInstantiateWithFlags": [
-                ctypes.POINTER(ctypes.c_void_p),
-                ctypes.c_void_p,
-                ctypes.c_ulonglong,
-            ],
-            "cudaGraphLaunch": [ctypes.c_void_p, ctypes.c_void_p],
-            "cudaGraphDestroy": [ctypes.c_void_p],
-            "cudaGraphExecDestroy": [ctypes.c_void_p],
             "cudaProfilerStart": [],
             "cudaProfilerStop": [],
         }.items():
@@ -94,9 +95,13 @@ class Device:
         self.runtime.cudaGetErrorString.restype = ctypes.c_char_p
         self.transfer_engines = set()
         self.upload_pool = UploadPool(self)
+        self.capture_stream = None
+        self.graph_failed = False
+        self._failed_graph_resources = []
 
     def close(self):
         self.upload_pool.close()
+        self.capture_stream = None
 
     def memory_info(self):
         free, total = ctypes.c_size_t(), ctypes.c_size_t()
@@ -106,42 +111,69 @@ class Device:
         return free.value, total.value
 
     def empty(self, shape, dtype):
-        return self.module.allocate(tensor_shape(tuple(shape)), dtype, 0)
+        return torch.ops.oh_my_vllm.native_empty(
+            tuple(shape),
+            torch_dtype(dtype),
+            torch.device("cuda:0"),
+        )
 
     def uploads(self):
         return Uploads(self)
 
     def scratch(self, shape, dtype):
-        return self.module.allocate_scratch(tensor_shape(tuple(shape)), dtype, 0)
+        return torch.ops.oh_my_vllm.native_scratch(
+            tuple(shape), torch_dtype(dtype), torch.device("cuda:0")
+        )
 
     def zeros(self, shape, dtype):
         result = self.empty(shape, dtype)
-        self.module.zero(result)
-        return result
+        return torch.ops.oh_my_vllm.native_zero(result)
+
+    def zero(self, value):
+        return torch.ops.oh_my_vllm.native_zero(value)
+
+    def copy(self, destination, source):
+        return torch.ops.oh_my_vllm.native_copy(source, destination)
 
     def view(self, value, shape, offset=0):
-        return self.module.view(value, tensor_shape(tuple(shape)), offset)
+        return torch.ops.oh_my_vllm.native_view(value, tuple(shape), offset)
 
     def upload(self, value, dtype=None):
-        value = np.require(value, requirements=["C", "W"])
-        output = self.empty(value.shape, dtype or str(value.dtype))
-        self.module.copy_bytes(output, tvm_ffi.from_dlpack(value))
-        return output
+        if isinstance(value, torch.Tensor):
+            if value.device.type != "cpu":
+                raise ValueError("device upload input must be a CPU tensor")
+            if not value.is_contiguous():
+                raise ValueError("device upload requires a contiguous tensor")
+            source = value
+        else:
+            source = torch.as_tensor(np.require(value, requirements=["C", "W"]))
+        output = self.empty(
+            source.shape,
+            torch_dtype(dtype) if dtype is not None else source.dtype,
+        )
+        return torch.ops.oh_my_vllm.native_copy(source, output)
 
     def download(self, value, dtype):
-        output = np.empty(value.shape, dtype=dtype)
-        self.module.copy_bytes(tvm_ffi.from_dlpack(output), value)
-        return output
+        result = torch.ops.oh_my_vllm.native_download(value)
+        if dtype is None:
+            return result
+        target = torch_dtype(dtype)
+        if target == result.dtype:
+            return result
+        if target.itemsize != result.element_size():
+            raise ValueError("download dtype must keep the source element width")
+        # A download preserves raw bytes; a same-width dtype reinterprets them.
+        return result.view(target)
 
     def synchronize(self):
         self.module.synchronize(0)
 
     def synchronize_compute(self):
-        stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+        stream = torch_adapter.current_stream("cuda:0")
         self.checked(self.runtime.cudaStreamSynchronize(stream))
 
     def pinned_quiescent(self):
-        stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+        stream = torch_adapter.current_stream("cuda:0")
         status = self.runtime.cudaStreamQuery(stream)
         if status == 600:
             return False
@@ -160,58 +192,56 @@ class Device:
             if handle:
                 try:
                     self.checked(getattr(self.runtime, name)(handle))
+                    if isinstance(handle, ctypes.c_void_p):
+                        handle.value = None
                 except Exception as failure:
                     error = error or failure
         if error is not None and not suppress:
             raise error
+        return error
+
+    def _check_graph_health(self):
+        if getattr(self, "graph_failed", False):
+            raise RuntimeError("CUDA Graph device is unusable after cleanup failure")
+
+    def ensure_healthy(self):
+        self._check_graph_health()
+
+    def _capture_stream(self):
+        stream = getattr(self, "capture_stream", None)
+        if stream is None:
+            stream = torch.cuda.Stream(device="cuda:0")
+            self.capture_stream = stream
+        return stream
 
     def capture(self, operation):
-        stream, graph, executable = (ctypes.c_void_p() for _ in range(3))
-        temporary = (("cudaGraphDestroy", graph), ("cudaStreamDestroy", stream))
+        self._check_graph_health()
+        if torch.cuda.is_current_stream_capturing():
+            raise RuntimeError("caller stream is already capturing")
+        self.wait_pinned_safe()
+        stream = self._capture_stream()
+        graph = torch.cuda.CUDAGraph()
+        pool = torch.cuda.graph_pool_handle()
         try:
-            self.checked(
-                self.runtime.cudaStreamCreateWithFlags(ctypes.byref(stream), 1)
-            )
-            with tvm_ffi.use_raw_stream(tvm_ffi.device("cuda:0"), stream.value):
-                self.checked(self.runtime.cudaStreamBeginCapture(stream, 1))
-                try:
-                    operation()
-                except BaseException:
-                    self.runtime.cudaStreamEndCapture(stream, ctypes.byref(graph))
-                    raise
-                self.checked(
-                    self.runtime.cudaStreamEndCapture(stream, ctypes.byref(graph))
-                )
-            self.checked(
-                self.runtime.cudaGraphInstantiateWithFlags(
-                    ctypes.byref(executable), graph, 0
-                )
-            )
+            with (
+                torch_adapter.use_stream("cuda:0", stream),
+                torch.cuda.graph(graph, pool=pool, stream=stream),
+            ):
+                operation()
         except BaseException:
-            self.destroy_handles(
-                (("cudaGraphExecDestroy", executable), *temporary), suppress=True
-            )
+            self.graph_failed = False
             raise
-        try:
-            self.destroy_handles(temporary)
-        except BaseException:
-            self.destroy_handles((("cudaGraphExecDestroy", executable),), suppress=True)
-            raise
-        return executable
+        return graph
 
-    def release_graph(self, executable):
-        error = None
+    def release_graph(self, graph, resources=None):
         try:
-            self.synchronize()
-        except BaseException as failure:
-            error = failure
-        try:
-            self.checked(self.runtime.cudaGraphExecDestroy(executable))
+            torch.cuda.synchronize()
+            graph.reset()
         except BaseException:
-            if error is None:
-                raise
-        if error is not None:
-            raise error
+            self.graph_failed = True
+            retained = resources.pop_all() if resources is not None else None
+            self._failed_graph_resources.append((graph, retained))
+            raise
 
     @contextmanager
     def graph(self, operation):
@@ -220,28 +250,27 @@ class Device:
         with ExitStack() as resources:
             if acquire is not None:
                 resources.enter_context(acquire())
-            executable = self.capture(operation)
+            graph = self.capture(operation)
             active = True
 
             def replay():
+                self._check_graph_health()
                 if not active:
                     raise RuntimeError("CUDA Graph is closed")
-                stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
-                try:
-                    self.checked(self.runtime.cudaGraphLaunch(executable, stream))
-                except BaseException:
-                    with suppress(BaseException):
-                        self.synchronize()
-                    raise
+                stream = torch.cuda.current_stream()
+                with torch_adapter.use_stream("cuda:0", stream):
+                    graph.replay()
 
             try:
                 yield replay
-            except BaseException:
-                with suppress(BaseException):
-                    self.release_graph(executable)
+            except BaseException as failure:
+                try:
+                    self.release_graph(graph, resources)
+                except BaseException as cleanup:
+                    raise failure from cleanup
                 raise
             else:
-                self.release_graph(executable)
+                self.release_graph(graph, resources)
             finally:
                 active = False
 

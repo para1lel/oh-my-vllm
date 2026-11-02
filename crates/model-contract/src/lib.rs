@@ -46,6 +46,10 @@ pub enum WeightFormat {
     F32,
     #[serde(rename = "qwen_fp8_e4m3_block128x128_fp32_scales")]
     QwenFp8E4m3Block128x128Fp32Scales,
+    #[serde(rename = "deepseek_fp4")]
+    DeepseekFp4,
+    #[serde(rename = "deepseek_fp8_e4m3_block32_ue8m0")]
+    DeepseekFp8E4m3Block32Ue8m0,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +141,8 @@ pub struct SpeculationSpec {
 #[serde(rename_all = "snake_case")]
 pub enum SpeculationMethod {
     Mtp,
+    #[serde(rename = "dspark5")]
+    DsPark5,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

@@ -37,7 +37,7 @@ Use different checks for protocols, state ownership, and numerical results.
 ## Added fixed cases
 
 The [case definitions](../../../development/model/cases.py) specify stored inputs and complete vocabulary outputs.
-Usual tests load repository fixtures without PyTorch.
+Usual tests load repository fixtures.
 
 | Case | Fixed input | Vocabulary outputs |
 |---|---|---|
@@ -47,7 +47,7 @@ Usual tests load repository fixtures without PyTorch.
 
 The restoration case clears the request's private state reference before verification.
 Verification reads the logical 784-token checkpoint.
-State selection commits the first two input rows.
+The state commit accepts the first two input rows.
 The next target computation reads that selected state.
 MTP context uses the stored boundary hidden row and the selected verification rows.
 Its two draft inputs use fixed tokens.
@@ -111,7 +111,7 @@ All three limits must pass for each endpoint row. A failed comparison exits with
 The short case keeps its original limits.
 The added limits use [vLLM commit 86129933](https://github.com/vllm-project/vllm/commit/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af) and the selected project implementation, with the same checkpoint, stored inputs, and FP64 references.
 For each case, take the largest NRMSE and absolute error, and the smallest cosine across all its endpoint rows.
-Round these values outward to steps of 0.01, 0.1, and 0.001, respectively.
+Round the NRMSE and absolute error outward to steps of 0.01 and 0.1, and the cosine similarity to 0.001.
 Set the limits independently for each case. Keep the larger error limits and the smaller cosine limit from these two implementations.
 
 The selected project implementation uses FP32 FFN residuals, beta-weighted GDN inverse columns, and scaled BF16 GDN attention coefficients.

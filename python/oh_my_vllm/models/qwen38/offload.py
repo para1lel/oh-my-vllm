@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from math import prod
 
+import numpy as np
+import torch
+
 from ...operators.runtime.storage import WIDTHS
 from .transfers import completion, validate_operation
 
@@ -12,7 +15,7 @@ class TensorSpec:
 
     @classmethod
     def of(cls, tensor):
-        return cls(tuple(tensor.shape), str(tensor.dtype))
+        return cls(tuple(tensor.shape), str(tensor.dtype).removeprefix("torch."))
 
     @property
     def size(self):
@@ -38,12 +41,17 @@ class Snapshot:
         return sum(spec.size for spec in self.specs)
 
     def host_views(self):
-        import tvm_ffi
-
+        if not self.specs:
+            return ()
         offset, views = 0, []
+        storage = self.storage.tensor
+        if isinstance(storage, np.ndarray):
+            storage = torch.from_numpy(storage)
         for spec in self.specs:
             views.append(
-                tvm_ffi.from_dlpack(self.storage.array[offset : offset + spec.size])
+                storage[offset : offset + spec.size]
+                .view(getattr(torch, spec.dtype))
+                .reshape(spec.shape)
             )
             offset += spec.size
         return tuple(views)
@@ -132,8 +140,6 @@ class Offload:
         return pending
 
     def request_sources(self, request):
-        import numpy as np
-
         values, endpoint = [], request.state_slot is not None
         if endpoint:
             values.extend(self.cache.state_views(request.state_slot))
@@ -145,8 +151,9 @@ class Offload:
                 raise ValueError("proposal rows do not cover their storage")
         media = []
         for index, item in enumerate(request.media):
-            if item.embedding is not None and not isinstance(
-                item.embedding, np.ndarray
+            if (
+                isinstance(item.embedding, torch.Tensor)
+                and item.embedding.device.type == "cuda"
             ):
                 media.append(index)
                 values.append(item.embedding)

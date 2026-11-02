@@ -16,3 +16,4 @@ dist/
 *.pt
 *.nsys-rep
 perf.data*
+.codegraph/

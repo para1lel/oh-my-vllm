@@ -294,7 +294,10 @@ int main() {
 
 def run_native_capture_check(directory):
     import tvm_ffi
-    from oh_my_vllm.operators.runtime.native import collectives_vendor_dependencies
+    from oh_my_vllm.operators.runtime.native import (
+        collectives_vendor_dependencies,
+        cuda_include_directories,
+    )
     from tvm_ffi.libinfo import find_libtvm_ffi
 
     root = Path(__file__).resolve().parents[1]
@@ -308,7 +311,7 @@ def run_native_capture_check(directory):
             vendor["host_compiler"],
             "-std=c++17",
             f"-I{Path(tvm_ffi.__file__).parent / 'include'}",
-            f"-I{cuda / 'include'}",
+            *(f"-I{path}" for path in cuda_include_directories(cuda)),
             f"-I{root / 'python/oh_my_vllm/operators/runtime/cuda'}",
             f"-I{vendor['include_directory']}",
             str(source),

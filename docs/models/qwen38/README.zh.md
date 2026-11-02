@@ -82,7 +82,7 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MO
 只有明确变更参考时, 才需要生成新文件.
 在独立环境中安装 `requirements/model-reference.lock`.
 使用[官方 PyTorch 包](https://pytorch.org/get-started/previous-versions/).
-推理 worker 不使用 PyTorch.
+推理 worker 使用 `requirements/runtime.txt` 中的 Torch 包.
 将 `LOGITS_REFERENCE` 设为仓库外的新 `.npz` 路径.
 用参考环境生成文件:
 
@@ -102,7 +102,7 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --
 scripts/with-env.sh scripts/with-gpu.sh python -m development.operators numerics --model "$MODEL_ROOT" --report "$OPERATOR_REPORT"
 ```
 
-该命令加载仓库内 fixture 和批准的门槛, 不使用 PyTorch.
+该命令加载仓库内 fixture 和批准的门槛.
 fixture 缺失, identity 改变或未通过门槛都会导致错误退出.
 
 明确更新 fixture 时, 将 `OPERATOR_FIXTURES` 设为仓库外的新暂存目录.

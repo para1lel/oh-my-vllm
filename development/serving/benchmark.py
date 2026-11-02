@@ -114,6 +114,7 @@ def source_identity():
             in {
                 "Cargo.toml",
                 "Cargo.lock",
+                "requirements/development.txt",
                 "requirements/runtime.txt",
                 "development/native_build.py",
             }

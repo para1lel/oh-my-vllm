@@ -41,15 +41,15 @@ Do not capture private user requests.
 Use the stored arrays as fixture inputs.
 A seed alone does not replace the stored reference output.
 
-Usual tests load fixtures and run the candidate only.
-They do not import PyTorch or generate reference outputs.
+Usual acceptance loads the stored expected outputs and runs the candidate on PyTorch.
+Acceptance does not import or run the reference generators.
 A missing or changed fixture causes an error.
-Use PyTorch only for explicit initial generation or an approved fixture update.
+Explicit initial generation and approved fixture updates use a separate environment.
 Stage changed fixtures with their manifests and reference changes for review.
 Do not regenerate or overwrite expected arrays during a test.
 
 Compare all elements of named outputs and assigned state writes.
-These include BF16 KV, GDN recurrent/convolution checkpoints, and hidden exports.
+These elements include BF16 KV, GDN recurrent/convolution checkpoints, and hidden exports.
 Use per-sequence, per-field normalized L2 error and maximum absolute error.
 Near-zero references also use an absolute-error condition.
 Reject nonfinite values that the contract does not permit.
@@ -79,7 +79,7 @@ Check greedy ties, masks, rejection residuals, bonus selection, and RNG counters
 PyTorch generates expected numerical arrays. Usual tests compare arrays with NumPy.
 Integer RNG mapping uses a deterministic helper that does not call production code.
 Distribution-only execution must not select tokens or advance RNG state.
-A worker behavior test checks stop truncation before effective state selection.
+A worker behavior test checks stop truncation before the effective state commit.
 
 ## Theoretical latency and performance limits
 
@@ -115,7 +115,7 @@ The result is a conservative nominal-resource estimate, not a proof of minimum p
 For FA/GDN/FFN and internal vision blocks, measure a fixed sequence of applicable layer weights with the same shape.
 For MTP and output, use their production weights and the declared cache policy.
 Use the same sequence for calibration and subsequent tests.
-This prevents a single hot layer from representing a streaming model workload.
+This sequence prevents a single hot layer from representing a streaming model workload.
 
 Calibrate each maximum ratio from the current correct implementation.
 Use five new measurement sessions with at least 30 samples per case in each session.
@@ -212,7 +212,7 @@ It does not infer compatibility from a different operator's private buffer indic
 
 MTP acceptance returns candidate results, not published state.
 The worker first applies request stop conditions to the returned tokens.
-The accepted count after stop handling then controls state selection through the existing state commit procedure.
+The accepted count after stop handling then controls the existing state commit.
 The GPU candidate slot cannot replace this decision before stop handling.
 Keep the RNG state and counter rules for each of the target, proposal, and acceptance domains.
 

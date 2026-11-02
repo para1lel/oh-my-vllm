@@ -24,7 +24,7 @@ GDN recurrence 和 prefill 通过完整 GDN 用例检查.
 
 数值参考使用直接的 PyTorch 公式实现.
 固定输入和原始 checkpoint 权重精确转换后, 使用 FP64 算术.
-参考实现按照[模型契约](model.zh.md)实现数学操作, mask, position, 状态转移和采样规则.
+参考实现按照[模型契约](model.zh.md)实现数学运算, mask, position, 状态转移和采样规则.
 它不得调用生产 kernel, 也不得复制其分块和融合算法.
 它不得使用旧 kernel 输出作为预期值.
 Attention 分块仅用于控制参考实现的内存用量.
@@ -41,10 +41,10 @@ Manifest 记录张量 shape/dtype, 用例身份, 输入摘要, 预期输出摘�
 使用存储的数组作为 fixture 输入.
 仅有 seed 不能替代已存储的参考输出.
 
-常规测试加载 fixture, 只执行待测实现.
-它们不导入 PyTorch, 也不生成参考输出.
+常规验收加载已存储的预期输出, 并在 PyTorch 上执行待测实现.
+验收不导入或运行参考生成器.
 Fixture 缺失或改变时返回错误.
-仅在显式首次生成或经批准的 fixture 更新时使用 PyTorch.
+显式首次生成和经批准的 fixture 更新使用独立环境.
 将变更的 fixture, manifest 和参考实现变更一起暂存并审查.
 测试期间不得重新生成或覆盖预期数组.
 
@@ -79,7 +79,7 @@ FFN 输入为零时, 输出必须为零.
 PyTorch 生成预期数值数组. 常规测试使用 NumPy 比较数组.
 整数 RNG 映射使用不调用生产代码的确定性辅助实现.
 仅计算 distribution 时不得选择 token 或推进 RNG 状态.
-Worker 行为测试检查 stop 截断发生在有效状态选择之前.
+Worker 行为测试检查 stop 截断发生在有效 state commit 之前.
 
 ## 理论延迟与性能门槛
 
@@ -115,7 +115,7 @@ pass: ratio <= case.max_ratio
 FA/GDN/FFN 和内部 vision block 测量固定的适用层权重序列, 其中 shape 相同.
 MTP 和 output 使用其生产权重及声明的缓存策略.
 校准和后续测试使用同一序列.
-这样可避免用单个热缓存层代表流式访问权重的模型工作负载.
+这样可避免用单个热层代表流式访问权重的模型工作负载.
 
 每个最大倍率根据当前正确实现校准.
 执行 5 次新的测量会话, 每次会话中每个用例至少采集 30 个样本.
@@ -191,7 +191,7 @@ FA, GDN, FFN 和 vision 接口提供完整子层.
 | `output.distribution` | 最终归一化, 词表投影, 惩罚, 约束和所需概率分布. |
 | `output.sample` | 分布计算和 token 选择. |
 | `mtp.context` | MTP 输入投影及 KV-only 变体的 FA 输入. |
-| `mtp.draft` | 使用共享组件完成适用的 MTP 输入投影, 完整的一层 FA, FFN 及采样. |
+| `mtp.draft` | 使用共享组件完成适用的 MTP 输入投影, 一个完整的 FA 层, FFN 及采样. |
 | `mtp.accept` | 接受判断, 拒绝采样和候选状态 slot 选择. |
 | `vision` | 一个视觉层. 首层包含 patch 输入. 末层包含空间合并. |
 
@@ -212,7 +212,7 @@ MTP 包包含其组合融合实现, 并控制其存储布局.
 
 MTP acceptance 返回候选结果, 不返回已发布状态.
 Worker 先对返回的 token 应用请求停止条件.
-随后由停止条件处理后的接受数量通过现有状态提交过程控制状态选择.
+随后由停止条件处理后的接受数量控制现有 state commit.
 处理停止条件前, GPU 候选 slot 不能替代这一决策.
 保持 target, proposal 和 acceptance 各域的 RNG 状态与计数器规则.
 

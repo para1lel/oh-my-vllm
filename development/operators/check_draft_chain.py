@@ -41,19 +41,17 @@ class DraftSampling(unittest.TestCase):
             values[:, candidates] = np.asarray(candidates) % 5 + step * 0.25
             encoded = (values.view(np.uint32) >> 16).astype(np.uint16)
             logits.append(encoded)
-            device.module.copy_bytes(stage.outputs.logits, device.upload(encoded))
+            device.copy(stage.outputs.logits, device.upload(encoded))
 
         def run():
             for step, stage in enumerate(stages):
                 stage.draw(settings, gpu_rng)
                 stage.advance_presence(gpu_history)
-                device.module.copy_bytes(token_rows[step], stage.outputs.tokens)
+                device.copy(token_rows[step], stage.outputs.tokens)
 
         try:
             edge_tokens = np.asarray([0, 7, 8, vocabulary - 1], np.int64)
-            device.module.copy_bytes(
-                stages[0].outputs.tokens, device.upload(edge_tokens)
-            )
+            device.copy(stages[0].outputs.tokens, device.upload(edge_tokens))
             stages[0].advance_presence(gpu_history)
             expected_history = history.copy()
             expected_history[0, 0] = 1
@@ -61,7 +59,7 @@ class DraftSampling(unittest.TestCase):
             expected_history[2, 1] = 1
             expected_history[3, -1] = 128
             np.testing.assert_array_equal(
-                device.download(gpu_history, np.uint8), expected_history
+                device.download(gpu_history, np.uint8).numpy(), expected_history
             )
             with ExitStack() as resources:
                 for stage in stages:
@@ -75,24 +73,30 @@ class DraftSampling(unittest.TestCase):
                         [[42 + row, offset] for row in range(rows)],
                         np.uint64,
                     )
-                    device.module.copy_bytes(gpu_history, device.upload(history))
-                    device.module.copy_bytes(gpu_rng, device.upload(random))
+                    device.copy(gpu_history, device.upload(history))
+                    device.copy(gpu_rng, device.upload(random))
                     replay()
-                    actual_tokens = device.download(captured, np.int64)
-                    actual_rng = device.download(gpu_rng, np.uint64)
-                    actual_history = device.download(gpu_history, np.uint8)
+                    actual_tokens = device.download(captured, np.int64).numpy()
+                    actual_rng = device.download(gpu_rng, np.uint64).numpy()
+                    actual_history = device.download(gpu_history, np.uint8).numpy()
                     for step, stage in enumerate(stages):
-                        device.module.copy_bytes(gpu_history, device.upload(history))
-                        device.module.copy_bytes(gpu_rng, device.upload(random))
-                        device.module.copy_bytes(
+                        device.copy(gpu_history, device.upload(history))
+                        device.copy(gpu_rng, device.upload(random))
+                        device.copy(
                             baseline.outputs.logits, device.upload(logits[step])
                         )
                         baseline.draw(settings, gpu_rng)
-                        expected = device.download(baseline.outputs.tokens, np.int64)
+                        expected = device.download(
+                            baseline.outputs.tokens, np.int64
+                        ).numpy()
                         np.testing.assert_array_equal(actual_tokens[step], expected)
                         np.testing.assert_array_equal(
-                            device.download(stage.outputs.probabilities, np.float32),
-                            device.download(baseline.outputs.probabilities, np.float32),
+                            device.download(
+                                stage.outputs.probabilities, np.float32
+                            ).numpy(),
+                            device.download(
+                                baseline.outputs.probabilities, np.float32
+                            ).numpy(),
                         )
                         for row, token in enumerate(expected):
                             history[row, token // 8] |= 1 << (token % 8)

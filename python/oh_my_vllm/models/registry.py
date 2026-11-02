@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 
 from .api import AdapterSpec, ModelAdapter
+from .deepseek_v41.adapter import SPEC as DEEPSEEK_V41
 from .qwen38.adapter import SPEC as QWEN38
 
-ADAPTERS = (QWEN38,)
+ADAPTERS = (QWEN38, DEEPSEEK_V41)
 MAX_CONFIG_BYTES = 1 << 20
 
 

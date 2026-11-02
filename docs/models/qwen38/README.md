@@ -29,7 +29,7 @@ Use `--speculative-mode none` for ordinary decode.
 
 The adapter follows the shared [execution rules](../../execution.md).
 Decode and verification fragments use CUDA Graphs when their bindings permit capture.
-This also applies inside a mixed Execute.
+This capture rule also applies inside a mixed Execute.
 The adapter keeps one prefill workspace and one prefill context slot.
 
 Automatic prefill selection permits Graphs only for text requests with at most 1024 rows.
@@ -82,7 +82,7 @@ The [evaluation procedure](evaluation.md) specifies the input, precision, metric
 Generation is necessary only for an explicit reference change.
 Install `requirements/model-reference.lock` in a different environment.
 Use the [official PyTorch packages](https://pytorch.org/get-started/previous-versions/).
-The inference worker does not use PyTorch.
+The inference worker uses the Torch package in `requirements/runtime.txt`.
 Set `LOGITS_REFERENCE` to a new external `.npz` path.
 Generate the file with the reference environment:
 
@@ -102,7 +102,7 @@ Run all fixed numerical cases in the inference environment:
 scripts/with-env.sh scripts/with-gpu.sh python -m development.operators numerics --model "$MODEL_ROOT" --report "$OPERATOR_REPORT"
 ```
 
-This command loads repository fixtures and approved limits without PyTorch.
+This command loads repository fixtures and approved limits.
 Missing fixtures, changed identities, or failed limits cause an error exit.
 
 For an explicit fixture update, set `OPERATOR_FIXTURES` to a new external staging directory.

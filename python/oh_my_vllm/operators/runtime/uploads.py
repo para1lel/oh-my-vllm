@@ -1,12 +1,13 @@
 import ctypes
 from contextlib import suppress
 
-import numpy as np
-import tvm_ffi
+import torch
+
+from . import torch_adapter
 
 
 def _eager_stream(device):
-    stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+    stream = torch_adapter.current_stream("cuda:0")
     capture = ctypes.c_int()
     device.checked(device.runtime.cudaStreamIsCapturing(stream, ctypes.byref(capture)))
     if capture.value:
@@ -21,6 +22,8 @@ class HostStorage:
         device.checked(
             device.runtime.cudaHostAlloc(ctypes.byref(self.pointer), size, 0)
         )
+        self._buffer = (ctypes.c_ubyte * max(size, 1)).from_address(self.pointer.value)
+        self.tensor = torch.frombuffer(self._buffer, dtype=torch.uint8, count=size)
 
     def close(self):
         if self.pointer:
@@ -123,22 +126,22 @@ class UploadBuffer:
         self.device, self.destination = device, destination
         self.storage, self.event = None, ctypes.c_void_p()
         self.pending = self.untracked = False
-        self.array = self.tensor = None
+        self.tensor = None
         try:
             ranged = capacity_bytes is not None
             size = capacity_bytes if ranged else source.nbytes
             shape, dtype = (
-                ((size,), np.uint8) if ranged else (source.shape, source.dtype)
+                ((size,), torch.uint8) if ranged else (source.shape, source.dtype)
             )
             self.storage = device.upload_pool.acquire(size, exact=ranged)
             device.checked(
                 device.runtime.cudaEventCreateWithFlags(ctypes.byref(self.event), 2)
             )
-            memory = (ctypes.c_byte * self.storage.size).from_address(
-                self.storage.pointer.value
+            self.tensor = (
+                self.storage.tensor if ranged else self.storage.tensor.view(dtype)
             )
-            self.array = np.ndarray(shape, dtype, buffer=memory)
-            self.tensor = tvm_ffi.from_dlpack(self.array)
+            elements = size if ranged else source.numel()
+            self.tensor = self.tensor.reshape(-1)[:elements].reshape(shape)
         except BaseException:
             self.close()
             raise
@@ -154,16 +157,22 @@ class UploadBuffer:
             self.pending = self.untracked = False
 
     def copy(self, source, stream):
-        if source.shape != self.array.shape or source.dtype != self.array.dtype:
+        if (
+            not isinstance(source, torch.Tensor)
+            or source.device.type != "cpu"
+            or not source.is_contiguous()
+            or source.shape != self.tensor.shape
+            or source.dtype != self.tensor.dtype
+        ):
             raise ValueError("upload shape or dtype changed")
         self.wait()
-        np.copyto(self.array, source, casting="no")
+        self.tensor.copy_(source)
         self._submit(self.destination, self.tensor, stream)
 
     def _submit(self, destination, source, stream):
         self.pending = self.untracked = True
         try:
-            self.device.module.upload_bytes(destination, source)
+            torch.ops.oh_my_vllm.native_upload(source, destination)
             self.device.checked(self.device.runtime.cudaEventRecord(self.event, stream))
             self.untracked = False
         except BaseException:
@@ -172,7 +181,7 @@ class UploadBuffer:
 
     def close(self):
         self.wait()
-        self.tensor = self.array = None
+        self.tensor = None
         error = None
         if self.storage is not None:
             try:
@@ -201,31 +210,35 @@ class RangeUpload(UploadBuffer):
         self._views = None
         super().__init__(device, destination, None, capacity_bytes=capacity_bytes)
         self.staging_bytes = self.storage.size
-        self.dtype = np.dtype(str(destination.dtype))
+        self.dtype = destination.dtype
 
     def copy(self, source, *, offset=0):
         if self.closed:
             raise RuntimeError("host upload range is closed")
         stream = _eager_stream(self.device)
         if (
-            not isinstance(source, np.ndarray)
+            not isinstance(source, torch.Tensor)
+            or source.device.type != "cpu"
+            or not source.is_contiguous()
             or source.dtype != self.dtype
-            or not source.dtype.isnative
             or type(offset) is not int
             or not 0 <= offset <= self.destination.numel()
-            or source.size > self.destination.numel() - offset
+            or source.numel() > self.destination.numel() - offset
             or source.nbytes > self.capacity_bytes
         ):
             raise ValueError("upload range exceeds its prepared bounds or dtype")
         if not source.nbytes:
             return
         self.wait()
-        snapshot = np.ndarray(source.shape, source.dtype, buffer=self.array)
-        np.copyto(snapshot, source, casting="no")
+        snapshot = (
+            self.storage.tensor.view(source.dtype)
+            .reshape(-1)[: source.numel()]
+            .reshape(source.shape)
+        )
+        snapshot.copy_(source)
         destination = self.device.view(self.destination, source.shape, offset)
-        tensor = tvm_ffi.from_dlpack(snapshot)
-        self._views = destination, tensor
-        self._submit(destination, tensor, stream)
+        self._views = destination, snapshot
+        self._submit(destination, snapshot, stream)
 
     def close(self):
         self.closed = True
@@ -244,8 +257,12 @@ class Uploads:
     def copy(self, destination, source):
         if self.closed:
             raise RuntimeError("host uploads are closed")
-        if not isinstance(source, np.ndarray):
-            raise ValueError("host uploads require a NumPy array")
+        if (
+            not isinstance(source, torch.Tensor)
+            or source.device.type != "cpu"
+            or not source.is_contiguous()
+        ):
+            raise ValueError("host uploads require a contiguous CPU Torch tensor")
         stream = _eager_stream(self.device)
         key = id(destination)
         if key not in self.buffers:
@@ -259,16 +276,15 @@ class Uploads:
         if (
             type(capacity_bytes) is not int
             or capacity_bytes <= 0
-            or getattr(destination, "device", None) != tvm_ffi.device("cuda:0")
+            or not isinstance(destination, torch.Tensor)
+            or destination.device.type != "cuda"
             or not destination.is_contiguous()
         ):
             raise ValueError(
                 "upload range requires positive capacity and contiguous CUDA storage"
             )
-        dtype = tvm_ffi.dtype(str(destination.dtype))
-        if dtype.lanes != 1 or dtype.bits <= 0 or dtype.bits % 8:
+        if destination.element_size() <= 0:
             raise ValueError("upload range requires a byte-addressable scalar dtype")
-        np.dtype(str(destination.dtype))
         key = id(destination)
         if key in self.ranges:
             if self.ranges[key].capacity_bytes != capacity_bytes:

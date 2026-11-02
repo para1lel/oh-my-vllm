@@ -8,41 +8,62 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from oh_my_vllm.operators.activation.api import FUNCTIONS as ACTIVATION_FUNCTIONS
 from oh_my_vllm.operators.fa.api import FUNCTIONS as FA_FUNCTIONS
 from oh_my_vllm.operators.ffn.api import FUNCTIONS as FFN_FUNCTIONS
 from oh_my_vllm.operators.gdn.api import FUNCTIONS as GDN_FUNCTIONS
+from oh_my_vllm.operators.hyperconnection.api import (
+    FUNCTIONS as HYPERCONNECTION_FUNCTIONS,
+)
 from oh_my_vllm.operators.mtp.api import FUNCTIONS as MTP_FUNCTIONS
 from oh_my_vllm.operators.output.api import FUNCTIONS as SAMPLE_FUNCTIONS
+from oh_my_vllm.operators.projection.api import FUNCTIONS as PROJECTION_FUNCTIONS
+from oh_my_vllm.operators.routing.api import FUNCTIONS as ROUTING_FUNCTIONS
 from oh_my_vllm.operators.runtime.device import FUNCTIONS as DEVICE_FUNCTIONS
 from oh_my_vllm.operators.runtime.native import (
     MODULE_SOURCES,
     OPTIONAL_MODULE_SOURCES,
     SOURCES,
     build_digest,
+    build_environment_identity,
     cache_directory,
     collectives_vendor_dependencies,
+    cuda_include_directories,
+    hyperconnection_vendor_dependencies,
     source_digest,
     verify_collectives_vendor_images,
+    verify_hyperconnection_vendor_images,
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
+from oh_my_vllm.operators.sparse_attention.api import (
+    FUNCTIONS as SPARSE_ATTENTION_FUNCTIONS,
+)
+from oh_my_vllm.operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
 from oh_my_vllm.operators.vision.api import FUNCTIONS as VISION_FUNCTIONS
 
 MODULES = {
+    "activation": ACTIVATION_FUNCTIONS,
     "device": DEVICE_FUNCTIONS,
     "ffn": FFN_FUNCTIONS,
     "fa": FA_FUNCTIONS,
     "gdn": GDN_FUNCTIONS,
+    "hyperconnection": HYPERCONNECTION_FUNCTIONS,
     "mtp": MTP_FUNCTIONS,
+    "projection": PROJECTION_FUNCTIONS,
+    "routing": ROUTING_FUNCTIONS,
     "sample": SAMPLE_FUNCTIONS,
+    "sparse_attention": SPARSE_ATTENTION_FUNCTIONS,
+    "transform": TRANSFORM_FUNCTIONS,
     "vision": VISION_FUNCTIONS,
 }
 
 
 def optional_modules():
     from oh_my_vllm.operators.runtime.collectives import FUNCTIONS
+    from oh_my_vllm.operators.runtime.paged import FUNCTIONS as PAGED_FUNCTIONS
 
-    return {"collectives": FUNCTIONS}
+    return {"collectives": FUNCTIONS, "paged": PAGED_FUNCTIONS}
 
 
 @functools.cache
@@ -52,15 +73,21 @@ def build(name, functions):
 
     if os.environ.setdefault("TVM_FFI_CUDA_ARCH_LIST", "10.0a") != "10.0a":
         raise ValueError("native operators require the B200 architecture 10.0a")
-    nvcc = shutil.which("nvcc")
-    if nvcc is None:
-        cuda = os.environ.get("CUDA_HOME", "/usr/local/cuda")
-        nvcc = str(Path(cuda) / "bin/nvcc")
+    cuda = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")).resolve()
+    nvcc = cuda / "bin/nvcc"
+    if not nvcc.is_file():
+        raise RuntimeError(f"CUDA compiler nvcc is not available in {cuda}")
+    nvcc = str(nvcc)
     flags = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a", "-lineinfo")
     source = (MODULE_SOURCES | OPTIONAL_MODULE_SOURCES)[name]
     source_fingerprint = source_digest(source)
     compiler = subprocess.check_output([nvcc, "--version"]).decode()
-    include_paths = [str(source.parent), str(SOURCES)]
+    environment = build_environment_identity(cuda, compiler)
+    include_paths = [
+        str(source.parent),
+        str(SOURCES),
+        *(str(path) for path in cuda_include_directories(cuda)),
+    ]
     commit = None
     if name in MODULES and name != "device":
         cutlass = Path(os.environ["OH_MY_VLLM_CUTLASS"])
@@ -83,6 +110,8 @@ def build(name, functions):
     if name == "collectives":
         vendor = collectives_vendor_dependencies()
         flags += ("--compiler-bindir", vendor["host_compiler"])
+    elif name == "hyperconnection":
+        vendor = hyperconnection_vendor_dependencies()
     build_options = {}
     if vendor is not None:
         include_paths.append(vendor["include_directory"])
@@ -94,14 +123,15 @@ def build(name, functions):
         importlib.metadata.version("apache-tvm-ffi"),
         commit,
         functions,
-        vendor,
+        vendor=vendor,
+        environment=environment,
     )
     cache = cache_directory()
     directory = cache / source_id
     directory.mkdir(parents=True, exist_ok=True)
     library = build_inline(
         f"oh_my_vllm_{name}",
-        cuda_sources=f'#include "{name}.cu"',
+        cuda_sources=f'#include "{source.name}"',
         functions=functions,
         extra_cuda_cflags=flags,
         extra_include_paths=include_paths,
@@ -128,6 +158,7 @@ def build(name, functions):
         "cuda_flags": flags,
         "ffi_version": importlib.metadata.version("apache-tvm-ffi"),
         "cutlass": commit,
+        **environment,
     }
     if vendor is not None:
         metadata[f"{name}_vendor"] = vendor
@@ -146,6 +177,8 @@ def build(name, functions):
         verify_vision_vendor_images(module, vendor)
     elif name == "collectives":
         verify_collectives_vendor_images(module, vendor)
+    elif name == "hyperconnection":
+        verify_hyperconnection_vendor_images(module, vendor)
     return module, source_id, immutable_library
 
 

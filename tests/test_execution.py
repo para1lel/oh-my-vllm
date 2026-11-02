@@ -1,66 +1,100 @@
 import ctypes
+import gc
 import unittest
+import weakref
 from contextlib import ExitStack, contextmanager, nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import numpy as np
+import torch
 from oh_my_vllm.models.qwen38.inference import Worker
 from oh_my_vllm.operators.runtime.device import Device
 
 
-class GraphOwner:
-    def __init__(self, events, fail=False):
-        self.events, self.fail = events, fail
-
-    @contextmanager
-    def graph_lease(self):
-        self.events.append(("lease",))
-        try:
-            yield
-        finally:
-            self.events.append(("release",))
-
-    def run(self):
-        self.events.append(("record",))
-        if self.fail:
-            raise ValueError("recording failed")
-
-
-def graph_device(events, failure=None):
-    device = Device.__new__(Device)
-    handles = {
-        "cudaStreamCreateWithFlags": (0, 11),
-        "cudaStreamEndCapture": (1, 12),
-        "cudaGraphInstantiateWithFlags": (0, 13),
-    }
-
-    def call(name, *args):
-        events.append((name, *args))
-        if name == failure:
-            return 1
-        if name in handles:
-            argument, value = handles[name]
-            ctypes.cast(args[argument], ctypes.POINTER(ctypes.c_void_p))[0] = value
-        return 0
-
-    names = (
-        *handles,
-        "cudaStreamBeginCapture",
-        "cudaStreamDestroy",
-        "cudaGraphDestroy",
-        "cudaGraphExecDestroy",
-        "cudaGraphLaunch",
-    )
-    device.runtime = SimpleNamespace(
-        **{name: lambda *args, name=name: call(name, *args) for name in names},
-        cudaGetErrorString=lambda _: b"injected CUDA failure",
-    )
-    device.synchronize = lambda: events.append(("synchronize",))
-    return device
-
-
 class Execution(unittest.TestCase):
+    def test_transfer_keeps_torch_owners_until_completion(self):
+        from oh_my_vllm.operators.runtime.transfers import TransferEngine
+
+        source = torch.arange(4, dtype=torch.float32)
+        destination = torch.zeros(4, dtype=torch.float32)
+        calls = []
+        device = SimpleNamespace(
+            runtime=SimpleNamespace(
+                cudaEventCreateWithFlags=lambda *_: 0,
+                cudaEventRecord=lambda *_: 0,
+                cudaStreamWaitEvent=lambda *_: 0,
+                cudaEventQuery=lambda *_: 0,
+                cudaStreamQuery=lambda *_: 0,
+                cudaStreamSynchronize=lambda *_: 0,
+            ),
+            checked=lambda status: self.assertEqual(status, 0),
+            transfer_engines=set(),
+            destroy_handles=lambda handles: None,
+        )
+        engine = TransferEngine.__new__(TransferEngine)
+        engine.device = device
+        engine.streams = {"h2d": ctypes.c_void_p(11)}
+        engine.pending, engine.events, engine.closed = {}, [], False
+        with (
+            patch(
+                "oh_my_vllm.operators.runtime.transfers.torch_adapter.current_stream",
+                return_value=7,
+            ),
+            patch(
+                "oh_my_vllm.operators.runtime.transfers.torch.ops.oh_my_vllm.native_copy_batch",
+                side_effect=lambda inputs, outputs, stream: calls.append(
+                    (inputs, outputs, stream)
+                ),
+            ),
+        ):
+            engine.submit(1, (destination,), (source,), "h2d")
+            source_ref, destination_ref = weakref.ref(source), weakref.ref(destination)
+            del source, destination
+            gc.collect()
+            self.assertIsNotNone(source_ref())
+            self.assertIsNotNone(destination_ref())
+            self.assertEqual(calls[0][2], 11)
+            engine.close()
+            calls.clear()
+        gc.collect()
+        self.assertIsNone(source_ref())
+        self.assertIsNone(destination_ref())
+
+    def test_metadata_uses_torch_host_arenas_and_upload_sources(self):
+        from oh_my_vllm.worker.metadata import Metadata
+
+        copied = []
+
+        class Uploads:
+            def copy(self, destination, source):
+                copied.append((destination, source))
+
+            def close(self):
+                pass
+
+        device = SimpleNamespace(
+            uploads=lambda: Uploads(),
+            scratch=lambda shape, dtype: torch.zeros(shape, dtype=dtype),
+            view=lambda value, shape, offset: value.reshape(-1)[
+                offset : offset + int(torch.tensor(shape).prod())
+            ].reshape(shape),
+        )
+        metadata = Metadata(
+            device,
+            (np.array([1, 2], dtype=np.int32), torch.tensor([3.0])),
+        )
+        self.assertTrue(
+            all(
+                isinstance(value, torch.Tensor)
+                for value in metadata.host_arenas.values()
+            )
+        )
+        self.assertTrue(
+            all(isinstance(value, torch.Tensor) for value in metadata.host_views)
+        )
+        self.assertTrue(all(isinstance(source, torch.Tensor) for _, source in copied))
+
     def test_cache_capacity_is_fixed_and_never_silently_reduced(self):
         from oh_my_vllm.models.qwen38.cache_budget import cache_budget
 
@@ -109,39 +143,32 @@ class Execution(unittest.TestCase):
                     )
             config["num_gpu_blocks"] = None
 
-    def test_upload_snapshots_source_and_waits_before_reuse_or_release(self):
+    def test_upload_keeps_torch_staging_owner_until_event_completion(self):
+        import gc
+
         from oh_my_vllm.operators.runtime.uploads import UploadPool, Uploads
 
-        events, allocations, pending = [], {}, []
-        idle, safe_waits = [False], []
+        allocations, pending, waits = {}, [], []
+        idle = [False]
 
         def wait_safe():
-            safe_waits.append(True)
             idle[0] = True
 
         def allocate(pointer, size, flags):
-            self.assertTrue(idle[0], "pinning requires an idle window")
             storage = ctypes.create_string_buffer(size)
             address = ctypes.addressof(storage)
             allocations[address] = storage
             ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = address
             return 0
 
-        def create(pointer, flags):
-            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = 1
-            return 0
-
         def wait(event):
-            events.append("wait")
+            waits.append(True)
             for destination, source in pending:
-                np.copyto(destination, source)
+                destination.copy_(source)
             pending.clear()
             return 0
 
         def release(pointer):
-            self.assertFalse(pending)
-            self.assertTrue(idle[0], "unpinning requires an idle window")
-            events.append("free")
             del allocations[pointer.value]
             return 0
 
@@ -153,248 +180,111 @@ class Execution(unittest.TestCase):
             runtime=SimpleNamespace(
                 cudaHostAlloc=allocate,
                 cudaFreeHost=release,
-                cudaEventCreateWithFlags=create,
+                cudaEventCreateWithFlags=lambda pointer, flags: 0,
                 cudaEventDestroy=lambda _: 0,
                 cudaEventRecord=lambda *_: 0,
                 cudaEventSynchronize=wait,
                 cudaStreamIsCapturing=capture,
             ),
-            module=SimpleNamespace(
-                upload_bytes=lambda dst, src: pending.append((dst, src))
-            ),
             checked=lambda status: self.assertEqual(status, 0),
             synchronize=lambda: wait(None),
             pinned_quiescent=lambda: idle[0],
             wait_pinned_safe=wait_safe,
+            view=lambda value, shape, offset: value,
         )
-        source, destination = np.array([1, 2], np.int32), np.zeros(2, np.int32)
         device.upload_pool = UploadPool(device)
+        source = torch.tensor([1, 2], dtype=torch.int32)
+        destination = torch.zeros(2, dtype=torch.int32, device="cuda")
         with (
-            patch("tvm_ffi.from_dlpack", side_effect=lambda array: array),
-            patch("tvm_ffi.get_raw_stream", return_value=7),
+            patch(
+                "oh_my_vllm.operators.runtime.uploads.torch.ops.oh_my_vllm.native_upload",
+                side_effect=lambda source, destination: pending.append(
+                    (destination, source)
+                ),
+            ),
+            patch(
+                "oh_my_vllm.operators.runtime.uploads.torch_adapter.current_stream",
+                return_value=7,
+            ),
         ):
             uploads = Uploads(device)
             uploads.copy(destination, source)
-            self.assertEqual(len(safe_waits), 1)
-            source[:] = 3
-            self.assertEqual(destination.tolist(), [0, 0])
-            uploads.copy(destination, source)
-            self.assertEqual(destination.tolist(), [1, 2])
-            source[:] = 4
-            uploads.close()
-            self.assertEqual(destination.tolist(), [3, 3])
-            self.assertEqual(events, ["wait", "wait"])
-            self.assertEqual(device.upload_pool.cached_bytes, source.nbytes)
-            uploads = Uploads(device)
-            uploads.copy(destination, source)
-            self.assertEqual(device.upload_pool.cached_bytes, 0)
-            self.assertEqual(len(allocations), 1)
-            uploads.close()
-            self.assertEqual(destination.tolist(), [4, 4])
-            self.assertEqual(events, ["wait", "wait", "wait"])
-            idle[0] = False
-            smaller = device.upload_pool.acquire(4)
-            self.assertEqual(smaller.size, 8)
-            self.assertEqual(len(allocations), 1)
-            self.assertEqual(len(safe_waits), 1)
-            device.upload_pool.release(smaller)
-            device.upload_pool.close()
-            self.assertEqual(events, ["wait", "wait", "wait", "free"])
-            self.assertFalse(allocations)
+            buffer = next(iter(uploads.buffers.values()))
+            self.assertIsInstance(buffer.tensor, torch.Tensor)
+            self.assertEqual(buffer.tensor.device.type, "cpu")
+            del source
+            gc.collect()
             uploads.close()
 
-            device.upload_pool = UploadPool(device, limit=16)
-            large = device.upload_pool.acquire(16)
-            small = [device.upload_pool.acquire(8) for _ in range(3)]
-            idle[0] = False
-            waits_before = len(safe_waits)
-            frees_before = events.count("free")
-            device.upload_pool.release(large)
-            device.upload_pool.release(small[0])
-            device.upload_pool.release(small[1])
-            self.assertEqual(device.upload_pool.cached_bytes, 16)
-            self.assertEqual(device.upload_pool.retired_bytes, 16)
-            reused = device.upload_pool.acquire(4)
-            self.assertEqual(reused.size, 8)
-            self.assertEqual(device.upload_pool.retired_bytes, 8)
-            device.upload_pool.release(reused)
-            self.assertEqual(len(safe_waits), waits_before)
-            self.assertEqual(events.count("free"), frees_before)
-            device.upload_pool.release(small[2])
-            self.assertEqual(len(safe_waits), waits_before + 1)
-            self.assertEqual(device.upload_pool.retired_bytes, 0)
-            self.assertEqual(len(allocations), 1)
-            oversized = device.upload_pool.acquire(64)
-            idle[0] = False
-            waits_before = len(safe_waits)
-            device.upload_pool.release(oversized)
-            self.assertEqual(len(safe_waits), waits_before + 1)
-            self.assertEqual(device.upload_pool.retired_bytes, 0)
-            self.assertEqual(len(allocations), 1)
-            device.upload_pool.close()
-            self.assertFalse(allocations)
+        torch.testing.assert_close(
+            destination, torch.tensor([1, 2], dtype=torch.int32, device="cuda")
+        )
+        self.assertTrue(waits)
+        device.upload_pool.close()
+        self.assertFalse(allocations)
 
-            device.upload_pool = UploadPool(device, limit=8)
-            cached = device.upload_pool.acquire(8)
-            retired = device.upload_pool.acquire(8)
-            idle[0] = False
-            device.upload_pool.release(cached)
-            device.upload_pool.release(retired)
-            failed_address = retired.pointer.value
-            device.runtime.cudaFreeHost = lambda pointer: (
-                1 if pointer.value == failed_address else release(pointer)
+    def test_range_upload_bounds_use_tensor_numel(self):
+        from oh_my_vllm.operators.runtime.uploads import RangeUpload, UploadPool
+
+        allocations = {}
+
+        def allocate(pointer, size, flags):
+            storage = ctypes.create_string_buffer(size)
+            allocations[ctypes.addressof(storage)] = storage
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.addressof(
+                storage
             )
-            with self.assertRaises(AssertionError):
-                device.upload_pool.close()
-            self.assertEqual(device.upload_pool.retired_bytes, 8)
-            self.assertEqual(list(allocations), [failed_address])
-            device.runtime.cudaFreeHost = release
-            device.upload_pool.close()
-            self.assertEqual(device.upload_pool.retired_bytes, 0)
-            self.assertFalse(allocations)
+            return 0
 
-            device.upload_pool = UploadPool(device, limit=0)
-            device.runtime.cudaStreamIsCapturing = capture
-            device.runtime.cudaEventRecord = lambda *_: 0
-            uploads = Uploads(device)
-            uploads.copy(destination, source)
-            uploads.copy(destination.copy(), source)
-            failed_address = next(iter(allocations))
-            device.runtime.cudaFreeHost = lambda pointer: (
-                1 if pointer.value == failed_address else release(pointer)
-            )
-            with self.assertRaises(AssertionError):
-                uploads.close()
-            self.assertEqual(list(allocations), [failed_address])
-            device.runtime.cudaFreeHost = release
-            uploads.close()
-            self.assertFalse(allocations)
-            with self.assertRaisesRegex(RuntimeError, "closed"):
-                uploads.copy(destination, source)
-            uploads = Uploads(device)
-            device.runtime.cudaEventRecord = lambda *_: 1
-            with self.assertRaises(AssertionError):
-                uploads.copy(destination, source)
-            self.assertEqual(destination.tolist(), [4, 4])
-            uploads.close()
-            self.assertFalse(allocations)
+        def free(pointer):
+            allocations.pop(pointer.value, None)
+            return 0
 
-            def captured(stream, status):
-                ctypes.cast(status, ctypes.POINTER(ctypes.c_int))[0] = 1
-                return 0
+        def capture(stream, status):
+            ctypes.cast(status, ctypes.POINTER(ctypes.c_int))[0] = 0
+            return 0
 
-            device.runtime.cudaStreamIsCapturing = captured
-            uploads = Uploads(device)
-            with self.assertRaisesRegex(RuntimeError, "before CUDA Graph"):
-                uploads.copy(destination, source)
-            self.assertFalse(allocations)
-            uploads.close()
-
-            class Tensor:
-                def __init__(self, array):
-                    self.array = array
-                    self.shape, self.dtype = array.shape, array.dtype
-                    self.device = tvm_ffi.device("cuda:0")
-
-                def is_contiguous(self):
-                    return self.array.flags.c_contiguous
-
-                def numel(self):
-                    return self.array.size
-
-                def data_ptr(self):
-                    return self.array.ctypes.data
-
-            def view(tensor, shape, offset=0):
-                return Tensor(
-                    tensor.array.reshape(-1)[
-                        offset : offset + int(np.prod(shape))
-                    ].reshape(shape)
-                )
-
-            import tvm_ffi
-
-            device.view = view
-            device.module.upload_bytes = lambda dst, src: pending.append(
-                (dst.array if isinstance(dst, Tensor) else dst, src)
-            )
-            device.runtime.cudaStreamIsCapturing = capture
-            device.runtime.cudaEventRecord = lambda *_: 0
-            device.upload_pool = UploadPool(device)
-            larger = device.upload_pool.acquire(1024)
-            device.upload_pool.release(larger)
-            uploads = Uploads(device)
-            target = Tensor(np.full((3, 4), -9, np.int32))
-            for capacity in (0, -1, True, 2.5):
-                with self.assertRaises(ValueError):
-                    uploads.prepare_range(target, capacity_bytes=capacity)
-            self.assertEqual(len(allocations), 1)
-            span = uploads.prepare_range(target, capacity_bytes=12)
-            self.assertEqual(span.staging_bytes, 16)
-            self.assertEqual(len(allocations), 2)
-            self.assertIs(uploads.prepare_range(target, capacity_bytes=12), span)
-            with self.assertRaises(ValueError):
-                uploads.prepare_range(target, capacity_bytes=16)
-            values = np.array([1, 99, 2, 99, 3], np.int32)[::2]
-            span.copy(values, offset=1)
-            values[:] = 77
-            self.assertEqual(target.array.reshape(-1).tolist(), [-9] * 12)
-            span.copy(np.array([[7], [8]], np.int32), offset=8)
-            self.assertEqual(
-                target.array.reshape(-1).tolist(),
-                [-9, 1, 2, 3, -9, -9, -9, -9, -9, -9, -9, -9],
-            )
-            before = len(events), len(pending), len(allocations)
-            span.copy(np.empty((0, 2), np.int32), offset=12)
-            for value, offset in (
-                ([1], 0),
-                (np.ones(1, np.float32), 0),
-                (np.ones(1, dtype=">i4"), 0),
-                (np.ones(1, np.int32), -1),
-                (np.ones(1, np.int32), True),
-                (np.ones(1, np.int32), 12),
-                (np.ones(4, np.int32), 0),
+        device = SimpleNamespace(
+            runtime=SimpleNamespace(
+                cudaHostAlloc=allocate,
+                cudaFreeHost=free,
+                cudaEventCreateWithFlags=lambda *_: 0,
+                cudaEventDestroy=lambda *_: 0,
+                cudaEventRecord=lambda *_: 0,
+                cudaEventSynchronize=lambda *_: 0,
+                cudaStreamIsCapturing=capture,
+            ),
+            checked=lambda status: self.assertEqual(status, 0),
+            wait_pinned_safe=lambda: None,
+            view=lambda value, shape, offset: value,
+        )
+        device.upload_pool = UploadPool(device)
+        upload = RangeUpload(
+            device, torch.empty(8, dtype=torch.int32, device="meta"), 32
+        )
+        try:
+            with (
+                patch(
+                    "oh_my_vllm.operators.runtime.uploads.torch.ops.oh_my_vllm.native_upload",
+                    side_effect=lambda *_: None,
+                ),
+                patch(
+                    "oh_my_vllm.operators.runtime.uploads.torch_adapter.current_stream",
+                    return_value=7,
+                ),
             ):
-                with self.assertRaises(ValueError):
-                    span.copy(value, offset=offset)
-            self.assertEqual(before, (len(events), len(pending), len(allocations)))
-            device.runtime.cudaStreamIsCapturing = captured
-            with self.assertRaises(RuntimeError):
-                uploads.prepare_range(target, capacity_bytes=12)
-            with self.assertRaises(RuntimeError):
-                span.copy(np.empty(0, np.int32), offset=12)
-            self.assertEqual(before, (len(events), len(pending), len(allocations)))
-            device.runtime.cudaStreamIsCapturing = capture
-            span.copy(np.array([5], np.int32))
-            for _ in range(20):
-                span.copy(np.array([5], np.int32))
-            self.assertEqual(len(allocations), 2)
-            uploads.close()
-            self.assertEqual(
-                target.array.reshape(-1).tolist(),
-                [5, 1, 2, 3, -9, -9, -9, -9, 7, 8, -9, -9],
-            )
-            with self.assertRaises(RuntimeError):
-                span.copy(np.empty(0, np.int32))
+                upload.copy(torch.arange(6, dtype=torch.int32).reshape(2, 3))
+        finally:
+            upload.close()
             device.upload_pool.close()
-            self.assertFalse(allocations)
 
-            device.upload_pool = UploadPool(device, limit=0)
-            uploads = Uploads(device)
-            span = uploads.prepare_range(target, capacity_bytes=4)
-            device.runtime.cudaEventRecord = lambda *_: 1
-            with self.assertRaises(AssertionError):
-                span.copy(np.array([13], np.int32))
-            self.assertEqual(target.array[0, 0], 13)
-            self.assertFalse(pending)
-            device.runtime.cudaEventRecord = lambda *_: 0
-            device.runtime.cudaFreeHost = lambda _: 1
-            with self.assertRaises(AssertionError):
-                uploads.close()
-            self.assertEqual(len(allocations), 1)
-            device.runtime.cudaFreeHost = release
-            uploads.close()
-            self.assertFalse(allocations)
+    def test_uploads_reject_numpy_runtime_buffers(self):
+        from oh_my_vllm.operators.runtime.uploads import Uploads
+
+        device = SimpleNamespace()
+        uploads = Uploads(device)
+        with self.assertRaisesRegex(ValueError, "CPU Torch"):
+            uploads.copy(torch.empty(1, device="cuda"), np.zeros(1, np.int32))
 
     def test_execute_delegates_prefill_and_mixed_graph_policy(self):
         worker = Worker.__new__(Worker)
@@ -438,6 +328,28 @@ class Execution(unittest.TestCase):
                 {row["request_id"] for row in result["outputs"]},
                 {row["request_id"] for row in rows},
             )
+
+    def test_execute_rejects_a_poisoned_device_before_model_work(self):
+        worker = Worker.__new__(Worker)
+        calls = []
+
+        def reject():
+            calls.append("health")
+            raise RuntimeError("CUDA Graph device is unusable")
+
+        worker.device = SimpleNamespace(ensure_healthy=reject)
+        worker.offload = SimpleNamespace(
+            check_execute=lambda *_: calls.append("offload")
+        )
+        with self.assertRaisesRegex(RuntimeError, "unusable"):
+            worker.execute(
+                dict(
+                    scheduled=[],
+                    finished_request_ids=[],
+                    preempted_request_ids=[],
+                )
+            )
+        self.assertEqual(calls, ["health"])
 
     def test_adaptive_prefill_reuses_only_successful_compatible_workspaces(self):
         from oh_my_vllm.models.qwen38 import model
@@ -704,57 +616,62 @@ class Execution(unittest.TestCase):
             finally:
                 operation.close()
 
+        events = []
+        device = Device.__new__(Device)
+        device.graph_failed = False
+        device.transfer_engines = set()
+        device.wait_pinned_safe = lambda: events.append("handoff")
+
+        class Graph:
+            def replay(self):
+                events.append("replay")
+
+            def reset(self):
+                events.append("reset")
+
+        @contextmanager
+        def capture(*_args, **_kwargs):
+            yield
+
         with (
-            patch("tvm_ffi.use_raw_stream") as use_stream,
-            patch("tvm_ffi.get_raw_stream", return_value=77),
+            patch("torch.cuda.CUDAGraph", return_value=Graph()),
+            patch("torch.cuda.graph_pool_handle", return_value="pool"),
+            patch("torch.cuda.Stream", return_value=SimpleNamespace()),
+            patch("torch.cuda.current_stream", return_value=SimpleNamespace()),
+            patch("torch.cuda.is_current_stream_capturing", return_value=False),
+            patch("torch.cuda.graph", side_effect=capture),
+            patch("oh_my_vllm.operators.runtime.device.torch_adapter.use_stream"),
+            patch("torch.cuda.synchronize", side_effect=lambda: events.append("sync")),
         ):
-            for failure in (
-                None,
-                "cudaStreamBeginCapture",
-                "cudaStreamEndCapture",
-                "cudaGraphInstantiateWithFlags",
-                "record",
-            ):
-                events = []
-                device = graph_device(events, failure)
-                owner = GraphOwner(events, failure == "record")
-                if failure:
-                    with (
-                        self.assertRaises(
-                            ValueError if failure == "record" else RuntimeError
-                        ),
-                        device.graph(owner.run),
-                    ):
-                        self.fail("failed recording must not produce a replay")
-                    self.assertEqual(events[-1][0], "release")
-                    self.assertIn("cudaStreamDestroy", [event[0] for event in events])
-                    continue
-                with device.graph(owner.run) as replay:
-                    self.assertNotIn("cudaGraphLaunch", [event[0] for event in events])
-                    replay()
-                    self.assertEqual(events[-1][-1], 77)
-                names = [event[0] for event in events]
-                self.assertLess(
-                    names.index("synchronize"), names.index("cudaGraphExecDestroy")
-                )
-                self.assertLess(
-                    names.index("cudaGraphExecDestroy"), names.index("release")
-                )
-                with self.assertRaisesRegex(RuntimeError, "closed"):
-                    replay()
-            events = []
-            device = graph_device(events)
-            with (
-                self.assertRaises(KeyboardInterrupt),
-                device.graph(GraphOwner(events).run) as replay,
-                patch.object(
-                    device.runtime, "cudaGraphLaunch", side_effect=KeyboardInterrupt
-                ),
-            ):
+            with device.graph(lambda: events.append("capture")) as replay:
                 replay()
-            self.assertEqual(events[-1][0], "release")
-            self.assertEqual(sum(event[0] == "synchronize" for event in events), 2)
-            self.assertEqual(use_stream.call_count, 6)
+            with self.assertRaisesRegex(RuntimeError, "closed"):
+                replay()
+        self.assertEqual(events, ["handoff", "capture", "replay", "sync", "reset"])
+
+    def test_graph_operation_converts_host_copies_to_torch(self):
+        from oh_my_vllm.models.qwen38.speculation import GraphOperation
+
+        copied = []
+
+        class Uploads:
+            def copy(self, destination, source):
+                copied.append((destination, source))
+
+            def close(self):
+                pass
+
+        operation = GraphOperation(SimpleNamespace(uploads=lambda: Uploads()))
+        source = torch.arange(4, dtype=torch.int32)
+        try:
+            operation.copy(object(), np.arange(4, dtype=np.int32))
+            operation.copy(object(), source)
+        finally:
+            operation.close()
+        self.assertIsInstance(copied[0][1], torch.Tensor)
+        self.assertEqual(copied[0][1].device.type, "cpu")
+        self.assertTrue(copied[0][1].is_contiguous())
+        self.assertIs(copied[1][1], source)
 
 
 if __name__ == "__main__":

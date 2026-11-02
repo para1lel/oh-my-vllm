@@ -62,7 +62,7 @@ def check_dependent_inputs(prepared, fixture, limits):
     for cycle in range(3):
         prepared.reset()
         for name in ("value", "residual"):
-            prepared.device.module.zero(prepared.inputs[name])
+            prepared.device.zero(prepared.inputs[name])
         prepared.invoke()
         if prepared.case.boundary == "ffn":
             for name, tensor in prepared.outputs.items():

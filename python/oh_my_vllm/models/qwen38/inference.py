@@ -227,6 +227,8 @@ class Worker:
         return outputs
 
     def execute(self, message):
+        if hasattr(self, "device"):
+            self.device.ensure_healthy()
         offload = getattr(self, "offload", None)
         if offload is not None:
             offload.check_execute(

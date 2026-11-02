@@ -15,7 +15,9 @@ fn host_swap_keeps_source_until_completion_and_cancel_drains_once() {
 
     let mut scheduler = make_scheduler(64, 16);
     scheduler.enable_host_cache(1 << 30);
-    assert!(scheduler.add_request(make_req(1, 8, 8)));
+    let mut request = make_req(1, 8, 8);
+    request.record_partial_prefix = false;
+    assert!(scheduler.add_request(request));
     scheduler.schedule();
     apply(
         &mut scheduler,
@@ -54,7 +56,9 @@ fn host_swap_restores_progress_and_drafts_without_recompute() {
 
     let mut scheduler = make_scheduler(64, 16);
     scheduler.enable_host_cache(1 << 30);
-    assert!(scheduler.add_request(make_req(1, 8, 8)));
+    let mut request = make_req(1, 8, 8);
+    request.record_partial_prefix = false;
+    assert!(scheduler.add_request(request));
     scheduler.schedule();
     apply(
         &mut scheduler,
@@ -330,7 +334,9 @@ fn declined_store_preserves_progress_and_does_not_block_other_waiters() {
 
     let mut scheduler = make_scheduler(64, 16);
     scheduler.enable_host_cache(1 << 30);
-    assert!(scheduler.add_request(make_req(1, 8, 8)));
+    let mut request = make_req(1, 8, 8);
+    request.record_partial_prefix = false;
+    assert!(scheduler.add_request(request));
     scheduler.schedule();
     apply(
         &mut scheduler,
@@ -366,7 +372,9 @@ fn declined_store_preserves_progress_and_does_not_block_other_waiters() {
         },
         HybridCoordinator::new(8, BS, true, 0).with_mamba_capacity(128),
     );
-    assert!(pressure.add_request(make_req(1, 16, 4)));
+    let mut resident = make_req(1, 16, 4);
+    resident.record_partial_prefix = false;
+    assert!(pressure.add_request(resident));
     pressure.schedule();
     apply(
         &mut pressure,
@@ -622,6 +630,39 @@ fn media_cache_salts_isolate_identical_placeholder_tokens() {
 }
 
 #[test]
+fn aligned_prompt_reuses_prefix_before_last_token() {
+    for (prompt_len, speculative) in [
+        (784, 0),
+        (784, 4),
+        (1568, 0),
+        (1568, 4),
+        (1569, 0),
+        (1569, 4),
+    ] {
+        let mut kv = HybridCoordinator::new(1400, 784, true, 0).with_mamba_capacity(128);
+        kv.set_speculative_blocks(speculative);
+        let mut scheduler = Scheduler::new(
+            SchedulerConfig {
+                max_num_batched_tokens: 32768,
+                max_num_seqs: 4,
+                enable_mtp: false,
+                mtp_draft_len: 0,
+            },
+            kv,
+        );
+        assert!(scheduler.add_request(make_req(1, prompt_len, 1)));
+        finish_prefills(&mut scheduler);
+        assert!(scheduler.add_request(make_req(2, prompt_len, 1)));
+        let batch = scheduler.schedule();
+        assert_eq!(batch.cache_hit_tokens, prompt_len - 1);
+        assert_eq!(batch.scheduled.len(), 1);
+        assert_eq!(batch.scheduled[0].num_computed_tokens, prompt_len - 1);
+        assert_eq!(batch.scheduled[0].token_ids.len(), 1);
+        scheduler.abort(2);
+    }
+}
+
+#[test]
 fn malformed_output_does_not_publish_pending_prefix_and_keeps_valid_history() {
     for (length, completed) in [(9, 4), (10, 8)] {
         let mut sched = make_scheduler(64, 4);
@@ -721,7 +762,9 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
         },
         kv,
     );
-    scheduler.add_request(make_req(1, 4, 10));
+    let mut request = make_req(1, 4, 10);
+    request.record_partial_prefix = false;
+    scheduler.add_request(request);
     scheduler.schedule();
     apply(
         &mut scheduler,
@@ -777,7 +820,9 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
     concurrent.config.enable_mtp = true;
     concurrent.config.mtp_draft_len = 2;
     for id in 1..=2 {
-        assert!(concurrent.add_request(make_req(id, 4, 8)));
+        let mut request = make_req(id, 4, 8);
+        request.record_partial_prefix = false;
+        assert!(concurrent.add_request(request));
     }
     concurrent.schedule();
     apply(
@@ -835,7 +880,9 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
     let mut residual = make_scheduler(64, 16);
     residual.config.enable_mtp = true;
     residual.config.mtp_draft_len = 4;
-    assert!(residual.add_request(make_req(1, 4, 8)));
+    let mut request = make_req(1, 4, 8);
+    request.record_partial_prefix = false;
+    assert!(residual.add_request(request));
     residual.schedule();
     apply(
         &mut residual,
@@ -1165,8 +1212,8 @@ fn prefill_budget_prefers_blocks_then_tokens_then_fewer_suffixes() {
         }
     }
     for (budget, lengths, expected) in [
-        (24, [20, 100, 100], vec![20, 4]),
-        (24, [4, 100, 100], vec![4, 20]),
+        (24, [20, 100, 100], vec![16, 8]),
+        (24, [4, 100, 100], vec![24]),
         (3, [20, 100, 100], vec![3]),
     ] {
         let mut scheduler = make_scheduler(128, budget);
@@ -1236,7 +1283,7 @@ fn prefill_budget_prefers_blocks_then_tokens_then_fewer_suffixes() {
         (767, vec![317, 450], vec![(1, 316), (2, 449)]),
         (800, vec![401, 401], vec![(1, 400), (2, 400)]),
         (784, vec![317, 450, 1000], vec![(3, 784)]),
-        (2353, vec![784, 3136], vec![(1, 784), (2, 1569)]),
+        (2353, vec![784, 3136], vec![(1, 1), (2, 2352)]),
         (100, vec![51, 51, 101], vec![(3, 100)]),
     ] {
         let mut scheduler = production_long_scheduler(if budget == 784 {

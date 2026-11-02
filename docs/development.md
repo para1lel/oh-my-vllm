@@ -1,31 +1,35 @@
 # Development setup
 
-Use Python 3.12, Rust, uv, and Node 24 or later for development.
+Use Python 3.15.2, Rust, pip, and Node 24 or later for development.
 The Conda definition supplies Python and Rust.
-Use the hook dependency versions from the Python and JavaScript lock files.
-
-Use different files for development and runtime dependencies.
+`requirements/runtime.txt` supplies the inference packages.
+`requirements/development.txt` supplies the development packages and includes the runtime file.
 
 ## Installation
 
-Install Conda, uv, and Node first.
+Install Conda and Node first.
 Do these commands:
 
 ```bash
 conda env create -f environment.yml
 conda activate oh-my-vllm
-uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/development.txt -r requirements/runtime.txt
+export OH_MY_VLLM_CONDA_PREFIX="$CONDA_PREFIX"
+PYZMQ_BACKEND=cffi python -m pip install --ignore-requires-python -r requirements/development.txt
 npm --prefix development/javascript ci --ignore-scripts --no-audit --no-fund
 scripts/with-env.sh pre-commit install
 ```
 
 If the environment is available, do the last four commands.
-The wrapper selects `OH_MY_VLLM_CONDA_PREFIX`, then `CONDA_PREFIX`, then `VIRTUAL_ENV`, then the repository `.venv`.
+The wrapper accepts only `OH_MY_VLLM_CONDA_PREFIX` and the `oh-my-vllm` Conda environment.
+The `PYZMQ_BACKEND=cffi` setting builds the CPython 3.15 binding against the
+selected Conda ZeroMQ library.
+The `--ignore-requires-python` option is required because the current AgentX
+wheel has an outdated Python upper bound.
 
 Use `scripts/with-env.sh` for Python and Cargo commands.
 The wrapper sets the executable paths, Python module paths, worker interpreter, and Cargo build output.
-
-Install the [runtime packages](../requirements/runtime.txt) for service work.
+Do not create a repository virtual environment.
+The development installation includes the runtime packages.
 
 ## Git hooks
 
@@ -56,16 +60,12 @@ Agents do the tests in the repository for the maintainer.
 
 ## Native modules
 
-Use CUDA 13.1. Keep host paths in ignored `LOCAL.md`.
+Use a CUDA 13.4 toolkit for native builds. Keep host paths in ignored `LOCAL.md`.
 Set `CUDA_HOME` to the CUDA installation directory.
-Install the kernel development packages:
+The development file installs the native build packages and includes `requirements/runtime.txt`.
+If CUDA 13.4 is not available, stop before a native rebuild. Do not mix CUDA
+13.2 headers with the CUDA 13.4 Torch runtime.
 
-```bash
-scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/kernel-development.txt
-```
-
-The inference bindings are in `requirements/kernels.txt`.
-Development packages are not worker dependencies.
 Set `CUTLASS_ROOT` to an external dependency directory.
 Get the specified headers:
 

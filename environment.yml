@@ -2,5 +2,20 @@ name: oh-my-vllm
 channels:
   - conda-forge
 dependencies:
-  - python=3.12.14
+  - python=3.15.2
   - rust=1.97.0
+  - cuda-nvcc=13.4.92
+  - cuda-cudart-dev=13.4.92
+  - cuda-crt=13.4.92
+  - cuda-nvrtc-dev=13.4.92
+  - zeromq
+  - jpeg
+  - zlib
+  - libpng
+  - freetype
+  - libtiff
+  - openjpeg
+  - libwebp
+  - lcms2
+  - libimagequant
+  - libraqm

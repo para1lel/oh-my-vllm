@@ -2,9 +2,13 @@ from contextlib import ExitStack, contextmanager
 from time import perf_counter
 
 import numpy as np
-import tvm_ffi
+import torch
 
 from .storage import decode, equal_bits, state_rows, storage_dtype
+
+
+def dtype_name(tensor):
+    return str(tensor.dtype).removeprefix("torch.")
 
 
 class PreparedCase:
@@ -31,10 +35,10 @@ class PreparedCase:
         result = {}
         for name, initial in arrays.items():
             host = np.require(initial, requirements=["C", "W"])
-            source = tvm_ffi.from_dlpack(host)
             target = self.device.empty(host.shape, self.fixture.dtype(group, name))
-            self.device.module.copy_bytes(target, source)
-            self.host.append((host, source))
+            source = torch.from_numpy(host)
+            self.device.copy(target, source)
+            self.host.append(host)
             self.restores.append((target, source))
             result[name] = target
         return result
@@ -53,7 +57,7 @@ class PreparedCase:
     def reset(self):
         self.require_open()
         for target, source in self.restores:
-            self.device.module.copy_bytes(target, source)
+            self.device.copy(target, source)
 
     def stage_resets(self):
         self.require_open()
@@ -61,7 +65,7 @@ class PreparedCase:
         staged = []
         for target in self.state.values():
             source = self.device.empty(tuple(target.shape), str(target.dtype))
-            self.device.module.copy_bytes(source, target)
+            self.device.copy(source, target)
             staged.append((target, source))
         self.device.synchronize()
         self.restores = staged
@@ -106,10 +110,10 @@ class PreparedCase:
         (self.replay or self.run)()
 
     def raw(self, tensor):
-        return self.device.download(tensor, storage_dtype(str(tensor.dtype)))
+        return self.device.download(tensor, storage_dtype(dtype_name(tensor))).numpy()
 
     def download(self, tensor):
-        return decode(self.raw(tensor), str(tensor.dtype))
+        return decode(self.raw(tensor), dtype_name(tensor))
 
     def observe(self):
         self.require_open()
@@ -125,7 +129,7 @@ class PreparedCase:
             rows = state_rows(raw, write["layout"])
             initial = state_rows(self.fixture.state[name], write["layout"])
             indices = np.asarray(write["indices"], dtype=np.int64)
-            actual[write["output"]] = decode(rows[indices], str(tensor.dtype))
+            actual[write["output"]] = decode(rows[indices], dtype_name(tensor))
             untouched = np.ones(len(rows), dtype=bool)
             untouched[indices] = False
             guards.append(equal_bits(rows[untouched], initial[untouched]))

@@ -106,7 +106,7 @@ class DraftChain:
         # Eligibility makes the mask independent of the unknown draft prefix.
         sampler.inputs.update(requests, [[] for _ in requests], "proposal")
         if not sampler.inputs.history_needed:
-            sampler.inputs.presence_history.fill(0)
+            sampler.inputs.presence_history.fill_(0)
         sampler.uploads.copy(sampler.presence_history, sampler.inputs.presence_history)
         if sampler.inputs.mask_changed:
             sampler.uploads.copy(sampler.mask, sampler.inputs.mask)
@@ -178,7 +178,7 @@ class DraftChain:
                             local * 248320,
                         ),
                     )
-        tokens = d.download(self.tokens, np.int64)
+        tokens = d.download(self.tokens, None)
         for local, request in enumerate(requests):
             request.drafts = tokens[:, local].tolist()
             if not request.drafts_greedy:

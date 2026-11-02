@@ -49,8 +49,8 @@ class PinnedTransfers(unittest.TestCase):
         self.assertFalse(allocations)
         idle[0] = True
         first, second = pool.acquire(256), pool.acquire(512)
-        first.array[:] = 17
-        second.array[:] = 29
+        first.tensor[:] = 17
+        second.tensor[:] = 29
         self.assertEqual(pool.allocated_bytes, 1024)
         self.assertEqual(pool.used_bytes, 768)
         idle[0] = False
@@ -58,7 +58,6 @@ class PinnedTransfers(unittest.TestCase):
         self.assertIsNone(first.pool)
         self.assertIsNone(first.slab)
         self.assertIsNone(first.tensor)
-        self.assertIsNone(first.array)
         self.assertEqual(pool.used_bytes, 512)
         with self.assertRaises(ValueError):
             pool.release(first)
@@ -68,11 +67,11 @@ class PinnedTransfers(unittest.TestCase):
         fourth = pool.acquire(256)
         self.assertIsNotNone(third)
         self.assertIsNotNone(fourth)
-        self.assertNotEqual(third.array.ctypes.data, fourth.array.ctypes.data)
-        third.array[:] = 42
-        fourth.array[:] = 53
-        self.assertTrue((third.array == 42).all())
-        self.assertTrue((second.array == 29).all())
+        self.assertNotEqual(third.tensor.data_ptr(), fourth.tensor.data_ptr())
+        third.tensor[:] = 42
+        fourth.tensor[:] = 53
+        self.assertTrue((third.tensor == 42).all())
+        self.assertTrue((second.tensor == 29).all())
         self.assertEqual(pool.used_bytes, 1024)
         self.assertIsNone(pool.acquire(512))
         second.close()

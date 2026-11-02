@@ -103,6 +103,110 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
     }
 
     #[test]
+    fn python_deepseek_ready_uses_checkpoint_windows_and_rejects_stale_layouts() {
+        let python =
+            std::env::var_os("OH_MY_VLLM_WORKER_PYTHON").unwrap_or_else(|| "python3".into());
+        let source = r#"
+import json
+import sys
+from tests.test_deepseek_descriptor import (
+    MODEL_CONFIG, RAW_CONFIG, checkpoint_identity, tokenizer_identity,
+)
+from oh_my_vllm.models.deepseek_v41.descriptor import build_descriptor
+d = build_descriptor(
+    MODEL_CONFIG, raw_config=RAW_CONFIG, checkpoint_identity=checkpoint_identity(),
+    tokenizer_identity=tokenizer_identity(), strategy=sys.argv[1],
+    cache_capacities=dict(window=7, compressed_kv=17, index_keys=17, accepted_state=7),
+)
+print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_blocks=7)))
+"#;
+        let policy = ModelPolicy::for_family(ModelFamily::DeepSeekV41);
+        let config = WorkerConfig {
+            num_gpu_blocks: Some(17),
+            mamba_blocks: Some(7),
+            ..WorkerConfig::for_model("/synthetic-deepseek".into(), policy)
+        };
+        let accepts = |ready: Value| {
+            let bytes = encode(&ready).unwrap();
+            let Ok(WorkerMessage::Ready {
+                descriptor,
+                logical_num_blocks,
+                mamba_blocks,
+                ..
+            }) = decode(&bytes)
+            else {
+                return false;
+            };
+            validate_ready(
+                policy,
+                &config,
+                &descriptor,
+                logical_num_blocks,
+                mamba_blocks,
+            )
+            .is_ok()
+        };
+        for strategy in ["tp4", "tep4", "dep4"] {
+            let output = Command::new(&python)
+                .args(["-c", source, strategy])
+                .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+                .env("CUDA_VISIBLE_DEVICES", "")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let ready: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert!(
+                accepts(ready.clone()),
+                "rejected checkpoint windows: {strategy}"
+            );
+            for (path, value) in [
+                (
+                    "/descriptor/cache_schema/groups/0/capacity_blocks",
+                    json!(17),
+                ),
+                (
+                    "/descriptor/cache_schema/groups/3/capacity_blocks",
+                    json!(8),
+                ),
+                (
+                    "/descriptor/cache_schema/groups/1/capacity_blocks",
+                    json!(16),
+                ),
+                (
+                    "/descriptor/cache_schema/groups/2/capacity_blocks",
+                    json!(16),
+                ),
+                (
+                    "/descriptor/cache_schema/groups/0/storage/id",
+                    json!("deepseek_v41_sliding_window_kv_bf16"),
+                ),
+                (
+                    "/descriptor/cache_schema/groups/3/storage/id",
+                    json!("deepseek_v41_accepted_state_v1"),
+                ),
+                (
+                    "/descriptor/cache_schema/groups/0/storage/version",
+                    json!(2),
+                ),
+                (
+                    "/descriptor/cache_schema/groups/3/storage/version",
+                    json!(2),
+                ),
+                ("/logical_num_blocks", json!(16)),
+                ("/mamba_blocks", json!(8)),
+            ] {
+                let mut changed = ready.clone();
+                *changed.pointer_mut(path).unwrap() = value;
+                assert!(!accepts(changed), "accepted {path}: {strategy}");
+            }
+        }
+    }
+
+    #[test]
     fn python_qwen_ready_agrees_with_rust_and_rejects_altered_contracts() {
         for drafts in [0, 4] {
             let (json_bytes, bytes) = python_ready(drafts);

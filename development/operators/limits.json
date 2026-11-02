@@ -58656,9 +58656,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -59012,9 +59012,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -59392,9 +59392,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -59772,9 +59772,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -60152,9 +60152,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -60532,9 +60532,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -60888,9 +60888,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -61268,9 +61268,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -61600,9 +61600,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -62076,9 +62076,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -62552,9 +62552,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -62836,9 +62836,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -63120,9 +63120,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -63404,9 +63404,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -63688,9 +63688,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -63996,9 +63996,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -64232,9 +64232,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -64468,9 +64468,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -64704,9 +64704,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -64940,9 +64940,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -65176,9 +65176,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -65436,9 +65436,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -65696,9 +65696,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -65956,9 +65956,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -66216,9 +66216,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -66476,9 +66476,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -66736,9 +66736,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -66996,9 +66996,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -67256,9 +67256,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -67516,9 +67516,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -67776,9 +67776,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -68108,9 +68108,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -68440,9 +68440,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -68772,9 +68772,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -69104,9 +69104,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -69436,9 +69436,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -69864,9 +69864,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -70340,9 +70340,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -70864,9 +70864,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -71316,9 +71316,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -71816,9 +71816,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -73036,9 +73036,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -74448,9 +74448,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -75764,9 +75764,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -76048,9 +76048,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -76332,9 +76332,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -76616,9 +76616,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -76852,9 +76852,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -77136,9 +77136,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -77612,9 +77612,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -78088,9 +78088,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -78564,9 +78564,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -79016,9 +79016,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -79468,9 +79468,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -79920,9 +79920,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -80468,9 +80468,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
@@ -81016,9 +81016,9 @@
         "version": "operator-timing-v2",
         "sources": {
           "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
-          "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+          "graph": "a556bf73bc6d79f1371cf68a8ebd3f8d7f991f19482eed5842849d027cd0062a"
         },
-        "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+        "graph": "torch-cudagraph; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": 0.02,
         "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"

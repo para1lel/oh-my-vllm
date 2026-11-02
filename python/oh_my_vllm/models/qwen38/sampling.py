@@ -1,6 +1,6 @@
 from contextlib import ExitStack
 
-import numpy as np
+import torch
 
 from ...operators.output import api as output
 from ...operators.output.plan import make_plan
@@ -10,15 +10,15 @@ from ...worker.constraints import batch_masks
 
 class SamplingInputs:
     def __init__(self, rows):
-        self.full_history = np.empty((rows, 2, 248320), dtype=np.int32)
-        self.presence_history = np.empty((rows, 248320 // 8), dtype=np.uint8)
+        self.full_history = torch.empty((rows, 2, 248320), dtype=torch.int32)
+        self.presence_history = torch.empty((rows, 248320 // 8), dtype=torch.uint8)
         self.history = self.full_history
         self.compact = False
-        self.mask = np.empty((rows, 248320 // 8), dtype=np.uint8)
+        self.mask = torch.empty((rows, 248320 // 8), dtype=torch.uint8)
         self.mask_keys = [None] * rows
         self.mask_changed = True
-        self.parameters = np.empty((rows, 7), dtype=np.float32)
-        self.random = np.empty((rows, 2), dtype=np.uint64)
+        self.parameters = torch.empty((rows, 7), dtype=torch.float32)
+        self.random = torch.empty((rows, 2), dtype=torch.uint64)
         self.history_needed = False
         self.field = "random_offset"
 
@@ -27,25 +27,42 @@ class SamplingInputs:
         for request in requests:
             if id(request) not in parameters:
                 parameters[id(request)] = request.parameters()
-        self.parameters[:] = [parameters[id(request)] for request in requests]
-        self.history_needed = bool(
-            np.any(self.parameters[:, 4:6] != 0) or np.any(self.parameters[:, 6] != 1)
-        )
-        self.compact = bool(
-            np.all(self.parameters[:, 4] == 0) and np.all(self.parameters[:, 6] == 1)
-        )
+        if requests:
+            self.parameters.copy_(
+                torch.stack(
+                    [
+                        torch.as_tensor(parameters[id(request)], dtype=torch.float32)
+                        for request in requests
+                    ]
+                )
+            )
+            self.history_needed = bool(
+                torch.any(self.parameters[:, 4:6] != 0)
+                or torch.any(self.parameters[:, 6] != 1)
+            )
+            self.compact = bool(
+                torch.all(self.parameters[:, 4] == 0)
+                and torch.all(self.parameters[:, 6] == 1)
+            )
+        else:
+            self.parameters.zero_()
+            self.random.zero_()
+            self.history_needed = False
+            self.compact = True
         self.history = self.presence_history if self.compact else self.full_history
         self.field = "proposal_offset" if stream == "proposal" else "random_offset"
+        # Torch rejects a uint64 scalar above the int64 maximum.
+        seeds = self.random.view(torch.int64)[:, 0]
         self.mask_changed = False
         pending = []
         for index, (history, request, prefix) in enumerate(
-            zip(self.history, requests, prefixes, strict=True)
+            zip(self.history[: len(requests)], requests, prefixes, strict=True)
         ):
             if self.history_needed:
                 if self.compact:
-                    history[:] = request.presence
+                    history.copy_(torch.as_tensor(request.presence, dtype=torch.uint8))
                 else:
-                    history[:] = request.counts
+                    history.copy_(torch.as_tensor(request.counts, dtype=torch.int32))
             constraint = request.constraint
             grammar_prefix = []
             thinking, thinking_count = request.thinking, request.thinking_count
@@ -85,9 +102,10 @@ class SamplingInputs:
                 self.mask_changed = True
                 self.mask_keys[index] = None
                 if key in request.sample_masks:
-                    self.mask[index] = np.frombuffer(
-                        request.sample_masks[key], np.uint8
+                    cached = torch.frombuffer(
+                        bytearray(request.sample_masks[key]), dtype=torch.uint8
                     )
+                    self.mask[index].copy_(cached)
                     self.mask_keys[index] = key
                 else:
                     pending.append(
@@ -104,7 +122,8 @@ class SamplingInputs:
                         )
                     )
             seed = request.seed ^ (0x9E3779B97F4A7C15 if stream == "proposal" else 0)
-            self.random[index] = (seed, getattr(request, self.field))
+            seeds[index] = seed if seed < 1 << 63 else seed - (1 << 64)
+            self.random[index, 1] = getattr(request, self.field)
         constrained = [
             item for item in pending if not item[3] and item[2].matcher is not None
         ]
@@ -134,9 +153,26 @@ class SamplingInputs:
             mask = request.mask(
                 constraint, thinking, generated, thinking_count, prefix, mask
             )
-            self.mask[index] = np.packbits(mask, bitorder="little")
-            request.sample_masks[key] = self.mask[index].tobytes()
+            packed = _pack_mask(torch.as_tensor(mask, dtype=torch.uint8))
+            self.mask[index].copy_(packed)
+            request.sample_masks[key] = self.mask[index].numpy().tobytes()
             self.mask_keys[index] = key
+
+
+def _pack_mask(mask):
+    if mask.numel() % 8:
+        raise ValueError("sampling masks must contain a multiple of eight tokens")
+    mask = mask.reshape(-1, 8)
+    return (
+        mask[:, 0]
+        | (mask[:, 1] << 1)
+        | (mask[:, 2] << 2)
+        | (mask[:, 3] << 3)
+        | (mask[:, 4] << 4)
+        | (mask[:, 5] << 5)
+        | (mask[:, 6] << 6)
+        | (mask[:, 7] << 7)
+    )
 
 
 class Sampling:
@@ -210,7 +246,7 @@ class Sampling:
     ):
         d = self.device
         if self.last_indices != indices:
-            self.uploads.copy(self.indices, np.asarray(indices, np.int32))
+            self.uploads.copy(self.indices, torch.as_tensor(indices, dtype=torch.int32))
             self.last_indices = list(indices)
         d.module.gather_rows(self.value, value, self.indices)
         d.module.gather_rows(self.residual, residual, self.indices)
@@ -223,7 +259,7 @@ class Sampling:
         prefixes = [[] for _ in requests] if prefixes is None else prefixes
         d = self.device
         self.inputs.update(requests, prefixes, stream)
-        self.greedy = bool(np.all(self.inputs.parameters[:, 0] == 0))
+        self.greedy = bool(torch.all(self.inputs.parameters[:, 0] == 0))
         if self.inputs.history_needed:
             self.uploads.copy(
                 self.presence_history if self.inputs.compact else self.history,
@@ -242,8 +278,13 @@ class Sampling:
         )
         tokens = None
         if sample:
-            tokens = d.download(self.operation.outputs.tokens, np.int64)
-            counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0)
+            tokens = d.download(self.operation.outputs.tokens, None)
+            counters = [
+                int(offset) + int(temperature > 0)
+                for offset, temperature in zip(
+                    self.inputs.random[:, 1], self.inputs.parameters[:, 0], strict=True
+                )
+            ]
             for request, counter in zip(requests, counters, strict=True):
                 setattr(request, self.inputs.field, int(counter))
         return tokens, self.operation.outputs.probabilities

@@ -6,11 +6,9 @@ The worker loads the local checkpoint. It uses the repository CUDA modules.
 ## Start
 
 Use the [development environment](development.md).
-Install the runtime packages:
-
-```bash
-scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/runtime.txt -r requirements/kernels.txt
-```
+`requirements/runtime.txt` supplies the service and inference packages.
+`requirements/development.txt` includes the runtime file.
+One development installation is sufficient.
 
 Build the executable:
 

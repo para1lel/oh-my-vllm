@@ -1,9 +1,9 @@
 import ctypes
 from dataclasses import dataclass
 
-import numpy as np
-import tvm_ffi
+import torch
 
+from . import torch_adapter
 from .uploads import HostStorage
 
 
@@ -12,8 +12,7 @@ class HostSlice:
         self.pool, self.slab = pool, slab
         self.offset, self.size, self.reserved = offset, size, reserved
         memory = (ctypes.c_uint8 * size).from_address(slab.pointer.value + offset)
-        self.array = np.ndarray((size,), np.uint8, buffer=memory)
-        self.tensor = tvm_ffi.from_dlpack(self.array)
+        self.tensor = torch.frombuffer(memory, dtype=torch.uint8, count=size)
 
     def close(self):
         if self.pool is not None:
@@ -81,7 +80,7 @@ class PinnedPool:
                 merged.append((offset, size))
         self.slabs[value.slab] = merged
         self.used_bytes -= value.reserved
-        value.pool = value.slab = value.tensor = value.array = None
+        value.pool = value.slab = value.tensor = None
 
     def trim(self):
         if not self.quiescent():
@@ -150,11 +149,11 @@ class TransferEngine:
         stream = self.streams[direction]
         runtime, checked = self.device.runtime, self.device.checked
         try:
-            compute = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+            compute = torch_adapter.current_stream("cuda:0")
             checked(runtime.cudaEventRecord(producer, compute))
             checked(runtime.cudaStreamWaitEvent(stream, producer, 0))
-            self.device.module.copy_batch(
-                transfer.destinations, transfer.sources, stream.value
+            torch.ops.oh_my_vllm.native_copy_batch(
+                transfer.sources, transfer.destinations, stream.value
             )
             checked(runtime.cudaEventRecord(complete, stream))
         except BaseException:
@@ -180,7 +179,7 @@ class TransferEngine:
         return completed
 
     def quiescent(self):
-        compute = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+        compute = torch_adapter.current_stream("cuda:0")
         return all(
             self.ready(self.device.runtime.cudaStreamQuery(stream))
             for stream in (compute, *self.streams.values())

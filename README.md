@@ -14,6 +14,7 @@ The service supplies Chat and Responses APIs, streaming, tools, and structured o
 | Adapter | Execution | Status and documents |
 |---|---|---|
 | Qwen3.8-27B-FP8 | One B200, ordinary decode and MTP4, 262144 total tokens | [Implemented adapter](docs/models/qwen38/README.md), [latest HTTP results](docs/models/qwen38/results.md) |
+| DeepSeek-V4.1-Flash | Four GPUs, text target decode and DSpark5 | [Adapter](docs/models/deepseek_v41/README.md), [HTTP procedure](docs/models/deepseek_v41/performance.md), [AgentX procedure](docs/models/deepseek_v41/agentx.md) |
 
 Only the listed adapter can start a model service. Unknown models cause startup errors.
 

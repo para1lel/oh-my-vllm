@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
+import torch
 from oh_my_vllm.models.qwen38.cache import Cache
 from oh_my_vllm.models.qwen38.inference import Worker
 from oh_my_vllm.worker.placeholder import Worker as StubWorker
@@ -45,9 +46,23 @@ class Transfers:
         result, self.completed = self.completed, []
         for job_id in result:
             for destination, source in self.jobs.pop(job_id):
+                destination_value = destination()
+                if isinstance(destination_value, torch.Tensor):
+                    destination_value = destination_value.view(torch.uint8).numpy()
+                elif isinstance(destination_value, np.ndarray):
+                    destination_value = destination_value.view(np.uint8)
+                else:
+                    destination_value = destination_value.view(np.uint8)
+                source_value = source()
+                if isinstance(source_value, torch.Tensor):
+                    source_value = source_value.view(torch.uint8).numpy()
+                elif isinstance(source_value, np.ndarray):
+                    source_value = source_value.view(np.uint8)
+                else:
+                    source_value = source_value.view(np.uint8)
                 np.copyto(
-                    destination().view(np.uint8).reshape(-1),
-                    source().view(np.uint8).reshape(-1),
+                    destination_value.reshape(-1),
+                    source_value.reshape(-1),
                 )
         return result
 
@@ -123,7 +138,10 @@ def worker_fixture():
     cache.hidden = np.arange(16 * 5, dtype=np.float32).reshape(16, 5)
     proposals = np.arange(4 * 11, dtype=np.float32).reshape(4, 11)
     media = SimpleNamespace(
-        embedding=Tensor(np.arange(3 * 5, dtype=np.float32).reshape(3, 5)),
+        embedding=torch.tensor(
+            np.arange(3 * 5, dtype=np.uint16).reshape(3, 5),
+            dtype=torch.uint16,
+        ),
         pixels=None,
         grid=(2, 2),
         spans=[(5, 3, 0)],
@@ -200,7 +218,7 @@ class OffloadWorker(unittest.TestCase):
             )
         ]
         proposals = request.proposals.copy()
-        embedding = request.media[0].embedding.copy()
+        embedding = request.media[0].embedding.clone()
         self.assertEqual(
             worker.offload.stats()["host_cache_capacity_bytes"], pool.limit
         )
@@ -230,7 +248,8 @@ class OffloadWorker(unittest.TestCase):
             self.assertEqual(worker.cache.indices, {})
             self.assertIsNone(request.state_slot)
             self.assertIsNone(request.proposals)
-            self.assertIsNone(request.media[0].embedding)
+            self.assertEqual(request.media[0].embedding.device.type, "cpu")
+            self.assertTrue(torch.equal(request.media[0].embedding, embedding))
             for array in (
                 *worker.cache.state,
                 *worker.cache.convolution,
@@ -271,7 +290,8 @@ class OffloadWorker(unittest.TestCase):
             np.testing.assert_array_equal(request.proposals, proposals)
             for index, row in enumerate(request.proposal_rows):
                 np.testing.assert_array_equal(row, proposals[index : index + 1])
-            np.testing.assert_array_equal(request.media[0].embedding, embedding)
+            self.assertEqual(request.media[0].embedding.device.type, "cpu")
+            self.assertTrue(torch.equal(request.media[0].embedding, embedding))
             for key, value in cpu.items():
                 self.assertIs(getattr(request, key), value, key)
             self.assertEqual(request.decoder.getstate(), decoder_state)
@@ -295,6 +315,7 @@ class OffloadWorker(unittest.TestCase):
                 patch("tvm_ffi.from_dlpack", side_effect=lambda value: value),
             ):
                 worker, request, engine, pool = worker_fixture()
+                embedding = request.media[0].embedding
                 exchange(worker, operation(1, "store"))
                 if kind == "drop_before_abort":
                     engine.completed = [1]
@@ -330,7 +351,8 @@ class OffloadWorker(unittest.TestCase):
                 self.assertEqual(worker.cache.indices, {})
                 self.assertIsNone(request.state_slot)
                 self.assertIsNone(request.proposals)
-                self.assertIsNone(request.media[0].embedding)
+                self.assertEqual(request.media[0].embedding.device.type, "cpu")
+                self.assertTrue(torch.equal(request.media[0].embedding, embedding))
                 exchange(worker, operation(3, "drop", fa=(), mamba=()))
                 self.assertNotIn(7, worker.offload.suspended)
                 self.assertEqual(pool.used_bytes, 0)
@@ -339,6 +361,24 @@ class OffloadWorker(unittest.TestCase):
     def test_prefix_capacity_deferral_validation_and_shutdown(self):
         with patch("tvm_ffi.from_dlpack", side_effect=lambda value: value):
             worker, _, engine, pool = worker_fixture()
+            empty = exchange(
+                worker,
+                operation(
+                    1001, "store", snapshot_id=1001, request_id=None, fa=(), mamba=()
+                ),
+            )["completed"][0]
+            self.assertEqual(
+                empty, {"transfer_id": 1001, "status": "complete", "bytes": 0}
+            )
+            self.assertEqual(
+                exchange(
+                    worker,
+                    operation(
+                        1002, "drop", snapshot_id=1001, request_id=None, fa=(), mamba=()
+                    ),
+                )["completed"][0]["status"],
+                "complete",
+            )
             store = operation(1, "store", request_id=None)
             pool.blocked, engine.idle = True, False
             self.assertEqual(
@@ -468,6 +508,45 @@ class OffloadWorker(unittest.TestCase):
                 self.assertEqual(stats["host_cache_completed_transfers"], 2)
                 self.assertEqual(stats["host_cache_used_bytes"], 0)
 
+    def test_media_cpu_torch_embedding_stays_host_and_reencodes(self):
+        from oh_my_vllm.models.qwen38.media import MediaProcessor
+
+        class Device:
+            def __init__(self):
+                self.copies = []
+                self.downloads = 0
+
+            def download(self, value, dtype):
+                self.downloads += 1
+                return value.view(torch.uint16)
+
+            def scratch(self, shape, dtype):
+                self.scratches = getattr(self, "scratches", [])
+                self.scratches.append((shape, dtype))
+                return torch.empty(shape, dtype=torch.bfloat16)
+
+            def copy(self, destination, source):
+                self.copies.append((destination, source))
+
+            def synchronize_compute(self):
+                pass
+
+        device = Device()
+        processor = MediaProcessor.__new__(MediaProcessor)
+        processor.device = device
+        embedding = torch.tensor(
+            np.arange(3 * 5, dtype=np.uint16).reshape(3, 5),
+            dtype=torch.uint16,
+        )
+        item = SimpleNamespace(embedding=embedding, pixels=None)
+        processor.offload(SimpleNamespace(media=[item]))
+        self.assertIs(item.embedding, embedding)
+        self.assertEqual(device.downloads, 0)
+        value = processor.encode(item)
+        self.assertIs(item.embedding, value)
+        self.assertIs(device.copies[0][1], embedding)
+        self.assertEqual(value.dtype, torch.bfloat16)
+
     def test_graph_warmup_and_metadata_use_compute_and_reusable_uploads(self):
         from oh_my_vllm.models.qwen38.model import Workspace
         from oh_my_vllm.models.qwen38.sampling import Sampling
@@ -493,6 +572,9 @@ class OffloadWorker(unittest.TestCase):
             synchronize_compute=lambda: events.append("wait_compute"),
             graph=lambda operation: nullcontext(operation),
             uploads=uploads,
+            copy=lambda destination, source: native_copies.append(
+                (destination, source)
+            ),
             module=SimpleNamespace(
                 copy_bytes=lambda destination, source: native_copies.append(
                     (destination, source)
@@ -518,7 +600,7 @@ class OffloadWorker(unittest.TestCase):
         np.testing.assert_array_equal(destination, source)
         operation.copy(destination, source + 1)
         self.assertEqual(upload_events, ["create", "copy", "copy"])
-        gpu_source = object()
+        gpu_source = torch.empty(4, dtype=torch.int32, device="meta")
         operation.copy(destination, gpu_source)
         self.assertEqual(len(native_copies), 1)
         self.assertIs(native_copies[0][1], gpu_source)

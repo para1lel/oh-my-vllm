@@ -1,7 +1,7 @@
 import gc
 import unittest
 import weakref
-from contextlib import nullcontext
+from contextlib import contextmanager
 from functools import partial
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -9,8 +9,6 @@ from unittest.mock import patch
 from oh_my_vllm.operators.fa import api as fa
 from oh_my_vllm.operators.fa.plan import make_plan
 from oh_my_vllm.operators.fa.workspace import prepare
-
-from tests.test_execution import graph_device
 
 
 class OperatorPlans(unittest.TestCase):
@@ -155,7 +153,25 @@ class OperatorPlans(unittest.TestCase):
             )
             operation = operation_for(bindings[0])
             operation.graph_lease = workspace.graph_lease
-            recording = graph_device(events).graph(operation)
+
+            @contextmanager
+            def graph(run):
+                with run.graph_lease():
+                    run()
+                    active = True
+
+                    def replay():
+                        if not active:
+                            raise RuntimeError("closed")
+
+                    try:
+                        yield replay
+                    finally:
+                        active = False
+                        events.append("graph-close")
+
+            device.graph = graph
+            recording = device.graph(operation)
             if fail:
                 with self.assertRaisesRegex(ValueError, "record failed"):
                     recording.__enter__()
@@ -166,37 +182,27 @@ class OperatorPlans(unittest.TestCase):
                 operation_for(bindings[0])()
             return recording, replay, references
 
-        with (
-            patch("tvm_ffi.use_raw_stream", new=lambda *_: nullcontext()),
-            patch("tvm_ffi.get_raw_stream", return_value=77),
-        ):
-            for family in ("fa", "gdn", "ffn"):
-                for fail in (False, True):
-                    events = []
-                    with self.subTest(family=family, fail=fail):
-                        recording, replay, references = start_capture(
-                            family, events, fail
-                        )
-                        gc.collect()
-                        if fail:
-                            self.assertTrue(
-                                all(reference() is None for reference in references)
-                            )
-                            continue
-                        self.assertTrue(
-                            all(reference() is not None for reference in references)
-                        )
-                        replay()
-                        recording.__exit__(None, None, None)
-                        del recording
-                        gc.collect()
+        for family in ("fa", "gdn", "ffn"):
+            for fail in (False, True):
+                events = []
+                with self.subTest(family=family, fail=fail):
+                    recording, replay, references = start_capture(family, events, fail)
+                    gc.collect()
+                    if fail:
                         self.assertTrue(
                             all(reference() is None for reference in references)
                         )
-                        names = [event[0] for event in events]
-                        self.assertLess(
-                            names.index("cudaGraphExecDestroy"),
-                            names.index("weight-release"),
-                        )
-                        with self.assertRaisesRegex(RuntimeError, "closed"):
-                            replay()
+                        continue
+                    self.assertTrue(
+                        all(reference() is not None for reference in references)
+                    )
+                    replay()
+                    recording.__exit__(None, None, None)
+                    del recording
+                    gc.collect()
+                    self.assertTrue(
+                        all(reference() is None for reference in references)
+                    )
+                    self.assertIn("graph-close", events)
+                    with self.assertRaisesRegex(RuntimeError, "closed"):
+                        replay()

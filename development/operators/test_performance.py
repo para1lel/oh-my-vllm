@@ -234,3 +234,68 @@ class PerformanceContracts(unittest.TestCase):
             calibrate([[Sample(1, 0, 1)] * 30], 1)
         with self.assertRaises(ValueError):
             check([Sample(1, 0, 1)] * 29, 1, 1)
+        from unittest.mock import patch
+
+        from .timing_graph import TimingGraph
+
+        class Handle:
+            def __init__(self):
+                self.removed = False
+
+            def remove(self):
+                self.removed = True
+
+        class FakeGraph:
+            def __init__(self, data):
+                self.data = data
+
+            def get_graph_data(self):
+                return self.data
+
+        @contextmanager
+        def timing_lease():
+            yield None
+
+        def run_timing(data):
+            installed = []
+            handle = Handle()
+
+            @contextmanager
+            def timing_graph_context(operation):
+                installed[0](FakeGraph(data))
+                yield lambda: None
+
+            def register(hook):
+                installed.append(hook)
+                return handle
+
+            prepared = SimpleNamespace(
+                device=SimpleNamespace(
+                    synchronize=lambda: None,
+                    ensure_healthy=lambda: None,
+                    graph=timing_graph_context,
+                ),
+                reset=lambda: None,
+                graph_lease=timing_lease,
+                run=lambda: None,
+                setup={},
+            )
+            with (
+                patch(
+                    "development.operators.timing_graph.register_graph_instantiate_hook",
+                    side_effect=register,
+                ),
+                TimingGraph(prepared, Events(), 3) as timing,
+            ):
+                timing()
+            return prepared, handle
+
+        prepared, handle = run_timing({"nodes": [{"index": 0}, {"index": 1}]})
+        record = prepared.setup["timing_graphs"][0]
+        self.assertEqual(record["repeats"], 3)
+        self.assertEqual(record["production_nodes"], 2)
+        self.assertEqual(record["graph_validation"], "get-graph-data")
+        self.assertTrue(handle.removed)
+        for data in ({"nodes": []}, {}):
+            with self.assertRaisesRegex(RuntimeError, "no nodes"):
+                run_timing(data)

@@ -18,7 +18,27 @@ from .device import selected_uuid
 
 VERSION = "1.0.7"
 DATASET = "semianalysis_cc_traces_weka_062126_256k"
+FULL_CONTEXT_DATASET = "semianalysis_cc_traces_weka_062126"
 DEFAULT_GRACE_PERIOD = 120
+
+
+def repository_python():
+    prefix = os.environ.get("OH_MY_VLLM_CONDA_PREFIX")
+    if not prefix:
+        raise ValueError("OH_MY_VLLM_CONDA_PREFIX is required for AgentX")
+    path = (Path(prefix) / "bin/python").resolve()
+    if not path.is_file():
+        raise ValueError(f"repository Python does not exist: {path}")
+    return path
+
+
+def validate_agentx_python(python):
+    selected = Path(python).resolve()
+    expected = repository_python()
+    if selected != expected:
+        raise ValueError(
+            f"AgentX must use the repository Python {expected}, found {selected}"
+        )
 
 
 def grace_period_seconds(value):
@@ -29,11 +49,24 @@ def grace_period_seconds(value):
 
 
 def profile_command(
-    python, model, artifacts, port, duration, seed, grace_period=DEFAULT_GRACE_PERIOD
+    python,
+    model,
+    artifacts,
+    port,
+    duration,
+    seed,
+    grace_period=DEFAULT_GRACE_PERIOD,
+    *,
+    model_name="qwen3.8-27b-fp8",
+    max_context=262144,
+    concurrency=4,
+    dataset=DATASET,
 ):
     if duration < 900:
         raise ValueError("AgentX profiling must last at least 900 seconds")
     grace_period_seconds(grace_period)
+    if max_context < 1 or concurrency < 1:
+        raise ValueError("AgentX context and concurrency must be positive")
     return [
         str(python),
         "-m",
@@ -43,16 +76,18 @@ def profile_command(
         "inferencex-agentx-mvp",
         "--url",
         f"http://127.0.0.1:{port}",
+        "--request-timeout-seconds",
+        "1800",
         "--model",
-        "qwen3.8-27b-fp8",
+        model_name,
         "--tokenizer",
         str(model),
         "--public-dataset",
-        DATASET,
+        dataset,
         "--max-context-length",
-        "262144",
+        str(max_context),
         "--concurrency",
-        "4",
+        str(concurrency),
         "--benchmark-duration",
         str(duration),
         "--benchmark-grace-period",
@@ -162,6 +197,7 @@ def arguments():
 
 def main():
     args = arguments()
+    validate_agentx_python(args.agentx_python)
     version = subprocess.check_output(
         [
             str(args.agentx_python),
@@ -201,7 +237,11 @@ def main():
         service.close()
     verify_artifact_identity(args, identity)
     service.verify_identity(identity["checkpoint"], identity["tokenizer"])
-    _, counts = export_run(args.artifacts / "agentx", args.csv)
+    _, counts = export_run(
+        args.artifacts / "agentx",
+        args.csv,
+        harness_log=args.artifacts / "agentx/logs/aiperf.log",
+    )
     subprocess.run(
         [
             str(args.agentx_python),

@@ -233,6 +233,109 @@ fn partial_prefixes_keep_private_continuations_and_transactional_ownership() {
 }
 
 #[test]
+fn aligned_prompt_checkpoint_reuses_prefix_before_last_token() {
+    for (length, speculative, separate) in [
+        (784, 0, false),
+        (784, 4, true),
+        (1568, 0, false),
+        (1568, 4, true),
+    ] {
+        let mut kv = HybridCoordinator::new(64, 784, true, 0);
+        if separate {
+            kv = kv.with_mamba_capacity(16);
+        }
+        kv.set_speculative_blocks(speculative);
+        let mut source = Req::new(1, length);
+        source.block_hashes = kv.compute_block_hashes(&source.token_ids);
+        let checkpoint = length - 1;
+        assert_eq!(kv.partial_checkpoint(&source), Some(checkpoint));
+        for end in [checkpoint, length] {
+            kv.new_step_starts();
+            kv.allocate_slots(
+                &source,
+                (vec![], vec![]),
+                0,
+                end - source.num_computed_tokens,
+                0,
+                false,
+            )
+            .unwrap();
+            source.num_computed_tokens = end;
+            if end == checkpoint {
+                assert_eq!(kv.cache_checkpoint(1).unwrap().0, checkpoint);
+            }
+            kv.commit_cache(&source);
+        }
+        kv.free(1);
+        kv.new_step_starts();
+
+        let mut replay = source.clone();
+        replay.id = 2;
+        replay.num_computed_tokens = 0;
+        let (fa, mb, hit) = kv.get_computed_blocks(&replay);
+        assert_eq!(hit, checkpoint);
+        assert_eq!(length - hit, 1);
+        let tail = *fa.last().unwrap();
+        let state = *mb.last().unwrap();
+        kv.allocate_slots(&replay, (fa, mb), hit, 1, 0, false)
+            .unwrap();
+        assert_eq!(kv.prefix_state_slot(2), Some(state));
+        assert_eq!(
+            kv.block_copies(2),
+            vec![(
+                tail,
+                *kv.full_attn_blocks(2).last().unwrap(),
+                (checkpoint % 784) as u32
+            )],
+        );
+        kv.free(2);
+        assert_eq!(kv.pool().num_free_blocks(), 63);
+    }
+}
+
+#[test]
+fn prompt_before_aligned_boundary_reuses_full_prefix() {
+    for (length, speculative, separate) in [(1569, 0, false), (1569, 4, true)] {
+        let mut kv = HybridCoordinator::new(64, 784, true, 0);
+        if separate {
+            kv = kv.with_mamba_capacity(16);
+        }
+        kv.set_speculative_blocks(speculative);
+        let mut source = Req::new(1, length);
+        source.block_hashes = kv.compute_block_hashes(&source.token_ids);
+        assert_eq!(kv.partial_checkpoint(&source), None);
+        for end in [length / 784 * 784, length] {
+            kv.new_step_starts();
+            kv.allocate_slots(
+                &source,
+                (vec![], vec![]),
+                0,
+                end - source.num_computed_tokens,
+                0,
+                false,
+            )
+            .unwrap();
+            source.num_computed_tokens = end;
+            kv.commit_cache(&source);
+        }
+        kv.free(1);
+        kv.new_step_starts();
+
+        let mut replay = source.clone();
+        replay.id = 2;
+        replay.num_computed_tokens = 0;
+        let (fa, mb, hit) = kv.get_computed_blocks(&replay);
+        assert_eq!(hit, length - 1);
+        assert_eq!(length - hit, 1);
+        kv.allocate_slots(&replay, (fa, mb), hit, 1, 0, false)
+            .unwrap();
+        assert_eq!(kv.prefix_state_slot(2), None);
+        kv.free(2);
+        assert_eq!(kv.pool().num_free_blocks(), 63);
+    }
+}
+
+#[test]
 fn restored_partial_checkpoint_keeps_read_lease_until_commit_or_cancel() {
     use crate::snapshot::BlockTables;
 

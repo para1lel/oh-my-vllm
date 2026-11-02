@@ -50,17 +50,17 @@ Use the [upstream procedure](https://github.com/SemiAnalysisAI/agentx-harness/bl
 ## Run
 
 Build the service and native modules with the [service guide](../../serving.md#start).
-Use a separate environment for the harness.
-Set `AGENTX_ENV` and `ARTIFACT_ROOT` to new directories external to the repository.
+Use the repository `oh-my-vllm` Conda environment for the harness.
+Set `OH_MY_VLLM_CONDA_PREFIX` to that environment and set `ARTIFACT_ROOT` to a
+new directory external to the repository.
 Set `MODEL_ROOT` to the local checkpoint directory.
 Use the [GPU wrapper](performance.md#measurement-command) for the measurement.
 
 ```bash
-scripts/with-env.sh uv venv "$AGENTX_ENV" --python "$CONDA_PREFIX/bin/python"
-scripts/with-env.sh uv pip install --python "$AGENTX_ENV/bin/python" -r requirements/agentx.lock
+export OH_MY_VLLM_CONDA_PREFIX="$CONDA_PREFIX"
 scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.agentx \
   --model "$MODEL_ROOT" \
-  --agentx-python "$AGENTX_ENV/bin/python" \
+  --agentx-python "$OH_MY_VLLM_CONDA_PREFIX/bin/python" \
   --artifacts "$ARTIFACT_ROOT" \
   --csv docs/models/qwen38/assets/agentx-mtp4.csv \
   --figure docs/models/qwen38/assets/agentx-mtp4.png
@@ -109,7 +109,7 @@ Missing cache data is an error, not a zero value.
 Rebuild the image from the CSV:
 
 ```bash
-scripts/with-env.sh "$AGENTX_ENV/bin/python" -m development.serving.agentx_plot \
+scripts/with-env.sh python -m development.serving.agentx_plot \
   --csv docs/models/qwen38/assets/agentx-mtp4.csv \
   --figure docs/models/qwen38/assets/agentx-mtp4.png
 ```

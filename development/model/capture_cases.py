@@ -32,7 +32,7 @@ def harness_identity():
 
 
 def download_logits(device, tensor):
-    bits = device.download(tensor, np.uint16)
+    bits = device.download(tensor, np.uint16).numpy()
     return (bits.astype(np.uint32) << 16).view(np.float32)
 
 

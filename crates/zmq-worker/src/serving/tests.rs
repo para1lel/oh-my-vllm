@@ -371,6 +371,21 @@ async fn idle_cohort_is_finite_and_active_decode_does_not_wait_for_prepare() {
 }
 
 #[tokio::test]
+async fn admission_respects_configured_sequence_capacity() {
+    let mut worker = TestWorker::launch(configuration()).await.unwrap();
+    let budget = Budget::new(1 << 28);
+    let (request, mut response) = submission(&budget);
+    let pending = begin_admit(&mut worker.client, 1, 1, request, 1)
+        .await
+        .unwrap();
+
+    assert!(pending.is_none());
+    let error = response.ready.take().unwrap().await.unwrap().unwrap_err();
+    assert_eq!(error.0, StatusCode::SERVICE_UNAVAILABLE);
+    worker.close().await;
+}
+
+#[tokio::test]
 async fn cancelled_or_expired_prepare_releases_lease_and_discards_late_reply() {
     tokio::time::timeout(Duration::from_secs(10), async {
         for expired in [false, true] {
@@ -379,7 +394,7 @@ async fn cancelled_or_expired_prepare_releases_lease_and_discards_late_reply() {
             let mut active = BTreeMap::new();
             let budget = Budget::new(1 << 28);
             let (request, mut response) = submission(&budget);
-            let mut pending = begin_admit(&mut worker.client, 0, request, 1)
+            let mut pending = begin_admit(&mut worker.client, 0, 4, request, 1)
                 .await
                 .unwrap();
             let RustMessage::Prepare {
@@ -427,7 +442,7 @@ async fn cancelled_or_expired_prepare_releases_lease_and_discards_late_reply() {
             assert_eq!(budget.snapshot()["request_state_bytes"], 0);
             prepared(&mut worker.socket, rpc_id, request_id).await;
             let (request, mut next_response) = submission(&budget);
-            pending = begin_admit(&mut worker.client, 0, request, 1)
+            pending = begin_admit(&mut worker.client, 0, 4, request, 1)
                 .await
                 .unwrap();
             let RustMessage::Prepare {
