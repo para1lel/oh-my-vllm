@@ -2,6 +2,7 @@ from contextlib import contextmanager
 
 from ..runtime.native import load
 from .api import FUNCTIONS, Outputs
+from .plan import scratch_bytes
 
 
 class Workspace:
@@ -9,6 +10,9 @@ class Workspace:
         self.module, self.source_id, self.library = load("sparse_attention", FUNCTIONS)
         self.plan, self.device = plan, device
         self.outputs = Outputs(*(allocate(*field) for field in plan.storage))
+        self.scratch = allocate(
+            (scratch_bytes(plan.rows, plan.heads, plan.slots),), "uint8"
+        )
         self.closed = False
 
     def check_open(self):
@@ -18,7 +22,7 @@ class Workspace:
     @contextmanager
     def graph_lease(self):
         self.check_open()
-        owners = self.outputs, self.module
+        owners = self.outputs, self.scratch, self.module
         try:
             yield
         finally:
@@ -33,7 +37,7 @@ class Workspace:
             inputs.indices.shape
         ) != (self.plan.rows, self.plan.slots):
             raise ValueError("sparse-attention input differs from the workspace plan")
-        self.module.attend(*inputs, *self.outputs)
+        self.module.attend(*inputs, self.scratch, *self.outputs)
         return self.outputs
 
 

@@ -110,6 +110,11 @@ Denominator 更新使用 `fma_rn(previous_sum, scale, block_sum)`.
 保留 duplicate index 和 masked slot 的原始位置.
 Empty row 和 fully masked row 返回零, 即使 finite sink exponential 下溢也如此.
 
+BF16 table 且 query 最多四行时, native attention 并行计算 64-slot partial.
+每个 partial 使用按顺序更新的 running maximum 对 probability 舍入.
+每个输出通道保留原来的 FP32 numerator 和 denominator 更新顺序.
+此路径必须满足冻结 endpoint 的误差限.
+
 DSpark proposal query 共享完整的 draft-index block.
 Target attention 保持其因果 index 规则.
 
@@ -126,22 +131,66 @@ HC expansion 先按该顺序对已舍入的 residual product 求和.
 HC mixing 在四个 FP32 accumulator 中独立累加 squared input.
 完整逻辑 row 数决定 reduction layout.
 在 FP32 projection 之后应用 inverse RMS.
-Native projection 使用 tensor runtime 的 cuBLAS library 和 caller 拥有的 32 MiB workspace.
+
+Native projection 按已发布的 FP32 reduction order 计算.
+HC 单 row projection 使用 32 个交错 split dot.
+其 caller 拥有的 32 MiB workspace 保存 split partial 和 chunk partial.
+多 row step 从实测的已发布 table 选择 split chunk.
+chunk 在每个 row 数范围中保持不变.
+
+每个实测 table 属于一个 output shape.
+HC table 有 24 个 output, width 为 20480.
+Router table 有 384 个 output, width 为 5120.
+DSpark router table 有 128 个 output, width 为 5120.
+Compressor table 有 512 个 output, width 为 5120.
+每个 table 覆盖 2 到 32768 的 row 数.
+
+多 row projection 为每个 row, output 和 chunk 写入一个 partial.
+独立的 reduction 按 chunk 顺序累加这些 partial.
+未实测的 shape 或 row 数会以错误停止 call.
+
+Router 和 compressor 的单 row projection 使用 32-lane warp reduction.
 这个 workspace 大小是数值契约的一部分.
+
+Ratio-1 compressor 使用 BF16 projection.
+其多 row call 使用 SM count target 为八的 cuBLAS handle.
+这会选择已发布的非 split-K kernel.
+
+一次实测 sweep 覆盖 row 数 2, 4, 8, 16, 64, 256, 1024 和 4096.
+Row 数 1024 和 4096 与 CUDA 13.0 image 完全一致.
+Row 数 1, 3, 5 到 7, 9 到 15, 17 到 255, 257 到 1023, 1025 到 4095 和 4097 到 32768 未实测.
+
+已知偏差: 部分小 row 数不能复现 CUDA 13.0 的 BF16 结果.
+Row 数 2, 4, 8, 16, 64 和 256 分别有 3, 3, 6, 12, 23 和 113 个不同 output.
+比较的 output 总数分别为 1024, 2048, 4096, 8192, 32768 和 131072.
+每个不同 output 与发布结果最多相差两个 BF16 code unit.
+
+Startup 在 limited handle 上运行固定的 BF16 probe.
+不同的 probe pattern 会以错误停止 worker.
+Probe 记录已接受的 native library layout.
+Probe 固定已接受的偏差 pattern.
+环境变为精确时它也会失败.
+
+Probe 只检查第一个 device.
+它不覆盖 rows == 1 的 default handle.
+Driver 或 library 变化可能选择不同的 kernel.
+DSpark markov head 使用 8-lane warp reduction.
+Confidence head 使用单 row split-dot order.
+
 
 ## Target row group
 
 Initial target prefill, single-token target call 和 MTP 保持现有的 row layout.
 Nonzero multi-token target call 保持 batch-major `[batch, step, ...]` storage.
 其 logical row count 为 request batch size.
-HC 和 router FP32 projection 对每个 source step 使用这个 row count.
-其 SGEMM call 直接写入 strided physical output storage.
+HC, router 和 compressor FP32 projection 对每个 source step 使用这个 row count.
+其 FP32 projection 直接写入 strided physical output storage.
 
 RMS 按 logical row count 选择 mean reduction layout, 并处理所有 physical row.
 Engram 使用 token logical row count 的四倍, 执行每份 copy 的 mean 和 dot reduction.
 在其最终 residual addition 中, 对 FP32 multiplication 和 addition 独立舍入.
 Engram embedding, KV projection, target attention 和 routed expert computation 保持批量执行.
-Router 可以在 HC projection 完成后使用 HC cuBLAS workspace.
+Router projection 不使用 HC workspace.
 
 ## 执行
 
@@ -151,10 +200,12 @@ Router 可以在 HC projection 完成后使用 HC cuBLAS workspace.
 每个 warp 在 in-place write 之前读取一个完整 group.
 Native quantization 不分配临时 device storage.
 
-HC preparation 保留 FP32 residual 副本, mean 与 inverse statistics, 以及 cuBLAS workspace.
+HC preparation 保留 FP32 residual 副本, mean 与 inverse statistics, 以及 operator workspace.
 Native HC call 接受最多 32768 行.
 Small-row workspace plan 保留 384-row 限制.
-在 Graph recording 之前准备 thread-local cuBLAS handle.
+
+HC preparation 是 capture-safe 的.
+在 Graph recording 之前准备 HC workspace.
 在 Graph release 之前, 保持 captured workspace 存活.
 Native manifest 记录 tensor runtime package 的 cuBLAS library image 和 header identity.
 
@@ -162,7 +213,12 @@ Tensor preparation 可以生成一个对齐的 contiguous input copy.
 Encoded output 和 scale 使用不同的 storage.
 
 Dense projection 不使用 device scratch storage.
+
 Grouped projection 使用 device row offset, 不上传 host descriptor.
+算子会在 device scratch 中压缩非空 group.
+grouped launch 覆盖非空 group 和输出 column tile.
+每个 block 遍历其 group row, 因此 launch 不使用 host row bound.
+
 每个 device count 必须在零与准备的最大行数之间.
 这些 count 的总和必须等于完整输入行数.
 无效 device count 生成 NaN output, 且不访问 input 或 weight.
@@ -185,7 +241,8 @@ Reference path 在计算之前连接两张 BF16 table.
 Native sparse attention 是 supported input 的默认路径.
 设置 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0`, 为 short query 选择 reference attention.
 除非发生 native status failure, 否则 long query 保持 native selection.
-Attention status failure 禁用 native selection, 并使用 reference path.
+Attention status failure 禁用 native selection.
+step boundary 检查一次累积的 status, 并在 worker 提交 cache state 之前报错.
 
 ## 验收
 

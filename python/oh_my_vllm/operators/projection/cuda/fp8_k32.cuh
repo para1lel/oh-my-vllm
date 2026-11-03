@@ -130,10 +130,116 @@ fp8_k32_kernel(const uint8_t *__restrict__ input, const uint8_t *__restrict__ we
 }
 
 template <class Output, class ScaleLayout>
+__global__ void
+fp8_decode_kernel(const uint8_t *__restrict__ input, const uint8_t *__restrict__ weight,
+                  const uint8_t *__restrict__ input_scales,
+                  const uint8_t *__restrict__ weight_scales, Output *__restrict__ output,
+                  int outputs, int width, ScaleLayout weight_layout) {
+  using Mma = cute::SM89_16x8x32_F32E4M3E4M3F32_TN;
+  int lane = threadIdx.x, column = blockIdx.x * 8;
+  int k = (lane & 3) * 4, n = lane >> 2, groups = width / 32;
+  float total[4] = {};
+  for (int start = 0; start < groups; start += 4) {
+    uint32_t a_values[4][4], b_values[4][2];
+    float sa[4], sb[4];
+#pragma unroll
+    for (int stage = 0; stage < 4; ++stage) {
+      int group = start + stage;
+      if (group < groups) {
+        uint32_t a0 = *reinterpret_cast<const uint32_t *>(input + group * 32 + k);
+        uint32_t a1 = *reinterpret_cast<const uint32_t *>(input + group * 32 + k + 16);
+        a_values[stage][0] = a0;
+        a_values[stage][1] = 0;
+        a_values[stage][2] = a1;
+        a_values[stage][3] = 0;
+        b_values[stage][0] = *reinterpret_cast<const uint32_t *>(
+            weight + int64_t(column + n) * width + group * 32 + k);
+        b_values[stage][1] = *reinterpret_cast<const uint32_t *>(
+            weight + int64_t(column + n) * width + group * 32 + k + 16);
+        sa[stage] = fp8_scale(input_scales[group]);
+        sb[stage] =
+            fp8_scale(weight_scales[weight_layout(cute::make_coord(column, group * 32, 0))]);
+      }
+    }
+#pragma unroll
+    for (int stage = 0; stage < 4; ++stage) {
+      if (start + stage < groups) {
+        float raw[4];
+        Mma::fma(raw[0], raw[1], raw[2], raw[3], a_values[stage][0], a_values[stage][1],
+                 a_values[stage][2], a_values[stage][3], b_values[stage][0], b_values[stage][1],
+                 0.f, 0.f, 0.f, 0.f);
+#pragma unroll
+        for (int value = 0; value < 4; ++value)
+          total[value] = __fmaf_rn(__fmul_rn(raw[value], sa[stage]), sb[stage], total[value]);
+      }
+    }
+  }
+  if (lane < 4) {
+#pragma unroll
+    for (int value = 0; value < 2; ++value) {
+      int index = column + lane * 2 + value;
+      if constexpr (std::is_same_v<Output, float>)
+        output[index] = total[value];
+      else
+        output[index] = __float2bfloat16_rn(total[value]);
+    }
+  }
+}
+
+template <class Output, class ScaleLayout>
+__global__ void
+fp8_decode_rawdots(const uint8_t *__restrict__ input, const uint8_t *__restrict__ weight,
+                   const uint8_t *__restrict__ input_scales,
+                   const uint8_t *__restrict__ weight_scales, Output *__restrict__ output,
+                   int width, ScaleLayout weight_layout) {
+  using Mma = cute::SM89_16x8x32_F32E4M3E4M3F32_TN;
+  __shared__ float raw_dots[512][8];
+  __shared__ float activation_scales[512], scales[512];
+  int lane = threadIdx.x % 32, warp = threadIdx.x / 32;
+  int k = (lane & 3) * 4, n = lane >> 2, column = blockIdx.x * 8, groups = width / 32;
+  for (int group = warp; group < groups; group += 8) {
+    uint32_t a0 = *reinterpret_cast<const uint32_t *>(input + group * 32 + k);
+    uint32_t a1 = *reinterpret_cast<const uint32_t *>(input + group * 32 + k + 16);
+    uint32_t b0 =
+        *reinterpret_cast<const uint32_t *>(weight + int64_t(column + n) * width + group * 32 + k);
+    uint32_t b1 = *reinterpret_cast<const uint32_t *>(weight + int64_t(column + n) * width +
+                                                      group * 32 + k + 16);
+    float raw[4];
+    Mma::fma(raw[0], raw[1], raw[2], raw[3], a0, 0u, a1, 0u, b0, b1, 0.f, 0.f, 0.f, 0.f);
+    if (lane < 4) {
+      raw_dots[group][lane * 2] = raw[0];
+      raw_dots[group][lane * 2 + 1] = raw[1];
+    }
+    if (lane == 0) {
+      activation_scales[group] = fp8_scale(input_scales[group]);
+      scales[group] =
+          fp8_scale(weight_scales[weight_layout(cute::make_coord(column, group * 32, 0))]);
+    }
+  }
+  __syncthreads();
+  if (threadIdx.x < 8) {
+    float total = 0.f;
+    for (int group = 0; group < groups; ++group)
+      total = __fmaf_rn(__fmul_rn(raw_dots[group][threadIdx.x], activation_scales[group]),
+                        scales[group], total);
+    if constexpr (std::is_same_v<Output, float>)
+      output[column + threadIdx.x] = total;
+    else
+      output[column + threadIdx.x] = __float2bfloat16_rn(total);
+  }
+}
+
+template <class Output, class ScaleLayout>
 void launch_fp8_k32(const uint8_t *input, const uint8_t *weight, const uint8_t *input_scales,
                     const uint8_t *weight_scales, Output *output, int rows, int outputs, int width,
                     ScaleLayout weight_layout, cudaStream_t stream) {
-  if (outputs <= 1024 && width >= 1024)
+  if (rows == 1 && (width >= 2048 || (width >= 1024 && outputs <= 1024)))
+    fp8_decode_rawdots<Output, ScaleLayout><<<outputs / 8, 256, 0, stream>>>(
+        input, weight, input_scales, weight_scales, output, width, weight_layout);
+  else if (rows == 1)
+    fp8_decode_kernel<Output, ScaleLayout><<<outputs / 8, 32, 0, stream>>>(
+        input, weight, input_scales, weight_scales, output, outputs, width, weight_layout);
+  else if (outputs <= 1024 && width >= 1024)
     fp8_k32_kernel<Output, ScaleLayout, 1><<<dim3(outputs / 8, (rows + 15) / 16), 128, 0, stream>>>(
         input, weight, input_scales, weight_scales, output, rows, outputs, width, weight_layout);
   else if (rows >= 32)

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,9 +21,10 @@ from .adapter import (
     validate_config,
 )
 from .cache import DeepSeekCache
+from .decode import DecodeBindings, DecodeGraph, EngramStage, decode_cycle
 from .descriptor import build_descriptor
 from .loader import DEFAULT_TILE_ROWS, RankLoader
-from .model import ModelArgs, Transformer
+from .model import ModelArgs, Transformer, context_token_bucket
 from .request import Request
 from .speculation import verify_greedy_drafts
 from .tokenizer import Tokenization
@@ -32,6 +34,7 @@ MAX_NATIVE_ROWS = 384
 MAX_PREFILL_ROWS = 32768
 DEFAULT_PREFILL_ROWS = 8192
 MAX_PREFILL_SUBBATCH = 16
+DEFAULT_DECODE_GRAPHS = 32
 
 
 def prefill_row_limit(value=None):
@@ -163,6 +166,23 @@ class Worker:
         with self.startup_trace.measure("weight_load"):
             self.weight_info = self.weights.load_into(self.model)
         self.model.eval()
+        self.decode_cycle = decode_cycle(self.model)
+        # TEP4 and DEP4 read routed counts on the host, so they cannot capture.
+        self.decode_graph_enabled = (
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_DECODE_GRAPH", "1") != "0"
+            and model_strategy == "tp4"
+        )
+        self.decode_graph_limit = int(
+            os.environ.get(
+                "OH_MY_VLLM_DEEPSEEK_DECODE_GRAPHS",
+                DEFAULT_DECODE_GRAPHS,
+            )
+        )
+        if self.decode_graph_limit < 0:
+            raise ValueError("DeepSeek decode graph limit must be nonnegative")
+        self.decode_graphs = {}
+        self.decode_bindings = {}
+        self.decode_engram = {}
         self.requests = {}
         self.slots = set(range(config["max_num_seqs"]))
         with self.startup_trace.measure("cache_construct"):
@@ -323,6 +343,78 @@ class Worker:
                         "DeepSeek resident cache position differs from the schedule"
                     )
 
+    def _decode_graph_step(self, token, position, slot, *, collect_main_hidden):
+        """Replay a captured decode step, or return None for the Eager path.
+
+        A graph is captured on the first step of each (slot, context bucket,
+        position residue) group. The graph cache is bounded, so a step outside a
+        captured group falls back to Eager.
+        """
+        if not getattr(self, "decode_graph_enabled", False):
+            return None
+        slots = (slot,)
+        bindings = self.decode_bindings.get(slots)
+        if bindings is None:
+            bindings = DecodeBindings(1, slots, self.device)
+            self.decode_bindings[slots] = bindings
+        stage = self.decode_engram.get(slots)
+        if stage is None:
+            stage = EngramStage(self.model, 1)
+            self.decode_engram[slots] = stage
+        context = context_token_bucket(position + 1)
+        key = (
+            slots,
+            context,
+            position % self.decode_cycle,
+            collect_main_hidden,
+        )
+        graph = self.decode_graphs.get(key)
+        if graph is None:
+            if len(self.decode_graphs) >= self.decode_graph_limit:
+                return None
+            bindings.bind(token, position)
+            self.model.reserve_cache(list(slots), context)
+            values = stage.stage(bindings, position)
+            graph = DecodeGraph(
+                self.model,
+                bindings,
+                position,
+                collect_main_hidden=collect_main_hidden,
+                engram_values=values,
+            )
+            try:
+                graph.capture()
+            except Exception as error:
+                # Capture uses the model collectives. A local unwind would leave the
+                # other ranks in a collective, so report and exit this rank process.
+                message = (
+                    f"DeepSeek graph capture failed on rank {self.rank}: {error!r}"
+                )
+                try:
+                    print(message, file=sys.stderr, flush=True)
+                    trace_path = os.environ.get("OH_MY_VLLM_DEEPSEEK_GRAPH_TRACE")
+                    if trace_path:
+                        import traceback
+
+                        with open(
+                            trace_path.replace("{rank}", str(self.rank)),
+                            "a",
+                            encoding="utf-8",
+                        ) as output:
+                            output.write(f"{message}\n{traceback.format_exc()}\n")
+                finally:
+                    os._exit(1)
+            self.decode_graphs[key] = graph
+        else:
+            bindings.bind(token, position)
+            self.model.reserve_cache(list(slots), context)
+            stage.stage(bindings, position)
+        graph.replay()
+        self.model._bind_state_exports(bindings.cache_slots, bindings.cache_slots_cpu)
+        if hasattr(self, "cache"):
+            self.cache.export_decoded_step(slots, position, position + 1)
+        return graph.logits, graph.main_hidden
+
     def _target(
         self,
         token_ids,
@@ -337,20 +429,41 @@ class Worker:
         output_ids = logits = main_hidden = None
         logit_chunks = [] if full_logits else None
         limit_rows = getattr(self, "prefill_rows", DEFAULT_PREFILL_ROWS)
+        execution = "eager"
         for offset in range(0, len(token_ids), limit_rows):
-            inputs = self._input_tokens((token_ids[offset : offset + limit_rows],))
-            chunk_logit_start = max(0, logit_start - offset) if full_logits else 0
-            output_ids, chunk_logits, chunk_hidden = self.model(
-                inputs,
-                start_pos=start_pos + offset,
-                cache_slots=cache_slots,
-                full_logits=full_logits,
-                compute_logits=compute_logits,
-                collect_main_hidden=getattr(self, "dspark", False),
-                logit_start=chunk_logit_start,
-                sample_output=not full_logits,
-                cache_slots_cpu=(slot,),
-            )
+            chunk = token_ids[offset : offset + limit_rows]
+            chunk_start = start_pos + offset
+            graph = None
+            if (
+                compute_logits
+                and not full_logits
+                and len(chunk) == 1
+                and chunk_start > 0
+            ):
+                graph = self._decode_graph_step(
+                    chunk[0],
+                    chunk_start,
+                    slot,
+                    collect_main_hidden=getattr(self, "dspark", False),
+                )
+            if graph is not None:
+                execution = "graph"
+                chunk_logits, chunk_hidden = graph
+                output_ids = None
+            else:
+                inputs = self._input_tokens((chunk,))
+                chunk_logit_start = max(0, logit_start - offset) if full_logits else 0
+                output_ids, chunk_logits, chunk_hidden = self.model(
+                    inputs,
+                    start_pos=chunk_start,
+                    cache_slots=cache_slots,
+                    full_logits=full_logits,
+                    compute_logits=compute_logits,
+                    collect_main_hidden=getattr(self, "dspark", False),
+                    logit_start=chunk_logit_start,
+                    sample_output=not full_logits,
+                    cache_slots_cpu=(slot,),
+                )
             logits = chunk_logits
             if logit_chunks is not None:
                 logit_chunks.append(chunk_logits)
@@ -358,7 +471,7 @@ class Worker:
                 self._seed_mtp_checkpoints(
                     chunk_hidden,
                     main_hidden,
-                    start_pos + offset,
+                    chunk_start,
                     cache_slots,
                     (slot,),
                     start_pos + len(token_ids),
@@ -377,6 +490,7 @@ class Worker:
             elif main_hidden is None:
                 main_hidden = chunk_hidden
             del chunk_hidden
+        self._target_execution = execution
         if logit_chunks is not None:
             logits = torch.cat(logit_chunks, dim=1)
         return output_ids, logits, main_hidden
@@ -455,19 +569,39 @@ class Worker:
         cache_slots_cpu = cache_slots.tolist()
         output_ids = logits = main_hidden = None
         logit_chunks = [] if full_logits else None
+        execution = "eager"
         for offset in range(0, length, chunk_size):
-            inputs = self._input_tokens(
-                [tokens[offset : offset + chunk_size] for tokens in token_batches]
-            )
-            output_ids, chunk_logits, chunk_hidden = self.model(
-                inputs,
-                start_pos=start_pos + offset,
-                cache_slots=cache_slots,
-                full_logits=full_logits,
-                compute_logits=compute_logits,
-                collect_main_hidden=getattr(self, "dspark", False),
-                cache_slots_cpu=cache_slots_cpu,
-            )
+            graph = None
+            if (
+                compute_logits
+                and not full_logits
+                and len(token_batches) == 1
+                and length == 1
+                and start_pos + offset > 0
+            ):
+                graph = self._decode_graph_step(
+                    token_batches[0][0],
+                    start_pos + offset,
+                    cache_slots_cpu[0],
+                    collect_main_hidden=getattr(self, "dspark", False),
+                )
+            if graph is not None:
+                execution = "graph"
+                output_ids = None
+                chunk_logits, chunk_hidden = graph
+            else:
+                inputs = self._input_tokens(
+                    [tokens[offset : offset + chunk_size] for tokens in token_batches]
+                )
+                output_ids, chunk_logits, chunk_hidden = self.model(
+                    inputs,
+                    start_pos=start_pos + offset,
+                    cache_slots=cache_slots,
+                    full_logits=full_logits,
+                    compute_logits=compute_logits,
+                    collect_main_hidden=getattr(self, "dspark", False),
+                    cache_slots_cpu=cache_slots_cpu,
+                )
             logits = chunk_logits
             if logit_chunks is not None:
                 logit_chunks.append(chunk_logits)
@@ -494,6 +628,7 @@ class Worker:
             elif main_hidden is None:
                 main_hidden = chunk_hidden
             del chunk_hidden
+        self._target_execution = execution
         if logit_chunks is not None:
             logits = torch.cat(logit_chunks, dim=1)
         return output_ids, logits, main_hidden
@@ -672,10 +807,11 @@ class Worker:
             )
             outputs = {}
             accepted_end = start_pos + length
+            targets = logits.argmax(dim=-1).tolist() if final else []
             for index, (row, request, slot, token_ids, _) in enumerate(prepared):
                 tokens, text, proposals = [], "", []
                 if final:
-                    target = int(logits[index].argmax(dim=-1).item())
+                    target = int(targets[index])
                     tokens, text = request.append([target])
                     if self.dspark and not request.finish:
                         proposals = self._proposal(
@@ -699,7 +835,7 @@ class Worker:
                 self.trace.record(
                     "target",
                     verify=False,
-                    execution="eager",
+                    execution=getattr(self, "_target_execution", "eager"),
                     requests=[
                         {
                             "id": row["request_id"],
@@ -861,7 +997,7 @@ class Worker:
         self.trace.record(
             "target",
             verify=bool(token_ids[known_count:]) if final else False,
-            execution="eager",
+            execution=getattr(self, "_target_execution", "eager"),
             requests=[
                 {
                     "id": row["request_id"],
@@ -989,6 +1125,9 @@ class Worker:
                         "model": "deepseek_v41",
                         "rank": self.rank,
                         "requests": len(self.requests),
+                        "decode_graph_enabled": self.decode_graph_enabled,
+                        "decode_graph_limit": self.decode_graph_limit,
+                        "decode_graphs": len(self.decode_graphs),
                         "gpu_free_bytes": torch.cuda.mem_get_info(self.device)[0],
                         **self.cache.stats(),
                     },
@@ -998,6 +1137,10 @@ class Worker:
 
     def close(self):
         try:
+            torch.cuda.synchronize(self.device)
+            self.decode_graphs.clear()
+            self.decode_bindings.clear()
+            self.decode_engram.clear()
             self.trace.close()
             self.cache.close()
             del self.model

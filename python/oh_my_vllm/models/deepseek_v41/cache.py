@@ -374,6 +374,12 @@ class DeepSeekCache:
             }
         )
 
+    def export_decoded_step(self, slots, start_pos, end_pos):
+        """Export the target state a graph replay wrote outside Python."""
+        self.exports.export_decoded_step(
+            self._window, self._tails, slots, start_pos, end_pos
+        )
+
     def _captured_state(self, slot, endpoint, accepted_end, include_mtp):
         if slot in self.exports.steps:
             return (

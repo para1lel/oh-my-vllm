@@ -323,7 +323,7 @@ class GraphCapture(unittest.TestCase):
             peak = [0]
             plan_keys = iter((0, 1, 0, 2))
 
-            def make_context(*args):
+            def make_context(*args, single_upload):
                 key = args[3].reuse_key
                 live.append(key)
                 peak[0] = max(peak[0], len(live))
@@ -348,7 +348,9 @@ class GraphCapture(unittest.TestCase):
                 patch.object(
                     speculation,
                     "context_plan",
-                    side_effect=lambda **_: SimpleNamespace(reuse_key=next(plan_keys)),
+                    side_effect=lambda **_: SimpleNamespace(
+                        reuse_key=next(plan_keys), batch=1
+                    ),
                 ),
                 patch.object(speculation, "Context", side_effect=make_context),
             ):

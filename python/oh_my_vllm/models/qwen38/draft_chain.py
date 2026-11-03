@@ -106,7 +106,7 @@ class DraftChain:
         # Eligibility makes the mask independent of the unknown draft prefix.
         sampler.inputs.update(requests, [[] for _ in requests], "proposal")
         if not sampler.inputs.history_needed:
-            sampler.inputs.presence_history.fill_(0)
+            sampler.inputs.presence_history_view[:] = 0
         sampler.uploads.copy(sampler.presence_history, sampler.inputs.presence_history)
         if sampler.inputs.mask_changed:
             sampler.uploads.copy(sampler.mask, sampler.inputs.mask)

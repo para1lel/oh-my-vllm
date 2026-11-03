@@ -23,6 +23,11 @@ from oh_my_vllm.models.deepseek_v41.tokenizer import Tokenization
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 
 from .benchmark import ROOT, source_identity
+from .deepseek_accounting import (
+    communication_model_metadata,
+    efficiency_percent,
+    reference_case,
+)
 from .deepseek_matrix import HTTP_CASES, case_id
 from .device import device_identity, selected_uuids
 
@@ -369,6 +374,11 @@ class Service:
         if stale_socket:
             raise RuntimeError("DeepSeek service did not remove its IPC socket")
 
+    def effective_strategy(self):
+        with self.trace.open() as source:
+            identity = json.loads(source.readline())
+        return identity["cache_memory"]["effective_strategy"]
+
     def run(self, tokenizer, case, prompt_seed):
         nonce = hashlib.sha256(f"{prompt_seed}:{case_id(case)}".encode()).hexdigest()[
             :32
@@ -395,13 +405,37 @@ class Service:
                 raise ValueError(
                     f"DeepSeek token count or prefix check failed: {usage}"
                 )
+        effective = self.effective_strategy()
+        metadata = communication_model_metadata(case["strategy"], "lower_bound")
+        if effective == case["strategy"]:
+            reference = reference_case(case, strategy=case["strategy"])
+            reference_seconds = reference.seconds
+            acceptance = reference.acceptance
+            efficiency = efficiency_percent(reference.seconds, seconds)
+            metadata = {
+                "accounting_version": reference.version,
+                "communication_model": reference.communication_model,
+                "profile_digest": reference.profile_digest,
+                "communication_rule_version": reference.communication_rule_version,
+                "dep4_communication_modeled": reference.communication_is_modeled,
+                "dep4_communication_measured": reference.communication_is_measured,
+            }
+        else:
+            reference_seconds = None
+            acceptance = "unavailable"
+            efficiency = None
         return {
             **case,
+            "effective_strategy": effective,
+            **metadata,
             "seconds": seconds,
             "request_count": len(responses),
             "output_tokens_per_second": (
                 case["batch"] * case["output_tokens"] / seconds
             ),
+            "ideal_reference_seconds": reference_seconds,
+            "reference_acceptance": acceptance,
+            "ideal_efficiency_percent": efficiency,
             "responses": responses,
         }
 
@@ -423,9 +457,19 @@ def write_csv(path, results):
         "batch",
         "input_tokens",
         "output_tokens",
+        "effective_strategy",
+        "accounting_version",
+        "communication_model",
+        "profile_digest",
+        "communication_rule_version",
+        "dep4_communication_modeled",
+        "dep4_communication_measured",
         "seconds",
         "request_count",
         "output_tokens_per_second",
+        "ideal_reference_seconds",
+        "reference_acceptance",
+        "ideal_efficiency_percent",
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as destination:

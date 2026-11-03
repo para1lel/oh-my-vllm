@@ -83,7 +83,11 @@ class Workspace:
         self.input = device.scratch((batch.rows, 5120), "bfloat16")
         self.zero = device.scratch((batch.rows, 5120), "bfloat16")
         device.zero(self.zero)
-        self.metadata_inputs = Metadata(device, metadata_arrays(batch))
+        self.metadata_inputs = Metadata(
+            device,
+            metadata_arrays(batch),
+            single_upload=batch.schedule.verify and len(batch.requests) >= 2,
+        )
         metadata = self.metadata_inputs.arrays
         self.tokens = metadata[5]
         self.batch_view = fa.BatchView(metadata[0], metadata[3], metadata[4])

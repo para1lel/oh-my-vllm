@@ -10,10 +10,13 @@ Dense and grouped projections reset the raw FP32 dot for each K32 group.
 The activation scale uses MUL. The weight scale uses FMA into the running
 sum. FP4 values convert accurately to FP8 before the raw dot. FP4 weight scales
 apply to each output row; FP8 weight scales apply to 32-row groups.
-Dense projection needs no device scratch. Grouped scratch holds device row
-offsets, rounded to 16 bytes. Device counts must be within max_rows and sum
-to the input rows; otherwise, the output is NaN. Host metadata and storage overlap
-failures occur before launch. Grouped calls do not upload host descriptors.
+Dense projection needs no device scratch. Grouped scratch holds the device row
+offsets and the compacted nonempty groups. The grouped launch covers the
+compacted groups and the output column tiles. Each block walks its group rows,
+so the launch does not use a host row bound. Device counts must be within
+max_rows and sum to the input rows; otherwise, the output is NaN. Host metadata
+and storage overlap failures occur before launch. Grouped calls do not upload
+host descriptors.
 """
 
 from typing import NamedTuple

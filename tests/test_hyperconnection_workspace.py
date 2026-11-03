@@ -218,10 +218,6 @@ class HyperconnectionWorkspaceCuda(unittest.TestCase):
             graph = torch.cuda.CUDAGraph()
             failures = (
                 (
-                    lambda: self.module.hc_prepare(*arguments),
-                    "prepare HC before Graph capture",
-                ),
-                (
                     lambda: self.module.hc_warmup(workspace["collapsed"]),
                     "prepare HC outside Graph capture",
                 ),
@@ -244,6 +240,14 @@ class HyperconnectionWorkspaceCuda(unittest.TestCase):
                     stream.synchronize()
                     self.assert_sentinels(workspace)
                     graph.reset()
+                # Preparation uses native kernels only, so a cold capture is valid.
+                with torch.cuda.graph(graph, stream=stream):
+                    self.module.hc_prepare(*arguments)
+                with torch.cuda.stream(stream):
+                    self.assertFalse(torch.cuda.is_current_stream_capturing())
+                stream.synchronize()
+                self.assert_sentinels(workspace)
+                graph.reset()
                 with torch.cuda.stream(stream):
                     self.module.hc_warmup(workspace["collapsed"])
                 with torch.cuda.graph(graph, stream=stream):

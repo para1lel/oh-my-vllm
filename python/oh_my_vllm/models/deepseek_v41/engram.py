@@ -189,6 +189,8 @@ class NgramHashState(nn.Module):
         start_pos: int,
         token_mask: torch.Tensor | None = None,
         cache_slots: torch.Tensor | None = None,
+        *,
+        position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """token_mask: [B, L], False for tokens that take no part in an n-gram (image spans).
         Returns the hash ids, shaped [B, L, n_engram_layers, n_hash_cols]."""
@@ -198,11 +200,16 @@ class NgramHashState(nn.Module):
         compressed = self.token_map[input_ids]
         if token_mask is not None:
             compressed = torch.where(token_mask, compressed, self.DEAD)
-        self.cache[cache_slots, start_pos : start_pos + seqlen] = compressed
-
-        positions = torch.arange(
-            start_pos, start_pos + seqlen, device=input_ids.device
-        ).expand(batch, seqlen)
+        if position is None:
+            self.cache[cache_slots, start_pos : start_pos + seqlen] = compressed
+            positions = torch.arange(
+                start_pos, start_pos + seqlen, device=input_ids.device
+            ).expand(batch, seqlen)
+        else:
+            positions = (
+                position + torch.arange(seqlen, device=input_ids.device)
+            ).expand(batch, seqlen)
+            self.cache[cache_slots[:, None], positions] = compressed
         tokens, blocked = [], torch.zeros_like(positions, dtype=torch.bool)
         for shift in range(self.layout.max_ngram_size):
             source = self.cache[cache_slots[:, None], (positions - shift).clamp_min(0)]

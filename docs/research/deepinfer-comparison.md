@@ -13,7 +13,7 @@ length decode batch to one model step. This difference adds Python work,
 kernel launch work, and repeated communication.
 
 The adapter also used a 384 row default prefill chunk. DeepSeek native
-operators accept up to 8192 rows. The default is now 8192. The environment
+operators accept up to 32768 rows. The default is now 8192. The environment
 variable `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` can lower this value.
 
 DSpark verification now sends the accepted prefix and all draft tokens in one

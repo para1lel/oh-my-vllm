@@ -13,8 +13,9 @@ nonzero multi-token prefill 使用 fused chunk path.
 
 当前 functional path 支持 text target decode 和 greedy DSpark5 verification.
 短真实 checkpoint checks 在 GPU `4,5,6,7` 上使用 TEP4.
-target path 使用 Eager execution.
-共享 CUDA Graph implementation 尚未接入这个 multi-rank adapter.
+
+target path 对 TP4 decode 使用捕获的 CUDA Graph.
+TEP4 和 DEP4 target decode 使用 Eager execution.
 
 当前公开 capability 是 text.
 在 tokenizer, image processor, rank execution 和 HTTP checks 接通前, image preparation 不加入公开 capability.
@@ -26,7 +27,10 @@ physical cache 在 Rust logical block table 后面保存 model page.
 Accepted-state page 在精确的 endpoint 保存 target window, MTP window 和 compressor tail.
 Restoration 在清空 active slot 前拒绝不匹配的 endpoint.
 FA prefix copy 只包含 compressed KV, index key 和 Engram history.
-由于 coordinated multi-rank Graph replay 尚未接入, DeepSeek 当前仍使用 Eager execution.
+
+DeepSeek 对 prefill 和 draft verification 使用 Eager execution.
+TP4 target decode 使用捕获的 CUDA Graph.
+TEP4 和 DEP4 target decode 使用 Eager execution.
 
 Verification 在覆盖 recurrent storage 前, 为每个可能接受的 endpoint 保存 private state.
 Commit 只发布 accepted state 和 scheduled checkpoint.
@@ -79,7 +83,7 @@ physical cache setting 必须覆盖请求的 prompt 和 output.
 
 Python worker 在各 rank-local tensor 和 physical page 中保存 model cache state.
 Rust logical cache transfer 为 protocol seam 返回 completion record.
-DeepSeek-specific DEP4 ownership 和 coordinated Graph replay 仍在开发.
+DeepSeek-specific DEP4 ownership 仍在开发.
 nonzero multi-token prefill 使用 fused chunk path.
 target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
 

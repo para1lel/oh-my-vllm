@@ -52,7 +52,9 @@ class GraphOperation:
 
 
 class Context(GraphOperation):
-    def __init__(self, device, weights, arrays, plan, hidden, cache, graph):
+    def __init__(
+        self, device, weights, arrays, plan, hidden, cache, graph, single_upload
+    ):
         super().__init__(device)
         self.weights = mtp.Weights(
             weights.mtp_input,
@@ -64,7 +66,7 @@ class Context(GraphOperation):
             (self.weights,),
             allocate=device.scratch,
         )
-        self.metadata_inputs = Metadata(device, arrays)
+        self.metadata_inputs = Metadata(device, arrays, single_upload=single_upload)
         self.arrays = self.metadata_inputs.arrays
         self.hidden = (
             device.scratch((cache.parallel * 5, 5120), "bfloat16") if graph else hidden
@@ -154,7 +156,7 @@ class Draft(GraphOperation):
                 ((batch,), "int64"),
             )
         )
-        self.metadata_inputs = Metadata(device, arrays)
+        self.metadata_inputs = Metadata(device, arrays, single_upload=batch >= 2)
         self.metadata = self.metadata_inputs.arrays[:5]
         self.tokens = self.metadata_inputs.arrays[5]
         self.sampling = Sampling(
@@ -166,12 +168,36 @@ class Draft(GraphOperation):
         )
         self.cache = None
         self.output = None
+        self._row_bindings = None
+        self._row_views = None
+
+    def row_views(self):
+        bindings = (
+            self.hidden,
+            self.sampling.operation.outputs.probabilities,
+            self.sampling.operation.outputs.hidden,
+        )
+        if self._row_bindings is None or any(
+            before is not after
+            for before, after in zip(self._row_bindings, bindings, strict=True)
+        ):
+            self._row_views = tuple(
+                tuple(
+                    self.device.view(value, (1, width), row * width)
+                    for row in range(value.shape[0])
+                )
+                for value, width in zip(bindings, (5120, 248320, 5120), strict=True)
+            )
+            # Strong source references prevent identity reuse while views are cached.
+            self._row_bindings = bindings
+        return self._row_views
 
     def graph_lease(self):
         return self.operation.graph_lease()
 
     def close(self):
         super().close()
+        self._row_views = self._row_bindings = None
         if self.metadata_inputs is not None:
             self.metadata_inputs.close()
         self.sampling.close()
@@ -420,6 +446,7 @@ class Speculation:
                     hidden,
                     self.cache,
                     True,
+                    single_upload=plan.batch >= 2,
                 )
                 created = True
             else:
@@ -438,6 +465,7 @@ class Speculation:
                     hidden,
                     self.cache,
                     False,
+                    single_upload=False,
                 )
                 self.context_key = key
                 created = True
@@ -536,6 +564,7 @@ class Speculation:
             if key not in self.drafts:
                 self.drafts[key] = Draft(d, self.weights, count, stage == 0)
             operation = self.drafts[key]
+            cached_rows = operation.row_views() if count >= 2 else None
             requests = [batch.requests[index] for index in active]
             positions, slots, tables, tokens = [], [], [], []
             for local, index in enumerate(active):
@@ -548,7 +577,12 @@ class Speculation:
                 tables.append(batch.metadata[2][index])
                 tokens.append(request.history[-1] if stage == 0 else request.drafts[-1])
                 operation.copy(
-                    d.view(operation.hidden, (1, 5120), local * 5120), previous[index]
+                    (
+                        cached_rows[0][local]
+                        if cached_rows is not None
+                        else d.view(operation.hidden, (1, 5120), local * 5120)
+                    ),
+                    previous[index],
                 )
             arrays = (
                 np.asarray(positions, np.int64).T.copy(),
@@ -577,12 +611,22 @@ class Speculation:
                 if not request.drafts_greedy:
                     operation.copy(
                         request.proposal_rows[stage],
-                        d.view(probability, (1, 248320), local * 248320),
+                        (
+                            cached_rows[1][local]
+                            if cached_rows is not None
+                            else d.view(probability, (1, 248320), local * 248320)
+                        ),
                     )
                 request.drafts.append(int(chosen[local]))
                 # The next stage copies all rows before the sampler reuses this buffer.
-                previous[index] = d.view(
-                    operation.sampling.operation.outputs.hidden, (1, 5120), local * 5120
+                previous[index] = (
+                    cached_rows[2][local]
+                    if cached_rows is not None
+                    else d.view(
+                        operation.sampling.operation.outputs.hidden,
+                        (1, 5120),
+                        local * 5120,
+                    )
                 )
                 if (
                     not request.stops_after(request.drafts)

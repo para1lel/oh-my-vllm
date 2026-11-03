@@ -4,17 +4,90 @@ The adapter uses native CUDA workspaces for production execution. These function
 model construction and small reference cases usable before a workspace is attached.
 """
 
+import hashlib
 import os
-from collections import OrderedDict
 from typing import NamedTuple
 
 import torch
 import torch.nn.functional as F
 
 from ...operators.hyperconnection.api import FUNCTIONS as HYPERCONNECTION_FUNCTIONS
+from ...operators.sparse_attention.plan import scratch_bytes as sparse_scratch_bytes
 from ...operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
 from .quantization import act_quant, fp4_values
 from .quantization import fp4_act_quant as fp4_act_quant
+
+
+class _PinnedMetadataUploader:
+    """Reusable pinned hosts for stream-ordered metadata uploads."""
+
+    def __init__(self, device, dtype=torch.int32, capacity=384):
+        self.device = device
+        self.dtype = dtype
+        self.capacity = capacity
+        self.slots = []
+        self.cursor = 0
+
+    def _new_slot(self):
+        # Pin on the CPU explicitly: the caller can set a CUDA default device.
+        host = torch.empty(
+            (self.capacity,), dtype=self.dtype, device="cpu", pin_memory=True
+        )
+        device = torch.empty((self.capacity,), dtype=self.dtype, device=self.device)
+        return [host, device, torch.cuda.Event()]
+
+    def _slot(self):
+        for offset in range(len(self.slots)):
+            index = (self.cursor + offset) % len(self.slots)
+            slot = self.slots[index]
+            if slot[2].query():
+                self.cursor = index + 1
+                return slot
+        if len(self.slots) < 64:
+            slot = self._new_slot()
+            self.slots.append(slot)
+            self.cursor = len(self.slots)
+            return slot
+        slot = self.slots[self.cursor % len(self.slots)]
+        slot[2].synchronize()
+        self.cursor += 1
+        return slot
+
+    def upload(self, values):
+        if torch.cuda.is_current_stream_capturing():
+            raise RuntimeError("captured metadata needs a capture-owned host buffer")
+        slot = self._slot()
+        count = len(values)
+        slot[0][:count].copy_(torch.tensor(values, dtype=self.dtype, device="cpu"))
+        slot[1][:count].copy_(slot[0][:count], non_blocking=True)
+        slot[2].record(torch.cuda.current_stream(self.device))
+        return slot[1][:count]
+
+
+_POINTER_UPLOADS = {}
+_CAPTURE_POINTER_HOSTS = {}
+
+
+def _upload_pointer_array(values, role, device):
+    """Upload one expert pointer array without a blocking host copy."""
+    if torch.cuda.is_current_stream_capturing():
+        # A captured copy must read pinned memory that outlives the graph.
+        key = (role, tuple(values))
+        host = _CAPTURE_POINTER_HOSTS.get(key)
+        if host is None:
+            host = torch.empty((len(values),), dtype=torch.int64, pin_memory=True)
+            host.copy_(torch.tensor(values, dtype=torch.int64, device="cpu"))
+            _CAPTURE_POINTER_HOSTS[key] = host
+        result = torch.empty((len(values),), dtype=torch.int64, device=device)
+        result.copy_(host, non_blocking=True)
+        return result
+    key = (role, str(device))
+    uploader = _POINTER_UPLOADS.get(key)
+    if uploader is None:
+        uploader = _PinnedMetadataUploader(device, dtype=torch.int64)
+        _POINTER_UPLOADS[key] = uploader
+    return uploader.upload(values)
+
 
 _PROJECTION_MODULE = None
 _ROUTING_MODULE = None
@@ -23,13 +96,51 @@ _HYPERCONNECTION_MODULE = None
 _TRANSFORM_MODULE = None
 _SPARSE_ATTENTION_MODULE = None
 _PACKED_WEIGHTS = {}
-_GROUPED_POINTERS = OrderedDict()
-_GROUPED_POINTER_CACHE_LIMIT = 128
 NATIVE_ROW_LIMIT = 384
 _SPARSE_NATIVE_DISABLED = (
     os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "1") != "1"
 )
+# Set only when the native call rejected a step. The environment switch keeps
+# long queries on the native path; a rejected native call does not.
 _SPARSE_NATIVE_FAILED = False
+_SPARSE_STATUS = {}
+
+
+def _disable_sparse_native():
+    global _SPARSE_NATIVE_DISABLED, _SPARSE_NATIVE_FAILED
+    _SPARSE_NATIVE_FAILED = True
+    _SPARSE_NATIVE_DISABLED = True
+
+
+def _sparse_status_accumulator(device):
+    key = str(device)
+    accumulator = _SPARSE_STATUS.get(key)
+    if accumulator is None:
+        accumulator = torch.zeros((), dtype=torch.bool, device=device)
+        _SPARSE_STATUS[key] = accumulator
+    return accumulator
+
+
+def reset_sparse_status():
+    """Clear the sparse attention status before a model step."""
+    for accumulator in _SPARSE_STATUS.values():
+        accumulator.zero_()
+
+
+def require_sparse_status():
+    """Stop the step when native sparse attention rejected a head tile.
+
+    The native operator zeroes a rejected head tile and flags its status. The
+    caller checks the accumulated status once per step, before the worker
+    commits cache state. A rejected step is not recoverable in place because
+    earlier layers already wrote their cache rows.
+    """
+    for accumulator in _SPARSE_STATUS.values():
+        if accumulator.item():
+            _disable_sparse_native()
+            raise RuntimeError(
+                "native sparse attention rejected the step; no state is committed"
+            )
 
 
 class _PackedWeightCacheEntry(NamedTuple):
@@ -157,29 +268,35 @@ def _packed_weight(weight, scales, bits):
 
 
 def _grouped_pointer_arrays(packed, device):
-    key = (
-        str(device),
-        tuple((weight.data_ptr(), scales.data_ptr()) for weight, scales, _ in packed),
+    weight_ptrs = _upload_pointer_array(
+        [weight.data_ptr() for weight, _, _ in packed], "weight", device
     )
-    cached = _GROUPED_POINTERS.get(key)
-    if cached is not None:
-        _GROUPED_POINTERS.move_to_end(key)
-        return cached[0], cached[1]
-    weight_ptrs = torch.tensor(
+    scale_ptrs = _upload_pointer_array(
+        [scales.data_ptr() for _, scales, _ in packed], "scale", device
+    )
+    return weight_ptrs, scale_ptrs
+
+
+def _static_pointer_arrays(packed, device):
+    """Device pointer arrays over every expert; prepared weights never move.
+
+    The pinned host tensors stay with the result set, so the asynchronous copy
+    never reads released storage.
+    """
+    packed = [_packed_weight(weight, scale, 4) for weight, scale in packed]
+    weight_host = torch.tensor(
         [weight.data_ptr() for weight, _, _ in packed],
         dtype=torch.int64,
-        device=device,
+        pin_memory=True,
     )
-    scale_ptrs = torch.tensor(
+    scale_host = torch.tensor(
         [scales.data_ptr() for _, scales, _ in packed],
         dtype=torch.int64,
-        device=device,
+        pin_memory=True,
     )
-    _GROUPED_POINTERS[key] = (weight_ptrs, scale_ptrs, packed)
-    _GROUPED_POINTERS.move_to_end(key)
-    while len(_GROUPED_POINTERS) > _GROUPED_POINTER_CACHE_LIMIT:
-        _GROUPED_POINTERS.popitem(last=False)
-    return weight_ptrs, scale_ptrs
+    weight_ptrs = weight_host.to(device, non_blocking=True)
+    scale_ptrs = scale_host.to(device, non_blocking=True)
+    return weight_ptrs, scale_ptrs, weight_host, scale_host
 
 
 def _scale_values(scales):
@@ -236,9 +353,23 @@ def fp4_gemm(
 
 
 def grouped_fp4_gemm(
-    values, counts, weights, *, counts_list=None, output_dtype=torch.bfloat16
+    values,
+    counts,
+    weights,
+    *,
+    counts_list=None,
+    pointers=None,
+    max_rows=None,
+    output_dtype=torch.bfloat16,
 ):
-    """Apply one FP4 projection to each consecutive routed expert segment."""
+    """Apply one FP4 projection to each consecutive routed expert segment.
+
+    The native operator compacts the nonempty groups on the device. Without
+    `counts_list`, the caller keeps the counts on the device and `max_rows`
+    defaults to every input row. With `counts_list`, the host list is validated
+    and supplies `max_rows`. `pointers` supplies prepared device pointer arrays
+    for the full expert order.
+    """
     output_dtype = _projection_output_dtype(output_dtype) or torch.bfloat16
     if values.ndim != 2:
         raise ValueError("grouped FP4 input must be a matrix")
@@ -248,24 +379,25 @@ def grouped_fp4_gemm(
         raise ValueError("grouped FP4 weights must match the expert count")
     if counts.device != values.device:
         raise ValueError("grouped FP4 counts must use the input device")
-    counts_list = counts.tolist() if counts_list is None else counts_list
-    if len(counts_list) != counts.numel():
-        raise ValueError("grouped FP4 count metadata must match the count tensor")
-    if any(type(count) is not int or count < 0 for count in counts_list):
-        raise ValueError("grouped FP4 counts must be non-negative")
-    if sum(counts_list) != values.size(0):
-        raise ValueError("grouped FP4 counts must cover every input row")
-
-    active = [
-        (count, weight, scale)
-        for count, (weight, scale) in zip(counts_list, weights, strict=True)
-        if count
-    ]
-    if not active:
+    if counts_list is None:
+        if max_rows is None:
+            max_rows = values.size(0)
+    else:
+        if len(counts_list) != counts.numel():
+            raise ValueError("grouped FP4 count metadata must match the count tensor")
+        if any(type(count) is not int or count < 0 for count in counts_list):
+            raise ValueError("grouped FP4 counts must be non-negative")
+        if sum(counts_list) != values.size(0):
+            raise ValueError("grouped FP4 counts must cover every input row")
+        if max(counts_list):
+            max_rows = max(counts_list)
+        else:
+            return values.new_empty((0, weights[0][0].size(0)), dtype=output_dtype)
+    if values.size(0) == 0:
         return values.new_empty((0, weights[0][0].size(0)), dtype=output_dtype)
     if values.is_cuda and all(
         weight.is_cuda and weight.dtype == torch.float4_e2m1fn_x2
-        for _, weight, _ in active
+        for weight, _ in weights
     ):
         encoded, input_scale = act_quant(
             values,
@@ -273,13 +405,14 @@ def grouped_fp4_gemm(
             "ue8m0",
             torch.float8_e8m0fnu,
         )
-        packed = [_packed_weight(weight, scale, 4) for _, weight, scale in active]
-        output_width = packed[0][0].size(0)
+        if pointers is None:
+            packed = [_packed_weight(weight, scale, 4) for weight, scale in weights]
+            weight_ptrs, scale_ptrs = _grouped_pointer_arrays(packed, values.device)
+            output_width = packed[0][0].size(0)
+        else:
+            weight_ptrs, scale_ptrs = pointers
+            output_width = weights[0][0].size(0)
         width = values.size(-1)
-        weight_ptrs, scale_ptrs = _grouped_pointer_arrays(packed, values.device)
-        active_counts = torch.tensor(
-            [count for count, _, _ in active], dtype=torch.int32, device=values.device
-        )
         output = torch.empty(
             (values.size(0), output_width), dtype=output_dtype, device=values.device
         )
@@ -288,8 +421,8 @@ def grouped_fp4_gemm(
             (
                 module.grouped_workspace_size(
                     values.size(0),
-                    len(active),
-                    max(count for count, _, _ in active),
+                    len(weights),
+                    max_rows,
                     output_width,
                     width,
                 ),
@@ -302,13 +435,14 @@ def grouped_fp4_gemm(
             input_scale.view(torch.uint8),
             weight_ptrs,
             scale_ptrs,
-            active_counts,
+            counts.to(torch.int32),
             output,
             scratch,
-            max(count for count, _, _ in active),
+            max_rows,
         )
         return output
 
+    counts_list = counts.tolist() if counts_list is None else counts_list
     outputs = []
     first = 0
     for count, (weight, scale) in zip(counts_list, weights, strict=True):
@@ -359,23 +493,21 @@ def _source_steps(values, logical_rows, operation):
 def fp32_project(values, weight, *, logical_rows=0, workspace=None):
     if values.ndim != 2 or weight.ndim != 2 or values.size(1) != weight.size(1):
         raise ValueError("FP32 projection inputs must be compatible matrices")
+    if values.size(1) != 5120:
+        raise ValueError("FP32 projection width must be 5120")
     rows = values.size(0)
     source_rows = _logical_row_count(rows, logical_rows)
     if (
         values.is_cuda
         and weight.device == values.device
         and values.dtype == weight.dtype == torch.float32
-        and values.size(1) == 5120
-        and weight.size(0) in (128, 384)
+        and weight.size(0) >= 1
         and values.is_contiguous()
         and weight.is_contiguous()
     ):
         module = _hyperconnection_module()
         if workspace is None:
-            workspace = torch.empty(
-                module.workspace_size(rows), dtype=torch.uint8, device=values.device
-            )
-            module.hc_warmup(values)
+            workspace = torch.empty(0, dtype=torch.uint8, device=values.device)
         output = torch.empty(
             (rows, weight.size(0)), dtype=torch.float32, device=values.device
         )
@@ -383,6 +515,78 @@ def fp32_project(values, weight, *, logical_rows=0, workspace=None):
         return output
     return _source_steps(
         values.float(), source_rows, lambda x: F.linear(x, weight.float())
+    )
+
+
+def bf16_linear(values, weight, *, logical_rows=0):
+    """Apply one BF16 projection with the released cuBLAS configuration."""
+    if weight.ndim != 2 or values.size(-1) != weight.size(1):
+        raise ValueError("BF16 projection inputs must be compatible matrices")
+    width = values.size(-1)
+    rows = values.numel() // width
+    outputs = weight.size(0)
+    source_rows = _logical_row_count(rows, logical_rows)
+    if not (
+        values.is_cuda
+        and weight.device == values.device
+        and values.dtype == weight.dtype == torch.bfloat16
+        and values.is_contiguous()
+        and weight.is_contiguous()
+    ):
+        output = _source_steps(
+            values.float().reshape(rows, width),
+            source_rows,
+            lambda x: F.linear(x, weight.float()),
+        )
+        return output.to(torch.bfloat16).reshape(*values.shape[:-1], outputs)
+    module = _hyperconnection_module()
+    output = torch.empty((rows, outputs), dtype=torch.bfloat16, device=values.device)
+    if logical_rows and logical_rows < rows:
+        steps = rows // logical_rows
+        grouped = values.reshape(logical_rows, steps, width)
+        out = output.view(logical_rows, steps, outputs)
+        step_out = torch.empty(
+            (logical_rows, outputs), dtype=torch.bfloat16, device=values.device
+        )
+        for step in range(steps):
+            module.bf16_linear(grouped[:, step].contiguous(), weight, step_out)
+            out[:, step] = step_out
+    else:
+        module.bf16_linear(values.reshape(rows, width), weight, output)
+    return output.reshape(*values.shape[:-1], outputs)
+
+
+def _native_fp32_linear(values, weight, function):
+    width = values.size(-1)
+    rows = values.numel() // width
+    outputs = weight.size(0)
+    if not (
+        values.is_cuda
+        and weight.device == values.device
+        and values.dtype == weight.dtype == torch.float32
+        and weight.is_contiguous()
+    ):
+        return F.linear(values.float(), weight.float())
+    module = _hyperconnection_module()
+    output = torch.empty((rows, outputs), dtype=torch.float32, device=values.device)
+    function(
+        module,
+        values.reshape(rows, width).contiguous(),
+        weight,
+        output,
+    )
+    return output.reshape(*values.shape[:-1], outputs)
+
+
+def markov_linear(values, weight):
+    return _native_fp32_linear(
+        values, weight, lambda module, x, w, out: module.markov_linear(x, w, out)
+    )
+
+
+def dot_linear(values, weight):
+    return _native_fp32_linear(
+        values, weight, lambda module, x, w, out: module.dot_linear(x, w, out)
     )
 
 
@@ -607,10 +811,52 @@ def _hc_native_available(residual, *inputs):
     return True
 
 
+_BF16_PROBE_DIGESTS = {
+    "2": "f5a8ea40f4c74b2e",
+    "64": "fb8f993fae7373f6",
+    "1024": "4fdc4d03ceb8a9f9",
+}
+_BF16_PROBE_DONE = False
+
+
+def _bf16_probe_digest(device, rows):
+    width = 5120
+    weight = torch.arange(512 * width, device=device, dtype=torch.int64)
+    weight = ((weight.remainder(2048) - 1024).to(torch.float32) / 1024).bfloat16()
+    values = torch.arange(rows * width, device=device, dtype=torch.int64)
+    values = ((values.remainder(1024) - 512).to(torch.float32) / 512).bfloat16()
+    output = bf16_linear(values.view(rows, width), weight.view(512, width))
+    return hashlib.sha256(output.view(torch.int16).cpu().numpy().tobytes()).hexdigest()[
+        :16
+    ]
+
+
+def verify_bf16_projection(device):
+    """Fail when the limited cuBLAS handle stops matching the accepted layout."""
+    global _BF16_PROBE_DONE
+    if _BF16_PROBE_DONE:
+        return
+    if torch.cuda.is_current_stream_capturing():
+        raise RuntimeError("verify the BF16 projection outside Graph capture")
+    actual = {str(rows): _bf16_probe_digest(device, rows) for rows in (2, 64, 1024)}
+    different = {
+        rows: (value, _BF16_PROBE_DIGESTS[rows])
+        for rows, value in actual.items()
+        if value != _BF16_PROBE_DIGESTS[rows]
+    }
+    if different:
+        raise RuntimeError(
+            "BF16 projection probe differs from the accepted cuBLAS layout: "
+            + repr(different)
+        )
+    _BF16_PROBE_DONE = True
+
+
 def make_hc_workspace(device, max_rows=NATIVE_ROW_LIMIT):
     if type(max_rows) is not int or not 0 < max_rows <= NATIVE_ROW_LIMIT:
         raise ValueError("DeepSeek mHC workspace rows must be between one and 384")
     module = _hyperconnection_module()
+    verify_bf16_projection(device)
     workspace = {
         "mixed": torch.empty((max_rows, 24), dtype=torch.float32, device=device),
         "post": torch.empty((max_rows, 4), dtype=torch.float32, device=device),
@@ -936,6 +1182,11 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
     if not sink.is_contiguous():
         sink = sink.contiguous()
     module = _sparse_attention_module()
+    scratch = torch.empty(
+        (sparse_scratch_bytes(query_rows.size(0), heads, ids.size(-1)),),
+        dtype=torch.uint8,
+        device=query.device,
+    )
     module.attend(
         query_rows,
         sink,
@@ -944,11 +1195,11 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
         window_scales,
         compressed.reshape(compressed_rows, 512),
         compressed_scales,
+        scratch,
         output,
         status,
     )
-    if bool(status.any().item()):
-        return None
+    _sparse_status_accumulator(query.device).logical_or_(status.any())
     return output.reshape(batch, sequence, heads, 512)
 
 
@@ -962,7 +1213,6 @@ def sparse_attn(
     native_window=None,
     native_compressed=None,
 ):
-    global _SPARSE_NATIVE_DISABLED, _SPARSE_NATIVE_FAILED
     long_query = q.numel() // (q.size(-1) * q.size(-2)) > NATIVE_ROW_LIMIT
     if (
         (not _SPARSE_NATIVE_DISABLED or (long_query and not _SPARSE_NATIVE_FAILED))
@@ -973,13 +1223,9 @@ def sparse_attn(
         and attn_sink.device == q.device
         and _sparse_native_available(q, topk_idxs, native_window, native_compressed)
     ):
-        native = _sparse_attn_native(
+        return _sparse_attn_native(
             q, attn_sink, topk_idxs, native_window, native_compressed
         )
-        if native is not None:
-            return native
-        _SPARSE_NATIVE_FAILED = True
-        _SPARSE_NATIVE_DISABLED = True
     if kv is None:
         kv = torch.cat((native_window, native_compressed), dim=1)
     maximum = torch.full(q.shape[:-1], -1e30, dtype=torch.float32, device=q.device)

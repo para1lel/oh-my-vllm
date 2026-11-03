@@ -110,6 +110,11 @@ Round the output to BF16.
 Keep duplicate indices and masked slots in their original positions.
 Empty and fully masked rows return zero, even when a finite sink exponential underflows.
 
+For BF16 tables with at most four query rows, native attention calculates 64-slot partials in parallel.
+Each partial uses the ordered running maximum for probability rounding.
+Each output channel keeps the original FP32 numerator and denominator update order.
+The frozen endpoint limits are applicable to this path.
+
 DSpark proposal queries share the full draft-index block.
 Target attention keeps its causal index rules.
 
@@ -126,22 +131,67 @@ Round FP32 multiplication and addition independently in these sums.
 HC mixing accumulates squared inputs independently in four FP32 accumulators.
 The full logical row count selects the reduction layout.
 Apply the inverse RMS after the FP32 projection.
-The native projection uses the tensor runtime's cuBLAS library and a caller-owned 32 MiB workspace.
+
+The native projection writes the released FP32 reduction order.
+The HC single-row projection uses 32 interleaved split dots.
+Its caller-owned 32 MiB workspace holds the split partials and the chunk partials.
+A multi-row step selects its split chunk from a measured released table.
+The chunk stays constant across each row-count range.
+
+Each measured table belongs to one output shape.
+The HC table has 24 outputs and width 20480.
+The router table has 384 outputs and width 5120.
+The DSpark router table has 128 outputs and width 5120.
+The compressor table has 512 outputs and width 5120.
+Each table covers row counts from 2 through 32768.
+
+A multi-row projection writes one partial for each row, output, and chunk.
+A separate reduction adds the partials in chunk order.
+An unmeasured shape or row count stops the call with an error.
+
+The router and compressor single-row projections use a 32-lane warp reduction.
 This workspace size is part of the numerical contract.
+
+The ratio-1 compressor uses a BF16 projection.
+Its multi-row calls use a cuBLAS handle with an SM count target of eight.
+This selects the released non-split-K kernel.
+
+A measured sweep covers rows 2, 4, 8, 16, 64, 256, 1024, and 4096.
+Rows 1024 and 4096 match the CUDA 13.0 image exactly.
+Rows 1, 3, 5 through 7, 9 through 15, 17 through 255, 257 through 1023,
+1025 through 4095, and 4097 through 32768 are not measured.
+
+Known deviation: some small rows do not reproduce the CUDA 13.0 BF16 result.
+Rows 2, 4, 8, 16, 64, and 256 differ in 3, 3, 6, 12, 23, and 113 outputs.
+The compared output counts are 1024, 2048, 4096, 8192, 32768, and 131072.
+Each different output is at most two BF16 code units from the release.
+
+Startup runs a fixed BF16 probe on the limited handle.
+A different probe pattern stops the worker with an error.
+The probe records the accepted native library layout.
+The probe pins the accepted deviating pattern.
+It fails also when the environment becomes exact.
+
+The probe checks the first device only.
+It does not cover the rows == 1 default handle.
+A driver or library change can select a different kernel.
+The DSpark markov head uses an eight-lane warp reduction.
+The confidence head uses the single-row split-dot order.
+
 
 ## Target row groups
 
 Initial target prefill, single-token target calls, and MTP keep their existing row layouts.
 Nonzero multi-token target calls keep batch-major `[batch, step, ...]` storage.
 Their logical row count is the request batch size.
-HC and router FP32 projections use this row count for each source step.
-Their SGEMM calls write directly to strided physical output storage.
+HC, router, and compressor FP32 projections use this row count for each source step.
+Their FP32 projections write directly to strided physical output storage.
 
 RMS selects its mean reduction layout from the logical row count and processes all physical rows.
 Engram uses four times the token logical row count for per-copy mean and dot reductions.
 FP32 multiplication and addition round independently in its final residual addition.
 Engram embedding, KV projection, target attention, and routed expert computation stay batched.
-The router can use the HC cuBLAS workspace after HC projection completes.
+The router projection does not use the HC workspace.
 
 ## Execution
 
@@ -151,10 +201,12 @@ It uses the caller's CUDA stream.
 Each warp reads one full group before an in-place write.
 Native quantization does not allocate temporary device storage.
 
-HC preparation keeps an FP32 residual copy, mean and inverse statistics, and the cuBLAS workspace.
+HC preparation keeps an FP32 residual copy, mean and inverse statistics, and the operator workspace.
 Native HC calls accept up to 32768 rows.
 Small-row workspace plans keep their 384-row limit.
-Prepare the thread-local cuBLAS handle before Graph recording.
+
+HC preparation is capture-safe.
+Prepare HC workspaces before Graph recording.
 Keep the captured workspace until Graph release.
 The native manifest records cuBLAS library image and header identities for the tensor runtime package.
 
@@ -162,7 +214,12 @@ Tensor preparation can make an aligned contiguous input copy.
 Encoded output and scales use different storage.
 
 Dense projection does not use device scratch storage.
+
 Grouped projection uses device row offsets without host descriptor uploads.
+The operator compacts the nonempty groups in its device scratch.
+The grouped launch covers the nonempty groups and the output column tiles.
+Each block walks its group rows, so the launch does not use a host row bound.
+
 Each device count must be between zero and the prepared maximum row count.
 The counts must sum to the full input row count.
 Invalid device counts produce NaN output without input or weight access.
@@ -185,7 +242,8 @@ The reference path joins their BF16 tables before computation.
 Native sparse attention is the default for supported inputs.
 Set `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0` to select reference attention for short queries.
 Long queries keep native selection unless a native status failure occurs.
-Attention status failures disable native selection and use the reference path.
+Attention status failures disable native selection.
+The step boundary checks the accumulated status once and raises before the worker commits cache state.
 
 ## Acceptance
 

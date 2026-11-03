@@ -117,6 +117,34 @@ class Request:
                 mask[blocked] = 0
         return mask
 
+    def packed_mask(self, mask, thinking, generated, thinking_count, prefix):
+        mask = mask.copy()
+        valid = self.tokenizer.valid_tokens
+        mask[(valid + 7) // 8 :] = 0
+        if valid % 8:
+            mask[valid // 8] &= (1 << (valid % 8)) - 1
+        budget = self.options.get("thinking_token_budget")
+        if thinking and budget is not None and budget >= 0 and thinking_count >= budget:
+            mask[:] = 0
+            token = self.tokenizer.think_end
+            mask[token // 8] = 1 << (token % 8)
+        if thinking or generated < self.minimum:
+            for token in self.tokenizer.eos:
+                mask[token // 8] &= 255 ^ (1 << (token % 8))
+        if self.options.get("sampling", {}).get("repetition_guard", True):
+            history = self.history[
+                max(self.prompt_len, len(self.history) - HISTORY_WINDOW) :
+            ] + list(prefix)
+            blocked = list(cycle_continuations(history))
+            allowed = [
+                token for token in blocked if mask[token // 8] & (1 << (token % 8))
+            ]
+            remaining = int(np.unpackbits(mask).sum()) if allowed else 0
+            if allowed and len(allowed) < remaining:
+                for token in allowed:
+                    mask[token // 8] &= 255 ^ (1 << (token % 8))
+        return mask
+
     def parameters(self):
         values = {**self.tokenizer.generation, **self.options.get("sampling", {})}
         return np.asarray(

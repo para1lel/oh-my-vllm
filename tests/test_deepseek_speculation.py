@@ -768,6 +768,28 @@ class DeepSeekSpeculation(unittest.TestCase):
             [7, 135, 263],
         )
 
+    def test_target_graph_requires_vocab_logits_and_one_token(self):
+        worker = Worker.__new__(Worker)
+        worker.device = torch.device("cpu")
+        worker.prefill_rows = MAX_PREFILL_ROWS
+        worker.decode_graph_enabled = True
+        worker.model = Mock(return_value=(None, None, None))
+        with patch.object(worker, "_decode_graph_step", return_value=None) as graph:
+            worker._target([1], 5, 3)
+            self.assertEqual(graph.call_count, 1)
+            worker._target([1], 0, 3)
+            self.assertEqual(graph.call_count, 1)
+            worker._target([1], 5, 3, compute_logits=False)
+            self.assertEqual(graph.call_count, 1)
+            worker._target([1, 2], 5, 3)
+            self.assertEqual(graph.call_count, 1)
+            worker._target_batch_group([[1]], 5, torch.tensor([3]))
+            self.assertEqual(graph.call_count, 2)
+            worker._target_batch_group(
+                [[1]], 5, torch.tensor([3]), compute_logits=False
+            )
+            self.assertEqual(graph.call_count, 2)
+
     def test_target_batch_keeps_total_rows_in_one_native_call(self):
         worker = Worker.__new__(Worker)
         worker.device = torch.device("cpu")

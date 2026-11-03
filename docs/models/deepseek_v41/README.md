@@ -13,8 +13,9 @@ Nonzero multi-token prefill uses the fused chunk path.
 
 The current functional path supports text target decode and greedy DSpark5 verification.
 Short checkpoint checks use TEP4 on GPUs `4,5,6,7`.
-The target path uses Eager execution.
-The shared CUDA Graph implementation is not connected to this multi-rank adapter.
+
+The target path uses captured CUDA Graphs for TP4 decode.
+TEP4 and DEP4 target decode use Eager execution.
 
 The supported public capability is text.
 Image preparation is kept out of the public capability until the tokenizer, image processor, rank execution, and HTTP checks are connected.
@@ -26,7 +27,10 @@ It supports prefix reuse, partial block copies, host snapshots, and restoration.
 Accepted-state pages keep target windows, MTP windows, and compressor tails at an exact endpoint.
 Restoration rejects a different endpoint before it clears an active slot.
 FA prefix copies contain only compressed KV, index keys, and Engram history.
-DeepSeek still uses Eager execution because coordinated multi-rank Graph replay is not connected.
+
+DeepSeek uses Eager execution for prefill and draft verification.
+TP4 target decode uses captured CUDA Graphs.
+TEP4 and DEP4 target decode use Eager execution.
 
 Verification keeps private state for each possible accepted endpoint before it overwrites recurrent storage.
 Commit publishes only accepted states and scheduled checkpoints.
@@ -79,7 +83,7 @@ The physical cache setting must cover the requested prompt and output.
 
 The Python worker keeps model cache state in rank-local tensors and physical pages.
 Rust logical cache transfers return completion records for the protocol seam.
-DeepSeek-specific DEP4 ownership and coordinated Graph replay stay in progress.
+DeepSeek-specific DEP4 ownership stays in progress.
 Nonzero multi-token prefill uses the fused chunk path.
 Target and MTP seed chunks keep total native rows below the operator limit.
 

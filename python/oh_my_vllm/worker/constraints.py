@@ -11,7 +11,7 @@ def mask_executor():
     return llguidance.LLExecutor(4)
 
 
-def batch_masks(constraints, prefixes):
+def batch_masks(constraints, prefixes, *, packed=False):
     width = constraints[0].tokenizer.vocab_size
     groups = {}
     for constraint, prefix in zip(constraints, prefixes, strict=True):
@@ -46,11 +46,11 @@ def batch_masks(constraints, prefixes):
                 raise ValueError("token violates the output constraint")
         pending.append((constraint, rows, longest, skip))
         rows += len(longest) - skip + 1
-    packed = np.zeros((rows, (width + 31) // 32), dtype=np.uint32)
+    buffer = np.zeros((rows, (width + 31) // 32), dtype=np.uint32)
     # The draft API leaves rows after termination unwritten.
     for constraint, start, path, skip in pending:
         for token in constraint.tokenizer.eos_tokens:
-            packed[start : start + len(path) - skip + 1, token // 32] |= 1 << (
+            buffer[start : start + len(path) - skip + 1, token // 32] |= 1 << (
                 token % 32
             )
     with ExitStack() as states:
@@ -70,15 +70,22 @@ def batch_masks(constraints, prefixes):
                     if speculative
                     else mask_executor().unsafe_compute_mask_ptr
                 )
-                operation(entries, packed.ctypes.data, packed.shape[1] * 4, rows)
+                operation(entries, buffer.ctypes.data, buffer.shape[1] * 4, rows)
         for constraint, start, path, skip in pending:
             constraint.check()
-            bits = packed[start : start + len(path) - skip + 1].view(np.uint8)
+            bits = buffer[start : start + len(path) - skip + 1].view(np.uint8)
             for index, token in enumerate(path[skip:]):
                 if not (bits[index, token // 8] >> (token % 8)) & 1:
                     raise ValueError("token violates the output constraint")
             for index, mask in enumerate(bits, skip):
                 constraint.prefix_masks[path[:index]] = mask.tobytes()
+    if packed:
+        return [
+            np.packbits(fallback[constraint, tuple(prefix)], bitorder="little")
+            if (constraint, tuple(prefix)) in fallback
+            else np.frombuffer(constraint.prefix_masks[tuple(prefix)], np.uint8)
+            for constraint, prefix in zip(constraints, prefixes, strict=True)
+        ]
     return [
         fallback[constraint, tuple(prefix)]
         if (constraint, tuple(prefix)) in fallback

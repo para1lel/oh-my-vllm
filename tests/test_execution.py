@@ -69,31 +69,175 @@ class Execution(unittest.TestCase):
         class Uploads:
             def copy(self, destination, source):
                 copied.append((destination, source))
+                destination.copy_(source)
 
             def close(self):
                 pass
 
         device = SimpleNamespace(
             uploads=lambda: Uploads(),
-            scratch=lambda shape, dtype: torch.zeros(shape, dtype=dtype),
+            scratch=lambda shape, dtype: torch.zeros(
+                shape, dtype=getattr(torch, dtype) if isinstance(dtype, str) else dtype
+            ),
             view=lambda value, shape, offset: value.reshape(-1)[
                 offset : offset + int(torch.tensor(shape).prod())
             ].reshape(shape),
         )
-        metadata = Metadata(
-            device,
-            (np.array([1, 2], dtype=np.int32), torch.tensor([3.0])),
+        values = (
+            np.array([1, 2], dtype=np.int32),
+            torch.tensor([3.0]),
+            torch.tensor([4], dtype=torch.int64),
+            torch.empty((0, 3), dtype=torch.int32),
+            torch.tensor(5, dtype=torch.uint8),
         )
-        self.assertTrue(
-            all(
-                isinstance(value, torch.Tensor)
-                for value in metadata.host_arenas.values()
-            )
-        )
-        self.assertTrue(
-            all(isinstance(value, torch.Tensor) for value in metadata.host_views)
-        )
+        for single_upload, uploads in ((False, 4), (True, 1)):
+            with self.subTest(single_upload=single_upload):
+                copied.clear()
+                metadata = Metadata(device, values, single_upload=single_upload)
+                self.assertIs(metadata.single_upload, single_upload)
+                self.assertEqual(len(copied), uploads)
+                self.assertTrue(
+                    all(
+                        isinstance(value, torch.Tensor)
+                        for value in metadata.host_arenas.values()
+                    )
+                )
+                for actual, expected in zip(metadata.arrays, values, strict=True):
+                    torch.testing.assert_close(actual, torch.as_tensor(expected))
+                    self.assertEqual(
+                        actual.storage_offset() * actual.element_size() % 16, 0
+                    )
+                if single_upload:
+                    self.assertEqual(set(metadata.device_arenas), {torch.uint8})
+                    self.assertEqual(metadata.device_arenas[torch.uint8].numel(), 64)
+                updated = tuple(torch.as_tensor(value) + 7 for value in values)
+                metadata.update(updated)
+                for actual, expected in zip(metadata.arrays, updated, strict=True):
+                    torch.testing.assert_close(actual, expected)
+                self.assertEqual(len(copied), 2 * uploads)
+                with self.assertRaisesRegex(ValueError, "shape or dtype changed"):
+                    metadata.update((torch.zeros(3, dtype=torch.int32), *values[1:]))
+                self.assertEqual(len(copied), 2 * uploads)
+                metadata.close()
         self.assertTrue(all(isinstance(source, torch.Tensor) for _, source in copied))
+
+    def test_qwen_metadata_upload_selection_at_all_three_call_sites(self):
+        from oh_my_vllm.models.qwen38 import model, speculation
+
+        def scratch(shape, dtype):
+            return torch.zeros(
+                shape, dtype=getattr(torch, dtype) if isinstance(dtype, str) else dtype
+            )
+
+        device = SimpleNamespace(
+            uploads=lambda: SimpleNamespace(copy=lambda *_: None, close=lambda: None),
+            scratch=scratch,
+            empty=scratch,
+            zeros=scratch,
+            zero=lambda value: value.zero_(),
+            upload=lambda value: value.clone(),
+            view=lambda value, shape, offset=0: value.reshape(-1)[
+                offset : offset + int(np.prod(shape))
+            ].reshape(shape),
+        )
+        weights = SimpleNamespace(
+            layers=(),
+            mtp_input=None,
+            mtp_layer=SimpleNamespace(attention=None, feed_forward=None),
+            mtp_sample=None,
+            attention_variant=lambda *_: None,
+        )
+        for count in (1, 2, 4):
+            for verify, graph in ((False, True), (True, True), (True, False)):
+                with self.subTest(batch=count, verify=verify, graph=graph):
+                    batch = SimpleNamespace(
+                        rows=count,
+                        requests=[
+                            SimpleNamespace(
+                                state_position=2,
+                                mtp_position=0,
+                                history=[0, 1],
+                                position=lambda value: (value,) * 3,
+                            )
+                            for _ in range(count)
+                        ],
+                        scheduled=[
+                            dict(
+                                request_id=index,
+                                num_computed_tokens=0,
+                                fa_block_table=[0],
+                            )
+                            for index in range(count)
+                        ],
+                        schedule=SimpleNamespace(
+                            verify=verify,
+                            sequence_rows=tuple(range(count + 1)),
+                            read_slots=(0,) * count,
+                        ),
+                        metadata=(
+                            np.zeros((3, count), np.int64),
+                            np.zeros(count, np.int32),
+                            np.zeros((count, 1), np.int32),
+                            np.arange(count + 1, dtype=np.int32),
+                            np.ones(count, np.int32),
+                        ),
+                        tokens=np.ones(count, np.int64),
+                        writes=list(range(count)),
+                    )
+                    cache = SimpleNamespace(parallel=count, hidden=None, fa=(None,))
+                    operation = Mock(outputs=(torch.zeros(count, 5120),) * 2)
+                    with (
+                        patch.object(model, "prepare_fa", return_value=operation),
+                        patch.object(model, "prepare_gdn", return_value=operation),
+                        patch.object(model, "prepare_ffn", return_value=operation),
+                        patch.object(
+                            speculation, "prepare_context", return_value=operation
+                        ),
+                        patch.object(
+                            speculation, "prepare_draft", return_value=operation
+                        ),
+                        patch.object(speculation, "Sampling"),
+                        patch.object(speculation.Context, "execute"),
+                    ):
+                        workspace = model.Workspace(
+                            device, weights, cache, batch, (None,) * 4
+                        )
+                        owner = speculation.Speculation(
+                            device,
+                            weights,
+                            cache,
+                            SimpleNamespace(rows=lambda _: (None, None)),
+                            Mock(),
+                        )
+                        draft = speculation.Draft(
+                            device, weights, count, True, table_width=1
+                        )
+                        try:
+                            owner.context(batch, torch.zeros(count, 5120), graph, {})
+                            context = (
+                                next(iter(owner.context_decode.values()))
+                                if graph and verify
+                                else owner.context_prefill
+                            )
+                            for metadata, enabled in (
+                                (workspace.metadata_inputs, verify and count >= 2),
+                                (
+                                    context.metadata_inputs,
+                                    graph and verify and count >= 2,
+                                ),
+                                (draft.metadata_inputs, count >= 2),
+                            ):
+                                self.assertIs(metadata.single_upload, enabled)
+                                self.assertEqual(
+                                    set(metadata.device_arenas),
+                                    {torch.uint8}
+                                    if enabled
+                                    else {torch.int32, torch.int64},
+                                )
+                        finally:
+                            workspace.close()
+                            owner.close()
+                            draft.close()
 
     def test_cache_capacity_is_fixed_and_never_silently_reduced(self):
         from oh_my_vllm.models.qwen38.cache_budget import cache_budget
@@ -194,7 +338,7 @@ class Execution(unittest.TestCase):
         )
         device.upload_pool = UploadPool(device)
         source = torch.tensor([1, 2], dtype=torch.int32)
-        destination = torch.zeros(2, dtype=torch.int32, device="cuda")
+        destination = torch.zeros(2, dtype=torch.int32)
         with (
             patch(
                 "oh_my_vllm.operators.runtime.uploads.torch.ops.oh_my_vllm.native_upload",
@@ -216,9 +360,7 @@ class Execution(unittest.TestCase):
             gc.collect()
             uploads.close()
 
-        torch.testing.assert_close(
-            destination, torch.tensor([1, 2], dtype=torch.int32, device="cuda")
-        )
+        torch.testing.assert_close(destination, torch.tensor([1, 2], dtype=torch.int32))
         self.assertTrue(waits)
         device.upload_pool.close()
         self.assertFalse(allocations)
@@ -284,7 +426,7 @@ class Execution(unittest.TestCase):
         device = SimpleNamespace()
         uploads = Uploads(device)
         with self.assertRaisesRegex(ValueError, "CPU Torch"):
-            uploads.copy(torch.empty(1, device="cuda"), np.zeros(1, np.int32))
+            uploads.copy(torch.empty(1), np.zeros(1, np.int32))
 
     def test_execute_delegates_prefill_and_mixed_graph_policy(self):
         worker = Worker.__new__(Worker)
@@ -479,7 +621,9 @@ class Execution(unittest.TestCase):
         with patch.object(
             speculation,
             "Context",
-            side_effect=lambda *args: Mock(hidden=args[4], endpoint_rows=()),
+            side_effect=lambda *args, single_upload: Mock(
+                hidden=args[4], endpoint_rows=()
+            ),
         ) as context:
             try:
                 for value, count in ((hidden, 1), (hidden, 1), (object(), 2)):
@@ -487,6 +631,7 @@ class Execution(unittest.TestCase):
                     self.assertEqual(owner.context(batch, value, True, {}), {})
                     self.assertEqual(context.call_count, count)
                     self.assertIs(context.call_args.args[-1], False)
+                    self.assertIs(context.call_args.kwargs["single_upload"], False)
                     self.assertIs(owner.context_prefill.hidden, value)
                     owner.context_prefill.copy.assert_not_called()
                     self.assertFalse(owner.context_decode)

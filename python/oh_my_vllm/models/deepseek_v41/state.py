@@ -78,6 +78,42 @@ class StateExports:
             ]
             step.windows[key] = snapshot
 
+    def export_decoded_step(self, windows, tails, slots, start_pos, end_pos):
+        """Snapshot one-token decode state after a graph replay.
+
+        The replay wrote the new rows, so the cache buffers already hold the
+        endpoint state. The host position of the next replay is different, and a
+        captured snapshot would repeat its capture-time indices.
+        """
+        if end_pos != start_pos + 1:
+            raise ValueError("decoded state export requires one token")
+        for slot in slots:
+            step = self.steps.get(slot)
+            if step is None or end_pos not in step.endpoints:
+                continue
+            for cache in windows:
+                key = end_pos, id(cache)
+                if key in step.windows:
+                    continue
+                width = cache.size(1)
+                first = max(0, end_pos - width)
+                positions = torch.arange(first, end_pos, device=cache.device)
+                offsets = positions.remainder(width)
+                snapshot = torch.zeros_like(cache[slot])
+                snapshot[offsets] = cache[slot, offsets]
+                step.windows[key] = snapshot
+            for kv, score in tails:
+                key = end_pos, id(kv)
+                if key in step.tails:
+                    continue
+                remainder = end_pos % kv.size(1)
+                snapshot_kv = torch.zeros_like(kv[0])
+                snapshot_score = torch.full_like(score[0], -torch.inf)
+                if remainder:
+                    snapshot_kv[:remainder].copy_(kv[slot, :remainder])
+                    snapshot_score[:remainder].copy_(score[slot, :remainder])
+                step.tails[key] = snapshot_kv, snapshot_score
+
     def tail(self, kv, score, values, scores, start_pos):
         ratio = kv.size(1)
         origin = start_pos - start_pos % ratio

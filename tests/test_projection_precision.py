@@ -731,19 +731,28 @@ class ProjectionPrecisionCuda(unittest.TestCase):
 
     def test_grouped_fp4_rounding_replays_with_changed_counts(self):
         for dtype, value in ((torch.bfloat16, 648), (torch.float32, 646)):
-            with self.subTest(dtype=dtype):
-                self.check_grouped_replay(dtype, value)
+            for counts, changed in (
+                ((1, 0, 33, 2), (16, 1, 0, 19)),
+                ((1, 0, 3, 2), (6, 0, 0, 0)),
+                ((1, 0, 13, 2), (0, 16, 0, 0)),
+                ((1, 0, 14, 2), (0, 0, 17, 0)),
+            ):
+                with self.subTest(dtype=dtype, counts=counts):
+                    self.check_grouped_replay(dtype, value, counts, changed)
 
-    def check_grouped_replay(self, dtype, value):
+    def check_grouped_replay(self, dtype, value, counts, changed):
         module = kernel._projection_module()
-        case = grouped_literal(dtype=dtype)
+        case = grouped_literal(counts, max_rows=max(33, sum(counts)), dtype=dtype)
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(stream):
             run_grouped(module, case)
             eager = case.output.clone()
         stream.synchronize()
-        shifts = torch.tensor([-1] + [1] * 33 + [2] * 2, device="cuda")
+        shifts = torch.repeat_interleave(
+            torch.tensor([-1, 0, 1, 2], device="cuda"),
+            torch.tensor(counts, device="cuda"),
+        )
         expected = (case.factors * torch.exp2(shifts[:, None].float()) * value).to(
             dtype
         )
@@ -752,10 +761,10 @@ class ProjectionPrecisionCuda(unittest.TestCase):
         try:
             with torch.cuda.graph(graph, stream=stream):
                 run_grouped(module, case)
-            for counts in ((1, 0, 33, 2), (16, 1, 0, 19)):
-                with self.subTest(counts=counts), torch.cuda.stream(stream):
+            for replay_counts in (counts, changed):
+                with self.subTest(counts=replay_counts), torch.cuda.stream(stream):
                     case.counts.copy_(
-                        torch.tensor(counts, device="cuda", dtype=torch.int32)
+                        torch.tensor(replay_counts, device="cuda", dtype=torch.int32)
                     )
                     case.output.fill_(-7)
                     graph.replay()
@@ -765,7 +774,7 @@ class ProjectionPrecisionCuda(unittest.TestCase):
                 finished.synchronize()
                 group_shifts = torch.repeat_interleave(
                     torch.tensor([-1, 0, 1, 2], device="cuda"),
-                    torch.tensor(counts, device="cuda"),
+                    torch.tensor(replay_counts, device="cuda"),
                 )
                 expected = (
                     case.factors * torch.exp2(group_shifts[:, None].float()) * value

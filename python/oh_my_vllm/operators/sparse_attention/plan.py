@@ -1,6 +1,12 @@
 from dataclasses import dataclass
 
 
+def scratch_bytes(rows, heads, slots):
+    tiles = rows * (heads // 16) * ((slots + 63) // 64) if rows <= 4 else 0
+    errors = rows * (heads // 16) * 64 if tiles else 0
+    return (tiles * (16 * 64 + 16 + 16 + 16 * 512 + 1) + errors) * 4
+
+
 @dataclass(frozen=True)
 class Plan:
     rows: int

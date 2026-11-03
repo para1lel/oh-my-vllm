@@ -37,7 +37,10 @@ runner 记录 source, executable, native module, checkpoint, tokenizer, topology
 完整 timer 包含 request submission, prompt preparation, queueing, model execution 和 response parsing.
 它不包含 model loading 和 initialization.
 CSV 记录 mode, strategy, batch, exact length, request count, full seconds 和 output rate.
+它还记录 `effective_strategy`, `ideal_reference_seconds`, `reference_acceptance` 和 `ideal_efficiency_percent`.
 
 当前还没有记录完整的 approved matrix result.
-HTTP result 需要 DeepSeek-specific reference calculation 后才能报告 efficiency.
+理想计划计入全部五个 draft. 它不是实测 efficiency 结果.
+策略回退没有参考值.
+使用 [参考计量](accounting.zh.md) 了解 trace 契约和缺少的计数.
 当前会话的 SOTA 目标不加入 repository performance gate.

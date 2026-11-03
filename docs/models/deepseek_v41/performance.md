@@ -37,7 +37,10 @@ These settings do not independently identify each worker's runtime.
 The full timer includes request submission, prompt preparation, queueing, model execution, and response parsing.
 It excludes model loading and initialization.
 The CSV records mode, strategy, batch, exact lengths, request count, full seconds, and output rate.
+It also records `effective_strategy`, `ideal_reference_seconds`, `reference_acceptance`, and `ideal_efficiency_percent`.
 
 No complete approved matrix result is recorded yet.
-The HTTP result must use a DeepSeek-specific reference calculation before efficiency can be reported.
+The ideal plan credits all five drafts. It is not a measured efficiency result.
+A strategy fallback has no reference value.
+Use the [reference calculation](accounting.md) for the trace contract and the missing counters.
 The session-only SOTA target does not become a repository performance gate.

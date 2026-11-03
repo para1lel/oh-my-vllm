@@ -223,6 +223,39 @@ class DeepSeekCacheBehavior(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "state page"):
             cache.restore(7, 0, row([1], [3]), start_pos=4)
 
+    def test_decoded_export_snapshots_the_post_replay_state(self):
+        model = FakeModel()
+        cache = DeepSeekCache(model, block_tokens=4, max_seq_len=8)
+        attention = model.layers[0].attn
+        source = row([1, 2], [3, 4])
+        cache.begin_step(source, 0, start_pos=4, end_pos=5, minimum_end=5)
+        attention.window_kv_cache[0] = torch.tensor(
+            [[4.0, 40.0, 44.0], [5.0, 50.0, 54.0], [6.0, 60.0, 64.0], [7.0, 70.0, 74.0]]
+        )
+        attention.compressor.kv_state[0, 0] = torch.tensor([9.0, 90.0, 99.0])
+        attention.compressor.score_state[0, 0] = torch.tensor([1.0, 2.0, 3.0])
+
+        cache.export_decoded_step((0,), 4, 5)
+
+        torch.testing.assert_close(
+            cache.exports.window_state(0, 5, attention.window_kv_cache),
+            attention.window_kv_cache[0],
+        )
+        tail_kv, tail_score = cache.exports.tail_state(
+            0, 5, attention.compressor.kv_state
+        )
+        torch.testing.assert_close(tail_kv[0], torch.tensor([9.0, 90.0, 99.0]))
+        self.assertTrue(bool((tail_kv[1:] == 0).all()))
+        torch.testing.assert_close(tail_score[0], torch.tensor([1.0, 2.0, 3.0]))
+        self.assertTrue(bool(torch.isneginf(tail_score[1:]).all()))
+
+    def test_decoded_export_requires_one_token(self):
+        model = FakeModel()
+        cache = DeepSeekCache(model, block_tokens=4, max_seq_len=8)
+        cache.begin_step(row([1, 2], [3, 4]), 0, start_pos=5, end_pos=7, minimum_end=7)
+        with self.assertRaisesRegex(ValueError, "one token"):
+            cache.export_decoded_step((0,), 5, 7)
+
     def test_host_transfers_require_a_live_resident_request(self):
         model = FakeModel()
         requests = {7: SimpleNamespace(cache_slot=0)}

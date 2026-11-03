@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from .deepseek_accounting import VERSION, collective_profile_digest
 from .deepseek_agentx import service_max_num_seqs
 from .deepseek_benchmark import (
     Service,
@@ -17,6 +19,7 @@ from .deepseek_benchmark import (
     native_identity,
     request_body,
     verify_artifact_identity,
+    write_csv,
 )
 
 
@@ -116,6 +119,41 @@ class DeepSeekBenchmark(unittest.TestCase):
                 for service in services:
                     service.close()
             self.assertTrue(all(not directory.exists() for directory in directories))
+
+    def test_effective_strategy_reads_the_execution_trace_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            arguments = SimpleNamespace(
+                artifacts=root,
+                model=root,
+                binary=root / "service",
+                cache_context=1048576,
+                blocks=32,
+                mamba_blocks=8,
+            )
+
+            class FinishedProcess:
+                def poll(self):
+                    return 0
+
+            with patch(
+                "development.serving.deepseek_benchmark.subprocess.Popen",
+                return_value=FinishedProcess(),
+            ):
+                service = Service(arguments, "dspark5", "dep4")
+            service.trace.write_text(
+                json.dumps(
+                    {
+                        "operation": "identity",
+                        "cache_memory": {"effective_strategy": "tep4"},
+                    }
+                )
+                + "\n"
+            )
+            try:
+                self.assertEqual(service.effective_strategy(), "tep4")
+            finally:
+                service.close()
 
     def test_numeric_runtime_changes_invalidate_the_measurement_identity(self):
         import torch
@@ -247,6 +285,43 @@ class DeepSeekBenchmark(unittest.TestCase):
         self.assertNotIn("effort", body)
         self.assertEqual(body["reasoning_effort"], "off")
         self.assertTrue(body["ignore_eos"])
+
+    def test_result_and_csv_hold_accounting_identity(self):
+        case = dict(
+            mode="ordinary", strategy="tp4", batch=1, input_tokens=2, output_tokens=1
+        )
+        response = {
+            "usage": {
+                "prompt_tokens": 2,
+                "completion_tokens": 1,
+                "prompt_tokens_details": {"cached_tokens": 0},
+            }
+        }
+        service = object.__new__(Service)
+        service.port = 0
+        service.effective_strategy = lambda: "tp4"
+        with (
+            patch(
+                "development.serving.deepseek_benchmark.exact_prompt", return_value=[]
+            ),
+            patch("development.serving.deepseek_benchmark.post", return_value=response),
+        ):
+            result = service.run(object(), case, "test")
+        self.assertEqual(result["accounting_version"], VERSION)
+        self.assertEqual(result["communication_model"], "lower_bound")
+        self.assertEqual(result["profile_digest"], collective_profile_digest())
+        self.assertFalse(result["dep4_communication_measured"])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.csv"
+            write_csv(path, [result])
+            with path.open() as source:
+                row = next(csv.DictReader(source))
+        self.assertEqual(row["accounting_version"], VERSION)
+        self.assertEqual(row["communication_model"], "lower_bound")
+        self.assertEqual(row["profile_digest"], collective_profile_digest())
+        self.assertEqual(
+            row["communication_rule_version"], result["communication_rule_version"]
+        )
 
     def test_verify_artifact_identity_rejects_changed_measurement_inputs(self):
         with (

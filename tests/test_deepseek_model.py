@@ -9,20 +9,32 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
+from oh_my_vllm.models.deepseek_v41 import model
+from oh_my_vllm.models.deepseek_v41.decode import (
+    DecodeBindings,
+    pause_state_export,
+    sampled_token_ids,
+)
 from oh_my_vllm.models.deepseek_v41.engram import NgramHashState
 from oh_my_vllm.models.deepseek_v41.kernel import act_quant, fp8_gemm
 from oh_my_vllm.models.deepseek_v41.loader import RankLoader
 from oh_my_vllm.models.deepseek_v41.model import (
     Attention,
     Compressor,
+    Engram,
     Gate,
     ModelArgs,
     MoE,
     ParallelEngramEmbedding,
     RowParallelLinear,
     Transformer,
+    _route_counts,
+    compressed_context_width,
+    context_token_bucket,
     get_dspark_topk_idxs,
     get_prefill_window_topk_idxs,
+    get_window_topk_idxs,
+    position_window_topk_idxs,
     select_candidate_blocks,
     shared_attn,
 )
@@ -30,6 +42,21 @@ from safetensors.torch import save_file
 
 
 class DeepSeekModel(unittest.TestCase):
+    def test_route_counts_match_bincount_without_a_host_read(self):
+        indices = torch.tensor([0, 3, 3, 5, 383, 0], dtype=torch.int32)
+        expected = torch.bincount(indices.to(torch.int64), minlength=384).to(
+            torch.int32
+        )
+
+        actual = _route_counts(indices, 384)
+
+        self.assertEqual(actual.dtype, torch.int32)
+        torch.testing.assert_close(actual, expected)
+        torch.testing.assert_close(
+            _route_counts(torch.empty(0, dtype=torch.int32), 4),
+            torch.zeros(4, dtype=torch.int32),
+        )
+
     def test_rank_loader_keeps_full_down_k_and_matching_output_row_scales(self):
         config = json.loads(
             (Path(__file__).parent / "fixtures/deepseek_v41/config.json").read_text()
@@ -708,6 +735,103 @@ class DeepSeekModel(unittest.TestCase):
             torch.set_default_dtype(previous_dtype)
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_moe_device_counts_avoid_the_host_read_for_many_rows(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cuda")
+        torch.set_default_dtype(torch.bfloat16)
+        world_size_patch = patch.object(model, "world_size", 1)
+        world_size_patch.start()
+        try:
+            torch.manual_seed(1)
+            args = ModelArgs(
+                dim=32,
+                moe_inter_dim=32,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                n_shared_experts=1,
+                dtype="bf16",
+                expert_dtype="fp4",
+                parallel_strategy="TP4",
+                swiglu_limit=10,
+            )
+            moe = MoE(0, args).eval()
+            for expert in moe.experts:
+                for linear in (expert.w1, expert.w2, expert.w3):
+                    raw = torch.randint(
+                        0, 256, linear.weight.shape, device="cuda", dtype=torch.uint8
+                    )
+                    linear.weight.data.copy_(raw.view(torch.float4_e2m1fn_x2))
+                    linear.scale.data.fill_(1)
+
+            rows_count = 10  # two activated experts give 20 routed rows
+            positions = torch.arange(rows_count, device="cuda")
+
+            class FixedGate(torch.nn.Module):
+                def forward(self, value, image_mask=None):
+                    weights = torch.linspace(
+                        0.1, 0.9, rows_count * 2, device=value.device
+                    ).view(rows_count, 2)
+                    indices = torch.stack(
+                        (positions % 4, (positions + 1) % 4), dim=1
+                    ).long()
+                    return weights, indices
+
+            class ZeroExpert(torch.nn.Module):
+                def forward(self, value):
+                    return torch.zeros_like(value)
+
+            moe.gate = FixedGate()
+            moe.shared_experts = ZeroExpert()
+            value = torch.randn(
+                (rows_count, 1, 32), device="cuda", dtype=torch.bfloat16
+            )
+
+            rows = value.view(-1, 32)
+            weights, indices = moe.gate(rows)
+            flat_indices = indices.flatten()
+            order = torch.argsort(flat_indices)
+            sorted_tokens = (
+                torch.arange(rows.size(0), device="cuda")
+                .view(-1, 1)
+                .expand_as(indices)
+                .flatten()[order]
+            )
+            sorted_weights = weights.flatten()[order]
+            sorted_rows = rows.index_select(0, sorted_tokens)
+            counts = torch.bincount(flat_indices, minlength=4).tolist()
+            expected_rows = torch.zeros_like(rows, dtype=torch.float32)
+            first = 0
+            for index, count in enumerate(counts):
+                last = first + count
+                if count:
+                    expected_rows.index_add_(
+                        0,
+                        sorted_tokens[first:last],
+                        moe.experts[index](
+                            sorted_rows[first:last],
+                            sorted_weights[first:last].unsqueeze(-1),
+                        ).float(),
+                    )
+                first = last
+            expected = expected_rows.to(value.dtype).view_as(value)
+
+            original = torch.Tensor.tolist
+
+            def guarded(tensor):
+                if tensor.is_cuda:
+                    raise AssertionError("host read of a CUDA routed count")
+                return original(tensor)
+
+            with patch.object(torch.Tensor, "tolist", guarded):
+                actual = moe(value)
+            torch.testing.assert_close(actual, expected, atol=0.08, rtol=0.08)
+        finally:
+            world_size_patch.stop()
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_fp8_projection_accepts_long_prefill_rows(self):
         previous_device = torch.get_default_device()
         previous_dtype = torch.get_default_dtype()
@@ -898,9 +1022,339 @@ class DeepSeekModel(unittest.TestCase):
             torch.set_default_device(previous_device)
             torch.set_default_dtype(previous_dtype)
 
+    def test_device_window_indices_match_the_integer_path(self):
+        for window_size in (1, 4, 8):
+            for position in range(1, 2 * window_size + 3):
+                eager = get_window_topk_idxs(window_size, 2, 1, position)
+                device = position_window_topk_idxs(
+                    window_size, 2, torch.tensor(position, dtype=torch.int64)
+                )
+                self.assertTrue(torch.equal(eager, device))
+
+    def test_device_position_decode_matches_the_integer_path(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=3,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(0, 2, 1),
+                kv_source_layers=(1, 2),
+                index_source_layers=(1, 2),
+                index_n_heads=4,
+                index_head_dim=32,
+                index_topk=4,
+                candidate_source_layer=-1,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                temperature=0,
+                max_batch_size=1,
+                max_seq_len=16,
+            )
+            model = Transformer(args)
+            for parameter in model.parameters():
+                torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+            initial = {name: value.clone() for name, value in model.named_buffers()}
+            tokens = torch.randint(0, 128, (1, 12))
+
+            def decode(with_device_position):
+                model(tokens[:, :5], start_pos=0)
+                logits, ids = [], []
+                for position in range(5, 12):
+                    cursor = (
+                        torch.tensor(position, dtype=torch.int64)
+                        if with_device_position
+                        else None
+                    )
+                    output, step_logits, _ = model(
+                        tokens[:, position : position + 1],
+                        start_pos=position,
+                        position=cursor,
+                    )
+                    logits.append(step_logits)
+                    ids.append(output)
+                return logits, ids
+
+            eager_logits, eager_ids = decode(False)
+            eager_buffers = {
+                name: value.clone() for name, value in model.named_buffers()
+            }
+            for name, value in model.named_buffers():
+                value.copy_(initial[name])
+            device_logits, device_ids = decode(True)
+            for index in range(len(eager_logits)):
+                self.assertTrue(
+                    torch.equal(eager_logits[index], device_logits[index]),
+                    f"decode step {index} logits differ",
+                )
+                self.assertTrue(torch.equal(eager_ids[index], device_ids[index]))
+            for name, value in model.named_buffers():
+                self.assertTrue(
+                    torch.equal(eager_buffers[name], value),
+                    f"{name} differs after the device position path",
+                )
+        finally:
+            shared_attn.topk_idxs = None
+            shared_attn.compress_kv = None
+            shared_attn.index_k = None
+            shared_attn.candidates = None
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_engram_hash_reads_a_device_position(self):
+        state = NgramHashState.__new__(NgramHashState)
+        torch.nn.Module.__init__(state)
+        state.layout = SimpleNamespace(max_ngram_size=2)
+        state.pad_id = 0
+        state.cache = torch.zeros(2, 16, dtype=torch.int64)
+        state.cache[0, :6] = torch.tensor([3, 4, 5, 6, 7, 1])
+        state.token_map = torch.arange(8)
+        state.multipliers = torch.tensor([[1, 3]])
+        state.primes = torch.tensor([[[11]]])
+        state.offsets = torch.tensor([[0]])
+        tokens = torch.tensor([[2]])
+        slots = torch.tensor([0])
+        initial = state.cache.clone()
+
+        eager = state(tokens, start_pos=6, cache_slots=slots)
+        eager_cache = state.cache.clone()
+        state.cache.copy_(initial)
+        device = state(
+            tokens,
+            start_pos=6,
+            cache_slots=slots,
+            position=torch.tensor(6, dtype=torch.int64),
+        )
+        self.assertTrue(torch.equal(eager, device))
+        self.assertTrue(torch.equal(eager_cache, state.cache))
+
+    def test_padded_context_widths_never_expose_padding_rows(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=3,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(0, 2, 1),
+                kv_source_layers=(1, 2),
+                index_source_layers=(1, 2),
+                index_n_heads=4,
+                index_head_dim=32,
+                index_topk=16,
+                candidate_source_layer=-1,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                temperature=0,
+                max_batch_size=1,
+                max_seq_len=32,
+            )
+            model = Transformer(args)
+            for parameter in model.parameters():
+                torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+            model(torch.randint(0, 128, (1, 5)), start_pos=0)
+            widths = {}
+            for position in range(5, 13):
+                model(
+                    torch.randint(0, 128, (1, 1)),
+                    start_pos=position,
+                    position=torch.tensor(position, dtype=torch.int64),
+                )
+                # The last index source (layer 2, ratio 1) owns the published state.
+                idxs = shared_attn.topk_idxs
+                width = shared_attn.index_k.size(1)
+                compress_len = position + 1
+                self.assertGreaterEqual(width, compress_len)
+                self.assertEqual(
+                    width,
+                    compressed_context_width(compress_len, 1, args.max_seq_len),
+                )
+                compressed = idxs[idxs >= args.window_size]
+                self.assertTrue(
+                    bool((compressed < args.window_size + compress_len).all()),
+                    "an emitted index selected a padding row",
+                )
+                extent = context_token_bucket(compress_len)
+                widths.setdefault(extent, set()).add((idxs.size(-1), width))
+            for extent, shapes in widths.items():
+                self.assertEqual(
+                    len(shapes), 1, f"bucket {extent} changed shape: {shapes}"
+                )
+            self.assertEqual(compressed_context_width(13, 1, args.max_seq_len), 16)
+        finally:
+            shared_attn.topk_idxs = None
+            shared_attn.compress_kv = None
+            shared_attn.index_k = None
+            shared_attn.candidates = None
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_decode_bindings_write_fixed_device_inputs(self):
+        bindings = DecodeBindings(2, [3, 1], "cpu")
+        bindings.bind(torch.tensor([7, 9]), 12)
+        self.assertTrue(torch.equal(bindings.token_ids, torch.tensor([[7], [9]])))
+        self.assertEqual(int(bindings.position), 12)
+        self.assertTrue(torch.equal(bindings.cache_slots, torch.tensor([3, 1])))
+        bindings.bind(torch.tensor([4, 5]), 13)
+        self.assertTrue(torch.equal(bindings.token_ids, torch.tensor([[4], [5]])))
+        self.assertEqual(int(bindings.position), 13)
+        with self.assertRaises(ValueError):
+            DecodeBindings(2, [1, 1], "cpu")
+        with self.assertRaises(ValueError):
+            DecodeBindings(2, [1], "cpu")
+        single = DecodeBindings(1, [0], "cpu")
+        single.bind(6, 4)
+        self.assertTrue(torch.equal(single.token_ids, torch.tensor([[6]])))
+        self.assertEqual(sampled_token_ids(torch.tensor([[1.0, 3.0, 2.0]])), [1])
+
+    def test_capture_pauses_host_state_export(self):
+        export = SimpleNamespace(steps={0: "step"}, batch=(0,))
+        model = SimpleNamespace(_state_export=export)
+        with pause_state_export(model):
+            self.assertEqual(export.steps, {})
+        self.assertEqual(export.steps, {0: "step"})
+        self.assertEqual(export.batch, (0,))
+        plain = SimpleNamespace()
+        with pause_state_export(plain):
+            pass
+        self.assertFalse(hasattr(plain, "_state_export"))
+
+    def test_captured_forward_defers_the_sparse_status_check(self):
+        previous_device = torch.get_default_device()
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=64,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=1,
+                n_mtp_layers=0,
+                n_heads=2,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(0,),
+                kv_source_layers=(),
+                index_source_layers=(),
+                candidate_source_layer=-1,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                max_batch_size=1,
+                max_seq_len=8,
+            )
+            model = Transformer(args)
+            for parameter in model.parameters():
+                torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+            ids = torch.randint(0, 64, (1, 2))
+            with self.assertRaises(ValueError):
+                model(
+                    ids,
+                    start_pos=0,
+                    position=torch.tensor(0, dtype=torch.int64),
+                )
+            with patch(
+                "oh_my_vllm.models.deepseek_v41.model.require_sparse_status"
+            ) as status:
+                model(ids, start_pos=0, check_status=False)
+                status.assert_not_called()
+                model(ids, start_pos=0)
+                status.assert_called_once()
+        finally:
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_engram_accepts_a_staged_embedding(self):
+        previous_dtype = torch.get_default_dtype()
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            layout = SimpleNamespace(
+                max_ngram_size=2,
+                n_heads=1,
+                head_dim=32,
+                layer_ids=(0,),
+                num_embeddings=(8,),
+            )
+            args = ModelArgs(dim=8, hc_mult=1, norm_eps=1e-20)
+            engram = Engram(args, 0, layout)
+            for parameter in engram.parameters():
+                if parameter.dtype in (torch.float8_e4m3fn, torch.float8_e8m0fnu):
+                    parameter.data.copy_(
+                        torch.full(parameter.shape, 0.02, dtype=torch.float32).to(
+                            parameter.dtype
+                        )
+                    )
+                else:
+                    torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+            x = torch.randn(1, 1, 1, 8, dtype=torch.bfloat16)
+            hash_ids = torch.randint(0, 8, (1, 1, 1))
+            eager = engram(x, hash_ids)
+            staged = engram.embed(hash_ids).flatten(-2)
+            mixed = engram(x, None, embedding=staged)
+            self.assertTrue(torch.equal(eager, mixed))
+        finally:
+            torch.set_default_dtype(previous_dtype)
+
+    def test_compressed_context_width_covers_each_bucket(self):
+        for ratio in (1, 2):
+            capacity = 512
+            widths = {}
+            for end_pos in range(1, capacity * ratio + 1):
+                width = compressed_context_width(end_pos, ratio, capacity)
+                self.assertGreaterEqual(width, end_pos // ratio)
+                self.assertLessEqual(width, capacity)
+                extent = context_token_bucket(end_pos)
+                widths.setdefault(extent, set()).add(width)
+            for extent, values in widths.items():
+                self.assertEqual(
+                    len(values), 1, f"bucket {extent} ratio {ratio}: {values}"
+                )
+            self.assertEqual(
+                compressed_context_width(capacity * ratio, ratio, capacity), capacity
+            )
+            self.assertEqual(
+                compressed_context_width(capacity * ratio + 1, ratio, capacity),
+                capacity,
+            )
+
     def test_prefill_window_indices_include_previous_cache_and_causal_chunk(self):
         indices = get_prefill_window_topk_idxs(4, 1, 3, 4)
-
         self.assertEqual(tuple(indices.shape), (1, 3, 4))
         self.assertTrue(torch.equal(indices[0, 0], torch.tensor([1, 2, 3, 4])))
         self.assertTrue(torch.equal(indices[0, 1], torch.tensor([2, 3, 4, 5])))

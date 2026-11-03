@@ -166,7 +166,7 @@ void hc_prepare(TensorView residual, TensorView incoming, TensorView weight, Ten
 void fp32_project(TensorView values, TensorView weight, TensorView output,
                   TensorView blas_workspace, int64_t logical_rows) {
   TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 32768);
-  TVM_FFI_ICHECK(weight.ndim() == 2 && (weight.size(0) == 128 || weight.size(0) == 384));
+  TVM_FFI_ICHECK(weight.ndim() == 2 && weight.size(0) >= 1);
   int rows = values.size(0), outputs = weight.size(0);
   TVM_FFI_ICHECK(logical_rows >= 0 && logical_rows <= rows &&
                  (!logical_rows || rows % logical_rows == 0))
@@ -174,18 +174,142 @@ void fp32_project(TensorView values, TensorView weight, TensorView output,
   tensor_contract(values, values, kDLFloat, 32, {rows, width});
   tensor_contract(weight, values, kDLFloat, 32, {outputs, width});
   tensor_contract(output, values, kDLFloat, 32, {rows, outputs});
-  tensor_contract(blas_workspace, values, kDLUInt, 8, {workspace_size(rows)});
-  TVM_FFI_ICHECK(reinterpret_cast<uintptr_t>(blas_workspace.data_ptr()) % 256 == 0);
-  separate({values, weight, output, blas_workspace});
+  TVM_FFI_ICHECK(blas_workspace.device().device_type == kDLCUDA);
+  TVM_FFI_ICHECK(blas_workspace.ndim() == 1 && blas_workspace.dtype().code == kDLUInt &&
+                 blas_workspace.dtype().bits == 8 && blas_workspace.dtype().lanes == 1);
+  TVM_FFI_ICHECK(blas_workspace.size(0) == 0 || blas_workspace.size(0) >= workspace_size(rows));
+  TVM_FFI_ICHECK(blas_workspace.size(0) == 0 ||
+                 reinterpret_cast<uintptr_t>(blas_workspace.data_ptr()) % 256 == 0);
+  if (blas_workspace.size(0))
+    separate({values, weight, output, blas_workspace});
+  else
+    separate({values, weight, output});
   if (!rows)
     return;
   tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
-  auto blas = hc_projection::bind(values.device().device_id, blas_workspace, stream);
-  hc_projection::multiply(blas, static_cast<const float *>(values.data_ptr()),
-                          static_cast<const float *>(weight.data_ptr()),
-                          static_cast<float *>(output.data_ptr()), rows, width, outputs,
-                          logical_rows ? static_cast<int>(logical_rows) : rows);
+  auto input = static_cast<const float *>(values.data_ptr());
+  auto weight_values = static_cast<const float *>(weight.data_ptr());
+  auto output_values = static_cast<float *>(output.data_ptr());
+  int step_rows = logical_rows ? static_cast<int>(logical_rows) : rows;
+  int steps = rows / step_rows;
+  if (step_rows == 1) {
+    for (int step = 0; step < steps; ++step)
+      hc_projection::multiply_released_gemv(input + step * width, weight_values,
+                                            output_values + step * outputs, width, outputs, stream);
+  } else {
+    int chunk = hc_projection::project_chunk(step_rows, outputs, width);
+    TVM_FFI_ICHECK(chunk > 0)
+        << "FP32 projection shape and row count have no measured released layout";
+    for (int step = 0; step < steps; ++step)
+      hc_projection::multiply_released_chunked(
+          input + step * width, weight_values, output_values + step * outputs, step_rows, outputs,
+          width, steps * width, steps * outputs, chunk, stream);
+  }
+  check_cuda(cudaGetLastError());
+}
+
+void markov_linear(TensorView values, TensorView weight, TensorView output) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && weight.ndim() == 2);
+  int rows = values.size(0);
+  int width = weight.size(1), outputs = weight.size(0);
+  TVM_FFI_ICHECK(values.numel() == rows * width);
+  TVM_FFI_ICHECK(int64_t(rows) * outputs <= 0x7fffffff) << "markov output needs int64 indexing";
+  TVM_FFI_ICHECK(rows <= 65535) << "markov rows exceed the grid.y limit";
+  tensor_contract(values, values, kDLFloat, 32, {rows, width});
+  tensor_contract(weight, values, kDLFloat, 32, {outputs, width});
+  tensor_contract(output, values, kDLFloat, 32, {rows, outputs});
+  separate({values, weight, output});
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  hc_projection::multiply_released_gemv8(
+      static_cast<const float *>(values.data_ptr()), static_cast<const float *>(weight.data_ptr()),
+      static_cast<float *>(output.data_ptr()), rows, width, outputs, stream);
+  check_cuda(cudaGetLastError());
+}
+
+void dot_linear(TensorView values, TensorView weight, TensorView output) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && weight.ndim() == 2);
+  int rows = values.size(0);
+  int width = weight.size(1), outputs = weight.size(0);
+  TVM_FFI_ICHECK(values.numel() == rows * width && width % 2 == 0);
+  TVM_FFI_ICHECK(int64_t(rows) * outputs <= 0x7fffffff) << "dot output needs int64 indexing";
+  tensor_contract(values, values, kDLFloat, 32, {rows, width});
+  tensor_contract(weight, values, kDLFloat, 32, {outputs, width});
+  tensor_contract(output, values, kDLFloat, 32, {rows, outputs});
+  separate({values, weight, output});
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  hc_projection::multiply_released_dot(
+      static_cast<const float *>(values.data_ptr()), static_cast<const float *>(weight.data_ptr()),
+      static_cast<float *>(output.data_ptr()), rows, outputs, width, stream);
+  check_cuda(cudaGetLastError());
+}
+
+int64_t hc_chunk(int64_t rows) {
+  if (rows < 0 || rows > 32768)
+    TVM_FFI_ICHECK(false) << "HC row count is outside the operator limit";
+  int chunk = hc_projection::released_chunk(static_cast<int>(rows));
+  TVM_FFI_ICHECK(rows <= 1 || chunk > 0) << "HC row count has no measured released layout";
+  return chunk;
+}
+
+int64_t project_chunk(int64_t rows, int64_t outputs) {
+  if (rows < 0 || rows > 32768 || outputs < 0 || outputs > 0x7fffffff)
+    TVM_FFI_ICHECK(false) << "projection shape is outside the operator limit";
+  return hc_projection::project_chunk(static_cast<int>(rows), static_cast<int>(outputs), width);
+}
+
+void hc_chunked_project(TensorView values, TensorView weight, TensorView output,
+                        TensorView workspace) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 2 && values.size(0) <= 32768)
+      << "hc_chunked_project rows must be in the measured range 2..32768";
+  int rows = values.size(0);
+  TVM_FFI_ICHECK(weight.ndim() == 2 && weight.size(0) == mixes && weight.size(1) == flat_width);
+  tensor_contract(values, values, kDLFloat, 32, {rows, flat_width});
+  tensor_contract(weight, values, kDLFloat, 32, {mixes, flat_width});
+  tensor_contract(output, values, kDLFloat, 32, {rows, mixes});
+  int chunk = hc_projection::released_chunk(rows);
+  TVM_FFI_ICHECK(chunk > 0) << "HC row count has no measured released layout";
+  int64_t needed = hc_projection::chunk_workspace_bytes(rows, flat_width, chunk);
+  TVM_FFI_ICHECK(workspace.device().device_type == kDLCUDA);
+  TVM_FFI_ICHECK(workspace.ndim() == 1 && workspace.dtype().code == kDLUInt &&
+                 workspace.dtype().bits == 8 && workspace.dtype().lanes == 1);
+  TVM_FFI_ICHECK(workspace.size(0) == 0 || workspace.size(0) >= needed);
+  TVM_FFI_ICHECK(workspace.size(0) == 0 ||
+                 reinterpret_cast<uintptr_t>(workspace.data_ptr()) % 16 == 0);
+  if (workspace.size(0))
+    separate({values, weight, output, workspace});
+  else
+    separate({values, weight, output});
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  hc_projection::multiply_released_chunked_parallel(
+      static_cast<const float *>(values.data_ptr()), static_cast<const float *>(weight.data_ptr()),
+      static_cast<float *>(output.data_ptr()), rows, mixes, flat_width, flat_width, mixes, chunk,
+      workspace.size(0) ? workspace.data_ptr() : nullptr, workspace.size(0), stream);
+  check_cuda(cudaGetLastError());
+}
+
+void bf16_linear(TensorView values, TensorView weight, TensorView output) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 32768);
+  TVM_FFI_ICHECK(weight.ndim() == 2 && weight.size(0) >= 1);
+  int rows = values.size(0), width = values.size(1), outputs = weight.size(0);
+  TVM_FFI_ICHECK(weight.size(1) == width);
+  tensor_contract(values, values, kDLBfloat, 16, {rows, width});
+  tensor_contract(weight, values, kDLBfloat, 16, {outputs, width});
+  tensor_contract(output, values, kDLBfloat, 16, {rows, outputs});
+  separate({values, weight, output});
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  hc_projection::bf16_multiply(values.device().device_id, values.data_ptr(), weight.data_ptr(),
+                               output.data_ptr(), rows, outputs, width, stream);
   check_cuda(cudaGetLastError());
 }
 

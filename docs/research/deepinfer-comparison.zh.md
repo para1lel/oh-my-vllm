@@ -12,7 +12,7 @@ model. DeepInfer 把变长 decode batch 放入一次 model step. 这个差距增
 Python 工作, kernel launch 工作和重复通信.
 
 adapter 原来使用 384 行的默认 prefill chunk. DeepSeek native operator
-支持最多 8192 行. 默认值现在是 8192. 环境变量
+支持最多 32768 行. 默认值现在是 8192. 环境变量
 `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` 可以降低这个值.
 
 DSpark 验证现在把 accepted prefix 和全部 draft token 放入一次 target

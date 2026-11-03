@@ -256,11 +256,13 @@ void launch_attention(TensorView query, TensorView sink, TensorView indices, Ten
   check_cuda(cudaGetLastError());
 }
 
+#include "decode.cuh"
+
 } // namespace
 
 void attend(TensorView query, TensorView sink, TensorView indices, TensorView window,
             TensorView window_scales, TensorView compressed, TensorView compressed_scales,
-            TensorView output, TensorView status) {
+            TensorView scratch, TensorView output, TensorView status) {
   TVM_FFI_ICHECK(query.ndim() == 3 && indices.ndim() == 2 && window.ndim() == 2 &&
                  compressed.ndim() == 2);
   int64_t rows = query.size(0), heads = query.size(1), slots = indices.size(1);
@@ -279,16 +281,46 @@ void attend(TensorView query, TensorView sink, TensorView indices, TensorView wi
   tensor_contract(compressed_scales, query, kDLUInt, 8, {compressed_rows, bf16 ? 0 : 32});
   tensor_contract(output, query, kDLBfloat, 16, {rows, heads, 512});
   tensor_contract(status, query, kDLUInt, 8, {rows, heads / 16});
-  for (auto input : {query, sink, indices, window, window_scales, compressed, compressed_scales}) {
-    disjoint(input, output);
-    disjoint(input, status);
-  }
+  int tiles = rows <= 4 ? rows * (heads / 16) * ((slots + 63) / 64) : 0;
+  int64_t errors = tiles ? rows * (heads / 16) * 64 : 0;
+  tensor_contract(scratch, query, kDLUInt, 8, {(int64_t(tiles) * DecodeFloats + errors) * 4});
+  for (auto writable : {scratch, output, status})
+    for (auto input : {query, sink, indices, window, window_scales, compressed, compressed_scales})
+      disjoint(input, writable);
+  disjoint(scratch, output);
+  disjoint(scratch, status);
   disjoint(output, status);
   if (!rows)
     return;
   tvm::ffi::CUDADeviceGuard guard(query.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, query.device().device_id));
-  if (bf16)
+  if (bf16 && rows <= 4 && slots > 0) {
+    auto data = decode_scratch(scratch.data_ptr(), tiles);
+    int groups = rows * (heads / 16), blocks = (slots + 63) / 64;
+    check_cuda(cudaFuncSetAttribute(decode_scores, cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                    SharedBytes));
+    decode_scores<<<dim3(groups, blocks), 256, SharedBytes, stream>>>(
+        static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+        static_cast<const float *>(sink.data_ptr()),
+        static_cast<const int32_t *>(indices.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(window.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(compressed.data_ptr()), data, heads, slots, window_rows,
+        compressed_rows);
+    check_cuda(cudaGetLastError());
+    decode_probabilities<<<groups * blocks, 256, 0, stream>>>(data, slots);
+    check_cuda(cudaGetLastError());
+    decode_ordered_values<<<dim3(groups, 64), 32, 0, stream>>>(
+        static_cast<const float *>(sink.data_ptr()),
+        static_cast<const int32_t *>(indices.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(window.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(compressed.data_ptr()), data,
+        static_cast<__nv_bfloat16 *>(output.data_ptr()), groups, heads, slots, window_rows);
+    check_cuda(cudaGetLastError());
+    decode_status<<<groups, 256, 0, stream>>>(data, static_cast<__nv_bfloat16 *>(output.data_ptr()),
+                                              static_cast<uint8_t *>(status.data_ptr()), groups,
+                                              slots);
+    check_cuda(cudaGetLastError());
+  } else if (bf16)
     launch_attention<true>(query, sink, indices, window, window_scales, compressed,
                            compressed_scales, output, status, stream);
   else

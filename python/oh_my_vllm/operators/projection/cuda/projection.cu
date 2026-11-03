@@ -89,7 +89,7 @@ void launch_grouped_fp4_projection(TensorView encoded, TensorView scales, Tensor
                          static_cast<const int64_t *>(weight_ptrs.data_ptr()),
                          static_cast<const int64_t *>(weight_scale_ptrs.data_ptr()),
                          static_cast<const int32_t *>(counts.data_ptr()),
-                         static_cast<int32_t *>(scratch.data_ptr()),
+                         static_cast<uint8_t *>(scratch.data_ptr()),
                          static_cast<Output *>(output.data_ptr()), groups, rows, outputs, width,
                          max_rows, padded / 2, layout, stream);
   check_cuda(cudaGetLastError());
@@ -155,7 +155,7 @@ int64_t grouped_workspace_size(int64_t rows, int64_t groups, int64_t max_rows, i
   TVM_FFI_ICHECK(rows <= groups * max_rows);
   TVM_FFI_ICHECK(outputs >= 32 && outputs <= 32768 && outputs % 32 == 0);
   TVM_FFI_ICHECK(width >= 32 && width <= 16384 && width % 32 == 0);
-  return ((groups + 1) * sizeof(int32_t) + 15) / 16 * 16;
+  return grouped_scratch_bytes(static_cast<int>(groups < rows ? groups : rows));
 }
 
 void grouped_project(TensorView encoded, TensorView scales, TensorView weight_ptrs,

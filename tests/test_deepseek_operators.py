@@ -367,8 +367,15 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         # then the BF16 midpoint rounds to 648, not 644.
         for rows, width, outputs in (
             (rows, width, outputs)
-            for rows in (1, 16, 17, 31, 32, 33, 63, 64, 65, 125, 126)
-            for width, outputs in ((64, 160), (1024, 1280), (1056, 1088))
+            for rows in (1, 2, 4, 8, 16, 17, 31, 32, 33, 63, 64, 65, 125, 126)
+            for width, outputs in (
+                (64, 160),
+                (96, 32),
+                (1024, 512),
+                (1024, 1280),
+                (1056, 1088),
+                (16384, 32),
+            )
         ):
             inputs = torch.zeros((rows, width), device="cuda")
             weight = torch.zeros((outputs, width), device="cuda")
@@ -539,6 +546,8 @@ class DeepSeekOperatorContracts(unittest.TestCase):
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_fp32_projection_replays_on_caller_stream(self):
         for rows, width, outputs in (
+            (1, 96, 32),
+            (1, 1056, 512),
             (2, 128, 32),
             (2, 1024, 512),
             (32, 1024, 1280),
@@ -1117,10 +1126,7 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             (w.view(torch.uint8).clone(), s.view(torch.uint8).clone())
             for w, s in weights
         ]
-        with (
-            patch.dict(kernel._PACKED_WEIGHTS, clear=True),
-            patch.dict(kernel._GROUPED_POINTERS, clear=True),
-        ):
+        with patch.dict(kernel._PACKED_WEIGHTS, clear=True):
             actual = kernel.grouped_fp4_gemm(values, counts, weights)
             expected = []
             first = 0
@@ -1197,6 +1203,180 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         torch.testing.assert_close(actual, expected, atol=0.08, rtol=0.08)
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_grouped_fp4_device_counts_match_host_counts(self):
+        device = torch.device("cuda")
+        generator = torch.Generator(device=device).manual_seed(53)
+        values = torch.randn(
+            (6, 32), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        weights = []
+        for seed in (29, 31, 37):
+            weight_generator = torch.Generator(device=device).manual_seed(seed)
+            raw = torch.randint(
+                0,
+                256,
+                (32, 16),
+                generator=weight_generator,
+                device=device,
+                dtype=torch.uint8,
+            )
+            weights.append(
+                (
+                    raw.view(torch.float4_e2m1fn_x2),
+                    torch.ones((32, 1), device=device, dtype=torch.float8_e8m0fnu),
+                )
+            )
+        counts = torch.tensor((1, 0, 5), device=device, dtype=torch.int32)
+
+        expected = kernel.grouped_fp4_gemm(
+            values, counts, weights, counts_list=(1, 0, 5)
+        )
+        actual = kernel.grouped_fp4_gemm(values, counts, weights)
+
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_grouped_fp4_rejects_device_counts_that_miss_a_row(self):
+        device = torch.device("cuda")
+        raw = torch.zeros((32, 16), device=device, dtype=torch.uint8)
+        weights = [
+            (
+                raw.view(torch.float4_e2m1fn_x2),
+                torch.ones((32, 1), device=device, dtype=torch.float8_e8m0fnu),
+            )
+            for _ in range(4)
+        ]
+        for rows, counts in ((6, (1, 0, 2, 0)), (2, (1, 1, 5, 0))):
+            # The second case drops a group that exceeds the row bound, so the
+            # compacted counts alone would look valid.
+            values = torch.zeros((rows, 32), device=device, dtype=torch.bfloat16)
+            actual = kernel.grouped_fp4_gemm(
+                values,
+                torch.tensor(counts, device=device, dtype=torch.int32),
+                weights,
+            )
+            self.assertFalse(torch.isfinite(actual).all())
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_grouped_fp4_capture_replays_the_metadata_upload(self):
+        device = torch.device("cuda:0")
+        generator = torch.Generator(device=device).manual_seed(43)
+        values = torch.randn(
+            (5, 32), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        weights = []
+        for seed in (7, 11, 13):
+            weight_generator = torch.Generator(device=device).manual_seed(seed)
+            raw = torch.randint(
+                0,
+                256,
+                (32, 16),
+                generator=weight_generator,
+                device=device,
+                dtype=torch.uint8,
+            )
+            weights.append(
+                (
+                    raw.view(torch.float4_e2m1fn_x2),
+                    torch.ones((32, 1), device=device, dtype=torch.float8_e8m0fnu),
+                )
+            )
+        counts = torch.tensor((2, 0, 3), device=device, dtype=torch.int32)
+        expected = kernel.grouped_fp4_gemm(
+            values, counts, weights, counts_list=(2, 0, 3)
+        )
+        graph = torch.cuda.CUDAGraph()
+        try:
+            with torch.cuda.graph(graph):
+                actual = kernel.grouped_fp4_gemm(
+                    values, counts, weights, counts_list=(2, 0, 3)
+                )
+            actual.fill_(0)
+            graph.replay()
+            torch.cuda.synchronize()
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+        finally:
+            graph.reset()
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_grouped_fp4_device_counts_cover_rows_past_one_tile(self):
+        device = torch.device("cuda:0")
+        generator = torch.Generator(device=device).manual_seed(59)
+        values = torch.randn(
+            (37, 32), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        weights = []
+        for seed in (61, 67, 71):
+            weight_generator = torch.Generator(device=device).manual_seed(seed)
+            raw = torch.randint(
+                0,
+                256,
+                (32, 16),
+                generator=weight_generator,
+                device=device,
+                dtype=torch.uint8,
+            )
+            weights.append(
+                (
+                    raw.view(torch.float4_e2m1fn_x2),
+                    torch.ones((32, 1), device=device, dtype=torch.float8_e8m0fnu),
+                )
+            )
+        counts = torch.tensor((19, 0, 18), device=device, dtype=torch.int32)
+        expected = kernel.grouped_fp4_gemm(
+            values, counts, weights, counts_list=(19, 0, 18)
+        )
+        graph = torch.cuda.CUDAGraph()
+        try:
+            with torch.cuda.graph(graph):
+                actual = kernel.grouped_fp4_gemm(values, counts, weights)
+            actual.fill_(0)
+            graph.replay()
+            torch.cuda.synchronize()
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+        finally:
+            graph.reset()
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_grouped_fp4_gemm_uses_the_caller_default_device(self):
+        device = torch.device("cuda:0")
+        generator = torch.Generator(device=device).manual_seed(47)
+        values = torch.randn(
+            (5, 32), generator=generator, device=device, dtype=torch.bfloat16
+        )
+        weights = []
+        for seed in (17, 19, 23):
+            weight_generator = torch.Generator(device=device).manual_seed(seed)
+            raw = torch.randint(
+                0,
+                256,
+                (32, 16),
+                generator=weight_generator,
+                device=device,
+                dtype=torch.uint8,
+            )
+            weights.append(
+                (
+                    raw.view(torch.float4_e2m1fn_x2),
+                    torch.ones((32, 1), device=device, dtype=torch.float8_e8m0fnu),
+                )
+            )
+        counts = torch.tensor((2, 0, 3), device=device, dtype=torch.int32)
+        previous = torch.get_default_device()
+        torch.set_default_device(device)
+        try:
+            actual = kernel.grouped_fp4_gemm(
+                values, counts, weights, counts_list=(2, 0, 3)
+            )
+            torch.cuda.synchronize()
+        finally:
+            torch.set_default_device(previous)
+        expected = kernel.grouped_fp4_gemm(
+            values, counts, weights, counts_list=(2, 0, 3)
+        )
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_swiglu_accepts_an_unaligned_route_slice(self):
         gate = torch.zeros((8, 576), device="cuda", dtype=torch.bfloat16)
         up = torch.zeros_like(gate)
@@ -1248,7 +1428,123 @@ class DeepSeekOperatorContracts(unittest.TestCase):
         torch.testing.assert_close(native, reference, atol=0.06, rtol=0.06)
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_cuda_sparse_attention_status_failure_falls_back(self):
+    def test_cuda_sparse_decode_split_boundaries_and_graph(self):
+        from oh_my_vllm.operators.sparse_attention.plan import scratch_bytes
+
+        generator = torch.Generator(device="cuda").manual_seed(813)
+        module = kernel._sparse_attention_module()
+        for rows, heads, slots in (
+            (0, 16, 640),
+            (1, 16, 0),
+            (1, 16, 1),
+            (1, 64, 64),
+            (2, 16, 640),
+            (4, 16, 65),
+            (1, 16, 640),
+            (5, 16, 129),
+        ):
+            with self.subTest(rows=rows, heads=heads, slots=slots):
+                query = torch.randn(
+                    (rows, heads, 512),
+                    generator=generator,
+                    device="cuda",
+                    dtype=torch.bfloat16,
+                )
+                table = torch.randn(
+                    (7, 512), generator=generator, device="cuda", dtype=torch.bfloat16
+                )
+                sink = torch.zeros((heads,), device="cuda", dtype=torch.float32)
+                indices = torch.arange(slots, device="cuda", dtype=torch.int32) % 7
+                indices = indices.expand(rows, slots).contiguous()
+                if rows:
+                    indices[0].fill_(-1)
+                output = torch.empty_like(query)
+                status = torch.empty(
+                    (rows, heads // 16), device="cuda", dtype=torch.uint8
+                )
+                scratch = torch.empty(
+                    (scratch_bytes(rows, heads, slots),),
+                    device="cuda",
+                    dtype=torch.uint8,
+                )
+                scales = torch.empty((7, 0), device="cuda", dtype=torch.uint8)
+                compressed = torch.empty((0, 512), device="cuda", dtype=torch.bfloat16)
+                compressed_scales = torch.empty(
+                    (0, 0), device="cuda", dtype=torch.uint8
+                )
+
+                arguments = (
+                    query,
+                    sink,
+                    indices,
+                    table,
+                    scales,
+                    compressed,
+                    compressed_scales,
+                    scratch,
+                    output,
+                    status,
+                )
+
+                def run(arguments=arguments):
+                    module.attend(*arguments)
+
+                run()
+                graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(graph):
+                    run()
+                graph.replay()
+                self.assertFalse(bool(status.any()))
+                if rows:
+                    torch.testing.assert_close(
+                        output[0], torch.zeros_like(output[0]), atol=0, rtol=0
+                    )
+                if rows > 1:
+                    reference = kernel.sparse_attn(
+                        query[None], table[None], sink, indices[None], 512**-0.5
+                    )[0]
+                    torch.testing.assert_close(output, reference, atol=0.01, rtol=0.01)
+                if rows and slots:
+                    indices[-1, -1] = 7
+                    graph.replay()
+                    self.assertTrue(bool(status[-1].all()))
+                    torch.testing.assert_close(
+                        output[-1], torch.zeros_like(output[-1]), atol=0, rtol=0
+                    )
+                    indices[-1, -1] = 0
+                    query[-1, 0, 0] = float("nan")
+                    graph.replay()
+                    self.assertTrue(bool(status[-1, 0]))
+                    torch.testing.assert_close(
+                        output[-1, :16],
+                        torch.zeros_like(output[-1, :16]),
+                        atol=0,
+                        rtol=0,
+                    )
+                    query[-1].zero_()
+                    sink[0] = float("inf")
+                    graph.replay()
+                    self.assertTrue(bool(status[:, 0].all()))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_sparse_decode_keeps_cross_block_mma_order(self):
+        query = torch.zeros((1, 1, 16, 512), device="cuda", dtype=torch.bfloat16)
+        table = torch.zeros((1, 4, 512), device="cuda", dtype=torch.bfloat16)
+        table[0, :, 0] = torch.tensor((2**26, -(2**26), 1, 0), device="cuda")
+        indices = torch.full((1, 1, 130), -1, device="cuda", dtype=torch.int32)
+        indices[0, 0, [0, 64, 80, 129]] = torch.arange(
+            4, device="cuda", dtype=torch.int32
+        )
+        sink = torch.zeros((16,), device="cuda", dtype=torch.float32)
+
+        actual = kernel._sparse_attn_native(query, sink, indices, table, table[:, :0])
+
+        expected = torch.zeros_like(actual)
+        expected[..., 0] = 0.2
+        torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_sparse_attention_status_failure_blocks_the_step(self):
         device = torch.device("cuda")
         query = torch.zeros((1, 1, 16, 512), device=device, dtype=torch.bfloat16)
         window = torch.zeros((1, 1, 512), device=device, dtype=torch.bfloat16)
@@ -1262,50 +1558,21 @@ class DeepSeekOperatorContracts(unittest.TestCase):
                 arguments[-2].zero_()
                 arguments[-1].fill_(1)
 
-        with patch.object(
-            kernel, "_sparse_attention_module", return_value=FailedAttention()
-        ):
-            self.assertIsNone(
-                kernel._sparse_attn_native(query, sink, indices, window, compressed)
-            )
-
-    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_cuda_sparse_attention_failure_disables_long_query_retry(self):
-        device = torch.device("cuda")
-        rows = kernel.NATIVE_ROW_LIMIT + 1
-        query = torch.zeros((1, rows, 16, 512), device=device, dtype=torch.bfloat16)
-        window = torch.zeros((1, 1, 512), device=device, dtype=torch.bfloat16)
-        compressed = torch.empty((1, 0, 512), device=device, dtype=torch.bfloat16)
-        sink = torch.zeros((16,), device=device)
-        indices = torch.zeros((1, rows, 1), device=device, dtype=torch.int32)
-        kv = window
-        native = Mock(return_value=None)
-
         with (
-            patch.object(kernel, "_SPARSE_NATIVE_DISABLED", True),
-            patch.object(kernel, "_SPARSE_NATIVE_FAILED", False, create=True),
-            patch.object(kernel, "_sparse_attn_native", native),
+            patch.object(kernel, "_SPARSE_NATIVE_DISABLED", False),
+            patch.object(kernel, "_SPARSE_NATIVE_FAILED", False),
+            patch.object(
+                kernel, "_sparse_attention_module", return_value=FailedAttention()
+            ),
         ):
-            kernel.sparse_attn(
-                query,
-                kv,
-                sink,
-                indices,
-                512**-0.5,
-                native_window=window,
-                native_compressed=compressed,
+            kernel.reset_sparse_status()
+            output = kernel._sparse_attn_native(
+                query, sink, indices, window, compressed
             )
-            kernel.sparse_attn(
-                query,
-                kv,
-                sink,
-                indices,
-                512**-0.5,
-                native_window=window,
-                native_compressed=compressed,
-            )
-
-        self.assertEqual(native.call_count, 1)
+            self.assertEqual(tuple(output.shape), (1, 1, 16, 512))
+            with self.assertRaises(RuntimeError):
+                kernel.require_sparse_status()
+        kernel.reset_sparse_status()
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_large_row_native_paths_accept_rows_above_operator_limit(self):
@@ -1398,7 +1665,10 @@ class DeepSeekOperatorContracts(unittest.TestCase):
             native = kernel._sparse_attn_native(
                 query, sink, indices, window, compressed
             )
-            with patch.object(kernel, "_SPARSE_NATIVE_DISABLED", True):
+            with (
+                patch.object(kernel, "_SPARSE_NATIVE_DISABLED", True),
+                patch.object(kernel, "_SPARSE_NATIVE_FAILED", False),
+            ):
                 public = kernel.sparse_attn(
                     query,
                     torch.cat((window, compressed), dim=1),

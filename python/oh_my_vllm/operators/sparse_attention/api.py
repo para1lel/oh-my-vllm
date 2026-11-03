@@ -14,6 +14,12 @@ across four lanes with XOR offsets 2, 1. Its online update uses FMA.
 Status is uint8 [rows, heads/16]. A nonzero entry invalidates that head
 tile and its output is zero. Invalid IDs and nonfinite computation are
 rejected without invalid table reads. Check status before state commit.
+A caller can accumulate the status of several calls and check it once
+before it commits state.
+BF16 calls with at most four rows calculate QK blocks in parallel, then
+process V by independent output channels in the original accumulation order.
+Scratch is uint8 with scratch_bytes(rows, heads, slots) bytes and must be
+disjoint from every other tensor.
 Inputs and workspace must remain live through execution or graph release.
 Run once before Graph recording for native launch configuration.
 """
