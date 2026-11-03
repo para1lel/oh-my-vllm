@@ -79,6 +79,8 @@ Startup checks the accepted BF16 projection pattern.
 
 Prepared HC operator workspaces keep FP32 input and statistics storage for Eager or Graph execution.
 Nonzero target chunks keep source-step projection and reduction layouts.
+HC and FP32 source positions share [HC kernel launches](../python/oh_my_vllm/operators/hyperconnection/cuda/hc_projection.cuh#L479)<!-- source: int steps = rows / logical_rows; --> and [FP32 projection launches](../python/oh_my_vllm/operators/hyperconnection/cuda/hyperconnection.cu#L194)<!-- source: int step_rows = logical_rows ? static_cast<int>(logical_rows) : rows; -->.
+The logical row count continues to select each position's split, chunk, and statistics layout.
 Their target attention and MoE execution stay batched.
 Native Engram arithmetic uses the logical request batch for its per-copy reductions.
 
@@ -197,7 +199,7 @@ The HTTP CSV records the ideal-acceptance plan only, which is not an efficiency 
 - Move the DeepSeek Engram lookup into the graph, or make its host copy asynchronous.
 - Evaluate the replicated `wo_b` against the measured collective cost.
 - Run the approved DeepSeek AgentX cases and publish the CSV and dark scatter plots.
-- Run the 38 HTTP cases and the three AgentX cases on GPUs apart from GPU 0.
+- Run the 38 HTTP cases and the three AgentX cases on GPUs that have no locked clock.
 - Add the DeepSeek accounting counters to the execution trace before efficiency reporting.
 
 Keep raw reports and temporary process records external to the repository.

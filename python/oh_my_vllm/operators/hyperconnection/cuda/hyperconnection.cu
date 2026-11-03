@@ -192,19 +192,15 @@ void fp32_project(TensorView values, TensorView weight, TensorView output,
   auto weight_values = static_cast<const float *>(weight.data_ptr());
   auto output_values = static_cast<float *>(output.data_ptr());
   int step_rows = logical_rows ? static_cast<int>(logical_rows) : rows;
-  int steps = rows / step_rows;
   if (step_rows == 1) {
-    for (int step = 0; step < steps; ++step)
-      hc_projection::multiply_released_gemv(input + step * width, weight_values,
-                                            output_values + step * outputs, width, outputs, stream);
+    hc_projection::multiply_released_gemv(input, weight_values, output_values, rows, width, outputs,
+                                          stream);
   } else {
     int chunk = hc_projection::project_chunk(step_rows, outputs, width);
     TVM_FFI_ICHECK(chunk > 0)
         << "FP32 projection shape and row count have no measured released layout";
-    for (int step = 0; step < steps; ++step)
-      hc_projection::multiply_released_chunked(
-          input + step * width, weight_values, output_values + step * outputs, step_rows, outputs,
-          width, steps * width, steps * outputs, chunk, stream);
+    hc_projection::multiply_released_chunked(input, weight_values, output_values, rows, outputs,
+                                             width, width, outputs, chunk, stream);
   }
   check_cuda(cudaGetLastError());
 }

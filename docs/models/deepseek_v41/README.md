@@ -64,8 +64,8 @@ The procedures define measurements. They do not add performance gates.
 
 ## GPU execution
 
-Use four GPUs apart from GPU 0.
-The current validation preference is GPUs `4,5,6,7`.
+Use four GPUs that have no locked clock for performance measurements.
+Numerical and state checks can use any four GPUs.
 Set the four GPU UUIDs through the GPU wrapper or the ignored `LOCAL.md` file.
 
 Build the demand-mapped storage module before starting the worker:

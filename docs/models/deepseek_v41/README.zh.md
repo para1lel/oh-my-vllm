@@ -64,8 +64,8 @@ approved 38-case matrix 使用 [HTTP 流程](performance.zh.md).
 
 ## GPU 执行
 
-使用 GPU 0 以外的四张显卡.
-当前 validation 优先使用 GPU `4,5,6,7`.
+性能测量使用四张没有锁频的显卡.
+数值和状态检查可以使用任意四张显卡.
 通过 GPU wrapper 或 ignored `LOCAL.md` 设置四个 GPU UUID.
 
 启动 worker 前, 构建按需映射的 storage module:

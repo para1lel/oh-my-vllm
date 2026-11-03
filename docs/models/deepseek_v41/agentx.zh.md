@@ -2,7 +2,7 @@
 
 使用 `agentx-harness==1.0.7` 和现有的 `inferencex-agentx-mvp` scenario.
 使用 pinned dataset, seed `42` 和至少 900 秒 profiling.
-使用 GPU 0 以外的四张显卡.
+使用四张没有锁频的显卡.
 runner 默认使用 session-tree concurrency 作为 service sequence capacity.
 使用 `--max-num-seqs` 可以覆盖这个值.
 

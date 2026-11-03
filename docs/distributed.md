@@ -28,6 +28,8 @@ UUIDs must be distinct, canonical, lowercase, and have the `GPU-` prefix.
 Do not combine the two UUID settings.
 Lists cannot contain spaces or empty entries.
 Exclusions override explicit selection.
+Performance runs must exclude GPUs that have a locked clock.
+Numerical and state checks can use any GPU.
 
 Invalid settings, missing devices, and non-B200 selections fail.
 Busy explicit selections wait.

@@ -92,6 +92,8 @@ Startup 检查已接受的 BF16 projection pattern.
 
 Prepared HC operator workspace 为 Eager 或 Graph execution 保留 FP32 input 和 statistics storage.
 Nonzero target chunk 保持 source-step projection 和 reduction layout.
+HC 和 FP32 的 source position 共用 [HC kernel 发射](../python/oh_my_vllm/operators/hyperconnection/cuda/hc_projection.cuh#L479)<!-- source: int steps = rows / logical_rows; --> 和 [FP32 projection 发射](../python/oh_my_vllm/operators/hyperconnection/cuda/hyperconnection.cu#L194)<!-- source: int step_rows = logical_rows ? static_cast<int>(logical_rows) : rows; -->.
+Logical row 数继续选择每个 position 的 split, chunk 和 statistics layout.
 其 target attention 和 MoE execution 保持批量执行.
 Native Engram arithmetic 使用 logical request batch 执行每份 copy 的 reduction.
 
@@ -227,7 +229,7 @@ HTTP CSV 只记录理想接受计划.
 - 依据实测 collective 成本评估 replicated `wo_b`.
 - 用 Nsight Compute 分析 top non-collective decode kernel.
 - 运行批准的 DeepSeek AgentX case, 发布 CSV 和暗色背景散点图.
-- 在 GPU 0 以外的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
+- 在没有锁频的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
 - 在 efficiency 报告前把 DeepSeek 计量计数加入执行 trace.
 - 交付前取得 independent code review.
 

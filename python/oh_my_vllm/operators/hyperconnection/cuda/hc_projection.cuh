@@ -226,6 +226,8 @@ __global__ void released_gemv_kernel(const float *input, const float *weight, fl
                                      int width, int outputs) {
   int out = blockIdx.x * blockDim.y + threadIdx.y;
   int lane = threadIdx.x;
+  input += blockIdx.y * width;
+  output += blockIdx.y * outputs;
   if (out >= outputs)
     return;
   float value = 0.f;
@@ -266,11 +268,11 @@ inline void multiply_released_one(const float *input, const float *weight, float
   check_cuda(cudaGetLastError());
 }
 
-inline void multiply_released_gemv(const float *input, const float *weight, float *output,
+inline void multiply_released_gemv(const float *input, const float *weight, float *output, int rows,
                                    int width, int outputs, cudaStream_t stream) {
   dim3 block(32, 4);
-  released_gemv_kernel<<<(outputs + 3) / 4, block, 0, stream>>>(input, weight, output, width,
-                                                                outputs);
+  released_gemv_kernel<<<dim3((outputs + 3) / 4, rows), block, 0, stream>>>(input, weight, output,
+                                                                            width, outputs);
   check_cuda(cudaGetLastError());
 }
 
@@ -421,6 +423,30 @@ void prepare(const __nv_bfloat16 *input, float *flat, float *statistics, int row
   prepare_kernel<X><<<rows, dim3(X, 512 / X), 0, stream>>>(input, flat, statistics);
 }
 
+inline void multiply_released_dot(const float *input, const float *weight, float *output, int rows,
+                                  int outputs, int width, cudaStream_t stream);
+
+__global__ void source_chunk_kernel(const float *input, const float *weight, float *output,
+                                    int chunk) {
+  int row = blockIdx.y, out = blockIdx.x, index = threadIdx.x;
+  int chunks = (FlatWidth + chunk - 1) / chunk;
+  __shared__ float partials[128];
+  if (index < chunks) {
+    int start = index * chunk, end = min(start + chunk, FlatWidth);
+    float partial = 0.f;
+    for (int k = start; k < end; ++k)
+      partial = __fmaf_rn(input[row * FlatWidth + k], weight[out * FlatWidth + k], partial);
+    partials[index] = partial;
+  }
+  __syncthreads();
+  if (index == 0) {
+    float total = 0.f;
+    for (int index = 0; index < chunks; ++index)
+      total = __fadd_rn(total, partials[index]);
+    output[row * Mixes + out] = total;
+  }
+}
+
 inline void project(TensorView residual, TensorView weight, TensorView mixed, TensorView flat,
                     TensorView statistics, TensorView workspace, int rows, int logical_rows,
                     cudaStream_t stream) {
@@ -453,17 +479,24 @@ inline void project(TensorView residual, TensorView weight, TensorView mixed, Te
     int steps = rows / logical_rows;
     auto weight_values = static_cast<const float *>(weight.data_ptr());
     auto mixed_values = static_cast<float *>(mixed.data_ptr());
-    for (int step = 0; step < steps; ++step) {
-      if (logical_rows == 1) {
-        multiply_released_one(values + step * FlatWidth, weight_values, mixed_values + step * Mixes,
-                              FlatWidth, Mixes, workspace.data_ptr(), stream);
+    if (logical_rows == 1) {
+      if (steps == 1)
+        multiply_released_one(values, weight_values, mixed_values, FlatWidth, Mixes,
+                              workspace.data_ptr(), stream);
+      else
+        multiply_released_dot(values, weight_values, mixed_values, rows, Mixes, FlatWidth, stream);
+    } else {
+      int chunk = released_chunk(logical_rows);
+      TVM_FFI_ICHECK(chunk > 0) << "HC logical rows have no measured released layout";
+      if (steps == 1 || chunk_workspace_bytes(rows, FlatWidth, chunk) <= BlasBytes) {
+        multiply_released_chunked_parallel(values, weight_values, mixed_values, rows, Mixes,
+                                           FlatWidth, FlatWidth, Mixes, chunk, workspace.data_ptr(),
+                                           BlasBytes, stream);
       } else {
-        int chunk = released_chunk(logical_rows);
-        TVM_FFI_ICHECK(chunk > 0) << "HC logical rows have no measured released layout";
-        multiply_released_chunked_parallel(values + step * FlatWidth, weight_values,
-                                           mixed_values + step * Mixes, logical_rows, Mixes,
-                                           FlatWidth, steps * FlatWidth, steps * Mixes, chunk,
-                                           workspace.data_ptr(), BlasBytes, stream);
+        TVM_FFI_ICHECK(chunk_count(FlatWidth, chunk) <= 128);
+        source_chunk_kernel<<<dim3(Mixes, rows), 128, 0, stream>>>(values, weight_values,
+                                                                   mixed_values, chunk);
+        check_cuda(cudaGetLastError());
       }
     }
   }

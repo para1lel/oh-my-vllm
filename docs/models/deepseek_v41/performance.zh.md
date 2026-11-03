@@ -1,7 +1,7 @@
 # HTTP 性能测量
 
 使用四张 B200 显卡和完整 Rust service.
-选择 GPU 0 以外的显卡.
+选择没有锁频的显卡.
 原始 artifact 保留在 repository 外.
 将 `TMPDIR` 设为具有写权限的目录.
 该目录必须使用适用于 Unix socket 的短路径.
