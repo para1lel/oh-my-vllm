@@ -263,12 +263,16 @@ class DeepSeekModel(unittest.TestCase):
                 self.assertRaisesRegex(ValueError, "UE8M0 K32"),
             ):
                 batch.require_batch_configuration(released)
-        for name in ("_SPARSE_NATIVE_DISABLED", "_SPARSE_NATIVE_FAILED"):
-            with (
-                patch.object(kernel, name, True),
-                self.assertRaisesRegex(ValueError, "native sparse"),
-            ):
-                batch.require_batch_configuration(released)
+        with (
+            patch.object(kernel, "_SPARSE_NATIVE_FAILED", True),
+            self.assertRaisesRegex(ValueError, "native sparse"),
+        ):
+            batch.require_batch_configuration(released)
+        with (
+            patch.object(kernel, "_SPARSE_NATIVE_DISABLED", True),
+            patch.object(kernel, "_SPARSE_NATIVE_FAILED", False),
+        ):
+            batch.require_batch_configuration(released)
         with (
             patch.object(kernel, "_SPARSE_NATIVE_DISABLED", False),
             patch.object(kernel, "_SPARSE_NATIVE_FAILED", False),
@@ -914,6 +918,39 @@ class DeepSeekModel(unittest.TestCase):
                             loader.close()
             self.assertEqual(hashlib.sha256(shard.read_bytes()).digest(), before)
 
+    def test_dense_owner_keeps_small_rank_term_before_bf16_rounding(self):
+        from oh_my_vllm.models.deepseek_v41.local_tp import LocalRowProjection
+
+        # Captured TEP4 values at layer 21, query 158, channel 348.
+        partials = torch.tensor(
+            [-0.04150390625, -2.2351741790771484e-08, -0.462890625, 0.11669921875],
+            dtype=torch.bfloat16,
+        )
+        calls = []
+
+        def project(values, weight):
+            rank = int(weight[0, 0])
+            calls.append((rank, tuple(values.shape), values.dtype))
+            return partials[rank].expand(values.size(0), 1).clone()
+
+        with torch.device("cpu"):
+            inputs = torch.ones((2, 4), dtype=torch.bfloat16)
+            weights = torch.arange(4, dtype=torch.bfloat16).reshape(1, 4)
+            actual = LocalRowProjection(4)(inputs, weights, None, project)
+        self.assertEqual(actual.dtype, torch.float32)
+        self.assertTrue(
+            torch.equal(
+                actual, torch.full((2, 1), -0.3876953423023224, dtype=torch.float32)
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                actual.to(torch.bfloat16),
+                torch.full((2, 1), -0.388671875, dtype=torch.bfloat16),
+            )
+        )
+        self.assertEqual(calls, [(rank, (2, 1), torch.bfloat16) for rank in range(4)])
+
     def test_attention_output_rounds_before_tensor_parallel_reduction(self):
         with patch("oh_my_vllm.models.deepseek_v41.model.world_size", 4):
             attention = RowParallelLinear(8, 2, dtype=torch.bfloat16)
@@ -1107,7 +1144,7 @@ class DeepSeekModel(unittest.TestCase):
             restored_window = attention.window_kv_cache[63].clone()
             cache.commit(7, row, 63, accepted_end=4)
             cache.clear_slot(63)
-            self.assertEqual(mapped_bytes() - before, active // 2)
+            self.assertEqual(mapped_bytes() - before, active)
             torch.testing.assert_close(attention.compress_kv_cache[2, :2], saved)
             cache.restore(7, 10, row, start_pos=4)
             torch.testing.assert_close(attention.compress_kv_cache[10, :2], restored)
@@ -1115,6 +1152,8 @@ class DeepSeekModel(unittest.TestCase):
             self.assertEqual(mapped_bytes() - before, active)
             cache.clear_slot(10)
             cache.clear_slot(2)
+            self.assertEqual(mapped_bytes() - before, active)
+            cache.close()
             self.assertEqual(mapped_bytes(), before)
         finally:
             shared_attn.reset_query_state()
@@ -1959,6 +1998,49 @@ class DeepSeekModel(unittest.TestCase):
                     torch.testing.assert_close(
                         value, expected[name], rtol=0, atol=0, msg=name
                     )
+
+                from oh_my_vllm.models.deepseek_v41.batch import target_decode_batch
+
+                uniform_starts = (max(starts),) * len(starts)
+                for name, value in transformer.named_buffers():
+                    value.copy_(initial[name])
+                outputs = [
+                    transformer(
+                        tokens[index : index + 1],
+                        start_pos=start,
+                        cache_slots=slots[index : index + 1],
+                        full_logits=length > 1,
+                        sample_output=False,
+                        collect_main_hidden=False,
+                    )[1]
+                    for index, start in enumerate(uniform_starts)
+                ]
+                expected = {
+                    name: value.clone() for name, value in transformer.named_buffers()
+                }
+                for name, value in transformer.named_buffers():
+                    value.copy_(initial[name])
+                worker = SimpleNamespace(
+                    model=transformer,
+                    args=args,
+                    device=torch.device("cpu"),
+                    decode_cycle=2,
+                    decode_graph_limit=0,
+                )
+                result = target_decode_batch(
+                    worker, tokens.tolist(), uniform_starts, slots.tolist()
+                )
+                torch.testing.assert_close(
+                    result.logits, torch.cat(outputs), rtol=0, atol=0
+                )
+                for name, value in transformer.named_buffers():
+                    torch.testing.assert_close(
+                        value, expected[name], rtol=0, atol=0, msg=name
+                    )
+                self.assertEqual(shared_attn.index_k.size(1), max(starts) + length)
+                self.assertEqual(shared_attn.compress_kv.size(1), max(starts) + length)
+                for binding in worker.decode_bindings.values():
+                    binding.close()
         finally:
             shared_attn.reset_query_state()
             torch.set_default_device(previous_device)
@@ -2083,6 +2165,51 @@ class DeepSeekModel(unittest.TestCase):
         single.bind(6, 4)
         self.assertTrue(torch.equal(single.token_ids, torch.tensor([[6]])))
         self.assertEqual(sampled_token_ids(torch.tensor([[1.0, 3.0, 2.0]])), [1])
+
+    def test_decode_graph_validates_every_request_before_capture_and_replay(self):
+        from oh_my_vllm.models.deepseek_v41.decode import DecodeGraph
+
+        bindings = DecodeBindings(2, (3, 1), "cpu", length=6, varlen=True)
+        graph = DecodeGraph.__new__(DecodeGraph)
+        graph.bindings = bindings
+        graph.start_pos = 14
+        graph.context_bucket = 32
+        graph.cycle = 2
+        graph.residue = 0
+        graph.window_prefixes = ((8, 8),)
+        graph.routed_bindings = ()
+        graph.closed = False
+        graph.cache_lease = None
+        graph.output = None
+        graph.model = SimpleNamespace()
+        with self.assertRaisesRegex(ValueError, "bind"):
+            graph._validate_positions()
+        for positions in ((12, 14), (14, 18), (18, 26)):
+            bindings.bind([[1] * 6] * 2, positions)
+            graph._validate_positions()
+        for positions in ((8, 14), (13, 14), (6, 14), (14, 28)):
+            bindings.bind([[1] * 6] * 2, positions)
+            with (
+                self.subTest(positions=positions),
+                self.assertRaisesRegex(ValueError, "outside"),
+            ):
+                graph.replay()
+        bindings.bind([[1] * 6] * 2, (8, 14))
+        with (
+            patch.object(graph, "close") as close,
+            self.assertRaisesRegex(ValueError, "outside"),
+        ):
+            graph.capture()
+        close.assert_called_once_with()
+        graph.context_bucket = 16
+        graph.start_pos = 6
+        graph.window_prefixes = ((8, 6),)
+        bindings.bind([[1] * 6] * 2, (6, 6))
+        graph._validate_positions()
+        bindings.bind([[1] * 6] * 2, (4, 6))
+        with self.assertRaisesRegex(ValueError, "outside"):
+            graph.replay()
+        bindings.close()
 
     def test_capture_pauses_host_state_export(self):
         export = SimpleNamespace(steps={0: "step"}, batch=(0,))

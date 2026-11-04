@@ -317,7 +317,7 @@ class Execution(unittest.TestCase):
                                 (workspace.metadata_inputs, verify and count >= 2),
                                 (
                                     context.metadata_inputs,
-                                    graph and verify and count >= 2,
+                                    not (graph and verify) or count >= 2,
                                 ),
                                 (draft.metadata_inputs, count >= 2),
                             ):
@@ -980,7 +980,7 @@ class Execution(unittest.TestCase):
                     self.assertEqual(owner.context(batch, value, True, {}), {})
                     self.assertEqual(context.call_count, count)
                     self.assertIs(context.call_args.args[-1], False)
-                    self.assertIs(context.call_args.kwargs["single_upload"], False)
+                    self.assertIs(context.call_args.kwargs["single_upload"], True)
                     self.assertIs(owner.context_prefill.hidden, value)
                     owner.context_prefill.copy.assert_not_called()
                     self.assertFalse(owner.context_decode)

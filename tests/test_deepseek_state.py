@@ -181,6 +181,38 @@ class DeepSeekStateExports(unittest.TestCase):
                 ):
                     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
+    def test_graph_partial_window_exports_clear_unused_slots_across_steps(self):
+        from oh_my_vllm.models.deepseek_v41.decode import DecodeBindings
+        from oh_my_vllm.models.deepseek_v41.decode_state import GraphStateExports
+        from oh_my_vllm.models.deepseek_v41.state import StateExports
+
+        bindings = DecodeBindings(2, (1, 0), "cpu", length=6, varlen=True)
+        captured = GraphStateExports(bindings, 2)
+        ring = torch.full((2, 8, 1), -100.0)
+        for start in (2, 10):
+            bindings.bind([[1] * 6] * 2, (start, start))
+            values = (
+                torch.arange(start, start + 6).float().view(1, 6, 1).repeat(2, 1, 1)
+            )
+            expected, actual = StateExports(), StateExports()
+            for export in (expected, actual):
+                for slot in bindings.cache_slots_cpu:
+                    export.begin(slot, start, range(start + 1, start + 7))
+                export.bind(bindings.cache_slots_cpu, positions=(start, start))
+            expected.window(ring, values, start)
+            captured.window(ring, values, start)
+            captured.publish(actual)
+            for slot in bindings.cache_slots_cpu:
+                for end in range(start + 1, start + 7):
+                    self.assertTrue(
+                        torch.equal(
+                            expected.window_state(slot, end, ring),
+                            actual.window_state(slot, end, ring),
+                        )
+                    )
+            ring.fill_(100)
+        bindings.close()
+
     def test_capture_rejects_an_unbound_batch_and_incomplete_endpoint(self):
         from oh_my_vllm.models.deepseek_v41.state import StateExports
 

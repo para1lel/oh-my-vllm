@@ -41,10 +41,16 @@ class LocalRowProjection:
         width = inputs.size(-1) // self.partitions
         if width * self.partitions != inputs.size(-1):
             raise ValueError("row projection input must divide into MP4 shards")
-        output = None
+        pairs = []
         for rank, shard in enumerate(self.weights):
             rows = inputs[..., rank * width : (rank + 1) * width].contiguous()
             # MP4 rounds each projection before the FP32 rank reduction.
             partial = project(rows, shard).float()
-            output = partial if output is None else output + partial
+            if rank % 2 == 0:
+                pairs.append(partial)
+            else:
+                pairs[-1].add_(partial)
+        output = pairs[0]
+        for pair in pairs[1:]:
+            output.add_(pair)
         return output

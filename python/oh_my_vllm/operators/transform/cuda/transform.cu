@@ -5,6 +5,7 @@
 #include "../../runtime/cuda/contracts.cuh"
 #include "engram.cuh"
 #include "engram_lookup.cuh"
+#include "packed_history.cuh"
 
 namespace {
 

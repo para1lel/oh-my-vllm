@@ -1,3 +1,8 @@
+"""CPU checks for adapter control and cache state.
+
+GPU checks cover real MTP history, batched model computation, and Graph execution.
+"""
+
 import gc
 import unittest
 import weakref
@@ -12,6 +17,7 @@ from oh_my_vllm.models.deepseek_v41.inference import (
     Worker,
     prefill_row_limit,
 )
+from oh_my_vllm.models.deepseek_v41.request import Request
 from oh_my_vllm.models.deepseek_v41.speculation import verify_greedy_drafts
 
 from tests.test_deepseek_cache import FakeModel
@@ -68,6 +74,184 @@ class _PositionModel(FakeModel):
         for index, slot in enumerate(cache_slots.tolist()):
             window[slot, positions[-4:].remainder(4)] = hidden[index, -4:]
 
+    def forward_spec(self, input_ids, hidden, *, start_pos, cache_slots):
+        self.forward_spec_seed(hidden, start_pos=start_pos, cache_slots=cache_slots)
+        return None
+
+
+class _ChainModel(_PositionModel):
+    """A CPU control fixture whose proposal does not read the MTP window."""
+
+    def __init__(self, *, acceptance=5, batch_size=2):
+        super().__init__(batch_size=batch_size)
+        self.acceptance = acceptance
+        self.targets, self.proposals = [], []
+        self.engram_hash.cache = torch.zeros(batch_size, 64, dtype=torch.int64)
+        self.layers[0].attn.compress_kv_cache = torch.zeros(batch_size, 32, 3)
+        self.layers[0].attn.indexer.k_cache = torch.zeros(batch_size, 32, 2)
+
+    @staticmethod
+    def prediction(token, previous, position):
+        return (token + 2 * previous + position) % 120 + 1
+
+    def __call__(
+        self,
+        inputs,
+        *,
+        start_pos,
+        cache_slots_cpu,
+        full_logits=False,
+        logit_start=0,
+        routing_trace=None,
+        **kwargs,
+    ):
+        hidden, predictions = [], []
+        attention = self.layers[0].attn
+        for row, slot in zip(inputs.tolist(), cache_slots_cpu, strict=True):
+            self.targets.append(dict(start=start_pos, tokens=row, verify=full_logits))
+            previous = (
+                int(self.engram_hash.cache[slot, start_pos - 1]) if start_pos else 0
+            )
+            values, targets = [], []
+            for position, token in enumerate(row, start_pos):
+                values.append([position + 1, token, previous])
+                targets.append(self.prediction(token, previous, position))
+                self.engram_hash.cache[slot, position] = token
+                previous = token
+            values = torch.tensor([values], dtype=torch.float32)
+            self._state_export.bind((slot,))
+            self._state_export.window(attention.window_kv_cache, values, start_pos)
+            kv, score = attention.compressor.kv_state, attention.compressor.score_state
+            tail = torch.cat((kv[slot : slot + 1, : start_pos % 2], values), dim=1)
+            self._state_export.tail(kv, score, tail, tail + 100, start_pos)
+            positions = torch.arange(start_pos, start_pos + len(row))
+            attention.window_kv_cache[slot, positions[-4:].remainder(4)] = values[
+                0, -4:
+            ]
+            for offset, position in enumerate(positions.tolist()):
+                if position % 2:
+                    attention.compress_kv_cache[slot, position // 2] = values[0, offset]
+                    attention.indexer.k_cache[slot, position // 2] = values[
+                        0, offset, :2
+                    ]
+            kv[slot].zero_()
+            score[slot].fill_(-torch.inf)
+            if (start_pos + len(row)) % 2:
+                kv[slot, 0] = values[0, -1]
+                score[slot, 0] = values[0, -1] + 100
+            hidden.append(values)
+            predictions.append(targets)
+        if routing_trace is not None:
+            routing_trace.record(
+                0, torch.arange(6, dtype=torch.int32).expand(inputs.numel(), -1)
+            )
+        logits = torch.nn.functional.one_hot(torch.tensor(predictions), 128).float()
+        logits = logits[:, logit_start:] if full_logits else logits[:, -1]
+        return None, logits, torch.cat(hidden)
+
+    def forward_spec(self, input_ids, hidden, *, start_pos, cache_slots):
+        if tuple(hidden.shape) != (1, 1, 3) or hidden[0, 0, 0] != start_pos + 1:
+            raise ValueError("proposal did not receive the accepted boundary hidden")
+        self.proposals.append(
+            dict(start=start_pos, token=int(input_ids.item()), hidden=hidden.clone())
+        )
+        self.forward_spec_seed(hidden, start_pos=start_pos, cache_slots=cache_slots)
+        if start_pos == 0:
+            return None
+        token, previous = int(input_ids.item()), int(hidden[0, 0, 1])
+        drafts = []
+        for position in range(start_pos + 1, start_pos + 6):
+            predicted = self.prediction(token, previous, position)
+            drafts.append(predicted)
+            previous, token = token, predicted
+        accepted = (
+            self.acceptance
+            if isinstance(self.acceptance, int)
+            else self.acceptance[int(cache_slots.item())]
+        )
+        if accepted < 5:
+            drafts[accepted] = (drafts[accepted] + 1) % 128
+        return torch.tensor([[int(input_ids.item()), *drafts]]), None, None
+
+
+def _chain_worker(*, prompts=((10, 11, 12),), acceptance=5, limit=24, **options):
+    worker = Worker.__new__(Worker)
+    worker.model = _ChainModel(acceptance=acceptance, batch_size=len(prompts) + 1)
+    worker.device = torch.device("cpu")
+    worker.dspark = True
+    worker.args = SimpleNamespace(window_size=4)
+    worker.slots = set(range(len(prompts) + 1))
+    tokenizer = SimpleNamespace(
+        valid_tokens=128,
+        grammar=None,
+        eos=set(),
+        decode_bytes=lambda tokens: b"x" * len(tokens),
+    )
+    worker.requests = {
+        key: Request(
+            tokenizer, prompt, dict(max_tokens=limit, sampling={"seed": 0}, **options)
+        )
+        for key, prompt in enumerate(prompts, 1)
+    }
+    for request in worker.requests.values():
+        request.cache_slot = None
+    worker.trace = SimpleNamespace(record=Mock())
+    worker.cache = DeepSeekCache(
+        worker.model,
+        block_tokens=4,
+        max_seq_len=64,
+        host_limit=1 << 20,
+        requests=worker.requests,
+        free_slots=worker.slots,
+    )
+    return worker
+
+
+def _chain_row(worker, tokens, *, key=1, start=None):
+    request = worker.requests[key]
+    blocks = list(range(16 * (key - 1) + 1, 16 * key + 1))
+    return dict(
+        request_id=key,
+        token_ids=list(tokens),
+        num_computed_tokens=request.state_position if start is None else start,
+        fa_block_table=blocks,
+        mamba_block_table=list(blocks),
+    )
+
+
+def _chain_state(worker, key=1):
+    cache, request = worker.cache, worker.requests[key]
+    slot, end = request.cache_slot, request.state_position
+    values = [value[slot] for value in (*cache._window, *cache._mtp_window)]
+    values += [
+        value[slot, : end // ratio]
+        for value, ratio in (*cache._compressed, *cache._index)
+    ]
+    values += [value[slot] for tail in cache._tails for value in tail]
+    values += [value[slot, :end] for value in cache._engram]
+    return [value.clone() for value in values]
+
+
+def _chain_batch(worker, tokens, positions, slots, **options):
+    """Supply batch result metadata through separate CPU model calls."""
+    results = [
+        worker.model(
+            torch.tensor([row]),
+            start_pos=start,
+            cache_slots_cpu=(slot,),
+            full_logits=len(row) > 1,
+        )
+        for row, start, slot in zip(tokens, positions, slots, strict=True)
+    ]
+    return SimpleNamespace(
+        logits=torch.cat([result[1] for result in results]),
+        hidden=torch.cat([result[2] for result in results]),
+        execution="eager",
+        routes=None,
+        bindings=None,
+        call=1,
+    )
+
 
 def _verification_worker(predictions):
     worker = Worker.__new__(Worker)
@@ -101,6 +285,402 @@ def _verification_worker(predictions):
 
 
 class DeepSeekSpeculation(unittest.TestCase):
+    def _run_chain(self, mode, *, acceptance):
+        worker = _chain_worker(acceptance=acceptance)
+        request = worker.requests[1]
+        next_proposals = worker._next_proposals
+        if mode == "greedy":
+            worker._next_proposals = lambda *_args: []
+        elif mode == "legacy":
+            worker._next_proposals = lambda *args: (
+                [] if worker.model.targets[-1]["verify"] else next_proposals(*args)
+            )
+        output = worker._execute_row(_chain_row(worker, request.history))
+        states = {request.state_position: _chain_state(worker)}
+        rounds = []
+        while not request.finish:
+            drafts = output["new_draft_token_ids"]
+            output = worker._execute_row(
+                _chain_row(worker, [request.history[-1], *drafts])
+            )
+            rounds.append((len(drafts), output))
+            self.assertEqual(request.state_position, len(request.history) - 1)
+            states[request.state_position] = _chain_state(worker)
+            if drafts:
+                self.assertTrue(
+                    torch.all(
+                        worker.model.engram_hash.cache[
+                            request.cache_slot, request.state_position :
+                        ]
+                        == 0
+                    )
+                )
+        return worker, states, rounds
+
+    def test_continuous_verification_matches_greedy_and_legacy_tokens_and_state(self):
+        for accepted in (0, 2, 5):
+            with self.subTest(accepted=accepted):
+                greedy, states, _ = self._run_chain("greedy", acceptance=accepted)
+                legacy, legacy_states, _ = self._run_chain(
+                    "legacy", acceptance=accepted
+                )
+                continuous, continuous_states, rounds = self._run_chain(
+                    "continuous", acceptance=accepted
+                )
+                for worker, actual in (
+                    (legacy, legacy_states),
+                    (continuous, continuous_states),
+                ):
+                    self.assertEqual(
+                        worker.requests[1].history, greedy.requests[1].history
+                    )
+                    for end, values in actual.items():
+                        for left, right in zip(values, states[end], strict=True):
+                            torch.testing.assert_close(left, right, rtol=0, atol=0)
+                self.assertTrue(all(count == 5 for count, _ in rounds[:2]))
+                self.assertLessEqual(
+                    len(continuous.model.targets), len(legacy.model.targets)
+                )
+                if accepted:
+                    self.assertLess(
+                        len(continuous.model.targets), len(legacy.model.targets)
+                    )
+                self.assertEqual(len(continuous.model.targets), len(rounds) + 1)
+
+    def test_verify_proposes_before_commit_and_restores_before_the_next_target(self):
+        worker = _chain_worker(acceptance=2)
+        request = worker.requests[1]
+        output = worker._execute_row(_chain_row(worker, request.history))
+        for _ in range(2):
+            calls = Mock()
+            with (
+                patch.object(worker, "_target", wraps=worker._target) as target,
+                patch.object(request, "append", wraps=request.append) as append,
+                patch.object(worker, "_seed_mtp", wraps=worker._seed_mtp) as seed,
+                patch.object(worker, "_proposal", wraps=worker._proposal) as proposal,
+                patch.object(
+                    worker.cache, "commit", wraps=worker.cache.commit
+                ) as commit,
+                patch.object(
+                    worker.cache, "restore", wraps=worker.cache.restore
+                ) as restore,
+            ):
+                for name, method in (
+                    ("target", target),
+                    ("append", append),
+                    ("seed", seed),
+                    ("proposal", proposal),
+                    ("commit", commit),
+                    ("restore", restore),
+                ):
+                    calls.attach_mock(method, name)
+                output = worker._execute_row(
+                    _chain_row(
+                        worker, [request.history[-1], *output["new_draft_token_ids"]]
+                    )
+                )
+                self.assertEqual(
+                    [call[0] for call in calls.mock_calls],
+                    ["target", "append", "seed", "proposal", "commit", "restore"],
+                )
+                token, hidden, start, slot = proposal.call_args.args
+                self.assertEqual(
+                    (token, start, slot),
+                    (
+                        output["token_ids"][-1],
+                        request.state_position - 1,
+                        request.cache_slot,
+                    ),
+                )
+                self.assertEqual(hidden[0, 0, 0], request.state_position)
+                self.assertEqual(
+                    commit.call_args.kwargs["accepted_end"],
+                    restore.call_args.kwargs["start_pos"],
+                )
+                self.assertFalse(restore.call_args.kwargs["use_prefix_state"])
+
+    def test_batch_requests_keep_their_own_continuous_proposal_boundaries(self):
+        worker = _chain_worker(
+            prompts=((10, 11, 12, 13), (20, 21, 22, 23, 24, 25)), acceptance=(0, 2)
+        )
+        outputs = {
+            key: worker._execute_row(_chain_row(worker, request.history, key=key))
+            for key, request in worker.requests.items()
+        }
+        for _ in range(2):
+            rows = [
+                _chain_row(
+                    worker,
+                    [request.history[-1], *outputs[key]["new_draft_token_ids"]],
+                    key=key,
+                )
+                for key, request in worker.requests.items()
+            ]
+            before = len(worker.model.targets)
+            with patch(
+                "oh_my_vllm.models.deepseek_v41.batch.target_decode_batch",
+                side_effect=_chain_batch,
+            ) as target:
+                outputs = worker._execute_decode_group(rows)
+                target.assert_called_once()
+            self.assertEqual(len(worker.model.targets) - before, 2)
+            for key, request in worker.requests.items():
+                self.assertEqual(
+                    outputs[key]["num_accepted_draft_tokens"], 2 * (key - 1)
+                )
+                self.assertEqual(len(outputs[key]["new_draft_token_ids"]), 5)
+                self.assertEqual(request.state_position, len(request.history) - 1)
+                proposal = worker.model.proposals[-3 + key]
+                self.assertEqual(proposal["start"], request.state_position - 1)
+                self.assertEqual(proposal["token"], request.history[-1])
+                expected = _chain_state(worker, key)
+                worker.cache.restore(
+                    key,
+                    request.cache_slot,
+                    rows[key - 1],
+                    start_pos=request.state_position,
+                    use_prefix_state=False,
+                )
+                for left, right in zip(
+                    _chain_state(worker, key), expected, strict=True
+                ):
+                    torch.testing.assert_close(left, right, rtol=0, atol=0)
+
+    def test_continuous_state_survives_slot_release_host_transfer_and_restart(self):
+        greedy, states, _ = self._run_chain("greedy", acceptance=2)
+        for recovery in ("release", "host", "restart"):
+            with self.subTest(recovery=recovery):
+                worker = _chain_worker(acceptance=2)
+                request = worker.requests[1]
+                output = worker._execute_row(_chain_row(worker, request.history))
+                output = worker._execute_row(
+                    _chain_row(
+                        worker, [request.history[-1], *output["new_draft_token_ids"]]
+                    )
+                )
+                scheduled = _chain_row(
+                    worker, [request.history[-1], *output["new_draft_token_ids"]]
+                )
+                if recovery == "release":
+                    worker._free_slot(request)
+                elif recovery == "host":
+                    used = (request.state_position + 3) // 4
+                    operation = dict(
+                        transfer_id=1,
+                        snapshot_id=7,
+                        kind="store",
+                        request_id=1,
+                        fa_blocks=scheduled["fa_block_table"][:used],
+                        mamba_blocks=scheduled["mamba_block_table"][:used],
+                    )
+                    self.assertEqual(
+                        worker.cache.handle(dict(operations=[operation]))[0]["status"],
+                        "complete",
+                    )
+                    self.assertIsNone(request.cache_slot)
+                    worker.cache.fa_pages.clear()
+                    worker.cache.mamba_pages.clear()
+                    for name in ("fa_block_table", "mamba_block_table"):
+                        scheduled[name] = [block + 32 for block in scheduled[name]]
+                    operation.update(
+                        transfer_id=2,
+                        kind="load",
+                        fa_blocks=scheduled["fa_block_table"][:used],
+                        mamba_blocks=scheduled["mamba_block_table"][:used],
+                    )
+                    self.assertEqual(
+                        worker.cache.handle(dict(operations=[operation]))[0]["status"],
+                        "complete",
+                    )
+                if recovery == "restart":
+                    scheduled = _chain_row(worker, request.history, start=0)
+                    output = worker.execute(
+                        dict(
+                            rpc_id=1,
+                            scheduled=[scheduled],
+                            preempted_request_ids=[1],
+                            finished_request_ids=[],
+                        )
+                    )["outputs"][0]
+                else:
+                    output = worker._execute_row(scheduled)
+                for _ in range(2):
+                    self.assertEqual(
+                        request.history,
+                        greedy.requests[1].history[: len(request.history)],
+                    )
+                    self.assertEqual(request.state_position, len(request.history) - 1)
+                    for left, right in zip(
+                        _chain_state(worker),
+                        states[request.state_position],
+                        strict=True,
+                    ):
+                        torch.testing.assert_close(left, right, rtol=0, atol=0)
+                    self.assertEqual(
+                        worker.model.proposals[-1]["start"], request.state_position - 1
+                    )
+                    scheduled.update(
+                        token_ids=[request.history[-1], *output["new_draft_token_ids"]],
+                        num_computed_tokens=request.state_position,
+                    )
+                    output = worker._execute_row(scheduled)
+
+    def test_stop_and_length_use_the_visible_prefix_before_proposing(self):
+        reference, _, _ = self._run_chain("greedy", acceptance=5)
+        expected = reference.requests[1].history[3:]
+        for accepted in (0, 2, 5):
+            for finish in ("eos", "stop", "length"):
+                with self.subTest(accepted=accepted, finish=finish):
+                    kept = accepted + 1
+                    options = {"limit": kept + 1} if finish == "length" else {}
+                    worker = _chain_worker(acceptance=accepted, **options)
+                    request = worker.requests[1]
+                    output = worker._execute_row(_chain_row(worker, request.history))
+                    if finish == "eos":
+                        request.tokenizer.eos = {expected[kept]}
+                    elif finish == "stop":
+                        request.options["stop"] = ["x" * kept]
+                    before = len(worker.model.proposals)
+                    output = worker._execute_row(
+                        _chain_row(
+                            worker,
+                            [request.history[-1], *output["new_draft_token_ids"]],
+                        )
+                    )
+                    self.assertEqual(output["token_ids"], expected[1 : kept + 1])
+                    self.assertEqual(output["num_accepted_draft_tokens"], accepted)
+                    self.assertEqual(
+                        output["finish_reason"],
+                        "length" if finish == "length" else "stop",
+                    )
+                    self.assertEqual(output["new_draft_token_ids"], [])
+                    self.assertEqual(len(worker.model.proposals), before)
+                    self.assertEqual(request.state_position, len(request.history) - 1)
+
+    def test_proposal_budget_skips_mtp_with_at_most_one_output_left(self):
+        for limit, expected in ((1, 0), (2, 0), (3, 1)):
+            for grouped in (False, True):
+                with self.subTest(limit=limit, grouped=grouped):
+                    worker = _chain_worker(limit=limit)
+                    scheduled = _chain_row(worker, worker.requests[1].history)
+                    output = (
+                        worker._execute_prefill_group([scheduled], final=True)[1]
+                        if grouped
+                        else worker._execute_row(scheduled)
+                    )
+                    self.assertEqual(len(output["new_draft_token_ids"]), expected)
+                    self.assertEqual(len(worker.model.proposals), int(expected > 0))
+        worker = _chain_worker(prompts=((10,),))
+        output = worker._execute_row(_chain_row(worker, [10]))
+        self.assertEqual(output["new_draft_token_ids"], [])
+        self.assertEqual(worker.model.proposals[0]["start"], 0)
+
+    def test_first_request_failure_before_commit_keeps_pages_unpublished(self):
+        for batched in (False, True):
+            for failure in ("seed", "proposal", "export", "commit"):
+                with self.subTest(batched=batched, failure=failure):
+                    worker = _chain_worker(prompts=((10,),))
+                    scheduled = _chain_row(worker, [10, 1, 2, 3, 4, 5])
+                    owner, name = {
+                        "seed": (worker.model, "forward_spec_seed"),
+                        "proposal": (worker.model, "forward_spec"),
+                        "export": (worker.cache.exports, "window_state"),
+                        "commit": (worker.cache, "commit"),
+                    }[failure]
+                    with (
+                        patch.object(owner, name, side_effect=ValueError(failure)),
+                        patch(
+                            "oh_my_vllm.models.deepseek_v41.batch.target_decode_batch",
+                            side_effect=_chain_batch,
+                        ),
+                        self.assertRaisesRegex(ValueError, failure),
+                    ):
+                        worker._execute_decode_group(
+                            [scheduled]
+                        ) if batched else worker._execute_row(scheduled)
+                    self.assertEqual(worker.cache.fa_pages, {})
+                    self.assertTrue(
+                        all(
+                            page.endpoint == 0
+                            for page in worker.cache.mamba_pages.values()
+                        )
+                    )
+                    self.assertEqual(worker.cache.exports.steps, {})
+                    self.assertIsNone(worker.requests[1].cache_slot)
+                    self.assertEqual(worker.requests[1].state_position, 0)
+                    self.assertEqual(worker.slots, {0, 1})
+
+    def test_later_batch_proposal_failure_discards_the_group_after_an_earlier_commit(
+        self,
+    ):
+        from oh_my_vllm.models.deepseek_v41.launcher import GroupWorker
+
+        worker = _chain_worker(prompts=((10, 11, 12), (20, 21, 22)), acceptance=2)
+        worker.batch_decode_enabled, worker.decode_cycle = True, 2
+        outputs = {
+            key: worker._execute_row(_chain_row(worker, request.history, key=key))
+            for key, request in worker.requests.items()
+        }
+        rows = [
+            _chain_row(
+                worker,
+                [request.history[-1], *outputs[key]["new_draft_token_ids"]],
+                key=key,
+            )
+            for key, request in worker.requests.items()
+        ]
+        histories = {
+            key: list(request.history) for key, request in worker.requests.items()
+        }
+        failed_slot = worker.requests[2].cache_slot
+        proposal = worker._proposal
+
+        def fail_second(token, hidden, start, slot):
+            if slot == failed_slot:
+                raise RuntimeError("second proposal failed")
+            return proposal(token, hidden, start, slot)
+
+        message = dict(
+            type="execute",
+            rpc_id=3,
+            scheduled=rows,
+            finished_request_ids=[],
+            preempted_request_ids=[],
+        )
+        bridge = GroupWorker.__new__(GroupWorker)
+        bridge.commands = []
+        bridge.close = Mock()
+        bridge._collect = Mock(
+            side_effect=lambda _timeout: {0: worker.execute(message)}
+        )
+        with (
+            patch.object(worker, "_proposal", side_effect=fail_second) as propose,
+            patch.object(worker.cache, "commit", wraps=worker.cache.commit) as commit,
+            patch(
+                "oh_my_vllm.models.deepseek_v41.batch.target_decode_batch",
+                side_effect=_chain_batch,
+            ),
+            self.assertRaisesRegex(RuntimeError, "second proposal failed"),
+        ):
+            bridge.handle(message)
+        self.assertEqual(propose.call_count, 2)
+        commit.assert_called_once()
+        self.assertEqual(commit.call_args.args[0], 1)
+        bridge.close.assert_called_once()
+        # Rust must receive no successful Execute result from this discarded group.
+        self.assertEqual(worker.cache.fa_pages[1].valid_tokens, 4)
+        self.assertEqual(worker.cache.mamba_pages[2].endpoint, 6)
+        self.assertEqual(worker.cache.fa_pages[17].valid_tokens, 3)
+        self.assertEqual(worker.cache.mamba_pages[17].endpoint, 3)
+        self.assertNotIn(18, worker.cache.fa_pages)
+        for key, request in worker.requests.items():
+            self.assertEqual(request.generated, 4)
+            self.assertNotEqual(request.history, histories[key])
+            self.assertIsNone(request.cache_slot)
+            self.assertEqual(request.state_position, 0)
+        self.assertEqual(worker.cache.exports.steps, {})
+        self.assertEqual(worker.slots, {0, 1, 2})
+
     def test_stopped_verification_commits_only_the_visible_accepted_prefix(self):
         worker, scheduled = _verification_worker([1, 2, 3, 4, 5, 9])
         request = worker.requests[1]
@@ -300,6 +880,12 @@ class DeepSeekSpeculation(unittest.TestCase):
             def forward_spec_seed(self, hidden, *, start_pos, cache_slots):
                 positions = torch.arange(start_pos, start_pos + hidden.size(1))
                 ring[positions.remainder(4)] = hidden.flatten()
+
+            def forward_spec(self, input_ids, hidden, *, start_pos, cache_slots):
+                self.forward_spec_seed(
+                    hidden, start_pos=start_pos, cache_slots=cache_slots
+                )
+                return None
 
         worker.model = Model()
         output = worker._execute_row(

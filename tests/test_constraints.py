@@ -42,6 +42,10 @@ class ChainDevice:
     def zeros(self, shape, dtype):
         return np.zeros(shape, np.float32 if dtype == "bfloat16" else dtype)
 
+    def zero(self, value):
+        value[...] = 0
+        return value
+
     def upload(self, value):
         return value.copy()
 
@@ -87,8 +91,9 @@ class ChainDevice:
 
 
 class ChainSample:
-    def __init__(self, plan, device, weights):
-        rows, allocate = plan.rows, device.empty
+    def __init__(self, plan, device, weights, *, allocate=None):
+        rows = plan.rows
+        allocate = device.empty if allocate is None else allocate
         self.outputs = SimpleNamespace(
             hidden=allocate((rows, 5120), "bfloat16"),
             probabilities=allocate((rows, 248320), "float32"),

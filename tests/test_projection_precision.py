@@ -167,6 +167,7 @@ class GroupedProjectionPrecision(unittest.TestCase):
                         )
                         target = Mock()
                         target._state_export = None
+                        target._physical_cache = None
                         target.layers = [layer]
                         target.modules.return_value = (moe,)
 
@@ -1156,6 +1157,17 @@ class ProjectionPrecisionCuda(unittest.TestCase):
                     )
                     torch.testing.assert_close(
                         actual, expected.to(dtype), rtol=0, atol=0
+                    )
+                    grouped_encoded = encoded.repeat(17, 1)
+                    grouped = kernel.grouped_fp4_gemm(
+                        grouped_encoded.to(torch.bfloat16),
+                        torch.tensor((0, 68), device="cuda", dtype=torch.int32),
+                        [(raw.view(torch.float4_e2m1fn_x2), weight_scales)] * 2,
+                        output_dtype=dtype,
+                        quantized=(grouped_encoded, input_scales.repeat(17, 1)),
+                    )
+                    torch.testing.assert_close(
+                        grouped, expected.to(dtype).repeat(17, 1), rtol=0, atol=0
                     )
 
     def test_fp4_scales_each_k32_dot_before_accumulation(self):

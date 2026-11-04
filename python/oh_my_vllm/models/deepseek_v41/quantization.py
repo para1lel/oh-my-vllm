@@ -104,6 +104,18 @@ def fp4_values(encoded):
     return levels[(codes & 7).long()] * torch.where((codes & 8).bool(), -1.0, 1.0)
 
 
+def fp4_dequantize(encoded, scales, block_size, *, dtype=torch.bfloat16):
+    if block_size not in (16, 32, 128):
+        raise ValueError("FP4 decode group size must be 16, 32, or 128")
+    if scales.dtype not in (torch.float8_e4m3fn, torch.float8_e8m0fnu):
+        raise ValueError("FP4 decode scales must use E4M3 or UE8M0")
+    width = encoded.size(-1) * 2
+    if scales.shape != (*encoded.shape[:-1], width // block_size):
+        raise ValueError("FP4 decode scales do not match the encoded groups")
+    values = fp4_values(encoded).unflatten(-1, (-1, block_size))
+    return (values * scales.float().unsqueeze(-1)).flatten(-2).to(dtype)
+
+
 def _fp4_codes(values):
     absolute = values.abs()
     thresholds = torch.tensor(

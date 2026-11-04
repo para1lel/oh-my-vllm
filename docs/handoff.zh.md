@@ -10,10 +10,10 @@ Qwen 保留单 worker 路径和共享 Rust service, scheduler, logical cache, DE
 Qwen decode 和 single-query verification 使用 native operator.
 [采样](../python/oh_my_vllm/models/qwen38/sampling.py#L28)<!-- source: self.full_history_view = self.full_history.numpy() -->使用 NumPy view 打包 mask 和 metadata.
 [上传](../python/oh_my_vllm/operators/runtime/uploads.py#L207)<!-- source: self._native_key = key -->保留 pinned snapshot, 并复用 native binding.
-当 verification batch 至少有两个 request 时, 每组 metadata 上传一次.
-其他 target 和 context input 使用分别上传的路径.
+[Context input](../python/oh_my_vllm/models/qwen38/speculation.py#L482)<!-- source: self.context_prefill = Context( --> 和 verification batch 使用一次上传, 但单 request verification 和单 request staged decode 除外.
+其他 target input 使用分别上传的路径.
 
-[Acceptance](../python/oh_my_vllm/models/qwen38/speculation.py#L232)<!-- source: self.metadata_inputs = Metadata(device, arrays, single_upload=True) --> 将 gather index, draft, slot 和 RNG 打包为一次上传.
+[Acceptance](../python/oh_my_vllm/models/qwen38/speculation.py#L245)<!-- source: self.metadata_inputs = Metadata(device, arrays, single_upload=True) --> 将 gather index, draft, slot 和 RNG 打包为一次上传.
 准备后的 [metadata writer](../python/oh_my_vllm/worker/metadata.py#L116)<!-- source: self.uploads.update(self._write, sources) --> 在输入校验和事件完成后更新 pinned snapshot.
 
 grammar 约束的 MTP4 chain 已禁用.
@@ -25,7 +25,7 @@ Batch 1 保留分别 draft 上传和原 mask 路径.
 Draft 复用重复检测证明和精确的已过滤 mask.
 
 Qwen 使用 [HTTP reference v5](models/qwen38/performance.zh.md#下界计算) 和 [operator reference v4](models/qwen38/operator-performance.zh.md).
-下一步: 重复长输出测量, 完成 24 项 HTTP 矩阵和 AgentX 验收.
+Qwen [HTTP 和 AgentX 报告](models/qwen38/results.zh.md) 已完成.
 
 DeepSeek-V4.1-Flash adapter 使用原始 48 shard checkpoint 和 rank-local placement.
 其四 rank Python bridge 支持 text target 和 DSpark5 greedy verification.
@@ -53,10 +53,10 @@ Native SwiGLU 支持最多 1048576 个 routed row.
 这使 six-route 8192-row prefill chunk 保持在 native activation path.
 
 
-DeepSeek 使用发布模型的 FP4 和 FP8 scale rule, 并对数值使用最近偶数舍入.
-Dense 和 grouped projection 在 scale multiplication 和 FP32 accumulation 之前, 为每个 K32 group 重置 raw dot product.
-FP4 weight 在 raw dot 前精确转换为 FP8.
-FP4 转换保留符号位.
+DeepSeek 使用发布模型的 FP4 和 FP8 scale, 并对数值使用最近偶数舍入.
+Dense 和 grouped projection 在缩放和 FP32 累加之前, 重置每个 K32 dot.
+FP4 weight 精确转换为 FP8, 并保留符号位.
+Routed FP4 prefill 一起转换 [四个值](../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L29)<!-- source: __device__ __forceinline__ uint2 fp4_half_four(uint16_t packed) { -->, 并复用 [scale](../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L162)<!-- source: float activation_scales[2][2], weight_scales_tile[2][2]; -->.
 支持的 [dense prefill 形状](models/deepseek_v41/gemm.zh.md#dense-prefill-分块) 使用 TMA 和 TMEM, 并保留精确的 FP16 转换与有序 K32 缩放更新.
 其他 FP8 形状保留已有内核.
 
@@ -68,9 +68,8 @@ Native routing 保持发布参考的 softplus 和 selected-score sum 顺序.
 
 In-place quantization 先舍入再反量化.
 Native quantizer 写入 encoded value 和 scale, 不使用随 context 增长的 temporary tensor.
-Native attention 将 window KV 和 compressed KV 保存在两张 table 中.
-它读取模型的 BF16 table, 不执行量化.
-Reference path 在计算之前合并这些 table.
+Native attention 从不同 table 读取 BF16 window value 和编码后的 compressed history.
+Reference path 先解码 compressed history, 再合并这些 table.
 
 Shared expert 使用完整复制的 FP8 weight 和 scale.
 其输出在 routed rank reduction 后添加.
@@ -118,7 +117,9 @@ Native sparse attention 是 supported input 的默认路径.
 设置 `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0`, 为 short query 选择 reference attention.
 long query 使用 native sparse attention, 因为 reference path 的扩展性较差.
 
-DeepSeek token page 在 request slot 之间保存 compressed KV, index key 和 Engram history.
+Token page 保存编码后的 compressed KV, index key 和 Engram history.
+Active slot 使用 page-table view.
+Host transfer 保留编码值和 scale 字节.
 Accepted-state page 在 accepted endpoint 保存 target window, MTP window 和 compressor tail.
 cache operation 支持 logical block store, load, drop, partial prefix copy 和
 page-backed host snapshot.
@@ -144,11 +145,11 @@ TEP4 保留路由结果的跨进程归约.
 DeepSeek 允许在同一个 Execute 中抢占并重新启动同一个请求.
 已结束的请求不能在该 Execute 中同时被调度或抢占.
 
-Grouped projection 使用 device offset, 压缩后的非空 expert, 以及保持 native K32 顺序的 persistent FP16 tile.
+Grouped projection 使用 device offset, 非空 expert 压缩, persistent FP16 tile, native K32 顺序和 token 顺序.
+Grouped FP4 BF16 的 [grid](../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L226)<!-- source: constexpr int blocks_per_sm = --> 最多有 1036 个 block.
 总 routed row 不超过 64 时, 使用并行 raw dot 和有序 scale 累加.
 
-TP4 device count path 没有 routed-row 上限.
-Grouped execution 保持 token order.
+TP4 device count 没有 routed-row 上限.
 Non-FP4 权重和 test expert 使用 reference loop.
 
 Routed 消息最多有 1024 行.
@@ -159,7 +160,7 @@ Shared expert 处理完整的 prefill chunk.
 [固定容量内核](models/deepseek_v41/gemm.zh.md#固定容量投影与求和) 为 SwiGLU 将投影尾部清零, 并使用设备 status.
 TEP4 Graph 和 DEP4 调用方的接入尚未完成.
 
-TP4, TEP4 和 DEP4 为每个 weight set 保留 [device expert pointer](../python/oh_my_vllm/models/deepseek_v41/model.py#L1846)<!-- source: pointers = state.pointers --> 和 FP4 绑定.
+TP4, TEP4 和 DEP4 为每个 weight set 保留 [device expert pointer](../python/oh_my_vllm/models/deepseek_v41/model.py#L1840)<!-- source: pointers = state.pointers --> 和 FP4 绑定.
 权重或专家重新绑定, 子 `_apply` 和状态加载会清除它们.
 
 Native projection 共享兼容的 encoded weight storage.
@@ -176,10 +177,9 @@ DSpark 只保留 MTP window 所需的 target hidden tail.
 Compressed KV source 在当前 cache write 后发布选中的 slot.
 Compressed KV 和 index copy 只包含 active context range.
 
-CUDA sequence staging 为 active request slot 使用按需映射的 storage.
-Slot restoration 在复制 state 前映射所需 context.
-Slot release 在解除 storage 映射前等待 device work.
 Index scoring 使用有界 query chunk 和紧凑的 candidate-block mask.
+Index-key workspace 解码选中请求的 context.
+Graph lease 保持 physical page 有效.
 
 serving engine 会执行配置的 `max_num_seqs` resident limit.
 它会保留一个额外的 request 做 preparation, 以便让 CPU admission 与 GPU work overlap.
@@ -198,6 +198,9 @@ Qwen Graph 保留有界 workspace, stream handoff, graph upload 和 cleanup.
 DeepSeek prefill 和 draft verification 使用 Eager execution.
 
 实验性批量 target 保留每个请求的位置, 循环状态端点和每个请求的投影形状.
+DSpark verification 更新 proposal, 并恢复 accepted state.
+相同起点的 Eager group 使用 scalar position.
+不同起点的 group 和 Graph replay 使用 device position.
 `OH_MY_VLLM_DEEPSEEK_BATCH_DECODE=1` 选择此路径.
 默认关闭.
 
@@ -208,7 +211,10 @@ Hook 为嵌套的专家调用保留一次路由记录.
 
 TP4/TEP4 计数排除重算的历史行.
 [Trace 契约](models/deepseek_v41/accounting.zh.md#运行时-trace-契约)规定混合阶段的错误处理.
-Batch 检查点和 HTTP trace 校验未完成.
+[Packed 页检查](../development/model/check_deepseek_batch.py#L19)<!-- source: return cpu(vars(value), torch) --> [关闭 Graph lease](../development/model/check_deepseek_batch.py#L297)<!-- source: graph.close() -->.
+完整 B64 检查点和 HTTP trace 校验未完成.
+
+DEP4 候选的 GPU 验收尚未完成.
 
 DeepSeek startup 只读取 `config.json` 和 `model.safetensors.index.json` 生成 descriptor identity.
 Ready 之前不会 hash weight shard.
@@ -218,37 +224,34 @@ Rank-local checkpoint 加载使用 65536 行 tile, 16 字节对齐的连续参�
 `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` 选择 tile 大小.
 `OH_MY_VLLM_STARTUP_TRACE` 选择外部 startup trace.
 
-DeepSeek 使用 [v3.1 参考](models/deepseek_v41/accounting.zh.md) 绑定 HTTP trace.
-Harness 绑定 `GPU-` UUID, worker 身份, 计数和同一个可配置的 client/service 超时.
+DeepSeek 保持 [v3.1](models/deepseek_v41/accounting.zh.md) 作为 HTTP 默认计量和 source trace 契约.
+[v4](models/deepseek_v41/performance.zh.md) 保持有条件的部分下界和独立身份.
+[v5](models/deepseek_v41/performance.zh.md#packed-项目参考与-19-行检查) 计入 packed 历史, 并检查 19 条长输出行.
 v2/v3 仍可复算.
 完整 workload 尚未验收.
-下一步: 使用最终 source 身份运行 [matrix](../development/serving/deepseek_matrix.py) 和 AgentX.
+使用最终 source 身份运行 [matrix](../development/serving/deepseek_matrix.py) 和 AgentX.
 
 ## 下一步
 
 - 在[算子 microbench 设计](models/qwen38/operators.zh.md)中运行固定的 Qwen operator case.
-- 使用 decode profile 选择下一项 host launch 和 collective 优化.
 - 在 approved long-context workload 中测量每个 state endpoint 的 window storage.
-- 比较 persistent encoded KV storage 与直接 BF16 table read 的测量结果.
-- 在 long-context capacity 调整前, 测量 raw 和 prepared projection storage.
+- 使用模型 workload 验证[编码 KV 存储](research/deepinfer-precision.zh.md).
+- 在 long-context capacity 调整前, 测量 projection 和 TP4 gather storage.
 - 性能验收前, 保留独立且固定的 DeepSeek 文本端点检查.
-- 在长上下文容量调优前, 测量 TP4 激活和输出的收集操作及其临时存储.
-- 在 long-context capacity 调整之前, 减少重复的 cuBLAS operator workspace storage.
+- 在 capacity 调整之前, 减少重复的 cuBLAS workspace storage.
 - 在 image acceptance 之前增加独立的 image endpoint.
-- 分别报告配置的 context limit 和观测到的 AgentX request length.
+- 分别记录配置的 context limit 和观测到的 AgentX request length.
 - 为并发 16 和 100K 至 200K token trace 调整 AgentX physical block 和 temporary operator workspace capacity.
 - 用四 rank 检查点输入验证批量 decode, 每个请求的投影布局, Graph 端点和跨请求 verification.
 - 增加 physical cache 和 sequence capacity 后, 运行更高容量的 AgentX case.
-- 完成 DEP4 checkpoint 数值, 状态, 容量和 HTTP 验收.
+- 使用当前 native 身份, 完成 DEP4 checkpoint 数值, 状态, 容量和 HTTP 验收.
 - 将 native DeepSeek path 与 reference path 和公开 baseline 做性能比较.
 - 将 large-row native temporary storage 移入 adapter-owned graph operator workspace.
-- 用 owner trace 记录校验 DEP4 HTTP manifest.
+- 使用 64 个并发请求的 owner trace, 校验 DEP4 HTTP manifest.
 - 将 DeepSeek Engram lookup 移入 Graph, 或使其 host copy 异步.
 - 依据实测 collective 成本评估 replicated `wo_b`.
-- 用 Nsight Compute 分析 top non-collective decode kernel.
-- 运行批准的 DeepSeek AgentX case, 发布 CSV 和暗色背景散点图.
+- 运行批准的 DeepSeek AgentX case. 发布 CSV 和暗色背景散点图.
 - 在没有锁频的显卡上运行 38 个 HTTP case 和 3 个 AgentX case.
-- 交付前取得 independent code review.
 
 原始报告和临时 process records 保留在 repository 外部.
 Host settings 和 model paths 放在 `LOCAL.md` 中.

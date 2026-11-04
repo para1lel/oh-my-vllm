@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from ...operators.hyperconnection.api import FUNCTIONS as HYPERCONNECTION_FUNCTIONS
 from ...operators.sparse_attention.plan import scratch_bytes as sparse_scratch_bytes
 from ...operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
+from .packed_cache import PackedView
 from .quantization import act_quant, fp4_values
 from .quantization import fp4_act_quant as fp4_act_quant
 
@@ -1338,11 +1339,23 @@ def _sparse_native_available(query, indices, window, compressed):
         and window.dtype == torch.bfloat16
         and window.device == query.device
         and window.is_contiguous()
-        and compressed.ndim == 3
-        and tuple(compressed.shape[-1:]) == (512,)
-        and compressed.dtype == torch.bfloat16
-        and compressed.device == query.device
-        and compressed.is_contiguous()
+        and (
+            (
+                isinstance(compressed, PackedView)
+                and compressed.size(0) == query.size(0)
+                and compressed.size(2) == 512
+                and compressed.history.dtype == torch.bfloat16
+                and compressed.device == query.device
+            )
+            or (
+                isinstance(compressed, torch.Tensor)
+                and compressed.ndim == 3
+                and tuple(compressed.shape[-1:]) == (512,)
+                and compressed.dtype == torch.bfloat16
+                and compressed.device == query.device
+                and compressed.is_contiguous()
+            )
+        )
     )
 
 
@@ -1350,12 +1363,22 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
     batch, sequence, heads, _ = query.shape
     window_length, compressed_length = window.size(1), compressed.size(1)
     window_rows = batch * window_length
-    compressed_rows = batch * compressed_length
+    packed = isinstance(compressed, PackedView)
+    compressed_rows = (
+        compressed.history.codes.size(1) if packed else batch * compressed_length
+    )
     window_scales = torch.empty(
         (window_rows, 0), dtype=torch.uint8, device=query.device
     )
-    compressed_scales = torch.empty(
-        (compressed_rows, 0), dtype=torch.uint8, device=query.device
+    compressed_scales = (
+        compressed.history.scales.view(compressed_rows, 32)
+        if packed
+        else torch.empty((compressed_rows, 0), dtype=torch.uint8, device=query.device)
+    )
+    compressed_table = (
+        compressed.history.codes.view(compressed_rows, 256)
+        if packed
+        else compressed.reshape(compressed_rows, 512)
     )
     ids = indices.to(torch.int32).clone()
     batch_offset = torch.arange(batch, device=query.device, dtype=torch.int32).view(
@@ -1363,14 +1386,24 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
     )
     valid_ids = ids >= 0
     window_ids = valid_ids & (ids < window_length)
+    if packed:
+        logical = ids - window_length
+        physical = compressed.native_rows(
+            logical.clamp(0, max(0, compressed_length - 1))
+        )
+        compressed_ids = torch.where(
+            logical < compressed_length,
+            physical + window_rows,
+            torch.full_like(physical, window_rows + compressed_rows),
+        ).to(torch.int32)
+    else:
+        compressed_ids = (
+            ids + window_rows + batch_offset * compressed_length - window_length
+        )
     ids = torch.where(
         window_ids,
         ids + batch_offset * window_length,
-        torch.where(
-            valid_ids,
-            ids + window_rows + batch_offset * compressed_length - window_length,
-            torch.full_like(ids, -1),
-        ),
+        torch.where(valid_ids, compressed_ids, ids),
     )
     query_rows = query.reshape(batch * sequence, heads, 512)
     ids = ids.reshape(batch * sequence, ids.size(-1))
@@ -1392,7 +1425,7 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
         ids,
         window.reshape(window_rows, 512),
         window_scales,
-        compressed.reshape(compressed_rows, 512),
+        compressed_table,
         compressed_scales,
         scratch,
         output,
@@ -1400,6 +1433,10 @@ def _sparse_attn_native(query, sink, indices, window, compressed):
     )
     _sparse_status_accumulator(query.device).logical_or_(status.any())
     return output.reshape(batch, sequence, heads, 512)
+
+
+def native_sparse_graph_enabled():
+    return not _SPARSE_NATIVE_DISABLED and not _SPARSE_NATIVE_FAILED
 
 
 def sparse_attn(
@@ -1425,7 +1462,15 @@ def sparse_attn(
         return _sparse_attn_native(
             q, attn_sink, topk_idxs, native_window, native_compressed
         )
+    if _CAPTURED_TENSORS.get() is not None or (
+        q.is_cuda and torch.cuda.is_current_stream_capturing()
+    ):
+        raise RuntimeError(
+            "DeepSeek reference sparse attention requires Eager execution"
+        )
     if kv is None:
+        if isinstance(native_compressed, PackedView):
+            native_compressed = native_compressed.materialize(shared=False)
         kv = torch.cat((native_window, native_compressed), dim=1)
     maximum = torch.full(q.shape[:-1], -1e30, dtype=torch.float32, device=q.device)
     denominator = torch.zeros_like(maximum)

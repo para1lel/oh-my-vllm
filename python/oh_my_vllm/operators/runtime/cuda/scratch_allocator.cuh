@@ -47,6 +47,8 @@ inline int64_t scratch_reserved_bytes() {
 }
 
 struct ScratchAllocator {
+  cudaStream_t allocation_stream = nullptr;
+
   void AllocData(DLTensor *tensor) {
     tvm::ffi::CUDADeviceGuard guard(tensor->device.device_id);
     auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, tensor->device.device_id));
@@ -57,14 +59,15 @@ struct ScratchAllocator {
     auto bytes = std::max<size_t>(tvm::ffi::GetDataSize(*tensor), 1);
     cuda_check(cudaMallocFromPoolAsync(&tensor->data, bytes, scratch_pool(tensor->device.device_id),
                                        stream));
+    allocation_stream = stream;
     allocated_storage.fetch_add(bytes, std::memory_order_relaxed);
     scratch_live_bytes.fetch_add(bytes, std::memory_order_relaxed);
   }
 
   void FreeData(DLTensor *tensor) {
     tvm::ffi::CUDADeviceGuard guard(tensor->device.device_id);
-    auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, tensor->device.device_id));
-    cudaFreeAsync(tensor->data, stream);
+    // The DLPack deleter can run after the caller's FFI stream scope has ended.
+    cudaFreeAsync(tensor->data, allocation_stream);
     auto bytes = std::max<size_t>(tvm::ffi::GetDataSize(*tensor), 1);
     allocated_storage.fetch_sub(bytes, std::memory_order_relaxed);
     scratch_live_bytes.fetch_sub(bytes, std::memory_order_relaxed);

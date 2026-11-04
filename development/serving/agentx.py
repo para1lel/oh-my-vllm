@@ -69,8 +69,10 @@ def profile_command(
         raise ValueError("AgentX context and concurrency must be positive")
     return [
         str(python),
-        "-m",
-        "aiperf",
+        "-c",
+        "import multiprocessing, runpy; "
+        "multiprocessing.set_start_method('spawn', force=True); "
+        "runpy.run_module('aiperf', run_name='__main__')",
         "profile",
         "--scenario",
         "inferencex-agentx-mvp",

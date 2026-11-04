@@ -3,8 +3,9 @@
 Queries are BF16 [rows, heads, 512]; sinks are original F32 [heads].
 Window rows use E4M3/UE8M0 groups of 32. Compressed rows use packed
 E2M1/E4M3 groups of 16, with the even channel in the low nibble.
-Alternatively, both tables use BF16 [table_rows, 512] with uint8 scales
-[table_rows, 0]. BF16 tables keep their values without quantization.
+Each table can instead use BF16 [table_rows, 512] with uint8 scales
+[table_rows, 0]. BF16 windows permit packed compressed rows. Encoded windows
+require packed compressed rows. BF16 tables keep their original values.
 Indices are int32 [rows, slots]: -1 masks a slot; window IDs precede
 compressed IDs. Repeated IDs contribute repeated mass.
 

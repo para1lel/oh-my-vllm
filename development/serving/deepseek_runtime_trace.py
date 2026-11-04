@@ -85,6 +85,16 @@ def validate_identities(events, harness, case):
             "native_modules": expected_native,
             "gpu_uuid": uuids[rank],
         }
+        modes = harness.get("configuration", {}).get("execution_modes")
+        if modes is not None:
+            expected_modes = modes.get(case["strategy"])
+            if (
+                not isinstance(expected_modes, dict)
+                or runtime.get("execution_modes") != expected_modes
+            ):
+                raise BindingError(
+                    "rank batch/Graph execution modes differ from harness"
+                )
         if any(runtime.get(key) != value for key, value in expected.items()):
             raise BindingError(f"rank {rank} runtime identity differs from harness")
         if identity.get("checkpoint") != harness["checkpoint"]:
@@ -248,6 +258,9 @@ def assemble_trace(events, responses, *, harness, case):
         proposed=proposed,
         manifest_sha256=digest(manifest),
     )
+    modes = harness.get("configuration", {}).get("execution_modes")
+    if modes is not None:
+        binding["runtime_modes"] = modes[case["strategy"]]
     trace = {"binding": binding, "manifest": manifest, "calls": calls}
     validate_trace(trace, strategy=case["strategy"], expected_binding=binding)
     return trace

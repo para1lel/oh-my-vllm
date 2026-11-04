@@ -45,6 +45,7 @@ def score_chunks(
     *,
     work_bytes: int = INDEX_SCORE_WORK_BYTES,
     rank_sum: bool = False,
+    head_partitions: int = 1,
 ) -> Iterator[tuple[int, int, torch.Tensor]]:
     """Yield query ranges and scores for [B,S,H,D], [B,T,D], [B,S,H].
 
@@ -55,7 +56,9 @@ def score_chunks(
     the per-head product, and the head reduction in separate lifetime phases.
     Input storage, caller-held outputs, and backend workspaces are not included.
     With rank_sum, FP16/BF16 rank sums use FP32 and round once to the score dtype.
-    A reusable rank accumulator adds B*T*accumulator_size bytes per row to every
+    With head_partitions, each group rounds before local accumulation.
+    Workspace terms use H/head_partitions and include the accumulator.
+    A reusable accumulator adds B*T*accumulator_size bytes per row to every
     phase. Returned scores do not share this accumulator's storage.
     Chunk ranges depend only on shapes, dtype size, and the positive integer
     budget. Empty S yields nothing; empty B or T yields one empty score chunk.
@@ -102,16 +105,18 @@ def score_chunks(
     accumulator_dtype = (
         torch.float32 if query.dtype in (torch.float16, torch.bfloat16) else query.dtype
     )
+    partition_heads = heads // head_partitions
+    local_sum = head_partitions > 1
     row_bytes = (
         batch
         * max(
-            heads * (dim + length),
-            2 * heads * length,
-            (heads + 1) * length,
+            partition_heads * (dim + length),
+            2 * partition_heads * length,
+            (partition_heads + 1) * length,
         )
         * query.element_size()
     )
-    if rank_sum:
+    if rank_sum or local_sum:
         accumulator_size = (
             4
             if query.dtype in (torch.float16, torch.bfloat16)
@@ -126,31 +131,58 @@ def score_chunks(
         )
     if rank_sum:
         import torch.distributed as dist
-
+    if rank_sum or local_sum:
         accumulator = torch.empty(
             batch * min(chunk_rows, rows) * length,
             dtype=accumulator_dtype,
             device=query.device,
         )
+    if local_sum:
+        grouped_query = query.unflatten(2, (head_partitions, partition_heads))
+        grouped_weights = weights.unflatten(2, (head_partitions, partition_heads))
     for first in range(0, rows, chunk_rows):
         last = min(first + chunk_rows, rows)
         with torch.no_grad():
-            packed_query = query[:, first:last].contiguous()
-            per_head = torch.einsum("bshd,btd->bsht", packed_query, keys)
-            del packed_query
-            weighted = per_head.relu_() * weights[:, first:last].unsqueeze(-1)
-            del per_head
-            scores = weighted.sum(dim=2)
-            del weighted
-            if rank_sum:
-                dtype = scores.dtype
+            if local_sum:
                 total = accumulator[: batch * (last - first) * length].view(
                     batch, last - first, length
                 )
-                total.copy_(scores)
-                del scores
-                dist.all_reduce(total)
-                scores = total.to(dtype, copy=True)
+                for partition in range(head_partitions):
+                    packed_query = grouped_query[:, first:last, partition].contiguous()
+                    per_head = torch.einsum("bshd,btd->bsht", packed_query, keys)
+                    del packed_query
+                    weighted = per_head.relu_() * grouped_weights[
+                        :, first:last, partition
+                    ].unsqueeze(-1)
+                    del per_head
+                    partial = weighted.sum(dim=2)
+                    del weighted
+                    if partition == 0:
+                        total.copy_(partial)
+                    else:
+                        total.add_(partial)
+                    del partial
+                if rank_sum:
+                    dist.all_reduce(total)
+                scores = total.to(query.dtype, copy=True)
                 del total
+            else:
+                packed_query = query[:, first:last].contiguous()
+                per_head = torch.einsum("bshd,btd->bsht", packed_query, keys)
+                del packed_query
+                weighted = per_head.relu_() * weights[:, first:last].unsqueeze(-1)
+                del per_head
+                scores = weighted.sum(dim=2)
+                del weighted
+                if rank_sum:
+                    dtype = scores.dtype
+                    total = accumulator[: batch * (last - first) * length].view(
+                        batch, last - first, length
+                    )
+                    total.copy_(scores)
+                    del scores
+                    dist.all_reduce(total)
+                    scores = total.to(dtype, copy=True)
+                    del total
         yield first, last, scores
         del scores

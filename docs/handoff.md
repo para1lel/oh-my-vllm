@@ -10,10 +10,10 @@ Qwen keeps its single-worker path and shared Rust service, scheduler, logical ca
 Qwen decode and single-query verification use native operators.
 [Sampling](../python/oh_my_vllm/models/qwen38/sampling.py#L28)<!-- source: self.full_history_view = self.full_history.numpy() --> packs masks and metadata with NumPy views.
 [Uploads](../python/oh_my_vllm/operators/runtime/uploads.py#L207)<!-- source: self._native_key = key --> keep pinned snapshots and reuse native bindings.
-Verification batches with at least two requests upload metadata once per group.
-Other target and context inputs use separate uploads.
+[Context inputs](../python/oh_my_vllm/models/qwen38/speculation.py#L482)<!-- source: self.context_prefill = Context( --> and verification batches use one upload, except single-request verification and single-request staged decode.
+Other target inputs upload separately.
 
-[Acceptance](../python/oh_my_vllm/models/qwen38/speculation.py#L232)<!-- source: self.metadata_inputs = Metadata(device, arrays, single_upload=True) --> packs gather indices, drafts, slots, and RNG into one upload.
+[Acceptance](../python/oh_my_vllm/models/qwen38/speculation.py#L245)<!-- source: self.metadata_inputs = Metadata(device, arrays, single_upload=True) --> packs gather indices, drafts, slots, and RNG into one upload.
 Prepared [metadata writers](../python/oh_my_vllm/worker/metadata.py#L116)<!-- source: self.uploads.update(self._write, sources) --> update pinned snapshots after input validation and event completion.
 
 Grammar-constrained MTP4 chains are disabled.
@@ -25,7 +25,7 @@ The [draft pipeline check](../development/operators/check_draft_pipeline.py) com
 Drafts reuse repetition proofs and exact filtered masks.
 
 Qwen uses [HTTP reference v5](models/qwen38/performance.md#lower-bound-calculation) and [operator reference v4](models/qwen38/operator-performance.md).
-Next: long-output measurements again, the 24-case HTTP matrix, and AgentX acceptance.
+The Qwen [HTTP and AgentX reports](models/qwen38/results.md) are completed.
 
 The DeepSeek-V4.1-Flash adapter loads the original 48-shard checkpoint with rank-local placement.
 Its four-rank Python bridge supports text targets and DSpark5 greedy verification.
@@ -50,12 +50,12 @@ Set a smaller chunk to use less temporary storage.
 Native SwiGLU accepts up to 1048576 routed rows, which keeps six-route 8192-row prefill chunks on the native activation path.
 
 
-DeepSeek uses the released FP4 and FP8 scale rules and nearest-even rounding.
-Dense and grouped projections reset raw dots for each K32 group before scale multiplication and FP32 accumulation.
-FP4 weights convert accurately to FP8 before the raw dot.
-FP4 conversion keeps sign bits.
+DeepSeek uses released FP4 and FP8 scales with nearest-even rounding.
+Dense and grouped projections reset each K32 dot before scaling and FP32 accumulation.
+FP4 weights convert exactly to FP8 with sign bits.
+Routed FP4 prefill converts [four values](../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L29)<!-- source: __device__ __forceinline__ uint2 fp4_half_four(uint16_t packed) { --> together and reuses [scales](../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L162)<!-- source: float activation_scales[2][2], weight_scales_tile[2][2]; -->.
 Supported [dense prefill shapes](models/deepseek_v41/gemm.md#dense-prefill-tiles) use TMA and TMEM with exact FP16 conversion and ordered K32 scale updates.
-Other FP8 shapes keep the existing kernels.
+Other FP8 shapes keep existing kernels.
 
 FP8 decode can calculate K32 dots in parallel.
 Scale accumulation keeps K32 order.
@@ -63,8 +63,8 @@ Scale accumulation keeps K32 order.
 Native RMS keeps the released square-sum reduction and reciprocal multiplication order, and native routing keeps the released softplus and selected-score sum order.
 
 In-place quantization rounds before dequantization, and the native quantizer writes encoded values and scales without context-sized temporaries.
-Native attention keeps window and compressed KV in two tables and reads the model BF16 tables without quantization.
-The reference path joins the tables before computation.
+Native attention reads BF16 window values and encoded compressed history from separate tables.
+The reference path decodes compressed history before joining the tables.
 
 Shared experts use full replicated FP8 weights and scales.
 Their output is added after routed rank reduction.
@@ -111,7 +111,9 @@ A rejected step raises and does not fall back to the reference path.
 Native sparse attention is the default, and long queries use it because the reference path scales poorly.
 Set `OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE=0` to select reference attention for short queries.
 
-DeepSeek token pages keep compressed KV, index keys, and Engram history across request slots.
+Token pages keep encoded compressed KV, index keys, and Engram history.
+Active slots use page-table views.
+Host transfers keep encoded values and scale bytes.
 Accepted-state pages keep target windows, MTP windows, and compressor tails at the accepted endpoint.
 Cache operations support logical block store, load, drop, partial prefix copy, and
 page-backed host snapshots.
@@ -134,12 +136,12 @@ TP4 gathers the FP32 token sums before adding the replicated shared output, and 
 
 DeepSeek permits preemption and restart of one request in an Execute, but finished requests cannot also be scheduled or preempted there.
 
-Grouped projection uses device offsets, compact nonempty experts, and persistent FP16 tiles with native K32 order.
+Grouped projection uses device offsets, nonempty expert compaction, persistent FP16 tiles, native K32 order, and token order.
+Grouped FP4 BF16 [grids](../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L226)<!-- source: constexpr int blocks_per_sm = --> have at most 1036 blocks.
 At most 64 routed rows use parallel raw dots and ordered scales.
 
-The TP4 device count path has no routed-row limit.
-Grouped execution keeps token order.
-Non-FP4 weights and test experts use the reference loop.
+TP4 device counts have no routed-row limit.
+Non-FP4 weights and test experts use reference loops.
 
 Routed messages have at most 1024 rows.
 TP4 and TEP4 prefill use larger [projection waves](models/deepseek_v41/gemm.md#routed-prefill-waves).
@@ -149,7 +151,7 @@ Shared experts process full prefill chunks.
 [Fixed-capacity kernels](models/deepseek_v41/gemm.md#fixed-capacity-projections-and-sums) zero projection tails for SwiGLU and use device status.
 TEP4 Graph and DEP4 caller integration is incomplete.
 
-TP4, TEP4, and DEP4 keep [device expert pointers](../python/oh_my_vllm/models/deepseek_v41/model.py#L1846)<!-- source: pointers = state.pointers --> and FP4 bindings for each weight set.
+TP4, TEP4, and DEP4 keep [device expert pointers](../python/oh_my_vllm/models/deepseek_v41/model.py#L1840)<!-- source: pointers = state.pointers --> and FP4 bindings for each weight set.
 Weight or expert rebinds, child `_apply`, and state loading clear them.
 
 Native projections share compatible encoded weight storage.
@@ -165,10 +167,9 @@ Full initial prompts can run as one aligned request batch, and shared query atte
 Compressed KV sources publish selected slots after the current cache write.
 Compressed KV and index copies contain only the active context range.
 
-CUDA sequence staging uses demand-mapped storage for active request slots.
-Slot restoration maps the required context before copying state.
-Slot release waits for device work before unmapping storage.
 Index scoring uses bounded query chunks and compact candidate-block masks.
+Index-key workspaces decode the selected request context.
+Graph leases keep physical pages alive.
 
 The serving engine enforces the configured `max_num_seqs` resident limit.
 It keeps one more request in preparation to overlap CPU admission with GPU work.
@@ -187,6 +188,9 @@ Cleanup failures keep operations and input owners with the failed Graph.
 DeepSeek prefill and draft verification use Eager execution.
 
 Experimental batched targets keep request-local positions, recurrent endpoints, and per-request projection shapes.
+DSpark verification renews proposals and restores accepted state.
+Same-position Eager groups use scalar positions.
+Mixed-position groups and Graph replay use device positions.
 `OH_MY_VLLM_DEEPSEEK_BATCH_DECODE=1` selects this path.
 The default is off.
 
@@ -197,7 +201,10 @@ After all ranks finish Execute, one MAX joins expert presence and one packed rea
 
 TP4/TEP4 counters exclude replayed history.
 The [trace contract](models/deepseek_v41/accounting.md#runtime-trace-contract) defines mixed-phase errors.
-Batch checkpoint and HTTP trace validation are incomplete.
+[Packed page checks](../development/model/check_deepseek_batch.py#L19)<!-- source: return cpu(vars(value), torch) --> [close Graph leases](../development/model/check_deepseek_batch.py#L297)<!-- source: graph.close() -->.
+Full B64 checkpoint and HTTP trace validation are incomplete.
+
+GPU acceptance of the DEP4 candidate is not completed.
 
 DeepSeek startup reads only `config.json` and `model.safetensors.index.json` for its descriptor identity and does not hash weight shards before Ready.
 
@@ -206,34 +213,34 @@ It copies required shard ranges and skips unused Engram payloads.
 `OH_MY_VLLM_DEEPSEEK_LOAD_TILE_ROWS` selects the tile size.
 `OH_MY_VLLM_STARTUP_TRACE` selects external startup traces.
 
-DeepSeek uses the [v3.1 reference](models/deepseek_v41/accounting.md) for HTTP trace binding.
-The harness binds `GPU-` UUIDs, worker identities, counters, and one configurable client/service timeout.
+DeepSeek keeps [v3.1](models/deepseek_v41/accounting.md) as the HTTP default and source trace contract.
+[v4](models/deepseek_v41/performance.md) keeps a conditional partial floor and separate identities.
+[v5](models/deepseek_v41/performance.md#packed-project-reference-and-19-row-check) counts packed history and checks 19 long-output rows.
 v2/v3 stay reproducible.
-The full workloads are not accepted.
-Next: run the [matrix](../development/serving/deepseek_matrix.py) and AgentX with final source identities.
+Full workloads are not accepted.
+Run [the matrix](../development/serving/deepseek_matrix.py) and AgentX with the last source identities.
 
 ## Next work
 
-- Run the fixed Qwen operator cases in the [operator microbench design](models/qwen38/operators.md).
+- Run fixed Qwen operator cases from the [microbench design](models/qwen38/operators.md).
 - Measure window storage at each state endpoint with the approved long-context workloads.
-- Measure persistent encoded KV storage against direct BF16 table reads.
-- Measure raw and prepared projection storage before long-context capacity tuning.
-- Keep the independent frozen DeepSeek text endpoint checks before performance acceptance.
-- Measure TP4 activation and output gathers and their temporary storage before long-context capacity tuning.
-- Reduce duplicate cuBLAS operator workspace storage before long-context capacity tuning.
+- Validate [encoded KV storage](research/deepinfer-precision.md) with the model workloads.
+- Measure projection and TP4 gather storage before long-context capacity tuning.
+- Keep independent frozen DeepSeek text endpoint checks before performance acceptance.
+- Reduce duplicate cuBLAS workspace storage before capacity tuning.
 - Add independent image endpoints before image acceptance.
-- Report the configured context limit and the observed AgentX request lengths independently.
+- Write configured context limits and observed AgentX request lengths independently.
 - Tune AgentX physical block and temporary operator workspace capacity for 100K to 200K token traces at concurrency 16.
 - Validate batched decode, per-request projection layouts, Graph endpoints, and cross-request verification with four-rank checkpoint inputs.
 - Run higher-capacity AgentX cases after increasing physical cache and sequence capacity.
-- Complete DEP4 checkpoint numerical, state, capacity, and HTTP acceptance.
+- Complete DEP4 checkpoint numerical, state, capacity, and HTTP acceptance with current native identities.
 - Measure the native DeepSeek paths against the reference path and public baselines.
 - Move large-row native temporary storage into adapter-owned graph operator workspaces.
-- Validate DEP4 HTTP manifests against owner trace records.
+- Validate DEP4 HTTP manifests against owner traces with 64 concurrent requests.
 - Move the DeepSeek Engram lookup into the graph, or make its host copy asynchronous.
 - Evaluate the replicated `wo_b` against the measured collective cost.
-- Run the approved DeepSeek AgentX cases and publish the CSV and dark scatter plots.
-- Run the 38 HTTP cases and the three AgentX cases on GPUs that have no locked clock.
+- Run approved DeepSeek AgentX cases. Publish CSV and dark scatter plots.
+- Run 38 HTTP and 3 AgentX cases without locked GPU clocks.
 
 Keep raw reports and temporary process records external to the repository.
 Put host settings and model paths in `LOCAL.md`.

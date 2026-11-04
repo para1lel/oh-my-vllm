@@ -88,7 +88,7 @@ Decode, Graph, DEP4, and unsupported expert bindings keep their existing paths.
 
 The official MoE adds each local expert output in increasing expert ID order.
 Each expert output first rounds to BF16.
-The [local sum](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py#L221)<!-- source: def ordered_expert_sum(values, sorted_routes, output, topk): --> uses one projection row per token and route slot.
+The [local sum](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py#L222)<!-- source: def ordered_expert_sum(values, sorted_routes, output, topk): --> uses one projection row per token and route slot.
 Projection rows follow expert ID order.
 The CUDA kernel sorts these row indices and adds their BF16 values to FP32 in that order.
 Unused route slots contribute no value.

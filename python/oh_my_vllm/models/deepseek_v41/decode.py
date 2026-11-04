@@ -14,8 +14,12 @@ from contextlib import contextmanager, nullcontext
 import torch
 
 from .decode_state import GraphStateExports, redirect_state_exports
-from .kernel import capture_cached_tensors, require_sparse_status
-from .model import context_token_bucket, sample
+from .kernel import (
+    capture_cached_tensors,
+    native_sparse_graph_enabled,
+    require_sparse_status,
+)
+from .model import Attention, context_token_bucket, sample
 
 
 class DecodeBindings:
@@ -120,6 +124,25 @@ class DecodeBindings:
             self.upload_device.close()
 
 
+def native_sparse_graph_eligible(model):
+    if not native_sparse_graph_enabled():
+        return False
+    for layer in getattr(model, "layers", ()):
+        attention = getattr(layer, "attn", None)
+        if not isinstance(attention, Attention):
+            continue
+        window = attention.window_kv_cache
+        if (
+            attention.head_dim != 512
+            or attention.n_local_heads not in (16, 64)
+            or not window.is_cuda
+            or window.dtype != torch.bfloat16
+            or not window.is_contiguous()
+        ):
+            return False
+    return True
+
+
 def capture_decode_graph(graph, rank):
     try:
         graph.capture()
@@ -188,6 +211,21 @@ def retained_graph_resources(model):
         if state is not None:
             retained.append(state.weights)
             retained.append(state.pointers)
+    cache = getattr(model, "_physical_cache", None)
+    if cache is not None and cache.page_table is not None:
+        retained.append(cache.page_table.values)
+        for history in cache.histories:
+            retained.extend(
+                value
+                for value in (
+                    history.codes,
+                    history.scales,
+                    getattr(history, "values", None),
+                )
+                if value is not None
+            )
+        if cache.index_workspace is not None:
+            retained.append(cache.index_workspace.values)
     return tuple(retained)
 
 
@@ -255,6 +293,8 @@ class DecodeGraph:
         self.output = None
         self.retained = ()
         self.routed_bindings = ()
+        self.cache_lease = None
+        self.closed = False
 
     def reserve(self):
         """Reserve paged cache rows through the end of the captured bucket."""
@@ -307,9 +347,26 @@ class DecodeGraph:
         )
 
     def capture(self):
+        if self.closed or self.cache_lease is not None or self.output is not None:
+            raise RuntimeError("capture a DeepSeek decode graph only once")
+        if not native_sparse_graph_eligible(self.model):
+            raise RuntimeError(
+                "DeepSeek reference sparse attention requires Eager execution"
+            )
+        cache = getattr(self.model, "_physical_cache", None)
+        if cache is not None and cache.page_table is not None:
+            self.cache_lease = cache.page_table.acquire()
+        try:
+            return self._capture()
+        except BaseException:
+            self.close()
+            raise
+
+    def _capture(self):
         """Run the operator warmups, then record the step."""
         if self.bindings.position_cpu != self.start_pos:
             raise ValueError("bind the capture position before recording")
+        self._validate_positions()
         current = torch.cuda.current_stream()
         with pause_state_export(self.model):
             saved = self._saved_recurrent_state()
@@ -346,34 +403,50 @@ class DecodeGraph:
     def main_hidden(self):
         return self.output[2]
 
+    def _validate_positions(self):
+        positions = self.bindings.positions_cpu
+        if positions is None:
+            raise ValueError("bind the decode position before replay")
+        if any(
+            context_token_bucket(value + self.bindings.length) != self.context_bucket
+            or value % self.cycle != self.residue
+            or any(
+                min(value, window) != prefix for window, prefix in self.window_prefixes
+            )
+            for value in positions
+        ):
+            raise ValueError("decode position is outside the captured graph")
+
     def replay(self):
+        if self.closed:
+            raise RuntimeError("DeepSeek decode graph is closed")
+        if self.cache_lease is not None:
+            self.cache_lease.validate()
         if any(
             getattr(layer.ffn, "_routed_state", None) is not state
             or state.generation != generation
             for layer, state, generation in self.routed_bindings
         ):
             raise RuntimeError("DeepSeek graph expert bindings have changed")
-        position = self.bindings.position_cpu
-        if position is None:
-            raise ValueError("bind the decode position before replay")
-        if (
-            context_token_bucket(position + self.bindings.length) != self.context_bucket
-            or any(
-                value % self.cycle != self.residue
-                for value in self.bindings.positions_cpu
-            )
-            or any(
-                min(value, window) != prefix
-                for window, prefix in self.window_prefixes
-                for value in self.bindings.positions_cpu
-            )
-        ):
-            raise ValueError("decode position is outside the captured graph")
+        self._validate_positions()
         self.graph.replay()
         require_sparse_status()
         export = getattr(self.model, "_state_export", None)
         if self.segmented and export is not None:
             self.state_exports.publish(export)
+
+    def close(self):
+        if self.closed:
+            return
+        torch.cuda.synchronize(self.bindings.position.device)
+        self.graph.reset()
+        self.output = None
+        self.retained = ()
+        self.routed_bindings = ()
+        if self.cache_lease is not None:
+            self.cache_lease.close()
+            self.cache_lease = None
+        self.closed = True
 
 
 class EngramStage:

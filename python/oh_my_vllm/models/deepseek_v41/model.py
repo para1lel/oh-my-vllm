@@ -38,7 +38,7 @@ from .kernel import (
     sparse_attn,
 )
 from .moe_prefill import PrefillWorkspace, projection_rows
-from .storage import sequence_cache
+from .packed_cache import PackedHistory, PackedView, history_view, write_history
 from .vision import Aligner, ViT
 
 # Set once by Transformer.__init__; one model per process, so layers just read them.
@@ -952,20 +952,14 @@ class Indexer(torch.nn.Module):
         if self.owns_k:
             self.wk = Linear(args.head_dim, self.index_head_dim, dtype=torch.bfloat16)
             self.k_norm = RMSNorm(self.index_head_dim, args.norm_eps)
-            self.k_cache: torch.Tensor
-            self.register_buffer(
-                "k_cache",
-                sequence_cache(
-                    args,
-                    (
-                        args.max_batch_size,
-                        args.max_seq_len // self.compress_ratio,
-                        args.index_head_dim,
-                    ),
-                    ratio=self.compress_ratio,
-                ),
-                persistent=False,
+            self.k_cache = PackedHistory(
+                args, args.index_head_dim, self.compress_ratio, 32, torch.float8_e8m0fnu
             )
+
+    def _apply(self, function, recurse=True):
+        if isinstance(getattr(self, "k_cache", None), PackedHistory):
+            self.k_cache.apply(function)
+        return super()._apply(function, recurse=recurse)
 
     def forward(
         self,
@@ -1020,17 +1014,16 @@ class Indexer(torch.nn.Module):
                     logical_rows=logical_rows,
                 )
                 apply_rotary_emb(k[..., -rd:], freqs)
-                fp4_act_quant(k, fp4_block_size, True)
-                if position is None:
-                    self.k_cache[
-                        cache_slots,
-                        start_pos // ratio : start_pos // ratio + k.size(1),
-                    ] = k
-                else:
-                    groups = position.reshape(-1, 1).div(ratio, rounding_mode="floor")
-                    groups = groups + torch.arange(k.size(1), device=x.device)
-                    self.k_cache[cache_slots[:, None], groups] = k
-            shared_attn.index_k = self.k_cache[:, :width][cache_slots]
+                encoded, scales = fp4_act_quant(k, fp4_block_size)
+                first = (
+                    start_pos // ratio
+                    if position is None
+                    else position.div(ratio, rounding_mode="floor")
+                )
+                write_history(
+                    self.k_cache, cache_slots, first, encoded, scales, fp4_block_size
+                )
+            shared_attn.index_k = history_view(self.k_cache, cache_slots, width)
 
         q = self.wq_b(qr).unflatten(-1, (self.n_local_heads, self.index_head_dim))
         if position is None:
@@ -1041,7 +1034,12 @@ class Indexer(torch.nn.Module):
             )
         fp4_act_quant(q, fp4_block_size, True)
 
-        index_k = shared_attn.index_k[:, :width]
+        source_keys = shared_attn.index_k
+        index_k = (
+            source_keys.with_width(width).materialize()
+            if isinstance(source_keys, PackedView)
+            else source_keys[:, :width]
+        )
         weights = request_linear(
             self.weights_proj,
             x,
@@ -1108,6 +1106,7 @@ class Indexer(torch.nn.Module):
             weights,
             work_bytes=INDEX_SCORE_WORK_BYTES,
             rank_sum=world_size > 1,
+            head_partitions=expert_world_size if world_size == 1 else 1,
         ):
             base = start_pos if position is None else position
             compress_lens = (
@@ -1243,19 +1242,8 @@ class Attention(nn.Module):
             persistent=False,
         )
         if self.is_kv_source:
-            self.compress_kv_cache: torch.Tensor
-            self.register_buffer(
-                "compress_kv_cache",
-                sequence_cache(
-                    args,
-                    (
-                        args.max_batch_size,
-                        args.max_seq_len // self.compress_ratio,
-                        self.head_dim,
-                    ),
-                    ratio=self.compress_ratio,
-                ),
-                persistent=False,
+            self.compress_kv_cache = PackedHistory(
+                args, self.head_dim, self.compress_ratio, 16, torch.float8_e4m3fn
             )
         if self.compress_ratio:
             original_seq_len, rope_theta = (
@@ -1276,6 +1264,11 @@ class Attention(nn.Module):
         ).to(torch.get_default_device())
         self.freqs_cis: torch.Tensor
         self.register_buffer("freqs_cis", freqs_cis, persistent=False)
+
+    def _apply(self, function, recurse=True):
+        if isinstance(getattr(self, "compress_kv_cache", None), PackedHistory):
+            self.compress_kv_cache.apply(function)
+        return super()._apply(function, recurse=recurse)
 
     def _window_kv(
         self, x, freqs_cis, start_pos, cache_slots, *, logical_rows=0, position=None
@@ -1435,16 +1428,15 @@ class Attention(nn.Module):
                 )
             apply_rotary_emb(latent[..., -self.rope_head_dim :], freqs)
             # Compressed KV uses groups of 16 with E4M3 scales; the indexer uses 32 with E8M0.
-            fp4_act_quant(latent, 16, True, scale_dtype=torch.float8_e4m3fn)
-            if position is None:
-                self.compress_kv_cache[
-                    cache_slots,
-                    start_pos // ratio : start_pos // ratio + latent.size(1),
-                ] = latent
-            else:
-                groups = position.reshape(-1, 1).div(ratio, rounding_mode="floor")
-                groups = groups + torch.arange(latent.size(1), device=x.device)
-                self.compress_kv_cache[cache_slots[:, None], groups] = latent
+            encoded, scales = fp4_act_quant(latent, 16, scale_dtype=torch.float8_e4m3fn)
+            first = (
+                start_pos // ratio
+                if position is None
+                else position.div(ratio, rounding_mode="floor")
+            )
+            write_history(
+                self.compress_kv_cache, cache_slots, first, encoded, scales, 16
+            )
         if self.is_kv_source:
             # Slot indexing makes a copy, so publish only after the current write.
             width = (
@@ -1454,7 +1446,9 @@ class Attention(nn.Module):
                     start_pos + seqlen, ratio, self.compress_kv_cache.size(1)
                 )
             )
-            shared_attn.compress_kv = self.compress_kv_cache[:, :width][cache_slots]
+            shared_attn.compress_kv = history_view(
+                self.compress_kv_cache, cache_slots, width
+            )
         return shared_attn.compress_kv, idxs
 
     def forward(
@@ -2708,6 +2702,10 @@ class Transformer(nn.Module):
         return super()._apply(function, recurse=recurse)
 
     def reserve_cache(self, slots, end_pos):
+        cache = getattr(self, "_physical_cache", None)
+        if cache is not None:
+            cache.require_active_slots(slots)
+            cache.reserve_workspace(len(slots), end_pos)
         for value in self._sequence_caches:
             rows = min(end_pos // value._context_ratio, value.size(1))
             for slot in slots:
@@ -2795,7 +2793,9 @@ class Transformer(nn.Module):
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
         self._bind_state_exports(cache_slots, cache_slots_cpu, cache_positions_cpu)
-        if reserve_cache and self._sequence_caches:
+        if reserve_cache and (
+            self._sequence_caches or hasattr(self, "_physical_cache")
+        ):
             slots = cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
             end = start_pos + input_ids.size(1)
             self.reserve_cache(
@@ -2912,6 +2912,8 @@ class Transformer(nn.Module):
         main_hidden: torch.Tensor,
         start_pos: int = 0,
         cache_slots: torch.Tensor | None = None,
+        *,
+        check_status: bool = True,
     ):
         shared_attn.reset_query_state()
         reset_sparse_status()
@@ -2922,7 +2924,8 @@ class Transformer(nn.Module):
         pre_mix = make_identity_pre_mix(h, self.hc_mult)
         for layer in self.mtp:
             h, pre_mix = layer(h, start_pos, pre_mix, main_x, cache_slots)
-        require_sparse_status()
+        if check_status:
+            require_sparse_status()
         if start_pos == 0:
             return None
         return self.mtp[-1].forward_head(h, pre_mix, input_ids)

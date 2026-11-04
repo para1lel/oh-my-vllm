@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import torch
 from oh_my_vllm.models.deepseek_v41 import kernel
+from oh_my_vllm.models.deepseek_v41.quantization import fp4_dequantize
 
 
 class DeepSeekQuantization(unittest.TestCase):
@@ -12,6 +13,87 @@ class DeepSeekQuantization(unittest.TestCase):
         device = torch.device(self.device)
         device.__enter__()
         self.addCleanup(device.__exit__, None, None, None)
+
+    def test_fp4_decode_preserves_all_codes_scales_and_signed_zero(self):
+        levels = torch.tensor(
+            (
+                0.0,
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                3.0,
+                4.0,
+                6.0,
+                -0.0,
+                -0.5,
+                -1.0,
+                -1.5,
+                -2.0,
+                -3.0,
+                -4.0,
+                -6.0,
+            )
+        )
+        for dtype, group, first, last in (
+            (torch.float8_e4m3fn, 16, 1, 127),
+            (torch.float8_e8m0fnu, 32, 0, 255),
+        ):
+            with self.subTest(dtype=dtype):
+                raw = torch.arange(first, last, dtype=torch.uint8).view(-1, 1)
+                scales = raw.view(dtype)
+                codes = torch.tensor(
+                    (0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE) * (group // 16),
+                    dtype=torch.uint8,
+                )
+                codes = codes.expand(raw.numel(), -1).contiguous()
+                actual = fp4_dequantize(codes, scales, group)
+                expected = (levels.repeat(group // 16) * scales.float()).bfloat16()
+                torch.testing.assert_close(
+                    actual.view(torch.int16), expected.view(torch.int16), atol=0, rtol=0
+                )
+
+    def test_original_fp4_codes_decode_to_the_inplace_result_bitwise(self):
+        values = torch.tensor(
+            (
+                6,
+                5,
+                3.5,
+                2.5,
+                1.75,
+                1.25,
+                0.75,
+                0.25,
+                -6,
+                -5,
+                -3.5,
+                -2.5,
+                -1.75,
+                -1.25,
+                -0.75,
+                -0.0,
+            )
+            * 32,
+            dtype=torch.bfloat16,
+        ).view(1, 512)
+        for group, dtype in ((16, torch.float8_e4m3fn), (32, torch.float8_e8m0fnu)):
+            for factor in (0.0, 2.0**-12, 1.0, 1.0625, 16.0):
+                with self.subTest(group=group, factor=factor):
+                    source = values * factor
+                    encoded, scales = kernel.fp4_act_quant(
+                        source, group, scale_dtype=dtype
+                    )
+                    expected = source.clone()
+                    kernel.fp4_act_quant(
+                        expected, group, inplace=True, scale_dtype=dtype
+                    )
+                    actual = fp4_dequantize(encoded, scales, group)
+                    torch.testing.assert_close(
+                        actual.view(torch.int16),
+                        expected.view(torch.int16),
+                        atol=0,
+                        rtol=0,
+                    )
 
     def test_fp8_inplace_rounds_before_dequantization(self):
         for block in (32, 128):

@@ -129,10 +129,11 @@ def _native_scratch(shape, dtype, device):
     device = torch.device(device)
     if device.type != "cuda":
         raise ValueError(f"native allocation requires a CUDA device: {device}")
-    native = _device_module().allocate_scratch(
-        _native_shape(shape), _native_dtype(dtype), device.index or 0
-    )
-    return torch_tensor(native)
+    with use_stream(device, torch.cuda.current_stream(device)):
+        native = _device_module().allocate_scratch(
+            _native_shape(shape), _native_dtype(dtype), device.index or 0
+        )
+        return torch_tensor(native)
 
 
 def _native_view(source, shape, offset=0):

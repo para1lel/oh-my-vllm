@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 from oh_my_vllm.models.deepseek_v41.inference import (
@@ -20,10 +21,15 @@ from oh_my_vllm.models.deepseek_v41.inference import (
     prefill_row_limit,
 )
 from oh_my_vllm.models.deepseek_v41.tokenizer import Tokenization
+from oh_my_vllm.models.deepseek_v41.trace import execution_modes
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 
+from . import deepseek_accounting as accounting
+from . import deepseek_accounting_v4 as accounting_v4
+from . import deepseek_accounting_v5 as accounting_v5
 from .benchmark import ROOT, source_identity
 from .deepseek_accounting import (
+    BindingError,
     efficiency_percent,
     reference_trace,
 )
@@ -44,6 +50,137 @@ DEEPSEEK_NATIVE_MODULES = (
 SHUTDOWN_GRACE_SECONDS = 35
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 7200
 SERVED_MODEL = "deepseek-v4.1-flash"
+
+
+def reference_configuration(version=accounting.VERSION):
+    if version not in (
+        accounting.VERSION,
+        accounting_v4.VERSION,
+        accounting_v5.VERSION,
+    ):
+        raise ValueError("unknown benchmark reference version")
+    configuration = {
+        "accounting_version": version,
+        "source_trace_version": accounting.VERSION,
+        "source_trace_rate_profile": accounting.rate_profile_digest(),
+        "rate_profile": accounting.rate_profile_digest(),
+        "assumptions_sha256": None,
+        "reference_scope": "version-bound reference estimate",
+        "reference_conditions": [],
+        "reference_zero_credit": [],
+        "reference_diagnostics": [],
+    }
+    if version == accounting_v4.VERSION:
+        configuration.update(
+            rate_profile=accounting_v4.rate_profile_digest(),
+            assumptions_sha256=accounting_v4.assumptions_digest(),
+            reference_scope="conditional partial resource floor",
+            reference_conditions=[
+                (
+                    "Released target matrix arithmetic, numerical order, formats, "
+                    "parameter placement, and replicated projections stay fixed."
+                ),
+                (
+                    "MoE output shards stay fixed, with no extra weight replication "
+                    "or projection recomputation."
+                ),
+                "Every credited MoE delivery uses complete BF16 rows.",
+                "There is no unmodeled value compression or cross-row value reuse.",
+                (
+                    "Quantized transfer, reuse, or resharding requires a new review "
+                    "and identity."
+                ),
+                (
+                    "This is not a complete roofline, capacity proof, or floor for "
+                    "every same-output algorithm."
+                ),
+                (
+                    "This selection does not establish frozen numerical, GPU, HTTP, "
+                    "or 33% acceptance."
+                ),
+            ],
+            reference_zero_credit=[
+                (
+                    "HBM and host strict credit is zero; retention and fresh-transfer "
+                    "proofs remain pending."
+                ),
+                "Embedding, attention wo_b, vocabulary-head, index, and Engram wire.",
+                "DEP4 dispatch and combine strict wire.",
+                (
+                    "MTP proposals, rejected rows, repeated prefill, replay, padding, "
+                    "state copies, and scheduler overhead."
+                ),
+                "Empirical collective latency, serial-chain estimates, and S/2.",
+                "Nonlinear normalization and Sinkhorn scalar estimates.",
+            ],
+            reference_diagnostics=[
+                "weight_union_lower_bytes",
+                "direct_protocol_sent_bytes",
+                "direct_protocol_received_bytes",
+            ],
+        )
+    if version == accounting_v5.VERSION:
+        configuration.update(
+            rate_profile=accounting_v5.rate_profile_digest(),
+            assumptions_sha256=accounting_v5.assumptions_digest(),
+            reference_scope="packed-aware project reference estimate",
+            reference_conditions=list(accounting_v5.ASSUMPTIONS.values()),
+            reference_zero_credit=[
+                "Protocol metadata and padding do not enter the project reference.",
+                "No universal physical minimum or full-model numerical claim.",
+            ],
+            reference_diagnostics=[
+                "protocol_serial_seconds",
+                "protocol_metadata_pressure_bytes",
+                "conditional_partial_floor_seconds",
+            ],
+        )
+    return configuration
+
+
+def runtime_reference(trace, *, strategy, expected_binding, version=accounting.VERSION):
+    metadata = reference_configuration(version)
+    if not isinstance(expected_binding, dict):
+        raise BindingError("runtime reference requires an expected source binding")
+    binding = trace.get("binding") if isinstance(trace, dict) else None
+    accounting.validate_binding(binding, expected=expected_binding)
+    if version in (accounting_v4.VERSION, accounting_v5.VERSION):
+        calculator = (
+            accounting_v4 if version == accounting_v4.VERSION else accounting_v5
+        )
+        reference = calculator.reference_trace(
+            trace, strategy=strategy, expected_binding=expected_binding
+        )
+        metadata.update(
+            communication_model=(
+                "conditional-partial-resource-floor"
+                if version == accounting_v4.VERSION
+                else "fixed-protocol-project-estimate"
+            ),
+            profile_digest=None,
+            communication_rule_version=None,
+            dep4_communication_modeled=False,
+            dep4_communication_measured=False,
+            reference_resources=asdict(reference),
+        )
+    else:
+        reference = reference_trace(
+            trace, strategy=strategy, expected_binding=expected_binding
+        )
+        metadata.update(
+            communication_model=reference.communication_model,
+            profile_digest=reference.profile_digest,
+            communication_rule_version=reference.communication_rule_version,
+            dep4_communication_modeled=reference.communication_is_modeled,
+            dep4_communication_measured=reference.communication_is_measured,
+        )
+    if reference.version != version:
+        raise BindingError("reference result differs from the selected version")
+    metadata.update(
+        source_trace_version=trace["binding"]["version"],
+        source_trace_rate_profile=trace["binding"]["rate_profile"],
+    )
+    return reference, metadata
 
 
 def _checkpoint_shard_manifest(root):
@@ -246,7 +383,7 @@ def checkpoint_descriptor_identity(model):
 def artifact_identity(arguments, tokenizer, uuids, *, workload):
     cache_configuration = effective_cache_configuration(arguments)
     service_configuration = effective_service_configuration(arguments)
-    return {
+    identity = {
         "source": source_identity(),
         "source_commit": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
@@ -266,8 +403,17 @@ def artifact_identity(arguments, tokenizer, uuids, *, workload):
             **cache_configuration,
             **service_configuration,
             "native_sparse": os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "1"),
+            "execution_modes": {
+                strategy: execution_modes(strategy)
+                for strategy in ("tp4", "tep4", "dep4")
+            },
         },
     }
+    if workload.get("kind") == "http":
+        identity["reference"] = reference_configuration(
+            getattr(arguments, "reference_version", accounting.VERSION)
+        )
+    return identity
 
 
 def verify_artifact_identity(arguments, tokenizer, uuids, expected, *, workload):
@@ -399,6 +545,9 @@ class Service:
         return identity["cache_memory"]["effective_strategy"]
 
     def run(self, tokenizer, case, prompt_seed, *, identity):
+        version = getattr(self.arguments, "reference_version", accounting.VERSION)
+        if identity.get("reference") != reference_configuration(version):
+            raise BindingError("benchmark reference identity is missing or changed")
         nonce = hashlib.sha256(f"{prompt_seed}:{case_id(case)}".encode()).hexdigest()[
             :32
         ]
@@ -426,19 +575,17 @@ class Service:
         trace = assemble_trace(
             read_rank_events(self.trace), responses, harness=identity, case=case
         )
-        reference = reference_trace(
-            trace, strategy=case["strategy"], expected_binding=trace["binding"]
+        reference, metadata = runtime_reference(
+            trace,
+            strategy=case["strategy"],
+            expected_binding=trace["binding"],
+            version=version,
         )
-        metadata = {
-            "accounting_version": reference.version,
-            "communication_model": reference.communication_model,
-            "profile_digest": reference.profile_digest,
-            "communication_rule_version": reference.communication_rule_version,
-            "dep4_communication_modeled": reference.communication_is_modeled,
-            "dep4_communication_measured": reference.communication_is_measured,
-        }
         return {
             **case,
+            "status": "completed",
+            "measurement_identity": identity,
+            "runtime_modes": trace["binding"].get("runtime_modes"),
             "effective_strategy": trace["binding"]["effective_strategy"],
             **metadata,
             "seconds": seconds,
@@ -475,6 +622,14 @@ def write_csv(path, results):
         "output_tokens",
         "effective_strategy",
         "accounting_version",
+        "source_trace_version",
+        "source_trace_rate_profile",
+        "rate_profile",
+        "assumptions_sha256",
+        "reference_scope",
+        "reference_conditions",
+        "reference_zero_credit",
+        "reference_diagnostics",
         "communication_model",
         "profile_digest",
         "communication_rule_version",
@@ -494,7 +649,13 @@ def write_csv(path, results):
         writer = csv.DictWriter(destination, fieldnames=fields)
         writer.writeheader()
         writer.writerows(
-            {field: result[field] for field in fields} for result in results
+            {
+                field: json.dumps(result[field])
+                if isinstance(result[field], (dict, list, tuple))
+                else result[field]
+                for field in fields
+            }
+            for result in results
         )
 
 
@@ -515,6 +676,15 @@ def argument_parser():
     parser.add_argument("--cache-context", type=int, default=1048576)
     parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int)
+    parser.add_argument(
+        "--reference-version",
+        choices=(accounting.VERSION, accounting_v4.VERSION, accounting_v5.VERSION),
+        default=accounting.VERSION,
+        help=(
+            "HTTP accountant; v4 is a conditional partial resource floor "
+            "(default: v3.1)"
+        ),
+    )
     parser.add_argument(
         "--request-timeout-seconds",
         type=request_timeout_seconds,
@@ -561,6 +731,7 @@ def main():
     (arguments.artifacts / "identity.json").write_text(
         json.dumps(identity, indent=2) + "\n"
     )
+    print(json.dumps({"event": "reference", **identity["reference"]}), flush=True)
     results = []
     for strategy, mode in sorted({(case["strategy"], case["mode"]) for case in cases}):
         selected = [
@@ -595,6 +766,14 @@ def main():
                                 "input_tokens",
                                 "output_tokens",
                                 "seconds",
+                                "accounting_version",
+                                "source_trace_version",
+                                "rate_profile",
+                                "assumptions_sha256",
+                                "reference_scope",
+                                "reference_seconds",
+                                "reference_acceptance",
+                                "efficiency_percent",
                             )
                         }
                     ),

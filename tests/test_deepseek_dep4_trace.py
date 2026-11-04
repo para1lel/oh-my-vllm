@@ -130,6 +130,35 @@ def _trace_peer(rank, directory):
             )
             if rank == 1:
                 legacy(3, 1)
+            else:
+                routes = RoutingTrace(2, 3, rank=rank, strategy="dep4", device="cpu")
+                model(
+                    torch.ones(1, 3, dtype=torch.long),
+                    8,
+                    cache_slots_cpu=(rank,),
+                    routing_trace=routes,
+                )
+                call = target_call_id(worker, -1)
+                counters = routes.counters(torch.tensor([True, True, False]))
+                model.forward_spec(torch.ones(1, 4, dtype=torch.bfloat16), start_pos=9)
+                assert executor.call == call == 4
+                trace.record(
+                    "accounting_call",
+                    rank=rank,
+                    call=call,
+                    phase="decode",
+                    request_rows=[
+                        dict(
+                            id=rank + 1,
+                            start=8,
+                            count=2,
+                            accepted=1,
+                            proposed=2,
+                            logit_rows=2,
+                        )
+                    ],
+                    **counters,
+                )
 
         with (
             patch("torch.distributed.all_reduce", wraps=dist.all_reduce) as reduce,
@@ -138,7 +167,7 @@ def _trace_peer(rank, directory):
             executor.execute(run)
             assert reduce.call_count == readback.call_count == 1
             assert reduce.call_args.kwargs["op"] == dist.ReduceOp.MAX
-            assert reduce.call_args.args[0].shape == (3, 2, 384)
+            assert reduce.call_args.args[0].shape == (4, 2, 384)
             executor.execute(lambda: None)
             assert reduce.call_count == readback.call_count == 1
         records = [
@@ -181,14 +210,17 @@ class DeepSeekDep4Trace(unittest.TestCase):
         with torch.inference_mode():
             scratch = torch.zeros(1)
         executor = Dep4Executor(_Model(0))
-        executor.exchange = lambda *_args: scratch.zero_()
+        executor.exchange = Mock(side_effect=lambda *_args: scratch.zero_())
         executor.accounting = SimpleNamespace(
             begin=Mock(), flush=lambda: scratch.zero_()
         )
-        with patch.object(executor, "_pending", side_effect=[(1, 1), (0, 4)]):
+        with patch.object(
+            executor, "_pending", side_effect=[(1, 1, 1, False), (0, 4, 0, False)]
+        ):
             executor.execute(torch.inference_mode()(lambda: None))
 
     def test_interleaved_proposal_and_next_target_flush_once_with_empty_peers(self):
+        """Check CPU call alignment and masks, without checkpoint or Graph execution."""
         with tempfile.TemporaryDirectory() as directory:
             mp.spawn(_trace_peer, args=(directory,), nprocs=4, join=True)
             ranks = [
@@ -196,15 +228,20 @@ class DeepSeekDep4Trace(unittest.TestCase):
                 for rank in range(4)
             ]
         for rank, records in enumerate(ranks):
-            self.assertEqual([row["call"] for row in records], [1, 2, 3])
+            self.assertEqual([row["call"] for row in records], [1, 2, 3, 4])
             self.assertEqual(
-                [row["phase"] for row in records], ["prefill", "decode", "decode"]
+                [row["phase"] for row in records],
+                ["prefill", "decode", "decode", "decode"],
             )
             for record in records:
                 self.assertEqual(
                     record["touched_experts"], [2, 2] if rank < 2 else [1, 1]
                 )
-                if rank >= 2 or (rank == 0 and record["call"] == 3):
+                if (
+                    rank >= 2
+                    or (rank == 0 and record["call"] == 3)
+                    or (rank == 1 and record["call"] == 4)
+                ):
                     self.assertEqual(record["request_rows"], [])
                     self.assertEqual(record["expert_assignments"], [[0] * 4] * 2)
                     self.assertEqual(record["dispatch_rows"], [[0] * 4] * 2)
@@ -212,6 +249,12 @@ class DeepSeekDep4Trace(unittest.TestCase):
         self.assertEqual(ranks[1][1]["expert_assignments"], [[2, 2, 1, 1]] * 2)
         self.assertEqual(ranks[0][1]["dispatch_rows"], [[6] * 4] * 2)
         self.assertEqual(ranks[1][1]["dispatch_rows"], [[1] * 4] * 2)
+        self.assertEqual(ranks[0][3]["expert_assignments"], [[4, 4, 2, 2]] * 2)
+        self.assertEqual(ranks[0][3]["dispatch_rows"], [[2] * 4] * 2)
+        self.assertEqual(
+            ranks[0][3]["request_rows"],
+            [dict(id=1, start=8, count=2, accepted=1, proposed=2, logit_rows=2)],
+        )
 
     def test_legacy_chunks_rejection_and_restart_do_not_credit_recomputed_rows(self):
         request = SimpleNamespace(cache_slot=0, prompt_len=4, state_position=4)

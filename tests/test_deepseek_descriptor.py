@@ -148,7 +148,7 @@ class DeepSeekDescriptor(unittest.TestCase):
             },
         )
         self.assertEqual(groups["compressed_kv"]["layers"], [2, 8, 14, 20])
-        self.assertEqual(groups["index_keys"]["layers"], [2, 8, 14, 20, 24, 28, 32, 36])
+        self.assertEqual(groups["index_keys"]["layers"], [2, 8, 14, 20])
         self.assertEqual(groups["compressed_kv"]["capacity_blocks"], 17)
         self.assertEqual(groups["index_keys"]["capacity_blocks"], 17)
         self.assertEqual(groups["accepted_state"]["kind"], "model_checkpoint")

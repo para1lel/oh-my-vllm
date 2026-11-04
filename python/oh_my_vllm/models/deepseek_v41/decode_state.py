@@ -39,6 +39,9 @@ class GraphStateExports:
         previous = cache.index_select(0, self.bindings.cache_slots)
         rows = torch.arange(batch, device=cache.device)[:, None]
         positions = self.bindings.position.reshape(-1, 1)
+        if start_pos < window:
+            padding = torch.arange(window, device=cache.device) >= positions
+            previous.masked_fill_(padding.unsqueeze(-1), 0)
         for offset in range(length):
             snapshots[:, offset].copy_(previous)
             ring = (

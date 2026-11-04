@@ -27,8 +27,10 @@ from .decode import (
     EngramStage,
     capture_decode_graph,
     decode_cycle,
+    native_sparse_graph_eligible,
 )
 from .descriptor import build_descriptor
+from .kernel import native_sparse_graph_enabled
 from .loader import DEFAULT_TILE_ROWS, RankLoader
 from .model import ModelArgs, Transformer, context_token_bucket
 from .request import Request
@@ -183,6 +185,7 @@ class Worker:
         self.decode_graph_enabled = (
             os.environ.get("OH_MY_VLLM_DEEPSEEK_DECODE_GRAPH", "1") != "0"
             and model_strategy == "tp4"
+            and native_sparse_graph_enabled()
         )
         self.decode_graph_limit = int(
             os.environ.get(
@@ -246,7 +249,13 @@ class Worker:
                     "decode_only": "eager",
                     "mixed": "eager",
                     "runtime": (
-                        runtime_identity(self.rank)
+                        runtime_identity(
+                            self.rank,
+                            strategy=self.strategy,
+                            batch_decode=self.batch_decode_enabled,
+                            decode_graph=self.decode_graph_enabled,
+                            decode_graph_limit=self.decode_graph_limit,
+                        )
                         if os.environ.get("OH_MY_VLLM_EXECUTION_TRACE")
                         else None
                     ),
@@ -390,7 +399,9 @@ class Worker:
         position residue) group. The graph cache is bounded, so a step outside a
         captured group falls back to Eager.
         """
-        if not getattr(self, "decode_graph_enabled", False):
+        if not getattr(
+            self, "decode_graph_enabled", False
+        ) or not native_sparse_graph_eligible(self.model):
             return None
         slots = (slot,)
         bindings = self.decode_bindings.get(slots)
@@ -709,6 +720,20 @@ class Worker:
         output_ids, _, _ = result
         return output_ids[0, 1:].tolist()
 
+    def _next_proposals(self, request, tokens, main_hidden, accepted_end, slot):
+        remaining = max(0, request.limit - request.generated)
+        if (
+            not self.dspark
+            or request.finish
+            or not tokens
+            or remaining <= 1
+            or main_hidden is None
+        ):
+            return []
+        return self._proposal(tokens[-1], main_hidden[:, -1:], accepted_end - 1, slot)[
+            : remaining - 1
+        ]
+
     def _seed_mtp(self, main_hidden, start_pos, slot, *, source_length=None):
         if main_hidden is None:
             return False
@@ -880,15 +905,15 @@ class Worker:
                 if final:
                     target = int(targets[index])
                     tokens, text = request.append([target])
-                    if self.dspark and not request.finish:
-                        proposals = self._proposal(
-                            target,
-                            main_hidden[index : index + 1, -1:],
-                            accepted_end - 1,
-                            slot,
-                        )
-                        remaining = max(0, request.limit - request.generated)
-                        proposals = proposals[: max(0, remaining - 1)]
+                    proposals = self._next_proposals(
+                        request,
+                        tokens,
+                        main_hidden[index : index + 1]
+                        if main_hidden is not None
+                        else None,
+                        accepted_end,
+                        slot,
+                    )
                 if hasattr(self, "cache"):
                     self.cache.commit(
                         row["request_id"],
@@ -1028,7 +1053,9 @@ class Worker:
                     source_length=hidden_count,
                 )
                 accepted_end = start_pos + accepted_input_count
-                proposals = []
+                proposals = self._next_proposals(
+                    request, tokens, accepted_hidden, accepted_end, slot
+                )
             else:
                 _, logits, main_hidden = self._target(
                     known, start_pos, slot, **trace_options
@@ -1043,17 +1070,9 @@ class Worker:
                 accepted_end = start_pos + known_count
                 tokens, text = request.append(target_predictions)
                 accepted = 0
-                proposals = []
-                if self.dspark and not request.finish:
-                    mtp_state_updated = True
-                    proposals = self._proposal(
-                        int(target_predictions[0]),
-                        main_hidden[:, -1:],
-                        start_pos + known_count - 1,
-                        slot,
-                    )
-                    remaining = max(0, request.limit - request.generated)
-                    proposals = proposals[: max(0, remaining - 1)]
+                proposals = self._next_proposals(
+                    request, tokens, main_hidden, accepted_end, slot
+                )
         if hasattr(self, "cache"):
             self.cache.commit(
                 row["request_id"],
@@ -1259,6 +1278,8 @@ class Worker:
     def close(self):
         try:
             torch.cuda.synchronize(self.device)
+            for graph in self.decode_graphs.values():
+                graph.close()
             self.decode_graphs.clear()
             for bindings in self.decode_bindings.values():
                 bindings.close()

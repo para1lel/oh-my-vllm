@@ -36,7 +36,43 @@ def rank_trace_path(value, rank):
     return str(path.with_name(f"{path.stem}-rank{rank}{path.suffix}"))
 
 
-def runtime_identity(rank):
+def execution_modes(
+    strategy=None, *, batch_decode=None, decode_graph=None, decode_graph_limit=None
+):
+    from .kernel import native_sparse_graph_enabled
+
+    strategy = (
+        strategy or os.environ.get("OH_MY_VLLM_DEEPSEEK_STRATEGY", "tep4")
+    ).lower()
+    if batch_decode is None:
+        batch_decode = os.environ.get("OH_MY_VLLM_DEEPSEEK_BATCH_DECODE") == "1"
+    if decode_graph is None:
+        decode_graph = (
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_DECODE_GRAPH", "1") != "0"
+            and strategy == "tp4"
+            and native_sparse_graph_enabled()
+        )
+    if decode_graph_limit is None:
+        decode_graph_limit = int(
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_DECODE_GRAPHS", "32")
+        )
+    if type(decode_graph_limit) is not int or decode_graph_limit < 0:
+        raise ValueError("DeepSeek decode graph limit must be nonnegative")
+    return {
+        "batch_decode": batch_decode,
+        "decode_graph": decode_graph,
+        "decode_graph_limit": decode_graph_limit,
+    }
+
+
+def runtime_identity(
+    rank,
+    *,
+    strategy=None,
+    batch_decode=None,
+    decode_graph=None,
+    decode_graph_limit=None,
+):
     modules = {}
     for name in NATIVE_MODULES:
         metadata = json.loads((cache_directory() / f"{name}.json").read_text())
@@ -70,6 +106,12 @@ def runtime_identity(rank):
         "source_commit": source,
         "source_digest": source_identity(),
         "native_modules": modules,
+        "execution_modes": execution_modes(
+            strategy,
+            batch_decode=batch_decode,
+            decode_graph=decode_graph,
+            decode_graph_limit=decode_graph_limit,
+        ),
     }
 
 

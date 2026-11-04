@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -369,6 +370,29 @@ class AgentXTests(unittest.TestCase):
         )
         self.assertEqual(rows, [])
         self.assertEqual(counts["incomplete"], 1)
+
+    def test_profile_command_starts_cli_with_spawn_and_keeps_arguments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "aiperf.py").write_text(
+                "import json, multiprocessing, sys\n"
+                "print(json.dumps({'method': multiprocessing.get_start_method(), "
+                "'arguments': sys.argv[1:]}))\n"
+            )
+            command = agentx.profile_command(
+                sys.executable, "/model", "/run", 1234, 900, 42
+            )
+            result = subprocess.run(
+                command,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=10,
+            )
+            actual = json.loads(result.stdout)
+            self.assertEqual(actual["method"], "spawn")
+            self.assertEqual(actual["arguments"], command[command.index("profile") :])
 
     def test_profile_command_keeps_scenario_and_rejects_short_measurement(self):
         command = agentx.profile_command("/env/python", "/model", "/run", 1234, 900, 42)

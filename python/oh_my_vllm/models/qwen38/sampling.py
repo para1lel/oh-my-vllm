@@ -183,23 +183,26 @@ class Sampling:
     def __init__(self, device, weights, rows, *, hidden=None, operation=None):
         self.device = device
         self.weights = weights
-        self.operation = operation or prepare(make_plan(rows=rows), device, (weights,))
+        allocate = device.scratch
+        self.operation = operation or prepare(
+            make_plan(rows=rows), device, (weights,), allocate=allocate
+        )
         self.token_rows = device.view(self.operation.outputs.tokens, (rows, 1))
         self.value, self.residual = (
             hidden
             if hidden is not None
             else (
-                device.empty((rows, 5120), "bfloat16"),
-                device.empty((rows, 5120), "float32"),
+                allocate((rows, 5120), "bfloat16"),
+                allocate((rows, 5120), "float32"),
             )
         )
         self.projection_inputs = output.Inputs(self.value, self.residual)
-        self.indices = device.empty((rows,), "int32")
-        self.history = device.zeros((rows, 2, 248320), "int32")
-        self.presence_history = device.zeros((rows, 248320 // 8), "uint8")
-        self.mask = device.empty((rows, 248320 // 8), "uint8")
-        self.parameters = device.empty((rows, 7), "float32")
-        self.rng = device.empty((rows, 2), "uint64")
+        self.indices = allocate((rows,), "int32")
+        self.history = device.zero(allocate((rows, 2, 248320), "int32"))
+        self.presence_history = device.zero(allocate((rows, 248320 // 8), "uint8"))
+        self.mask = allocate((rows, 248320 // 8), "uint8")
+        self.parameters = allocate((rows, 7), "float32")
+        self.rng = allocate((rows, 2), "uint64")
         self.inputs = SamplingInputs(rows)
         self.uploads = device.uploads()
         self.resources = ExitStack()

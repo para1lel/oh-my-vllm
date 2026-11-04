@@ -26,9 +26,11 @@ __device__ __forceinline__ void half_store(uint16_t *destination, int row, int c
       uint64_t(values.y) | (uint64_t(values.w) << 32);
 }
 
-__device__ __forceinline__ uint16_t fp4_half(uint8_t code) {
-  uint16_t magnitude = uint16_t(__byte_perm(0x3e3c3800u, 0x46444240u, code & 7) & 255) << 8;
-  return magnitude | (uint16_t(code & 8) << 12);
+__device__ __forceinline__ uint2 fp4_half_four(uint16_t packed) {
+  uint32_t high = __byte_perm(0x3e3c3800u, 0x46444240u, packed & 0x7777u);
+  uint32_t signs = __byte_perm(packed, uint32_t(packed) << 4, 0x1504u) & 0x80808080u;
+  high |= signs;
+  return make_uint2(__byte_perm(high, 0u, 0x1404u), __byte_perm(high, 0u, 0x3424u));
 }
 
 __device__ __forceinline__ void half_load_a(uint32_t (&values)[4], const uint16_t *data, int row,
@@ -136,12 +138,8 @@ __global__ void half_k32_kernel(const uint8_t *__restrict__ input, const uint8_t
                   ? *reinterpret_cast<const uint32_t *>(
                         weight + int64_t(first_column + row) * weight_stride + (start + column) / 2)
                   : 0;
-          uint32_t words[4];
-#pragma unroll
-          for (int pair = 0; pair < 4; ++pair)
-            words[pair] = uint32_t(fp4_half(packed >> (pair * 8))) |
-                          (uint32_t(fp4_half(packed >> (pair * 8 + 4))) << 16);
-          converted = make_uint4(words[0], words[1], words[2], words[3]);
+          uint2 low = fp4_half_four(packed), high = fp4_half_four(packed >> 16);
+          converted = make_uint4(low.x, low.y, high.x, high.y);
         }
         half_store(bs, row, column, converted);
       }
@@ -161,6 +159,16 @@ __global__ void half_k32_kernel(const uint8_t *__restrict__ input, const uint8_t
       }
       __syncthreads();
       for (int group = 0; group < stage_groups; ++group) {
+        float activation_scales[2][2], weight_scales_tile[2][2];
+#pragma unroll
+        for (int tile = 0; tile < 2; ++tile)
+#pragma unroll
+          for (int part = 0; part < 2; ++part) {
+            int row = tile * 16 + lane / 4 + 8 * part;
+            int column = warp * 16 + tile * 8 + (lane & 3) * 2 + part;
+            activation_scales[tile][part] = fp8_scale(sa[row * 4 + group]);
+            weight_scales_tile[tile][part] = fp8_scale(sb[column * 4 + group]);
+          }
         float raw[2][2][4] = {};
 #pragma unroll
         for (int half = 0; half < 2; ++half) {
@@ -181,12 +189,10 @@ __global__ void half_k32_kernel(const uint8_t *__restrict__ input, const uint8_t
 #pragma unroll
           for (int n = 0; n < 2; ++n)
 #pragma unroll
-            for (int value = 0; value < 4; ++value) {
-              int row = m * 16 + lane / 4 + 8 * (value >> 1);
-              int column = warp * 16 + n * 8 + (lane & 3) * 2 + (value & 1);
-              total[m][n][value] = fp8_scaled_add(raw[m][n][value], sa[row * 4 + group],
-                                                  sb[column * 4 + group], total[m][n][value]);
-            }
+            for (int value = 0; value < 4; ++value)
+              total[m][n][value] =
+                  __fmaf_rn(__fmul_rn(raw[m][n][value], activation_scales[m][value >> 1]),
+                            weight_scales_tile[n][value & 1], total[m][n][value]);
       }
       __syncthreads();
     }
@@ -217,9 +223,12 @@ void launch_half_k32(const uint8_t *input, const uint8_t *weight, const uint8_t 
                      int groups, int rows, int outputs, int width, int weight_stride,
                      ScaleLayout layout, cudaStream_t stream) {
   int bound = ((rows + 31) / 32 + (Grouped ? groups : 0)) * ((outputs + 63) / 64);
-  half_k32_kernel<Output, ScaleLayout, Bits, Grouped><<<min(bound, 148 * 8), 128, 0, stream>>>(
-      input, weight, input_scales, weight_scales, output, weight_ptrs, scale_ptrs, offsets, tiles,
-      groups, rows, outputs, width, weight_stride, layout);
+  constexpr int blocks_per_sm =
+      Grouped && Bits == 4 && std::is_same_v<Output, __nv_bfloat16> ? 7 : 8;
+  half_k32_kernel<Output, ScaleLayout, Bits, Grouped>
+      <<<min(bound, 148 * blocks_per_sm), 128, 0, stream>>>(
+          input, weight, input_scales, weight_scales, output, weight_ptrs, scale_ptrs, offsets,
+          tiles, groups, rows, outputs, width, weight_stride, layout);
 }
 
 } // namespace encoded_projection

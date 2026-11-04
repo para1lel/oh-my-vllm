@@ -1,4 +1,6 @@
+import gc
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -54,6 +56,104 @@ class TorchAdapterTests(unittest.TestCase):
                 raise RuntimeError("submit failed")
             self.assertEqual(tvm_ffi.get_raw_stream(device), 7)
         self.assertEqual(tvm_ffi.get_raw_stream(device), previous)
+
+    def test_scratch_allocation_and_dlpack_conversion_use_the_current_stream(self):
+        source = torch.arange(6, dtype=torch.float32).reshape(2, 3)
+        native = torch_adapter.native_tensor(source)
+        convert = torch_adapter.torch_tensor
+        for index, raw_stream in ((0, 11), (2, 17)):
+            with self.subTest(device=index, stream=raw_stream):
+                device = torch.device(f"cuda:{index}")
+                ffi_device = tvm_ffi.device(str(device))
+                previous = tvm_ffi.get_raw_stream(ffi_device)
+                calls = []
+
+                def allocate(
+                    shape,
+                    dtype,
+                    device_index,
+                    calls=calls,
+                    ffi_device=ffi_device,
+                    index=index,
+                ):
+                    calls.append(("allocate", tvm_ffi.get_raw_stream(ffi_device)))
+                    self.assertEqual(tuple(shape), (2, 3))
+                    self.assertEqual(dtype, "float32")
+                    self.assertEqual(device_index, index)
+                    return native
+
+                def to_torch(value, calls=calls, ffi_device=ffi_device):
+                    calls.append(("convert", tvm_ffi.get_raw_stream(ffi_device)))
+                    return convert(value)
+
+                with (
+                    torch_adapter.use_stream(device, 7),
+                    patch.object(
+                        torch.cuda,
+                        "current_stream",
+                        return_value=SimpleNamespace(cuda_stream=raw_stream),
+                    ) as current,
+                    patch.object(
+                        torch_adapter,
+                        "_device_module",
+                        return_value=SimpleNamespace(allocate_scratch=allocate),
+                    ),
+                    patch.object(torch_adapter, "torch_tensor", side_effect=to_torch),
+                ):
+                    result = torch.ops.oh_my_vllm.native_scratch(
+                        (2, 3), torch.float32, device
+                    )
+                    self.assertEqual(tvm_ffi.get_raw_stream(ffi_device), 7)
+                    current.assert_called_once_with(device)
+                self.assertEqual(tvm_ffi.get_raw_stream(ffi_device), previous)
+                self.assertEqual(
+                    calls, [("allocate", raw_stream), ("convert", raw_stream)]
+                )
+                self.assertEqual(result.data_ptr(), source.data_ptr())
+
+    def test_scratch_failure_restores_the_previous_stream(self):
+        device = torch.device("cuda:2")
+        ffi_device = tvm_ffi.device(str(device))
+        previous = tvm_ffi.get_raw_stream(ffi_device)
+        for stage in ("allocate", "convert"):
+            for error_type in (RuntimeError, KeyboardInterrupt):
+                with self.subTest(stage=stage, error=error_type.__name__):
+                    calls = []
+
+                    def fail_at(name, calls=calls, stage=stage, error_type=error_type):
+                        calls.append((name, tvm_ffi.get_raw_stream(ffi_device)))
+                        if stage == name:
+                            raise error_type("scratch failed")
+                        return object()
+
+                    with (
+                        torch_adapter.use_stream(device, 7),
+                        patch.object(
+                            torch.cuda,
+                            "current_stream",
+                            return_value=SimpleNamespace(cuda_stream=11),
+                        ),
+                        patch.object(
+                            torch_adapter,
+                            "_device_module",
+                            return_value=SimpleNamespace(
+                                allocate_scratch=lambda *_: fail_at("allocate")
+                            ),
+                        ),
+                        patch.object(
+                            torch_adapter,
+                            "torch_tensor",
+                            side_effect=lambda *_: fail_at("convert"),
+                        ),
+                    ):
+                        with self.assertRaisesRegex(error_type, "scratch failed"):
+                            torch_adapter._native_scratch((2, 3), torch.float32, device)
+                        self.assertEqual(tvm_ffi.get_raw_stream(ffi_device), 7)
+                    self.assertEqual(tvm_ffi.get_raw_stream(ffi_device), previous)
+                    expected = [("allocate", 11)]
+                    if stage == "convert":
+                        expected.append(("convert", 11))
+                    self.assertEqual(calls, expected)
 
     def test_native_shape_is_created_inside_the_adapter(self):
         shape = torch_adapter.native_shape((2, 3))
@@ -114,6 +214,50 @@ class CudaTorchAdapterTests(unittest.TestCase):
     def test_current_stream_returns_the_torch_cuda_stream(self):
         stream = torch.cuda.current_stream()
         self.assertEqual(torch_adapter.current_stream("cuda:0"), stream.cuda_stream)
+
+    def test_scratch_views_and_failed_conversion_release_after_stream_scope(self):
+        from oh_my_vllm.operators.runtime.device import Device
+
+        device = Device()
+        stream = torch.cuda.Stream(device="cuda:0")
+        gc.collect()
+        initial = device.module.allocated_bytes()
+        try:
+            with torch.cuda.stream(stream), torch_adapter.use_stream("cuda:0", 0):
+                output = torch.empty(4096, dtype=torch.int32, device="cuda:0")
+                for cycle in range(4):
+                    value = device.scratch(output.shape, output.dtype)
+                    alias = value.view(64, 64)
+                    value.fill_(cycle + 1)
+                    output.copy_(value)
+                    del value
+                    self.assertEqual(
+                        device.module.allocated_bytes(),
+                        initial + output.numel() * output.element_size(),
+                    )
+                    del alias
+                    self.assertEqual(device.module.allocated_bytes(), initial)
+                    self.assertEqual(
+                        tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0")), 0
+                    )
+                    torch.testing.assert_close(
+                        device.download(output, None),
+                        torch.full((4096,), cycle + 1, dtype=torch.int32),
+                    )
+                with (
+                    patch.object(
+                        torch_adapter,
+                        "torch_tensor",
+                        side_effect=RuntimeError("conversion failed"),
+                    ),
+                    self.assertRaisesRegex(RuntimeError, "conversion failed"),
+                ):
+                    device.scratch((4096,), torch.int32)
+                gc.collect()
+                self.assertEqual(device.module.allocated_bytes(), initial)
+        finally:
+            stream.synchronize()
+            device.close()
 
     def test_upload_routes_pinned_snapshots_and_ordinary_tensors(self):
         from oh_my_vllm.operators.runtime.device import Device

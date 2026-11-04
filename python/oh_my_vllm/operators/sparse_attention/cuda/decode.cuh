@@ -19,10 +19,11 @@ inline DecodeScratch decode_scratch(void *data, int tiles) {
           reinterpret_cast<int32_t *>(values + int64_t(tiles) * 16 * 512)};
 }
 
+template <bool Bf16Compressed>
 __global__ void decode_scores(const __nv_bfloat16 *query, const float *sink, const int32_t *indices,
-                              const __nv_bfloat16 *window, const __nv_bfloat16 *compressed,
-                              DecodeScratch scratch, int heads, int slots, int64_t window_rows,
-                              int64_t compressed_rows) {
+                              const __nv_bfloat16 *window, const uint8_t *compressed,
+                              const uint8_t *compressed_scales, DecodeScratch scratch, int heads,
+                              int slots, int64_t window_rows, int64_t compressed_rows) {
   extern __shared__ __align__(16) unsigned char storage[];
   auto *q = reinterpret_cast<__nv_bfloat16 *>(storage);
   auto *kv = q + 16 * 512;
@@ -52,14 +53,15 @@ __global__ void decode_scores(const __nv_bfloat16 *query, const float *sink, con
   if (!rejected) {
     for (int i = threadIdx.x; i < 64 * 512; i += blockDim.x) {
       int id = ids[i / 512], channel = i % 512;
-      float value = 0.f;
-      if (id >= 0) {
-        const auto *table = id < window_rows ? window : compressed;
-        int64_t index = id < window_rows ? id : id - window_rows;
-        value = __bfloat162float(table[index * 512 + channel]);
-        invalid |= !isfinite(value);
+      auto value = __float2bfloat16_rn(0.f);
+      if (id >= 0 && id < window_rows) {
+        value = window[int64_t(id) * 512 + channel];
+        invalid |= !isfinite(__bfloat162float(value));
+      } else if (id >= 0) {
+        value = read_compressed<Bf16Compressed>(compressed, compressed_scales, id - window_rows,
+                                                channel, invalid);
       }
-      kv[address(i / 512, channel, 512)] = __float2bfloat16_rn(value);
+      kv[address(i / 512, channel, 512)] = value;
     }
     rejected = __syncthreads_or(invalid);
   }
@@ -152,10 +154,12 @@ __global__ void decode_probabilities(DecodeScratch scratch, int slots) {
   }
 }
 
+template <bool Bf16Compressed>
 __global__ void decode_ordered_values(const float *sink, const int32_t *indices,
-                                      const __nv_bfloat16 *window, const __nv_bfloat16 *compressed,
-                                      DecodeScratch scratch, __nv_bfloat16 *output, int groups,
-                                      int heads, int slots, int64_t window_rows) {
+                                      const __nv_bfloat16 *window, const uint8_t *compressed,
+                                      const uint8_t *compressed_scales, DecodeScratch scratch,
+                                      __nv_bfloat16 *output, int groups, int heads, int slots,
+                                      int64_t window_rows) {
   __shared__ __align__(16) __nv_bfloat16 probabilities[16 * 64];
   __shared__ __align__(16) __nv_bfloat16 values[64 * 8];
   int blocks = (slots + 63) / 64;
@@ -185,10 +189,20 @@ __global__ void decode_ordered_values(const float *sink, const int32_t *indices,
         int selected = step * 32 + lane, slot = b * 64 + selected;
         int id = slot < slots ? indices[int64_t(row) * slots + slot] : -1;
         uint4 value = {};
-        if (id >= 0) {
-          const auto *table = id < window_rows ? window : compressed;
-          int64_t index = id < window_rows ? id : id - window_rows;
-          value = *reinterpret_cast<const uint4 *>(table + index * 512 + column);
+        if (id >= 0 && id < window_rows) {
+          value = *reinterpret_cast<const uint4 *>(window + int64_t(id) * 512 + column);
+        } else if (id >= 0) {
+          if constexpr (Bf16Compressed) {
+            const auto *table = reinterpret_cast<const __nv_bfloat16 *>(compressed);
+            value =
+                *reinterpret_cast<const uint4 *>(table + int64_t(id - window_rows) * 512 + column);
+          } else {
+            auto *decoded = reinterpret_cast<__nv_bfloat16 *>(&value);
+#pragma unroll
+            for (int c = 0; c < 8; ++c)
+              decoded[c] = read_compressed<false>(compressed, compressed_scales, id - window_rows,
+                                                  column + c, invalid);
+          }
         }
         *reinterpret_cast<uint4 *>(values + selected * 8) = value;
       }

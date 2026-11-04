@@ -17,8 +17,58 @@ from oh_my_vllm.models.deepseek_v41.trace import (
     target_call_id,
 )
 
+from tests.test_deepseek_speculation import _chain_row, _chain_worker
+
 
 class DeepSeekTrace(unittest.TestCase):
+    def test_continuous_verification_credits_old_drafts_and_advances_one_target_call(
+        self,
+    ):
+        worker = _chain_worker(acceptance=2, limit=10)
+        worker.rank, worker.strategy = 0, "tp4"
+        worker.routing_trace_enabled = True
+        request = worker.requests[1]
+        output = worker._execute_row(_chain_row(worker, request.history))
+        proposed = [len(output["new_draft_token_ids"])]
+        while not request.finish:
+            output = worker._execute_row(
+                _chain_row(
+                    worker, [request.history[-1], *output["new_draft_token_ids"]]
+                )
+            )
+            proposed.append(len(output["new_draft_token_ids"]))
+        records = [
+            call.kwargs
+            for call in worker.trace.record.call_args_list
+            if call.args == ("accounting_call",)
+        ]
+        self.assertEqual(proposed, [5, 5, 2, 0])
+        self.assertEqual([record["call"] for record in records], [1, 2, 3, 4])
+        self.assertEqual(
+            [record["phase"] for record in records],
+            ["prefill", "decode", "decode", "decode"],
+        )
+        self.assertEqual(
+            [record["request_rows"] for record in records[1:]],
+            [
+                [dict(id=1, start=3, count=3, accepted=2, proposed=5, logit_rows=3)],
+                [dict(id=1, start=6, count=3, accepted=2, proposed=5, logit_rows=3)],
+                [dict(id=1, start=9, count=3, accepted=2, proposed=2, logit_rows=3)],
+            ],
+        )
+        self.assertEqual(
+            [record["expert_assignments"] for record in records], [[[18, 0, 0, 0]]] * 4
+        )
+        self.assertEqual(worker.target_trace_frontiers, {1: 12})
+        self.assertEqual(len(worker.model.targets), 4)
+        self.assertEqual(len(worker.model.proposals), 3)
+        self.assertFalse(
+            any(
+                call.args == ("accounting_error",)
+                for call in worker.trace.record.call_args_list
+            )
+        )
+
     def test_rank_paths_keep_rank_zero_and_separate_other_writers(self):
         self.assertEqual(rank_trace_path("/tmp/trace.jsonl", 0), "/tmp/trace.jsonl")
         self.assertEqual(

@@ -11,7 +11,6 @@ from .adapter import (
     DS_PARK_DRAFT_TOKENS,
     DS_PARK_STAGES,
     DS_PARK_VERIFICATION_ROWS,
-    INDEX_SOURCE_LAYERS,
     KV_SOURCE_LAYERS,
     MAX_CONTEXT_TOKENS,
     MODEL_TYPE,
@@ -155,15 +154,15 @@ def build_descriptor(
                 _group(
                     "compressed_kv",
                     "compressed_kv",
-                    "deepseek_v41_compressed_kv_source_bf16",
+                    "deepseek_v41_compressed_kv_e2m1_g16_e4m3_paged",
                     list(KV_SOURCE_LAYERS),
                     cache_capacities["compressed_kv"],
                 ),
                 _group(
                     "index_keys",
                     "index_keys",
-                    "deepseek_v41_index_keys_bf16",
-                    list(INDEX_SOURCE_LAYERS),
+                    "deepseek_v41_index_keys_e2m1_g32_ue8m0_paged",
+                    list(KV_SOURCE_LAYERS),
                     cache_capacities["index_keys"],
                 ),
                 _group(

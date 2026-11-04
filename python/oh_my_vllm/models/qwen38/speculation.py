@@ -33,6 +33,16 @@ class GraphOperation:
             source = torch.as_tensor(source)
         if source.device.type == "cpu":
             self.host_uploads.copy(destination, source.contiguous())
+        elif (
+            isinstance(destination, torch.Tensor)
+            and source.device.type == "cuda"
+            and destination.device == source.device
+            and destination.dtype == source.dtype
+            and destination.shape == source.shape
+            and destination.is_contiguous()
+            and source.is_contiguous()
+        ):
+            destination.copy_(source, non_blocking=True)
         else:
             self.device.copy(destination, source)
 
@@ -140,10 +150,11 @@ class Draft(GraphOperation):
             draft_plan(rows=batch, first=first, table_width=table_width),
             device,
             (self.weights,),
+            allocate=device.scratch,
         )
         self.attention, self.ffn = self.operation.attention, self.operation.ffn
-        self.hidden = device.empty((batch, 5120), "bfloat16")
-        self.zero = device.zeros((batch, 5120), "bfloat16")
+        self.hidden = device.scratch((batch, 5120), "bfloat16")
+        self.zero = device.zero(device.scratch((batch, 5120), "bfloat16"))
         self.rows = device.upload(torch.arange(batch, dtype=torch.int32))
         self.boundary_rows = device.upload(torch.zeros(batch, dtype=torch.int32))
         arrays = tuple(
@@ -225,10 +236,12 @@ class Draft(GraphOperation):
 class Acceptance(GraphOperation):
     def __init__(self, device, batch, arrays):
         super().__init__(device)
-        self.operation = prepare_accept(accept_plan(batch=batch), device)
-        self.target = device.empty((batch, 5, 248320), "float32")
-        self.target_tokens = device.empty((batch, 5), "int64")
-        self.proposal = device.empty((batch, 4, 248320), "float32")
+        self.operation = prepare_accept(
+            accept_plan(batch=batch), device, allocate=device.scratch
+        )
+        self.target = device.scratch((batch, 5, 248320), "float32")
+        self.target_tokens = device.scratch((batch, 5), "int64")
+        self.proposal = device.scratch((batch, 4, 248320), "float32")
         self.metadata_inputs = Metadata(device, arrays, single_upload=True)
         self.gather, self.drafts, self.slots, self.rng = self.metadata_inputs.arrays
         self.proposal_rows = tuple(
@@ -474,7 +487,7 @@ class Speculation:
                     hidden,
                     self.cache,
                     False,
-                    single_upload=False,
+                    single_upload=True,
                 )
                 self.context_key = key
                 created = True

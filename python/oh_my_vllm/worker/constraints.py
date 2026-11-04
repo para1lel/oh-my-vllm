@@ -65,12 +65,19 @@ def batch_masks(constraints, prefixes, *, packed=False):
                 if bool(path[skip:]) == speculative
             ]
             if entries:
-                operation = (
-                    mask_executor().unsafe_compute_mask_ptr_with_draft_token
-                    if speculative
-                    else mask_executor().unsafe_compute_mask_ptr
-                )
-                operation(entries, buffer.ctypes.data, buffer.shape[1] * 4, rows)
+                row_bytes = buffer.shape[1] * 4
+                if not speculative and len(entries) <= 4:
+                    for matcher, index in entries:
+                        matcher.unsafe_compute_mask_ptr(
+                            buffer.ctypes.data + index * row_bytes, row_bytes
+                        )
+                else:
+                    operation = (
+                        mask_executor().unsafe_compute_mask_ptr_with_draft_token
+                        if speculative
+                        else mask_executor().unsafe_compute_mask_ptr
+                    )
+                    operation(entries, buffer.ctypes.data, row_bytes, rows)
         for constraint, start, path, skip in pending:
             constraint.check()
             bits = buffer[start : start + len(path) - skip + 1].view(np.uint8)

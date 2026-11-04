@@ -67,6 +67,19 @@ FP4 codes, NaN FP8 codes, or NaN BF16 output. Consumers must check invalid scale
 Metadata and overlap failures raise before any launch. The operation allocates
 no temporary device storage and does not synchronize. Retain every buffer
 through Eager completion or graph release.
+
+gather_fp4(codes, scales, table, slots, output, status, page_rows, group_size,
+           format) restores complete history keys into caller-owned BF16 output
+[B,T,D]. codes is U8 [pool_rows,D/2], and scales is U8 [pool_rows,D/group_size].
+The I64 table maps [active_slots,logical_pages] to physical pages. I64 slots
+has B entries. Format 1 uses UE8M0, and format 2 uses E4M3. D is divisible
+by group_size, which is 16, 32, or 128. Page zero contains masked padding.
+The caller initializes status I32 [1] to zero. Invalid metadata, invalid
+scales, or nonfinite results set status to one and write NaN for rejected
+values. Check status before state commit. Inputs, output, and status must
+not overlap. The operation uses FP32 multiplication and BF16 nearest-even
+rounding, without temporary storage or synchronization. Keep all buffers
+alive through execution or graph release. Map their storage before recording.
 """
 
 from typing import NamedTuple
@@ -79,6 +92,7 @@ FUNCTIONS = (
     "engram",
     "engram_lookup_stage",
     "engram_lookup_decode",
+    "gather_fp4",
 )
 
 

@@ -7,7 +7,7 @@ import torch
 from sympy import isprime
 from torch import nn
 
-from .storage import sequence_cache
+from .packed_cache import TokenHistory
 
 
 def find_next_prime(start: int, seen_primes: set[int]) -> int:
@@ -172,15 +172,12 @@ class NgramHashState(nn.Module):
         )
         self.register_buffer("multipliers", multipliers, persistent=False)
         self.register_buffer("token_map", torch.tensor(token_map), persistent=False)
-        self.register_buffer(
-            "cache",
-            sequence_cache(
-                args,
-                (args.max_batch_size, args.max_seq_len),
-                dtype=torch.int64,
-            ),
-            persistent=False,
-        )
+        self.cache = TokenHistory(args)
+
+    def _apply(self, function, recurse=True):
+        if isinstance(self.cache, TokenHistory):
+            self.cache.apply(function)
+        return super()._apply(function, recurse=recurse)
 
     @torch.inference_mode()
     def forward(

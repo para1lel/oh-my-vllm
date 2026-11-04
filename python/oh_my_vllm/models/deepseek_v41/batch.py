@@ -5,7 +5,13 @@ from dataclasses import dataclass
 import torch
 
 from . import kernel, model
-from .decode import DecodeBindings, DecodeGraph, EngramStage, capture_decode_graph
+from .decode import (
+    DecodeBindings,
+    DecodeGraph,
+    EngramStage,
+    capture_decode_graph,
+    native_sparse_graph_eligible,
+)
 from .model import context_token_bucket
 from .speculation import verify_greedy_drafts
 from .trace import RoutingTrace, record_accounting_call, target_call_id
@@ -49,8 +55,8 @@ def require_batch_configuration(args):
         or model.scale_dtype != torch.float8_e8m0fnu
     ):
         raise ValueError("batched CUDA target requires UE8M0 K32 projection scales")
-    if kernel._SPARSE_NATIVE_DISABLED or kernel._SPARSE_NATIVE_FAILED:
-        raise ValueError("batched CUDA target requires native sparse attention")
+    if kernel._SPARSE_NATIVE_FAILED:
+        raise ValueError("batched CUDA target cannot reuse a failed native sparse path")
 
 
 def target_decode_batch(
@@ -135,7 +141,9 @@ def target_decode_batch(
     )
     graph = worker.decode_graphs.get(key)
     enabled = (
-        getattr(worker, "decode_graph_enabled", False) and bindings.storage.is_cuda
+        getattr(worker, "decode_graph_enabled", False)
+        and bindings.storage.is_cuda
+        and native_sparse_graph_eligible(worker.model)
     )
     if (
         graph is None
@@ -190,11 +198,14 @@ def target_decode_batch(
         if tracing
         else None
     )
+    position = (
+        None if all(value == start_pos for value in positions) else bindings.position
+    )
     _, logits, hidden = worker.model(
         bindings.token_ids,
         start_pos=start_pos,
         cache_slots=bindings.cache_slots,
-        position=bindings.position,
+        position=position,
         sample_output=False,
         cache_slots_cpu=slots,
         cache_positions_cpu=positions,
@@ -263,13 +274,9 @@ def execute_decode_group(
                 else None
             )
             mtp_updated = worker._seed_mtp(hidden, start_pos, slot, source_length=count)
-            proposals = []
-            if not drafts and worker.dspark and not request.finish:
-                proposals = worker._proposal(
-                    int(predictions[index]), hidden[:, -1:], start_pos, slot
-                )
-                remaining = max(0, request.limit - request.generated)
-                proposals = proposals[: max(0, remaining - 1)]
+            proposals = worker._next_proposals(
+                request, tokens, hidden, accepted_end, slot
+            )
             if hasattr(worker, "cache"):
                 worker.cache.commit(
                     row["request_id"],

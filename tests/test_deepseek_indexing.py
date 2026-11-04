@@ -215,7 +215,7 @@ class DeepSeekIndexing(unittest.TestCase):
             torch.inference_mode(),
             patch.object(model, "world_size", 4),
             patch.object(model, "apply_rotary_emb"),
-            patch.object(model, "fp4_act_quant"),
+            patch.object(model, "fp4_act_quant", wraps=model.fp4_act_quant),
             patch.object(
                 model,
                 "sparse_attn",
@@ -438,6 +438,42 @@ class DeepSeekIndexing(unittest.TestCase):
                 torch.equal(actual[request : request + 1, :, :width], expected)
             )
             self.assertFalse(bool(actual[request, :, width:].any()))
+
+    def test_owner_scores_keep_mp4_head_rounding(self):
+        query = torch.ones((1, 3, 32, 1), dtype=torch.bfloat16)
+        keys = torch.ones((1, 7, 1), dtype=query.dtype)
+        weights = torch.zeros((1, 3, 32), dtype=query.dtype)
+        weights[:, :, 0] = 1
+        weights[:, :, 1] = 2**-8
+        weights[:, :, 8] = 2**-8
+        full = torch.cat(
+            [value for _, _, value in score_chunks(query, keys, weights)], dim=1
+        )
+        partials = [
+            torch.cat([value for _, _, value in score_chunks(q, keys, w)], dim=1)
+            for q, w in zip(query.chunk(4, dim=2), weights.chunk(4, dim=2), strict=True)
+        ]
+        expected = sum(partial.float() for partial in partials).to(query.dtype)
+        self.assertTrue(torch.equal(full, torch.full_like(full, 1 + 2**-7)))
+        self.assertTrue(torch.equal(expected, torch.ones_like(expected)))
+        for work_bytes in (308, 616, INDEX_SCORE_WORK_BYTES):
+            with self.subTest(work_bytes=work_bytes):
+                with patch("torch.distributed.all_reduce") as collective:
+                    actual = torch.cat(
+                        [
+                            value
+                            for _, _, value in score_chunks(
+                                query,
+                                keys,
+                                weights,
+                                work_bytes=work_bytes,
+                                head_partitions=4,
+                            )
+                        ],
+                        dim=1,
+                    )
+                self.assertTrue(torch.equal(actual, expected))
+                collective.assert_not_called()
 
     def test_rank_sum_rounds_once_and_budgets_the_fp32_accumulator(self):
         from torch.utils._python_dispatch import TorchDispatchMode

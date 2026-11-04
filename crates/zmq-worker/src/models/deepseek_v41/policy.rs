@@ -196,14 +196,14 @@ pub(in crate::models) fn validate_ready(
     validate_group(
         cache_group(descriptor, "compressed_kv")?,
         CacheKind::CompressedKv,
-        "deepseek_v41_compressed_kv_source_bf16",
+        "deepseek_v41_compressed_kv_e2m1_g16_e4m3_paged",
         &[2, 8, 14, 20],
     )?;
     validate_group(
         cache_group(descriptor, "index_keys")?,
         CacheKind::IndexKeys,
-        "deepseek_v41_index_keys_bf16",
-        &[2, 8, 14, 20, 24, 28, 32, 36],
+        "deepseek_v41_index_keys_e2m1_g32_ue8m0_paged",
+        &[2, 8, 14, 20],
     )?;
     validate_group(
         cache_group(descriptor, "accepted_state")?,
