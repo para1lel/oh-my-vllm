@@ -82,15 +82,6 @@ Input 边界还统计像素归一化.
 批准的门槛还绑定完整资源总量和下界值.
 批准的门槛绑定此 identity, 计时策略 identity, 用例, 生成的输入以及兼容的设备设置.
 常规验收不加载校准耗时.
-计费变化时, 按下式换算倍率, 保持每项已批准的最大延迟:
-
-```text
-new_max_ratio = old_max_ratio * old_reference / new_reference
-```
-
-在迁移来源信息中保留旧计费 identity, 资源值和倍率.
-此换算不得提高已批准的最大延迟.
-[迁移命令](../../../development/operators/migrate_accounting.py)记录每项旧门槛, 并在需要时向下舍入新倍率.
 
 在每个独立样本前, 从准备好的设备副本恢复状态与 RNG.
 在开始事件前完成每次恢复.

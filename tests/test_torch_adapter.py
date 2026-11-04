@@ -196,18 +196,6 @@ class TorchAdapterTests(unittest.TestCase):
                 self.assertEqual(alias[2].item(), probe)
                 self.assertEqual(alias.dtype, dtype)
 
-    def test_torch_library_schemas_are_registered(self):
-        namespace = torch.ops.oh_my_vllm
-        for name in (
-            "native_empty",
-            "native_view",
-            "native_copy",
-            "native_zero",
-            "native_upload",
-            "native_download",
-        ):
-            self.assertTrue(hasattr(namespace, name), name)
-
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
 class CudaTorchAdapterTests(unittest.TestCase):

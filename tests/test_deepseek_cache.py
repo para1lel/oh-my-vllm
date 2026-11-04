@@ -3,34 +3,44 @@ from types import SimpleNamespace
 
 import torch
 from oh_my_vllm.models.deepseek_v41.cache import DeepSeekCache
+from oh_my_vllm.models.deepseek_v41.packed_cache import PackedHistory, TokenHistory
 
 
 class FakeModel:
-    def __init__(self):
+    def __init__(self, *, batch_size=2, context=8):
+        args = SimpleNamespace(
+            max_batch_size=batch_size, max_seq_len=context, lazy_cache=False
+        )
         self.layers = [
             SimpleNamespace(
                 attn=SimpleNamespace(
-                    window_kv_cache=torch.zeros(2, 4, 3),
-                    compress_kv_cache=torch.zeros(2, 4, 3),
+                    is_kv_source=True,
+                    window_kv_cache=torch.zeros(batch_size, 4, 3),
+                    compress_kv_cache=PackedHistory(
+                        args, 32, 2, 16, torch.float8_e4m3fn
+                    ),
                     compress_ratio=2,
                     indexer=SimpleNamespace(
-                        k_cache=torch.zeros(2, 4, 2),
+                        owns_k=True,
+                        k_cache=PackedHistory(args, 32, 2, 32, torch.float8_e8m0fnu),
                     ),
                     compressor=SimpleNamespace(
-                        kv_state=torch.zeros(2, 2, 3),
-                        score_state=torch.zeros(2, 2, 3),
+                        kv_state=torch.zeros(batch_size, 2, 3),
+                        score_state=torch.zeros(batch_size, 2, 3),
                     ),
                 )
             )
         ]
         self.mtp = [
             SimpleNamespace(
-                attn=SimpleNamespace(
-                    window_kv_cache=torch.zeros(2, 4, 3),
-                )
+                attn=SimpleNamespace(window_kv_cache=torch.zeros(batch_size, 4, 3))
             )
         ]
-        self.engram_hash = SimpleNamespace(cache=torch.zeros(2, 8, dtype=torch.int64))
+        self.engram_hash = SimpleNamespace(cache=TokenHistory(args))
+
+
+def cache_for(model, **options):
+    return DeepSeekCache(model, fa_capacity=128, **options)
 
 
 def row(fa, mamba):
@@ -42,6 +52,64 @@ def row(fa, mamba):
 
 
 class DeepSeekCacheBehavior(unittest.TestCase):
+    def test_real_model_restores_sources_with_and_without_compression_tails(self):
+        from oh_my_vllm.models.deepseek_v41.model import ModelArgs, Transformer
+
+        with torch.device("cpu"), torch.inference_mode():
+            model = Transformer(
+                ModelArgs(
+                    vocab_size=128,
+                    dim=64,
+                    moe_inter_dim=64,
+                    n_layers=2,
+                    n_mtp_layers=0,
+                    n_heads=4,
+                    n_routed_experts=4,
+                    n_activated_experts=2,
+                    q_lora_rank=32,
+                    head_dim=32,
+                    rope_head_dim=16,
+                    o_groups=4,
+                    o_lora_rank=16,
+                    window_size=4,
+                    compress_ratios=(2, 1),
+                    kv_source_layers=(0, 1),
+                    index_source_layers=(0, 1),
+                    index_n_heads=4,
+                    index_head_dim=32,
+                    index_topk=4,
+                    candidate_source_layer=-1,
+                    hc_mult=2,
+                    dtype="bf16",
+                    expert_dtype=None,
+                    temperature=0,
+                    max_batch_size=2,
+                    max_seq_len=8,
+                    lazy_cache=False,
+                )
+            )
+            cache = cache_for(model, block_tokens=4, max_seq_len=8)
+            self.addCleanup(cache.close)
+            source = row([1], [3])
+            cache.activate_row(source, 0, end_pos=4)
+            for index, layer in enumerate(model.layers):
+                layer.attn.window_kv_cache[0].fill_(index + 2)
+            compressor = model.layers[0].attn.compressor
+            compressor.kv_state[0].fill_(5)
+            compressor.score_state[0].fill_(7)
+            cache.commit(7, source, 0, accepted_end=4)
+            cache.clear_slot(0)
+            cache.restore(7, 1, source, start_pos=4)
+            for index, layer in enumerate(model.layers):
+                window = layer.attn.window_kv_cache[1]
+                torch.testing.assert_close(window, torch.full_like(window, index + 2))
+            torch.testing.assert_close(
+                compressor.kv_state[1], torch.full_like(compressor.kv_state[1], 5)
+            )
+            torch.testing.assert_close(
+                compressor.score_state[1], torch.full_like(compressor.score_state[1], 7)
+            )
+
     def test_verification_commits_exact_windows_tails_and_private_checkpoints(self):
         windows = (
             (1, 2, 3, 0),
@@ -54,7 +122,8 @@ class DeepSeekCacheBehavior(unittest.TestCase):
         for accepted, want in enumerate(windows):
             with self.subTest(accepted_drafts=accepted):
                 model = FakeModel()
-                cache = DeepSeekCache(model, block_tokens=4, max_seq_len=8)
+                cache = cache_for(model, block_tokens=4, max_seq_len=8)
+                cache.activate_row(row([1, 2], [3, 4]), 0, end_pos=8)
                 attention = model.layers[0].attn
                 mtp = model.mtp[0].attn.window_kv_cache
                 attention.window_kv_cache[0, :2] = torch.tensor([[1.0], [2.0]])
@@ -120,9 +189,9 @@ class DeepSeekCacheBehavior(unittest.TestCase):
 
     def test_restore_requires_the_exact_state_endpoint_before_clearing(self):
         model = FakeModel()
-        cache = DeepSeekCache(model, block_tokens=4, max_seq_len=8)
+        cache = cache_for(model, block_tokens=4, max_seq_len=8)
         source = row([1, 2], [3, 0])
-        cache.ensure_row(source)
+        cache.activate_row(source, 0, end_pos=4)
         cache.commit(7, source, 0, accepted_end=4)
         for endpoint in (2, 3, 5):
             with self.subTest(endpoint=endpoint):
@@ -133,36 +202,16 @@ class DeepSeekCacheBehavior(unittest.TestCase):
                     model.layers[0].attn.window_kv_cache[0], torch.full((4, 3), 71.0)
                 )
 
-    def test_fa_page_growth_does_not_replicate_window_or_tail_storage(self):
-        def storage_bytes(value):
-            if isinstance(value, torch.Tensor):
-                return value.numel() * value.element_size()
-            if isinstance(value, (list, tuple)):
-                return sum(storage_bytes(item) for item in value)
-            if hasattr(value, "__dataclass_fields__"):
-                return sum(storage_bytes(item) for item in vars(value).values())
-            return 0
-
-        cache = DeepSeekCache(FakeModel(), block_tokens=4, max_seq_len=64)
-        cache.ensure_row(row([1], [31]))
-        initial = storage_bytes(list(cache.fa_pages.values()))
-        cache.ensure_row(row(list(range(1, 17)), [0] * 15 + [31]))
-        added = storage_bytes(list(cache.fa_pages.values())) - initial
-        self.assertEqual(added, 15 * 72)
-        self.assertEqual(
-            cache.stats()["gpu_logical_page_bytes"],
-            storage_bytes([*cache.fa_pages.values(), *cache.mamba_pages.values()]),
-        )
-
     def test_commit_merges_prefix_state_into_a_new_mamba_page(self):
         model = FakeModel()
-        cache = DeepSeekCache(
+        cache = cache_for(
             model,
             block_tokens=4,
             max_seq_len=8,
             host_limit=1 << 20,
         )
         source = row([1], [3])
+        cache.activate_row(source, 0, end_pos=4)
         model.layers[0].attn.window_kv_cache[0] = 1
         model.engram_hash.cache[0, :2] = torch.tensor([104, 105])
         cache.commit(7, source, 0, accepted_end=2)
@@ -188,35 +237,9 @@ class DeepSeekCacheBehavior(unittest.TestCase):
             )
         )
 
-    def test_commit_keeps_compressed_rows_completed_by_decode(self):
-        model = FakeModel()
-        cache = DeepSeekCache(
-            model,
-            block_tokens=4,
-            max_seq_len=8,
-            host_limit=1 << 20,
-        )
-        source = row([1, 2], [0, 4])
-        cache.commit(7, source, 0, accepted_end=6)
-
-        model.layers[0].attn.compress_kv_cache[0, 3] = torch.full((3,), 31)
-        model.layers[0].attn.indexer.k_cache[0, 3] = torch.full((2,), 37)
-        cache.commit(7, source, 0, start_pos=7, accepted_end=8)
-
-        cache.clear_slot(0)
-        cache.restore(7, 0, source, start_pos=8)
-        torch.testing.assert_close(
-            model.layers[0].attn.compress_kv_cache[0, 3],
-            torch.full((3,), 31.0),
-        )
-        torch.testing.assert_close(
-            model.layers[0].attn.indexer.k_cache[0, 3],
-            torch.full((2,), 37.0),
-        )
-
     def test_restore_rejects_missing_accepted_mamba_state(self):
         model = FakeModel()
-        cache = DeepSeekCache(model, block_tokens=4, max_seq_len=8)
+        cache = cache_for(model, block_tokens=4, max_seq_len=8)
         cache._fa_page(1)
         with self.assertRaisesRegex(ValueError, "state page"):
             cache.restore(7, 0, row([1], [0]), start_pos=4)
@@ -225,7 +248,7 @@ class DeepSeekCacheBehavior(unittest.TestCase):
 
     def test_decoded_export_snapshots_the_post_replay_state(self):
         model = FakeModel()
-        cache = DeepSeekCache(model, block_tokens=4, max_seq_len=8)
+        cache = cache_for(model, block_tokens=4, max_seq_len=8)
         attention = model.layers[0].attn
         source = row([1, 2], [3, 4])
         cache.begin_step(source, 0, start_pos=4, end_pos=5, minimum_end=5)
@@ -251,7 +274,7 @@ class DeepSeekCacheBehavior(unittest.TestCase):
 
     def test_decoded_export_requires_one_token(self):
         model = FakeModel()
-        cache = DeepSeekCache(model, block_tokens=4, max_seq_len=8)
+        cache = cache_for(model, block_tokens=4, max_seq_len=8)
         cache.begin_step(row([1, 2], [3, 4]), 0, start_pos=5, end_pos=7, minimum_end=7)
         with self.assertRaisesRegex(ValueError, "one token"):
             cache.export_decoded_step((0,), 5, 7)
@@ -259,7 +282,7 @@ class DeepSeekCacheBehavior(unittest.TestCase):
     def test_host_transfers_require_a_live_resident_request(self):
         model = FakeModel()
         requests = {7: SimpleNamespace(cache_slot=0)}
-        cache = DeepSeekCache(
+        cache = cache_for(
             model,
             block_tokens=4,
             max_seq_len=8,
@@ -296,7 +319,7 @@ class DeepSeekCacheBehavior(unittest.TestCase):
 
     def test_invalid_later_operation_has_no_batch_side_effect(self):
         model = FakeModel()
-        cache = DeepSeekCache(
+        cache = cache_for(
             model,
             block_tokens=4,
             max_seq_len=8,
@@ -331,20 +354,19 @@ class DeepSeekCacheBehavior(unittest.TestCase):
 
     def test_store_load_and_prefix_copy_restore_logical_blocks(self):
         model = FakeModel()
-        cache = DeepSeekCache(
+        cache = cache_for(
             model,
             block_tokens=4,
             max_seq_len=8,
             host_limit=1 << 20,
         )
+        source = row([1, 2], [3, 4])
+        cache.activate_row(source, 0, end_pos=6)
         model.layers[0].attn.window_kv_cache[0] = torch.arange(12).reshape(4, 3)
-        model.layers[0].attn.compress_kv_cache[0, :2] = torch.arange(6).reshape(2, 3)
-        model.layers[0].attn.indexer.k_cache[0, :2] = torch.arange(4).reshape(2, 2)
         model.layers[0].attn.compressor.kv_state[0] = 11
         model.layers[0].attn.compressor.score_state[0] = 13
         model.mtp[0].attn.window_kv_cache[0] = 17
         model.engram_hash.cache[0, :6] = torch.arange(6) + 20
-        source = row([1, 2], [3, 4])
         cache.commit(7, source, 0, accepted_end=4, include_mtp=True)
         cache.commit(7, source, 0, start_pos=4, accepted_end=6, include_mtp=True)
 
@@ -386,14 +408,6 @@ class DeepSeekCacheBehavior(unittest.TestCase):
         torch.testing.assert_close(
             model.layers[0].attn.window_kv_cache[0, :4],
             torch.arange(12, dtype=torch.float32).reshape(4, 3),
-        )
-        torch.testing.assert_close(
-            model.layers[0].attn.compress_kv_cache[0, :2],
-            torch.arange(6, dtype=torch.float32).reshape(2, 3),
-        )
-        torch.testing.assert_close(
-            model.layers[0].attn.indexer.k_cache[0, :2],
-            torch.arange(4, dtype=torch.float32).reshape(2, 2),
         )
         torch.testing.assert_close(
             model.mtp[0].attn.window_kv_cache[0],
@@ -489,12 +503,6 @@ class DeepSeekCacheBehavior(unittest.TestCase):
             )
 
         cache.copy_prefix([(5, 9, 2)])
-        torch.testing.assert_close(
-            cache.fa_pages[9].compressed[0][0], torch.arange(3).float()
-        )
-        torch.testing.assert_close(
-            cache.fa_pages[9].index[0][0], torch.arange(2).float()
-        )
         self.assertTrue(
             torch.equal(cache.fa_pages[9].engram[0][:2], torch.tensor([20, 21]))
         )

@@ -25,8 +25,8 @@ from oh_my_vllm.models.deepseek_v41.trace import execution_modes
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 
 from . import deepseek_accounting as accounting
-from . import deepseek_accounting_v4 as accounting_v4
-from . import deepseek_accounting_v5 as accounting_v5
+from . import deepseek_accounting_floor as accounting_floor
+from . import deepseek_accounting_packed as accounting_packed
 from .benchmark import ROOT, source_identity
 from .deepseek_accounting import (
     BindingError,
@@ -55,8 +55,8 @@ SERVED_MODEL = "deepseek-v4.1-flash"
 def reference_configuration(version=accounting.VERSION):
     if version not in (
         accounting.VERSION,
-        accounting_v4.VERSION,
-        accounting_v5.VERSION,
+        accounting_floor.VERSION,
+        accounting_packed.VERSION,
     ):
         raise ValueError("unknown benchmark reference version")
     configuration = {
@@ -70,10 +70,10 @@ def reference_configuration(version=accounting.VERSION):
         "reference_zero_credit": [],
         "reference_diagnostics": [],
     }
-    if version == accounting_v4.VERSION:
+    if version == accounting_floor.VERSION:
         configuration.update(
-            rate_profile=accounting_v4.rate_profile_digest(),
-            assumptions_sha256=accounting_v4.assumptions_digest(),
+            rate_profile=accounting_floor.rate_profile_digest(),
+            assumptions_sha256=accounting_floor.assumptions_digest(),
             reference_scope="conditional partial resource floor",
             reference_conditions=[
                 (
@@ -119,12 +119,12 @@ def reference_configuration(version=accounting.VERSION):
                 "direct_protocol_received_bytes",
             ],
         )
-    if version == accounting_v5.VERSION:
+    if version == accounting_packed.VERSION:
         configuration.update(
-            rate_profile=accounting_v5.rate_profile_digest(),
-            assumptions_sha256=accounting_v5.assumptions_digest(),
+            rate_profile=accounting_packed.rate_profile_digest(),
+            assumptions_sha256=accounting_packed.assumptions_digest(),
             reference_scope="packed-aware project reference estimate",
-            reference_conditions=list(accounting_v5.ASSUMPTIONS.values()),
+            reference_conditions=list(accounting_packed.ASSUMPTIONS.values()),
             reference_zero_credit=[
                 "Protocol metadata and padding do not enter the project reference.",
                 "No universal physical minimum or full-model numerical claim.",
@@ -143,10 +143,13 @@ def runtime_reference(trace, *, strategy, expected_binding, version=accounting.V
     if not isinstance(expected_binding, dict):
         raise BindingError("runtime reference requires an expected source binding")
     binding = trace.get("binding") if isinstance(trace, dict) else None
-    accounting.validate_binding(binding, expected=expected_binding)
-    if version in (accounting_v4.VERSION, accounting_v5.VERSION):
+    if not isinstance(binding, dict):
+        raise BindingError("runtime reference requires a source binding")
+    if version in (accounting_floor.VERSION, accounting_packed.VERSION):
         calculator = (
-            accounting_v4 if version == accounting_v4.VERSION else accounting_v5
+            accounting_floor
+            if version == accounting_floor.VERSION
+            else accounting_packed
         )
         reference = calculator.reference_trace(
             trace, strategy=strategy, expected_binding=expected_binding
@@ -154,7 +157,7 @@ def runtime_reference(trace, *, strategy, expected_binding, version=accounting.V
         metadata.update(
             communication_model=(
                 "conditional-partial-resource-floor"
-                if version == accounting_v4.VERSION
+                if version == accounting_floor.VERSION
                 else "fixed-protocol-project-estimate"
             ),
             profile_digest=None,
@@ -678,7 +681,11 @@ def argument_parser():
     parser.add_argument("--mamba-blocks", type=int)
     parser.add_argument(
         "--reference-version",
-        choices=(accounting.VERSION, accounting_v4.VERSION, accounting_v5.VERSION),
+        choices=(
+            accounting.VERSION,
+            accounting_floor.VERSION,
+            accounting_packed.VERSION,
+        ),
         default=accounting.VERSION,
         help=(
             "HTTP accountant; v4 is a conditional partial resource floor "

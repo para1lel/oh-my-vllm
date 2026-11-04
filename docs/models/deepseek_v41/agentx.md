@@ -49,36 +49,4 @@ The runner records source, executable, native modules, checkpoint, tokenizer, to
 Raw harness records and service logs stay in a separate location.
 The CSV and dark-background scatter plot are approved result artifacts.
 
-## Functional record
-
-The latest functional record uses TEP4 with 16 session trees on GPUs 1, 2, 3, and 4.
-It uses `max_num_seqs=1` to fit the model and cache in the available device memory.
-
-| Setting | Value |
-|---|---:|
-| AgentX version | `1.0.7` |
-| Profiling duration | 900 seconds |
-| Cache context | 65536 tokens |
-| GPU blocks | 512 |
-| Mamba blocks | 64 |
-| Maximum batched tokens | 16384 |
-| Warmup requests | 16 |
-| Profiling requests sent | 14 |
-| Completed requests | 2 |
-| Failed requests | 0 |
-| Cancelled requests | 12 |
-| Unaccounted requests | 0 |
-| Drain duration | 120 seconds |
-| Drain timeout | Yes |
-
-The [functional CSV](assets/agentx-tep4-16-functional.csv) and
-[functional dark scatter plot](assets/agentx-tep4-16-functional.png) record this run.
-The two completed rows show end-to-end service execution and artifact export.
-They do not represent TEP4 throughput at concurrency 16 because the service used one resident sequence.
-The harness phase counters include 12 requests cancelled after the drain timeout.
-The raw request export does not include these cancelled requests.
-Thus, counts from raw request records alone are not complete.
-
-The current DEP4 command uses request ownership and expert dispatch.
-The functional record above used an earlier implementation. It does not prove DEP4 acceptance.
-No complete approved AgentX result set is recorded yet.
+No complete approved AgentX result set is recorded.

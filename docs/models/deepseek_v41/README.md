@@ -1,100 +1,58 @@
 # DeepSeek V4.1 adapter
 
-DeepSeek-V4.1-Flash uses a four-rank Python worker group.
-Rust owns service control, admission, scheduling, logical state, and publication.
-Python owns checkpoint loading, tensors, model computation, and DSpark state.
-The worker boundary uses the existing ZMQ DEALER and msgpack protocol.
+DeepSeek-V4.1-Flash uses four Python ranks and the [shared service](../../serving.md).
+The public capability is text target generation with greedy DSpark5 verification.
+Image serving and full workload acceptance are not available.
 
-The adapter binds the public configuration, inference configuration, tokenizer assets, and checkpoint metadata.
-It reads weight shards during load without a full startup hash pass.
-It supports the released 48-shard safetensors layout, FP8 projections, FP4 routed experts, sparse attention, Engram tables, and Hyper-Connections.
-Prefill rows are split before native operators receive them.
-Nonzero multi-token prefill uses the fused chunk path.
+The [adapter](../../../python/oh_my_vllm/models/deepseek_v41/adapter.py) checks the released configuration.
+The [loader](../../../python/oh_my_vllm/models/deepseek_v41/loader.py) reads the original 48-shard checkpoint with rank-local placement.
+Startup identity includes configuration and index metadata.
+Loading does not hash full weight shards before Ready.
+Measurement artifacts bind full checkpoint identities.
 
-The current functional path supports text target decode and greedy DSpark5 verification.
-Short checkpoint checks use TEP4 on GPUs `4,5,6,7`.
+## Guides
 
-The target path uses captured CUDA Graphs for TP4 decode.
-TEP4 and DEP4 target decode use Eager execution.
+- [Numerical acceptance and independent reference restoration](evaluation.md)
+- [Quantization and numerical order](quantization.md)
+- [Projection arithmetic and native interfaces](gemm.md)
+- [Physical cache and upstream format reference](cache.md)
+- [HTTP workloads](performance.md), [reference calculation](accounting.md), and [AgentX workloads](agentx.md)
 
-The supported public capability is text.
-Image preparation is kept out of the public capability until the tokenizer, image processor, rank execution, and HTTP checks are connected.
+## Execution
 
-DEP4 uses Rust request owners and four separate logical cache pools.
-Each owner computes dense layers with complete weights and reads complete Engram rows from its host mapping.
-Routed experts use BF16 row dispatch and return FP32 local sums.
-Empty ranks participate in all expert exchanges.
-Target and proposal rounds coordinate ranks with different local call counts.
-DEP4 GPU numerical, state, capacity, and HTTP acceptance are incomplete.
+The [worker](../../../python/oh_my_vllm/models/deepseek_v41/inference.py) supports `tp4`, `tep4`, and request-owned `dep4`.
+TP4 target decode uses CUDA Graphs when its bindings permit capture.
+TEP4 and DEP4 target decode use Eager execution because they read routed counts on the host.
+Prefill and draft verification use Eager execution.
+The [Graph implementation](../../../python/oh_my_vllm/models/deepseek_v41/decode.py) owns captured buffers and cache leases.
+Uncaptured shapes and calls beyond the configured Graph limit use Eager execution.
 
-Dense owners keep MP4 partial rounding for row projections and MP4 vocabulary partitions.
-Routed FP32 sums keep the [local expert order](gemm.md#local-expert-sum) in TP4, TEP4, and DEP4.
+`OH_MY_VLLM_DEEPSEEK_BATCH_DECODE=1` selects experimental batched target execution.
+Its default is off.
+The [batched arithmetic contract](gemm.md#batched-target-arithmetic) defines per-request projection and collective rules.
+Full checkpoint, state, capacity, and HTTP acceptance are incomplete for DEP4 and experimental batching.
 
-The physical cache keeps model pages behind the Rust logical block tables.
-It supports prefix reuse, partial block copies, host snapshots, and restoration.
-Accepted-state pages keep target windows, MTP windows, and compressor tails at an exact endpoint.
-Restoration rejects a different endpoint before it clears an active slot.
-FA prefix copies contain only compressed KV, index keys, and Engram history.
+DEP4 keeps each request on its Rust-selected owner rank.
+That owner computes dense layers with full weights and reads full Engram rows from host storage.
+Expert dispatch sends BF16 rows and returns FP32 local sums.
+Ranks with no owned rows also participate in expert exchanges and completion.
+The [DEP4 executor](../../../python/oh_my_vllm/models/deepseek_v41/dep4.py) coordinates target and proposal calls.
 
-DeepSeek uses Eager execution for prefill and draft verification.
-TP4 target decode uses captured CUDA Graphs.
-TEP4 and DEP4 target decode use Eager execution.
+## GPU setup
 
-Verification keeps private state for each possible accepted endpoint before it overwrites recurrent storage.
-Commit publishes only accepted states and scheduled checkpoints.
-Prefill exports known checkpoint states before it releases their hidden rows.
-Verification keeps at most five additional hidden rows for accepted MTP seed state.
-Window storage grows with checkpoint capacity, not with FA token-page capacity.
-
-Native [projection preparation](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py) shares compatible encoded weight storage.
-Packed scales and padded weights keep separate storage.
-The reference path can still use the raw parameters.
-The [quantization contract](quantization.md) defines activation and KV formats, scale rounding, and in-place behavior.
-
-CUDA sequence staging uses demand-mapped storage for compressed KV, index keys, and Engram history.
-Each request slot maps only its active context range.
-The logical tensor address stays fixed during growth.
-Restoration maps the required range before the state copy.
-Slot release waits for device work before it releases physical storage.
-
-CPU reference execution keeps dense tensors.
-Models with mapped storage do not support tensor device or dtype conversion.
-
-Index score tensors use query chunks with a 256 MiB budget.
-This budget excludes inputs, selected results, and native library workspaces.
-FP16/BF16 index rank sums use FP32 and return to the score dtype after the sum.
-Candidate filters keep one boolean per block.
-Consumers expand only the current query chunk to token positions.
-
-Use the [HTTP procedure](performance.md) for the approved 38-case matrix.
-Use the [AgentX procedure](agentx.md) for the three strategy cases.
-The procedures define measurements. They do not add performance gates.
-
-## GPU execution
-
-Use four GPUs that have no locked clock for performance measurements.
-Numerical and state checks can use any four GPUs.
-Set the four GPU UUIDs through the GPU wrapper or the ignored `LOCAL.md` file.
-
-Build the demand-mapped storage module before starting the worker:
+Use the [development setup](../../development.md#native-modules) and [GPU selection rules](../../distributed.md#gpu-leases).
+Build the physical storage module before worker startup:
 
 ```bash
 scripts/with-env.sh scripts/with-gpu.sh python -m development.native_build --module paged
 ```
 
-The default worker context is bounded for functional startup.
-Set `OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT` to the requested physical context before a long-context check.
-The descriptor keeps the released 1048576-token model limit.
-The physical cache setting must cover the requested prompt and output.
+`OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT` sets physical context capacity, with a default of 65536 tokens.
+The descriptor limit is 1048576 tokens.
+Physical capacity must cover the requested prompt and output together.
+The descriptor limit does not prove that this capacity is available.
 
-## State
-
-The Python worker keeps model cache state in rank-local tensors and physical pages.
-Rust logical cache transfers return completion records for the protocol seam.
-DEP4 releases request owners only after all ranks acknowledge completion.
-Cache snapshots keep their owner rank after request release.
-Nonzero multi-token prefill uses the fused chunk path.
-Target and MTP seed chunks keep total native rows below the operator limit.
-
-Short TEP4 evidence does not prove TP4, DEP4, long context, images, Graphs, or SOTA.
-These paths must have separate checks.
+`OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS` sets the total rows in a native prefill chunk.
+The default is 8192, and the maximum is 32768.
+Smaller chunks use less temporary storage.
+The [routed projection wave](gemm.md#routed-prefill-waves) has a separate row setting.

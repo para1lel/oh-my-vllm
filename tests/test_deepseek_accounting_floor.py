@@ -3,12 +3,12 @@ import unittest
 from dataclasses import replace
 from unittest.mock import patch
 
-from development.serving import deepseek_accounting as v31
-from development.serving import deepseek_accounting_v2 as v2
-from development.serving import deepseek_accounting_v4 as acct
+from development.serving import deepseek_accounting as source
+from development.serving import deepseek_accounting_floor as acct
+from development.serving import deepseek_accounting_math as arithmetic
 
 MODEL = replace(
-    v2.DEEPSEEK_V41_MODEL,
+    arithmetic.DEEPSEEK_V41_MODEL,
     num_layers=1,
     compress_ratios=(0,),
     kv_source_layers=(),
@@ -25,7 +25,7 @@ def routed_trace(strategy, *, outputs=2, batch=4, model=MODEL):
         input_tokens=20,
         output_tokens=outputs,
     )
-    trace = v31.ideal_trace(case, model=model)
+    trace = source.ideal_trace(case, model=model)
     for records in _calls(trace):
         if records[0]["phase"] == "prefill":
             continue
@@ -186,7 +186,7 @@ class WholeHttpFloor(unittest.TestCase):
             input_tokens=20,
             output_tokens=7,
         )
-        trace = v31.ideal_trace(case, model=MODEL)
+        trace = source.ideal_trace(case, model=MODEL)
         result = acct.reference_trace(trace, strategy="dep4", model=MODEL)
         self.assertGreater(result.ranks[3].fp8_flops, 0)
         self.assertGreater(result.expert_union_lower[3][0], 0)
@@ -195,13 +195,13 @@ class WholeHttpFloor(unittest.TestCase):
         trace = routed_trace("tp4")
         missing = copy.deepcopy(trace)
         missing["calls"].pop()
-        with self.assertRaises(v31.TraceError):
+        with self.assertRaises(source.TraceError):
             acct.reference_trace(missing, strategy="tp4", model=MODEL)
         repeated = copy.deepcopy(trace)
         for record in copy.deepcopy(trace["calls"][4:]):
             record["call"] += 100
             repeated["calls"].append(record)
-        with self.assertRaises(v31.TraceError):
+        with self.assertRaises(source.TraceError):
             acct.reference_trace(repeated, strategy="tp4", model=MODEL)
 
     def test_empirical_profile_changes_do_not_change_strict_value_or_identity(self):
@@ -209,16 +209,18 @@ class WholeHttpFloor(unittest.TestCase):
         first = acct.reference_trace(trace, strategy="tp4", model=MODEL)
         changed = {
             key: tuple((size, latency * 100) for size, latency in points)
-            for key, points in v2.COLLECTIVE_LATENCY_PROFILE_US.items()
+            for key, points in arithmetic.COLLECTIVE_LATENCY_PROFILE_US.items()
         }
-        with patch.dict(v2.COLLECTIVE_LATENCY_PROFILE_US, changed, clear=True):
-            source = copy.deepcopy(trace)
-            source["binding"]["rate_profile"] = v31.rate_profile_digest()
-            second = acct.reference_trace(source, strategy="tp4", model=MODEL)
+        with patch.dict(arithmetic.COLLECTIVE_LATENCY_PROFILE_US, changed, clear=True):
+            rebound = copy.deepcopy(trace)
+            rebound["binding"]["rate_profile"] = source.rate_profile_digest()
+            second = acct.reference_trace(rebound, strategy="tp4", model=MODEL)
         self.assertEqual(first.seconds, second.seconds)
         self.assertEqual(first.rate_profile, second.rate_profile)
         self.assertEqual(first.assumptions_sha256, second.assumptions_sha256)
-        with patch.object(v2, "collective_latency_seconds", side_effect=AssertionError):
+        with patch.object(
+            arithmetic, "collective_latency_seconds", side_effect=AssertionError
+        ):
             self.assertEqual(
                 acct.reference_trace(trace, strategy="tp4", model=MODEL).seconds,
                 first.seconds,
@@ -233,13 +235,13 @@ class WholeHttpFloor(unittest.TestCase):
         ):
             self.assertNotEqual(acct.rate_profile_digest(MODEL), original)
 
-    def test_legacy_reference_remains_group_dependent_and_unchanged(self):
+    def test_default_reference_depends_on_target_call_groups(self):
         trace = routed_trace("tp4", outputs=2)
         trace["manifest"]["mode"] = "ordinary"
-        trace["binding"]["manifest_sha256"] = v31.digest(trace["manifest"])
+        trace["binding"]["manifest_sha256"] = source.digest(trace["manifest"])
         split = split_decode(trace, "tp4")
-        first = v31.reference_trace(trace, strategy="tp4", model=MODEL)
-        second = v31.reference_trace(split, strategy="tp4", model=MODEL)
+        first = source.reference_trace(trace, strategy="tp4", model=MODEL)
+        second = source.reference_trace(split, strategy="tp4", model=MODEL)
         self.assertEqual(first.version, "deepseek-http-reference-v3.1")
         self.assertGreater(second.seconds, first.seconds)
         self.assertEqual(
@@ -255,7 +257,7 @@ class WholeHttpFloor(unittest.TestCase):
             kv_source_layers=(1,),
             index_source_layers=(1,),
         )
-        layer = v2.layer_table(model)[1]
+        layer = arithmetic.layer_table(model)[1]
         empty, weights, score = acct._index([1], layer, model, "tp4")
         self.assertEqual(
             (empty.fp8_flops, empty.bf16_flops, weights, score), (0, 0, 0, 0)
@@ -269,37 +271,39 @@ class WholeHttpFloor(unittest.TestCase):
     def test_candidate_latest_block_counts_only_its_valid_positions(self):
         counts = [min(index, 16) for index in range(17)] + list(range(9, 17)) + [9]
         total = 0
-        self.assertEqual(acct.candidate_pairs(0, 1, 16), 0)
+        self.assertEqual(arithmetic.candidate_pairs(0, 1, 16), 0)
         for length, expected in enumerate(counts[1:], start=1):
-            actual = acct.candidate_pairs(length, 1, 16)
+            actual = arithmetic.candidate_pairs(length, 1, 16)
             self.assertEqual(actual - total, expected)
             total = actual
-        boundary = acct.candidate_pairs(16385, 1, 16384)
-        previous = acct.candidate_pairs(16384, 1, 16384)
+        boundary = arithmetic.candidate_pairs(16385, 1, 16384)
+        previous = arithmetic.candidate_pairs(16384, 1, 16384)
         self.assertEqual(boundary - previous, 16377)
         self.assertEqual((16384 - 16377) * 2 * 32 * 128, 57344)
         self.assertEqual(
-            acct.candidate_pairs(34, 2, 16) - acct.candidate_pairs(33, 2, 16),
+            arithmetic.candidate_pairs(34, 2, 16)
+            - arithmetic.candidate_pairs(33, 2, 16),
             9,
         )
         self.assertEqual(
-            acct.candidate_pairs(35, 2, 16) - acct.candidate_pairs(34, 2, 16),
+            arithmetic.candidate_pairs(35, 2, 16)
+            - arithmetic.candidate_pairs(34, 2, 16),
             9,
         )
 
     def test_full_model_v31_literal_counterexample_numbers_remain_reproducible(self):
-        model = v2.DEEPSEEK_V41_MODEL
+        model = arithmetic.DEEPSEEK_V41_MODEL
         trace = routed_trace("tp4", outputs=2, model=model)
         trace["manifest"]["mode"] = "ordinary"
-        trace["binding"]["manifest_sha256"] = v31.digest(trace["manifest"])
+        trace["binding"]["manifest_sha256"] = source.digest(trace["manifest"])
         split = split_decode(trace, "tp4", model)
         self.assertAlmostEqual(
-            v31.reference_trace(trace, strategy="tp4").seconds,
+            source.reference_trace(trace, strategy="tp4").seconds,
             0.009802319330475422,
             places=15,
         )
         self.assertAlmostEqual(
-            v31.reference_trace(split, strategy="tp4").seconds,
+            source.reference_trace(split, strategy="tp4").seconds,
             0.01924492533442352,
             places=15,
         )

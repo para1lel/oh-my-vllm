@@ -42,21 +42,15 @@ _TORCH_TO_NATIVE_DTYPE = {
 }
 
 
-def _check_tensor(value, require_contiguous=True):
+def native_tensor(value, *, require_contiguous=True):
     if isinstance(value, tvm_ffi.Tensor):
-        return
+        return value
     if not isinstance(value, torch.Tensor):
         raise TypeError("expected a torch.Tensor")
     if value.device.type not in ("cpu", "cuda"):
         raise ValueError(f"unsupported tensor device: {value.device}")
     if require_contiguous and not value.is_contiguous():
         raise ValueError("native tensor conversion requires a contiguous tensor")
-
-
-def native_tensor(value, *, require_contiguous=True):
-    _check_tensor(value, require_contiguous)
-    if isinstance(value, tvm_ffi.Tensor):
-        return value
     return tvm_ffi.from_dlpack(value, require_contiguous=require_contiguous)
 
 
@@ -111,16 +105,12 @@ def _native_dtype(dtype):
         raise ValueError(f"unsupported native dtype: {dtype}") from error
 
 
-def _native_shape(shape):
-    return tvm_ffi.Shape(tuple(shape))
-
-
 def _native_empty(shape, dtype, device):
     device = torch.device(device)
     if device.type != "cuda":
         raise ValueError(f"native allocation requires a CUDA device: {device}")
     native = _device_module().allocate(
-        _native_shape(shape), _native_dtype(dtype), device.index or 0
+        native_shape(shape), _native_dtype(dtype), device.index or 0
     )
     return torch_tensor(native)
 
@@ -131,13 +121,13 @@ def _native_scratch(shape, dtype, device):
         raise ValueError(f"native allocation requires a CUDA device: {device}")
     with use_stream(device, torch.cuda.current_stream(device)):
         native = _device_module().allocate_scratch(
-            _native_shape(shape), _native_dtype(dtype), device.index or 0
+            native_shape(shape), _native_dtype(dtype), device.index or 0
         )
         return torch_tensor(native)
 
 
 def _native_view(source, shape, offset=0):
-    native = _device_module().view(native_tensor(source), _native_shape(shape), offset)
+    native = _device_module().view(native_tensor(source), native_shape(shape), offset)
     return torch_tensor(native)
 
 

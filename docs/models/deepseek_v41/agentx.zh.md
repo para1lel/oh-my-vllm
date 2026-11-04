@@ -48,36 +48,4 @@ runner 记录 source, executable, native module, checkpoint, tokenizer, topology
 raw harness record 和 service log 保留在 repository 外.
 CSV 和暗色背景散点图是 approved result artifact.
 
-## 功能性记录
-
-最新功能性记录在 GPU 1, 2, 3 和 4 上使用 TEP4 和 16 个 session tree.
-它使用 `max_num_seqs=1`, 以适配可用 device memory 中的 model 和 cache.
-
-| Setting | Value |
-|---|---:|
-| AgentX version | `1.0.7` |
-| Profiling duration | 900 秒 |
-| Cache context | 65536 token |
-| GPU blocks | 512 |
-| Mamba blocks | 64 |
-| Maximum batched tokens | 16384 |
-| Warmup requests | 16 |
-| Profiling requests sent | 14 |
-| Completed requests | 2 |
-| Failed requests | 0 |
-| Cancelled requests | 12 |
-| Unaccounted requests | 0 |
-| Drain duration | 120 秒 |
-| Drain timeout | 是 |
-
-[functional CSV](assets/agentx-tep4-16-functional.csv) 和
-[functional dark scatter plot](assets/agentx-tep4-16-functional.png) 记录这次 run.
-这两个 completed row 证明 end-to-end service execution 和 artifact export.
-由于 service 使用一个 resident sequence, 它们不代表 concurrency 16 下的 TEP4 throughput.
-harness phase counter 包含 drain timeout 后取消的 12 个 request.
-raw request export 不包含这些 cancelled request.
-因此, 只根据 raw request record 得到的 count 不完整.
-
-当前 DEP4 command 使用 request ownership 和 expert dispatch.
-以上 functional record 使用较早的实现. 它不能证明 DEP4 已验收.
-当前还没有记录完整的 approved AgentX result set.
+当前没有记录完整的批准 AgentX 结果集.

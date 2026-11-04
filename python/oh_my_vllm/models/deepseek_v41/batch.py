@@ -89,9 +89,6 @@ def target_decode_batch(
         raise ValueError(
             "decode requests need the same context bucket and compressor branch"
         )
-    for name in ("decode_bindings", "decode_engram", "decode_graphs"):
-        if not hasattr(worker, name):
-            setattr(worker, name, {})
     slots = tuple(slots)
     binding_key = ("batch", slots, length)
     bindings = worker.decode_bindings.get(binding_key)
@@ -125,8 +122,8 @@ def target_decode_batch(
         stage = EngramStage(worker.model, len(slots), length=length)
         worker.decode_engram[binding_key] = stage
     engram_values = stage.stage(bindings, start_pos)
-    tracing = getattr(worker, "routing_trace_enabled", False)
-    collect_hidden = getattr(worker, "dspark", False)
+    tracing = worker.routing_trace_enabled
+    collect_hidden = worker.dspark
     key = (
         "batch",
         slots,
@@ -141,7 +138,7 @@ def target_decode_batch(
     )
     graph = worker.decode_graphs.get(key)
     enabled = (
-        getattr(worker, "decode_graph_enabled", False)
+        worker.decode_graph_enabled
         and bindings.storage.is_cuda
         and native_sparse_graph_eligible(worker.model)
     )
@@ -175,7 +172,7 @@ def target_decode_batch(
         )
         capture_decode_graph(graph, worker.rank)
         worker.decode_graphs[key] = graph
-    worker.target_call = getattr(worker, "target_call", 0) + 1
+    worker.target_call += 1
     if graph is not None and enabled:
         graph.replay()
         call = target_call_id(worker, worker.target_call)
@@ -236,14 +233,13 @@ def execute_decode_group(
                 raise ValueError(
                     "batched decode requires one accepted input and at most five drafts"
                 )
-            if hasattr(worker, "cache"):
-                worker.cache.begin_step(
-                    row,
-                    slot,
-                    start_pos=start,
-                    end_pos=start + len(tokens),
-                    minimum_end=start + 1,
-                )
+            worker.cache.begin_step(
+                row,
+                slot,
+                start_pos=start,
+                end_pos=start + len(tokens),
+                minimum_end=start + 1,
+            )
         result = target_decode_batch(
             worker,
             [item[3] for item in prepared],
@@ -277,23 +273,22 @@ def execute_decode_group(
             proposals = worker._next_proposals(
                 request, tokens, hidden, accepted_end, slot
             )
-            if hasattr(worker, "cache"):
-                worker.cache.commit(
+            worker.cache.commit(
+                row["request_id"],
+                row,
+                slot,
+                start_pos=start_pos,
+                accepted_end=accepted_end,
+                include_mtp=mtp_updated,
+            )
+            if drafts:
+                worker.cache.restore(
                     row["request_id"],
-                    row,
                     slot,
-                    start_pos=start_pos,
-                    accepted_end=accepted_end,
-                    include_mtp=mtp_updated,
+                    row,
+                    start_pos=accepted_end,
+                    use_prefix_state=False,
                 )
-                if drafts:
-                    worker.cache.restore(
-                        row["request_id"],
-                        slot,
-                        row,
-                        start_pos=accepted_end,
-                        use_prefix_state=False,
-                    )
             request.state_position = accepted_end
             outputs[row["request_id"]] = worker._output(
                 request, row, tokens, text, accepted, proposals
@@ -312,7 +307,7 @@ def execute_decode_group(
         worker._target_execution = result.execution
         worker.trace.record(
             "target",
-            rank=getattr(worker, "rank", 0),
+            rank=worker.rank,
             verify=len(prepared[0][3]) > 1,
             accepted=sum(item["accepted"] for item in request_rows),
             proposed=sum(item["proposed"] for item in request_rows),

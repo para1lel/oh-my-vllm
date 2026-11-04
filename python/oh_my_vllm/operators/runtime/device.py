@@ -1,12 +1,10 @@
 import ctypes
 import os
 from contextlib import ExitStack, contextmanager
-from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 import torch
-import tvm_ffi
 
 from . import torch_adapter
 from .native import load
@@ -27,11 +25,6 @@ FUNCTIONS = (
     "allocated_bytes",
     "reserved_bytes",
 )
-
-
-@lru_cache(maxsize=128)
-def tensor_shape(dimensions):
-    return tvm_ffi.Shape(dimensions)
 
 
 def torch_dtype(dtype):
@@ -200,37 +193,25 @@ class Device:
             raise error
         return error
 
-    def _check_graph_health(self):
-        if getattr(self, "graph_failed", False):
+    def ensure_healthy(self):
+        if self.graph_failed:
             raise RuntimeError("CUDA Graph device is unusable after cleanup failure")
 
-    def ensure_healthy(self):
-        self._check_graph_health()
-
-    def _capture_stream(self):
-        stream = getattr(self, "capture_stream", None)
-        if stream is None:
-            stream = torch.cuda.Stream(device="cuda:0")
-            self.capture_stream = stream
-        return stream
-
     def capture(self, operation):
-        self._check_graph_health()
+        self.ensure_healthy()
         if torch.cuda.is_current_stream_capturing():
             raise RuntimeError("caller stream is already capturing")
         self.wait_pinned_safe()
-        stream = self._capture_stream()
+        if self.capture_stream is None:
+            self.capture_stream = torch.cuda.Stream(device="cuda:0")
+        stream = self.capture_stream
         graph = torch.cuda.CUDAGraph()
         pool = torch.cuda.graph_pool_handle()
-        try:
-            with (
-                torch_adapter.use_stream("cuda:0", stream),
-                torch.cuda.graph(graph, pool=pool, stream=stream),
-            ):
-                operation()
-        except BaseException:
-            self.graph_failed = False
-            raise
+        with (
+            torch_adapter.use_stream("cuda:0", stream),
+            torch.cuda.graph(graph, pool=pool, stream=stream),
+        ):
+            operation()
         return graph
 
     def release_graph(self, graph, resources=None):
@@ -256,7 +237,7 @@ class Device:
             active = True
 
             def replay():
-                self._check_graph_health()
+                self.ensure_healthy()
                 if not active:
                     raise RuntimeError("CUDA Graph is closed")
                 stream = torch.cuda.current_stream()

@@ -4,8 +4,8 @@ from dataclasses import asdict, dataclass, replace
 from types import MappingProxyType
 
 from . import deepseek_accounting as source
-from . import deepseek_accounting_v2 as arithmetic
-from . import deepseek_accounting_v4 as floor
+from . import deepseek_accounting_floor as floor
+from . import deepseek_accounting_math as arithmetic
 
 VERSION = "deepseek-http-protocol-estimate-v5"
 ASSUMPTIONS = MappingProxyType(
@@ -164,9 +164,9 @@ def call_groups(records, *, strategy, model=arithmetic.DEEPSEEK_V41_MODEL):
             [count * model.hidden_size * 2 for count in counts],
         )
     for layer in arithmetic.layer_table(model):
-        one = source._one_layer(model, layer)
+        one = arithmetic.layer_model(model, layer)
         local = [
-            dict(source._local_groups(count, one, strategy, True)) if count else {}
+            dict(arithmetic.local_work(count, one, strategy, True)) if count else {}
             for count in counts
         ]
         for operation in ("hyper_connection", "attention_input", "compressor"):
@@ -196,19 +196,19 @@ def call_groups(records, *, strategy, model=arithmetic.DEEPSEEK_V41_MODEL):
                     else 0
                 )
                 projections.append(
-                    source._index_projection(
+                    arithmetic.index_projection_work(
                         counts[rank], new_keys, one, strategy, True
                     )
                     if counts[rank]
                     else arithmetic.Work()
                 )
                 pairs = sum(
-                    floor.candidate_pairs(
+                    arithmetic.candidate_pairs(
                         row["start"] + row["count"],
                         layer.compress_ratio,
                         model.candidate_positions,
                     )
-                    - floor.candidate_pairs(
+                    - arithmetic.candidate_pairs(
                         row["start"], layer.compress_ratio, model.candidate_positions
                     )
                     if layer.uses_candidate_mask
@@ -353,7 +353,7 @@ def call_groups(records, *, strategy, model=arithmetic.DEEPSEEK_V41_MODEL):
         append(
             f"{layer.layer_id}.engram.lookup",
             [
-                source.engram_alternatives(records, layer, model)[0][rank][0].work
+                arithmetic.engram_lookup_work(counts[rank], layer, model)
                 for rank in range(4)
             ],
         )
@@ -386,9 +386,10 @@ def call_groups(records, *, strategy, model=arithmetic.DEEPSEEK_V41_MODEL):
 def reference_trace(
     trace, *, strategy, expected_binding=None, model=arithmetic.DEEPSEEK_V41_MODEL
 ):
-    calls = source.validate_trace(
+    target = source.validate_trace(
         trace, strategy=strategy, model=model, expected_binding=expected_binding
     )
+    calls = target.calls
     totals = [arithmetic.Work() for _ in range(4)]
     sent = [0] * 4
     received = [0] * 4
@@ -398,7 +399,7 @@ def reference_trace(
     protocol_serial = 0.0
     for records in calls:
         ranks, directions, unique = call_groups(records, strategy=strategy, model=model)
-        protocol_serial += source.critical_seconds(ranks).seconds
+        protocol_serial += arithmetic.critical_seconds(ranks).seconds
         credited = [
             [
                 group
@@ -419,7 +420,7 @@ def reference_trace(
             totals[rank] = arithmetic.add_work(
                 totals[rank],
                 *(
-                    source.scale_accumulation_work(group.work)
+                    arithmetic.scale_accumulation_work(group.work)
                     for group in credited[rank]
                 ),
             )
@@ -433,9 +434,7 @@ def reference_trace(
                     (".dispatch.counts", ".dispatch.routing_metadata")
                 )
             )
-    partial = floor.reference_trace(
-        trace, strategy=strategy, model=model, expected_binding=expected_binding
-    )
+    partial = floor.reference_resources(target, model=model)
     return ReferenceResult(
         VERSION,
         sum(seconds),

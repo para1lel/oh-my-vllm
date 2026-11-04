@@ -31,8 +31,6 @@ Each case uses its own measured trace and acceptance counts.
 Accepted/proposed gives the sum of draft token counts for that row's measured requests.
 Ordinary decode has no draft acceptance ratio.
 
-The report gives no speedup estimate with earlier accounting versions or individual development points.
-
 ## HTTP measurements
 
 | Mode | Batch | Input tokens | Output tokens | Requests | Full HTTP s | Reference s | Efficiency | Accepted/proposed |

@@ -17,7 +17,7 @@ from oh_my_vllm.models.deepseek_v41.trace import (
     target_call_id,
 )
 
-from tests.test_deepseek_speculation import _chain_row, _chain_worker
+from tests.test_deepseek_speculation import _chain_row, _chain_worker, _worker
 
 
 class DeepSeekTrace(unittest.TestCase):
@@ -277,9 +277,7 @@ class DeepSeekTrace(unittest.TestCase):
         self.assertIsNone(TargetTrace.for_requests(worker, [(1, 3)]))
 
     def test_verification_is_one_call_with_a_small_prefill_limit(self):
-        from oh_my_vllm.models.deepseek_v41.inference import Worker
-
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.rank, worker.strategy, worker.device = 0, "tp4", torch.device("cpu")
         worker.prefill_rows = 2
         worker.routing_trace_enabled = True
@@ -341,9 +339,7 @@ class DeepSeekTrace(unittest.TestCase):
         self.assertEqual(replay["expert_assignments"], [[0, 0, 0, 0]])
 
     def test_default_aligned_decode_keeps_the_existing_prefill_group(self):
-        from oh_my_vllm.models.deepseek_v41.inference import Worker
-
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.batch_decode_enabled = False
         worker.requests = {
             key: SimpleNamespace(

@@ -251,17 +251,4 @@ step boundary 检查一次累积的 status, 并在 worker 提交 cache state 之
 CUDA case 检查 stream order, invalid metadata, empty history 和 temporary storage bound.
 这些检查不能替代独立的 full-model endpoint fixture, 或批准的 HTTP 和 AgentX workload.
 
-## Reference 执行
-
-使用隔离的 development environment 执行发布的 TileLang reference.
-不要将 TileLang 加入 inference dependency.
-对于此 quantizer source, TileLang 0.1.8 可能在所有 input store 完成前复用 input shared storage.
-在 reference 副本中, 每个 quantizer 写入 output shared storage 前都要使用 CUDA block barrier.
-在 `act_quant_kernel` 和 `fp4_quant_kernel` 中, 紧接 `T.copy(y_local, y_shared)` 之前加入 `T.sync_threads()`.
-不要改变 equation, cast 或原始 checkpoint file.
-
-在每个 reference manifest 中记录 original source, patch, modified source, compiler 和 runtime identity.
-生成 expected array 前, 使用 Compute Sanitizer Racecheck 检查 packed 和 in-place format.
-除非重复执行的 target 和 DSpark endpoint 逐位一致, 否则不要冻结 array.
-将此 backend 标识为带 synchronization patch 的 reference, 而不是未修改的发布版本.
-不要导入 candidate module 来生成 expected array.
+[数值验收指南](evaluation.zh.md)规定独立 fixture, 冻结限制和参考生成.

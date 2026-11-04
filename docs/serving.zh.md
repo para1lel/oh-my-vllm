@@ -6,9 +6,6 @@ Worker 加载本地 checkpoint, 使用仓库内的 CUDA 模块.
 ## 启动
 
 使用[开发环境](development.zh.md).
-`requirements/runtime.txt` 提供 service 和推理包.
-`requirements/development.txt` 包含 runtime 文件.
-一次 development 安装即可.
 
 构建可执行文件:
 

@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 
 from . import deepseek_accounting as source
-from . import deepseek_accounting_v5 as packed
+from . import deepseek_accounting_packed as packed
 from .deepseek_benchmark import reference_configuration, runtime_reference
 from .deepseek_matrix import HTTP_CASES, case_id
 from .deepseek_runtime_trace import request_owners, response_manifest

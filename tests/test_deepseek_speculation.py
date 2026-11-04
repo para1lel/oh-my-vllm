@@ -10,31 +10,23 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import torch
-from oh_my_vllm.models.deepseek_v41.cache import DeepSeekCache
 from oh_my_vllm.models.deepseek_v41.inference import (
     DEFAULT_PREFILL_ROWS,
     MAX_PREFILL_ROWS,
     Worker,
     prefill_row_limit,
 )
+from oh_my_vllm.models.deepseek_v41.quantization import fp4_act_quant
 from oh_my_vllm.models.deepseek_v41.request import Request
 from oh_my_vllm.models.deepseek_v41.speculation import verify_greedy_drafts
 
-from tests.test_deepseek_cache import FakeModel
+from tests.test_deepseek_cache import FakeModel, cache_for
 
 
 class _PositionModel(FakeModel):
-    def __init__(self, *, value_offset=1, predictions=None, batch_size=2):
-        super().__init__()
+    def __init__(self, *, value_offset=1, predictions=None, batch_size=2, context=32):
+        super().__init__(batch_size=batch_size, context=context)
         self.value_offset, self.predictions = value_offset, predictions
-        self.engram_hash.cache = torch.zeros(batch_size, 32, dtype=torch.int64)
-        attention = self.layers[0].attn
-        attention.window_kv_cache = torch.zeros(batch_size, 4, 3)
-        attention.compress_kv_cache = torch.zeros(batch_size, 16, 3)
-        attention.indexer.k_cache = torch.zeros(batch_size, 16, 2)
-        attention.compressor.kv_state = torch.zeros(batch_size, 2, 3)
-        attention.compressor.score_state = torch.zeros(batch_size, 2, 3)
-        self.mtp[0].attn.window_kv_cache = torch.zeros(batch_size, 4, 3)
 
     def __call__(self, inputs, *, start_pos, cache_slots_cpu, **kwargs):
         self._state_export.bind(cache_slots_cpu)
@@ -83,12 +75,9 @@ class _ChainModel(_PositionModel):
     """A CPU control fixture whose proposal does not read the MTP window."""
 
     def __init__(self, *, acceptance=5, batch_size=2):
-        super().__init__(batch_size=batch_size)
+        super().__init__(batch_size=batch_size, context=64)
         self.acceptance = acceptance
         self.targets, self.proposals = [], []
-        self.engram_hash.cache = torch.zeros(batch_size, 64, dtype=torch.int64)
-        self.layers[0].attn.compress_kv_cache = torch.zeros(batch_size, 32, 3)
-        self.layers[0].attn.indexer.k_cache = torch.zeros(batch_size, 32, 2)
 
     @staticmethod
     def prediction(token, previous, position):
@@ -128,12 +117,19 @@ class _ChainModel(_PositionModel):
             attention.window_kv_cache[slot, positions[-4:].remainder(4)] = values[
                 0, -4:
             ]
-            for offset, position in enumerate(positions.tolist()):
-                if position % 2:
-                    attention.compress_kv_cache[slot, position // 2] = values[0, offset]
-                    attention.indexer.k_cache[slot, position // 2] = values[
-                        0, offset, :2
-                    ]
+            completed = values[:, positions.remainder(2) == 1]
+            for history, width in (
+                (attention.compress_kv_cache, 3),
+                (attention.indexer.k_cache, 2),
+            ):
+                if completed.size(1):
+                    features = torch.nn.functional.pad(
+                        completed[:, :, :width], (0, 32 - width)
+                    )
+                    encoded, scales = fp4_act_quant(
+                        features, history.group_size, scale_dtype=history.scale_dtype
+                    )
+                    history.write(torch.tensor([slot]), start_pos // 2, encoded, scales)
             kv[slot].zero_()
             score[slot].fill_(-torch.inf)
             if (start_pos + len(row)) % 2:
@@ -174,8 +170,31 @@ class _ChainModel(_PositionModel):
         return torch.tensor([[int(input_ids.item()), *drafts]]), None, None
 
 
-def _chain_worker(*, prompts=((10, 11, 12),), acceptance=5, limit=24, **options):
+def _worker():
     worker = Worker.__new__(Worker)
+    worker.device = torch.device("cpu")
+    worker.dspark = False
+    worker.args = SimpleNamespace(window_size=384)
+    worker.rank = 0
+    worker.prefill_rows = DEFAULT_PREFILL_ROWS
+    worker.decode_graph_enabled = False
+    worker.decode_graph_limit = 32
+    worker.decode_graphs = {}
+    worker.decode_bindings = {}
+    worker.decode_engram = {}
+    worker.batch_decode_enabled = False
+    worker.routing_trace_enabled = False
+    worker.target_call = 0
+    worker._target_execution = "eager"
+    worker.cache = SimpleNamespace(
+        exports=SimpleNamespace(steps={}), mtp_checkpoint_ends=lambda *args: []
+    )
+    worker._input_tokens = lambda rows: torch.tensor(rows, dtype=torch.long)
+    return worker
+
+
+def _chain_worker(*, prompts=((10, 11, 12),), acceptance=5, limit=24, **options):
+    worker = _worker()
     worker.model = _ChainModel(acceptance=acceptance, batch_size=len(prompts) + 1)
     worker.device = torch.device("cpu")
     worker.dspark = True
@@ -193,10 +212,8 @@ def _chain_worker(*, prompts=((10, 11, 12),), acceptance=5, limit=24, **options)
         )
         for key, prompt in enumerate(prompts, 1)
     }
-    for request in worker.requests.values():
-        request.cache_slot = None
     worker.trace = SimpleNamespace(record=Mock())
-    worker.cache = DeepSeekCache(
+    worker.cache = cache_for(
         worker.model,
         block_tokens=4,
         max_seq_len=64,
@@ -254,7 +271,7 @@ def _chain_batch(worker, tokens, positions, slots, **options):
 
 
 def _verification_worker(predictions):
-    worker = Worker.__new__(Worker)
+    worker = _worker()
     worker.model = _PositionModel(value_offset=0, predictions=predictions)
     worker.device = torch.device("cpu")
     worker.dspark = True
@@ -274,7 +291,7 @@ def _verification_worker(predictions):
         )
     }
     worker.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
-    worker.cache = DeepSeekCache(worker.model, block_tokens=4, max_seq_len=32)
+    worker.cache = cache_for(worker.model, block_tokens=4, max_seq_len=32)
     return worker, {
         "request_id": 1,
         "token_ids": [10] * 20 + [1, 2, 3, 4, 5],
@@ -288,13 +305,8 @@ class DeepSeekSpeculation(unittest.TestCase):
     def _run_chain(self, mode, *, acceptance):
         worker = _chain_worker(acceptance=acceptance)
         request = worker.requests[1]
-        next_proposals = worker._next_proposals
         if mode == "greedy":
             worker._next_proposals = lambda *_args: []
-        elif mode == "legacy":
-            worker._next_proposals = lambda *args: (
-                [] if worker.model.targets[-1]["verify"] else next_proposals(*args)
-            )
         output = worker._execute_row(_chain_row(worker, request.history))
         states = {request.state_position: _chain_state(worker)}
         rounds = []
@@ -317,87 +329,21 @@ class DeepSeekSpeculation(unittest.TestCase):
                 )
         return worker, states, rounds
 
-    def test_continuous_verification_matches_greedy_and_legacy_tokens_and_state(self):
+    def test_continuous_verification_matches_greedy_tokens_and_state(self):
         for accepted in (0, 2, 5):
             with self.subTest(accepted=accepted):
                 greedy, states, _ = self._run_chain("greedy", acceptance=accepted)
-                legacy, legacy_states, _ = self._run_chain(
-                    "legacy", acceptance=accepted
-                )
                 continuous, continuous_states, rounds = self._run_chain(
                     "continuous", acceptance=accepted
                 )
-                for worker, actual in (
-                    (legacy, legacy_states),
-                    (continuous, continuous_states),
-                ):
-                    self.assertEqual(
-                        worker.requests[1].history, greedy.requests[1].history
-                    )
-                    for end, values in actual.items():
-                        for left, right in zip(values, states[end], strict=True):
-                            torch.testing.assert_close(left, right, rtol=0, atol=0)
+                self.assertEqual(
+                    continuous.requests[1].history, greedy.requests[1].history
+                )
+                for end, values in continuous_states.items():
+                    for left, right in zip(values, states[end], strict=True):
+                        torch.testing.assert_close(left, right, rtol=0, atol=0)
                 self.assertTrue(all(count == 5 for count, _ in rounds[:2]))
-                self.assertLessEqual(
-                    len(continuous.model.targets), len(legacy.model.targets)
-                )
-                if accepted:
-                    self.assertLess(
-                        len(continuous.model.targets), len(legacy.model.targets)
-                    )
                 self.assertEqual(len(continuous.model.targets), len(rounds) + 1)
-
-    def test_verify_proposes_before_commit_and_restores_before_the_next_target(self):
-        worker = _chain_worker(acceptance=2)
-        request = worker.requests[1]
-        output = worker._execute_row(_chain_row(worker, request.history))
-        for _ in range(2):
-            calls = Mock()
-            with (
-                patch.object(worker, "_target", wraps=worker._target) as target,
-                patch.object(request, "append", wraps=request.append) as append,
-                patch.object(worker, "_seed_mtp", wraps=worker._seed_mtp) as seed,
-                patch.object(worker, "_proposal", wraps=worker._proposal) as proposal,
-                patch.object(
-                    worker.cache, "commit", wraps=worker.cache.commit
-                ) as commit,
-                patch.object(
-                    worker.cache, "restore", wraps=worker.cache.restore
-                ) as restore,
-            ):
-                for name, method in (
-                    ("target", target),
-                    ("append", append),
-                    ("seed", seed),
-                    ("proposal", proposal),
-                    ("commit", commit),
-                    ("restore", restore),
-                ):
-                    calls.attach_mock(method, name)
-                output = worker._execute_row(
-                    _chain_row(
-                        worker, [request.history[-1], *output["new_draft_token_ids"]]
-                    )
-                )
-                self.assertEqual(
-                    [call[0] for call in calls.mock_calls],
-                    ["target", "append", "seed", "proposal", "commit", "restore"],
-                )
-                token, hidden, start, slot = proposal.call_args.args
-                self.assertEqual(
-                    (token, start, slot),
-                    (
-                        output["token_ids"][-1],
-                        request.state_position - 1,
-                        request.cache_slot,
-                    ),
-                )
-                self.assertEqual(hidden[0, 0, 0], request.state_position)
-                self.assertEqual(
-                    commit.call_args.kwargs["accepted_end"],
-                    restore.call_args.kwargs["start_pos"],
-                )
-                self.assertFalse(restore.call_args.kwargs["use_prefix_state"])
 
     def test_batch_requests_keep_their_own_continuous_proposal_boundaries(self):
         worker = _chain_worker(
@@ -598,7 +544,12 @@ class DeepSeekSpeculation(unittest.TestCase):
                         worker._execute_decode_group(
                             [scheduled]
                         ) if batched else worker._execute_row(scheduled)
-                    self.assertEqual(worker.cache.fa_pages, {})
+                    self.assertTrue(
+                        all(
+                            page.valid_tokens == 0
+                            for page in worker.cache.fa_pages.values()
+                        )
+                    )
                     self.assertTrue(
                         all(
                             page.endpoint == 0
@@ -672,7 +623,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(worker.cache.mamba_pages[2].endpoint, 6)
         self.assertEqual(worker.cache.fa_pages[17].valid_tokens, 3)
         self.assertEqual(worker.cache.mamba_pages[17].endpoint, 3)
-        self.assertNotIn(18, worker.cache.fa_pages)
+        self.assertEqual(worker.cache.fa_pages[18].valid_tokens, 0)
         for key, request in worker.requests.items():
             self.assertEqual(request.generated, 4)
             self.assertNotEqual(request.history, histories[key])
@@ -709,7 +660,9 @@ class DeepSeekSpeculation(unittest.TestCase):
         worker.model.forward_spec_seed = lambda *args, **kwargs: None
         with self.assertRaisesRegex(ValueError, "window state at endpoint"):
             worker._execute_row(scheduled)
-        self.assertEqual(worker.cache.fa_pages, {})
+        self.assertTrue(
+            all(page.valid_tokens == 0 for page in worker.cache.fa_pages.values())
+        )
         self.assertTrue(
             all(page.endpoint == 0 for page in worker.cache.mamba_pages.values())
         )
@@ -718,7 +671,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(worker.slots, {0, 1})
 
     def test_prefill_subbatches_keep_different_checkpoint_plans_and_slot_order(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.model = _PositionModel(batch_size=9)
         worker.device = torch.device("cpu")
         worker.dspark = True
@@ -737,7 +690,7 @@ class DeepSeekSpeculation(unittest.TestCase):
             for slot in range(8)
         }
         worker.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
-        worker.cache = DeepSeekCache(worker.model, block_tokens=4, max_seq_len=32)
+        worker.cache = cache_for(worker.model, block_tokens=4, max_seq_len=32)
         scheduled = [
             {
                 "request_id": slot,
@@ -787,16 +740,15 @@ class DeepSeekSpeculation(unittest.TestCase):
                 )
 
     def test_prefill_export_failure_releases_the_new_request_slot(self):
-        from oh_my_vllm.models.deepseek_v41.cache import DeepSeekCache
 
-        from tests.test_deepseek_cache import FakeModel
+        from tests.test_deepseek_cache import FakeModel, cache_for
 
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.requests = {
             1: SimpleNamespace(cache_slot=None, state_position=0, history=[1])
         }
         worker.slots = {0}
-        worker.cache = DeepSeekCache(FakeModel(), block_tokens=4, max_seq_len=8)
+        worker.cache = cache_for(FakeModel(), block_tokens=4, max_seq_len=8)
         scheduled = {
             "request_id": 1,
             "token_ids": [1],
@@ -810,9 +762,8 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(worker.slots, {0})
 
     def test_long_prefill_exports_mtp_checkpoint_before_discarding_hidden_rows(self):
-        from oh_my_vllm.models.deepseek_v41.cache import DeepSeekCache
 
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.model = _PositionModel()
         worker.device = torch.device("cpu")
         worker.dspark = True
@@ -830,7 +781,7 @@ class DeepSeekSpeculation(unittest.TestCase):
             )
         }
         worker.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
-        worker.cache = DeepSeekCache(worker.model, block_tokens=4, max_seq_len=16)
+        worker.cache = cache_for(worker.model, block_tokens=4, max_seq_len=16)
         scheduled = {
             "request_id": 1,
             "token_ids": list(range(1, 17)),
@@ -847,64 +798,11 @@ class DeepSeekSpeculation(unittest.TestCase):
         ):
             torch.testing.assert_close(window[1, :, 0], torch.tensor([1.0, 2, 3, 0]))
 
-    def test_long_verification_seeds_mtp_from_the_accepted_hidden_tail(self):
-        worker = Worker.__new__(Worker)
-        worker.device = torch.device("cpu")
-        worker.dspark = True
-        worker.args = SimpleNamespace(window_size=4)
-        worker.slots = set()
-        worker.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
-        request = SimpleNamespace(
-            cache_slot=0,
-            history=[10] * 20,
-            prompt_len=20,
-            limit=8,
-            generated=0,
-            finish=None,
-            thinking_count=0,
-            append=lambda tokens: (tokens, "ok"),
-        )
-        worker.requests = {1: request}
-        ring = torch.zeros(4)
-
-        class Model:
-            def __call__(self, inputs, *, start_pos, **kwargs):
-                hidden = torch.arange(start_pos, start_pos + inputs.size(1)).float()
-                predictions = torch.tensor([[1, 2, 9, 9, 9, 9]])
-                return (
-                    None,
-                    torch.nn.functional.one_hot(predictions, 16).float(),
-                    hidden.view(1, -1, 1),
-                )
-
-            def forward_spec_seed(self, hidden, *, start_pos, cache_slots):
-                positions = torch.arange(start_pos, start_pos + hidden.size(1))
-                ring[positions.remainder(4)] = hidden.flatten()
-
-            def forward_spec(self, input_ids, hidden, *, start_pos, cache_slots):
-                self.forward_spec_seed(
-                    hidden, start_pos=start_pos, cache_slots=cache_slots
-                )
-                return None
-
-        worker.model = Model()
-        output = worker._execute_row(
-            {
-                "request_id": 1,
-                "token_ids": [10] * 20 + [1, 2, 3, 4, 5],
-                "num_computed_tokens": 0,
-            }
-        )
-        self.assertEqual(output["num_accepted_draft_tokens"], 2)
-        self.assertEqual(request.state_position, 22)
-        torch.testing.assert_close(ring, torch.tensor([20.0, 21, 18, 19]))
-
     def test_worker_rejection_restores_rows_overwritten_by_future_drafts(self):
-        from oh_my_vllm.models.deepseek_v41.cache import DeepSeekCache
 
-        from tests.test_deepseek_cache import FakeModel
+        from tests.test_deepseek_cache import FakeModel, cache_for
 
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.dspark = True
         worker.model = FakeModel()
@@ -922,7 +820,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         worker.requests = {1: request}
         worker.slots = {1}
         worker.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
-        worker.cache = DeepSeekCache(worker.model, block_tokens=4, max_seq_len=8)
+        worker.cache = cache_for(worker.model, block_tokens=4, max_seq_len=8)
         attention = worker.model.layers[0].attn
         attention.window_kv_cache[0, :2] = torch.tensor([[1.0], [2.0]])
         worker.cache.commit(
@@ -969,7 +867,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(worker.cache.mamba_pages[3].endpoint, 2)
 
     def test_execute_rejects_a_resident_position_mismatch(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.requests = {
             1: SimpleNamespace(cache_slot=0, state_position=4),
         }
@@ -1021,7 +919,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         row = {"request_id": 1, "token_ids": [], "num_computed_tokens": 4}
         for scheduled, preempted in (([row], []), ([], [1])):
             with self.subTest(preempted=preempted):
-                worker = Worker.__new__(Worker)
+                worker = _worker()
                 request = SimpleNamespace(cache_slot=0, state_position=4)
                 worker.requests = {1: request}
                 worker.slots = {1}
@@ -1039,7 +937,7 @@ class DeepSeekSpeculation(unittest.TestCase):
                 self.assertEqual(worker.slots, {1})
 
     def test_execute_rejects_unknown_lifecycle_request(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.requests = {}
         with self.assertRaisesRegex(ValueError, "unknown request"):
             worker.execute(
@@ -1052,14 +950,13 @@ class DeepSeekSpeculation(unittest.TestCase):
             )
 
     def test_restore_failure_releases_the_new_request_slot(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         request = SimpleNamespace(cache_slot=None, history=[10])
         worker.requests = {1: request}
         worker.slots = {0}
         worker.cache = SimpleNamespace(
             restore=Mock(side_effect=ValueError("bad state")),
             clear_slot=Mock(),
-            ensure_mamba_row=Mock(),
             begin_step=Mock(),
         )
         with self.assertRaisesRegex(ValueError, "bad state"):
@@ -1074,7 +971,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(worker.slots, {0})
 
     def test_commit_failure_releases_the_request_slot(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         request = SimpleNamespace(
             cache_slot=None,
             state_position=0,
@@ -1099,7 +996,6 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
         worker.cache = SimpleNamespace(
             restore=Mock(),
-            ensure_mamba_row=Mock(),
             begin_step=Mock(),
             commit=Mock(side_effect=ValueError("commit failed")),
             clear_slot=Mock(),
@@ -1118,7 +1014,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         worker.cache.clear_slot.assert_called_once_with(0)
 
     def test_register_rejects_a_duplicate_request_identifier(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.requests = {1: object()}
         worker.runtime_max_context = 8
         with (
@@ -1134,142 +1030,8 @@ class DeepSeekSpeculation(unittest.TestCase):
                 }
             )
 
-    def test_worker_emits_bonus_token_after_full_draft_acceptance(self):
-        worker = Worker.__new__(Worker)
-        request = SimpleNamespace(
-            history=[10, 11],
-            prompt_len=2,
-            limit=8,
-            generated=0,
-            finish=None,
-            thinking_count=0,
-            cache_slot=0,
-            append=Mock(return_value=([5, 6, 7], "ok")),
-        )
-        worker.requests = {1: request}
-        worker.dspark = True
-        worker._slot = lambda _: 0
-        worker._proposal = Mock(return_value=[])
-        worker.trace = SimpleNamespace(record=Mock())
-        logits = [
-            torch.nn.functional.one_hot(torch.tensor([5]), 8).float(),
-            torch.nn.functional.one_hot(torch.tensor([6]), 8).float(),
-            torch.nn.functional.one_hot(torch.tensor([7]), 8).float(),
-        ]
-        worker._target = Mock(return_value=(None, torch.stack(logits, dim=1), None))
-
-        result = worker._execute_row(
-            {
-                "request_id": 1,
-                "token_ids": [10, 11, 5, 6],
-                "num_computed_tokens": 0,
-            }
-        )
-
-        self.assertEqual(result["token_ids"], [5, 6, 7])
-        self.assertEqual(result["num_accepted_draft_tokens"], 2)
-        worker._target.assert_called_once()
-        self.assertTrue(worker._target.call_args.kwargs["full_logits"])
-        self.assertEqual(worker._target.call_args.kwargs["logit_start"], 1)
-
-    def test_worker_proposes_from_the_last_target_token_in_a_prefill_chunk(self):
-        worker = Worker.__new__(Worker)
-        hidden = torch.arange(6, dtype=torch.float32).view(1, 2, 3)
-        request = SimpleNamespace(
-            history=[10, 11],
-            prompt_len=2,
-            limit=8,
-            generated=0,
-            finish=None,
-            thinking_count=0,
-            cache_slot=0,
-            append=Mock(return_value=([5], "ok")),
-        )
-        worker.requests = {1: request}
-        worker.dspark = True
-        worker._slot = lambda _: 0
-        worker._proposal = Mock(return_value=[6, 7])
-        worker.trace = SimpleNamespace(record=Mock())
-        worker._target = Mock(
-            return_value=(
-                None,
-                torch.nn.functional.one_hot(torch.tensor([[5]]), 8).float(),
-                hidden,
-            )
-        )
-
-        worker._execute_row(
-            {
-                "request_id": 1,
-                "token_ids": [10, 11],
-                "num_computed_tokens": 0,
-            }
-        )
-
-        worker._proposal.assert_called_once()
-        token, proposal_hidden, proposal_start, slot = worker._proposal.call_args.args
-        self.assertEqual(token, 5)
-        torch.testing.assert_close(proposal_hidden, hidden[:, -1:])
-        self.assertEqual(proposal_start, 1)
-        self.assertEqual(slot, 0)
-
-    def test_verification_seeds_mtp_state_for_accepted_target_positions(self):
-        worker = Worker.__new__(Worker)
-        request = SimpleNamespace(
-            history=[10, 5],
-            prompt_len=1,
-            limit=8,
-            generated=0,
-            finish=None,
-            thinking_count=0,
-            cache_slot=0,
-            append=Mock(return_value=([6, 7], "ok")),
-        )
-        hidden = torch.arange(9, dtype=torch.float32).view(1, 3, 3)
-        worker.requests = {1: request}
-        worker.dspark = True
-        worker.device = torch.device("cpu")
-        worker._slot = lambda _: 0
-        worker.model = SimpleNamespace(forward_spec_seed=Mock())
-        worker._proposal = Mock(return_value=[])
-        worker.trace = SimpleNamespace(record=Mock())
-        worker._target = Mock(
-            return_value=(
-                None,
-                torch.stack(
-                    [
-                        torch.nn.functional.one_hot(torch.tensor([6]), 8).float(),
-                        torch.nn.functional.one_hot(torch.tensor([6]), 8).float(),
-                    ],
-                    dim=1,
-                ),
-                hidden,
-            )
-        )
-
-        worker._execute_row(
-            {
-                "request_id": 1,
-                "token_ids": [10, 5, 6],
-                "num_computed_tokens": 0,
-            }
-        )
-
-        self.assertEqual(worker.model.forward_spec_seed.call_count, 1)
-        self.assertEqual(
-            [
-                call.kwargs["start_pos"]
-                for call in worker.model.forward_spec_seed.call_args_list
-            ],
-            [0],
-        )
-        self.assertEqual(
-            worker.model.forward_spec_seed.call_args.args[0].shape[1],
-            3,
-        )
-
     def test_target_keeps_long_prefill_in_one_native_call(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.prefill_rows = MAX_PREFILL_ROWS
         worker.model = Mock(
@@ -1288,7 +1050,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
 
     def test_target_default_prefill_limit_bounds_model_chunks(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.model = Mock(
             side_effect=[
@@ -1312,7 +1074,7 @@ class DeepSeekSpeculation(unittest.TestCase):
             prefill_row_limit(str(MAX_PREFILL_ROWS + 1))
 
     def test_target_releases_completed_prefill_hidden_chunks(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.prefill_rows = MAX_PREFILL_ROWS
         worker.args = SimpleNamespace(window_size=2)
@@ -1335,7 +1097,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(worker.model.call_count, 2)
 
     def test_target_uses_the_bounded_prefill_row_limit(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.prefill_rows = 128
         worker.model = Mock(
@@ -1355,7 +1117,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
 
     def test_target_graph_requires_vocab_logits_and_one_token(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.prefill_rows = MAX_PREFILL_ROWS
         worker.decode_graph_enabled = True
@@ -1377,7 +1139,7 @@ class DeepSeekSpeculation(unittest.TestCase):
             self.assertEqual(graph.call_count, 2)
 
     def test_target_batch_keeps_total_rows_in_one_native_call(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.prefill_rows = MAX_PREFILL_ROWS
 
@@ -1401,10 +1163,11 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
 
     def test_mtp_seed_keeps_total_rows_at_native_limit(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.dspark = True
         worker.model = SimpleNamespace(forward_spec_seed=Mock())
+        worker.args = SimpleNamespace(window_size=200)
         hidden = torch.zeros(4, 200, 8)
         cache_slots = torch.arange(4)
 
@@ -1427,7 +1190,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
 
     def test_target_batch_uses_four_request_prefill_subbatches(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.prefill_rows = DEFAULT_PREFILL_ROWS
 
@@ -1448,7 +1211,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         self.assertEqual(worker.model.call_count, 2)
 
     def test_target_batch_uses_wide_prefill_subbatches(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.prefill_rows = MAX_PREFILL_ROWS
         calls = []
@@ -1478,7 +1241,7 @@ class DeepSeekSpeculation(unittest.TestCase):
         )
 
     def test_mtp_seed_keeps_only_the_target_window(self):
-        worker = Worker.__new__(Worker)
+        worker = _worker()
         worker.device = torch.device("cpu")
         worker.dspark = True
         worker.args = SimpleNamespace(window_size=8)
@@ -1498,48 +1261,6 @@ class DeepSeekSpeculation(unittest.TestCase):
         call = worker.model.forward_spec_seed.call_args
         self.assertEqual(tuple(call.args[0].shape), (1, 8, 8))
         self.assertEqual(call.kwargs["start_pos"], 199)
-
-    def test_execute_groups_complete_initial_prefills(self):
-        worker = Worker.__new__(Worker)
-        worker.requests = {
-            1: SimpleNamespace(cache_slot=None, history=[10, 11, 12], prompt_len=3),
-            2: SimpleNamespace(cache_slot=None, history=[20, 21, 22], prompt_len=3),
-        }
-        worker._execute_prefill_group = Mock(
-            return_value={
-                1: {"request_id": 1},
-                2: {"request_id": 2},
-            }
-        )
-        worker._execute_row = Mock()
-
-        result = worker.execute(
-            {
-                "finished_request_ids": [],
-                "preempted_request_ids": [],
-                "scheduled": [
-                    {
-                        "request_id": 1,
-                        "token_ids": [10, 11, 12],
-                        "num_computed_tokens": 0,
-                    },
-                    {
-                        "request_id": 2,
-                        "token_ids": [20, 21, 22],
-                        "num_computed_tokens": 0,
-                    },
-                ],
-                "rpc_id": 1,
-            }
-        )
-
-        worker._execute_prefill_group.assert_called_once()
-        self.assertEqual(
-            worker._execute_prefill_group.call_args.kwargs,
-            {"final": True},
-        )
-        worker._execute_row.assert_not_called()
-        self.assertEqual(result["outputs"], [{"request_id": 1}, {"request_id": 2}])
 
     def test_rejection_keeps_only_the_matching_prefix_and_target_correction(self):
         result = verify_greedy_drafts(

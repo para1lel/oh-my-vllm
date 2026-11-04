@@ -36,11 +36,13 @@ def packed_model():
                 attn=SimpleNamespace(
                     window_kv_cache=torch.zeros(2, 4, 32),
                     compress_ratio=2,
+                    is_kv_source=True,
                     compress_kv_cache=PackedHistory(
                         args, 32, 2, 16, torch.float8_e4m3fn
                     ),
                     indexer=SimpleNamespace(
-                        k_cache=PackedHistory(args, 32, 2, 32, torch.float8_e8m0fnu)
+                        owns_k=True,
+                        k_cache=PackedHistory(args, 32, 2, 32, torch.float8_e8m0fnu),
                     ),
                     compressor=SimpleNamespace(
                         kv_state=torch.zeros(2, 2, 32),
@@ -705,6 +707,8 @@ class DeepSeekPackedCache(unittest.TestCase):
         reference.layers[0].attn.indexer.k_cache = torch.zeros(2, 8, 32)
         cache = DeepSeekCache(packed, block_tokens=4, max_seq_len=16, fa_capacity=16)
         self.addCleanup(cache.close)
+        with self.assertRaisesRegex(RuntimeError, "bound.*conversion"):
+            packed.float()
         schedule = row([1, 2], [3, 4])
         cache.begin_step(schedule, 0, start_pos=0, end_pos=8)
         tokens = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])

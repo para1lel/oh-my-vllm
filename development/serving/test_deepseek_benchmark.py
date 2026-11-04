@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 from uuid import UUID
 
 from . import deepseek_accounting as accounting
-from . import deepseek_accounting_v4 as accounting_v4
+from . import deepseek_accounting_floor as accounting_floor
 from .deepseek_accounting import (
     VERSION,
     BindingError,
@@ -153,7 +153,7 @@ class DeepSeekBenchmark(unittest.TestCase):
         parser = argument_parser()
         self.assertEqual(parser.parse_args(required).reference_version, VERSION)
         arguments = parser.parse_args(
-            [*required, "--reference-version", accounting_v4.VERSION]
+            [*required, "--reference-version", accounting_floor.VERSION]
         )
         for version in ("wire", "unknown", "deepseek-http-reference-v3"):
             with (
@@ -193,7 +193,7 @@ class DeepSeekBenchmark(unittest.TestCase):
                 )
                 self.assertEqual(
                     expected["reference"],
-                    reference_configuration(accounting_v4.VERSION),
+                    reference_configuration(accounting_floor.VERSION),
                 )
                 arguments.reference_version = VERSION
                 with self.assertRaisesRegex(RuntimeError, "changed"):
@@ -211,31 +211,16 @@ class DeepSeekBenchmark(unittest.TestCase):
                     input_tokens=20,
                     output_tokens=4,
                 )
-                fixture = runtime_fixture(case, reference_version=accounting_v4.VERSION)
+                fixture = runtime_fixture(
+                    case, reference_version=accounting_floor.VERSION
+                )
                 for rows in fixture[1]:
                     for row in rows[-1].get("request_rows", []):
                         row["proposed"] = 5
-                with (
-                    patch.object(
-                        accounting_v4,
-                        "reference_trace",
-                        wraps=accounting_v4.reference_trace,
-                    ) as selected,
-                    patch.object(
-                        accounting_v4,
-                        "reference_case",
-                        side_effect=AssertionError("static reference used"),
-                    ),
-                    patch(
-                        "development.serving.deepseek_benchmark.reference_trace",
-                        side_effect=AssertionError("legacy dispatch used"),
-                    ),
-                ):
-                    result, csv_row = run_fixture(
-                        case, *fixture, version=accounting_v4.VERSION
-                    )
-                selected.assert_called_once()
-                self.assertEqual(result["accounting_version"], accounting_v4.VERSION)
+                result, csv_row = run_fixture(
+                    case, *fixture, version=accounting_floor.VERSION
+                )
+                self.assertEqual(result["accounting_version"], accounting_floor.VERSION)
                 self.assertEqual(result["source_trace_version"], VERSION)
                 self.assertEqual(result["trace"]["binding"]["version"], VERSION)
                 self.assertEqual(
@@ -243,10 +228,10 @@ class DeepSeekBenchmark(unittest.TestCase):
                     accounting.rate_profile_digest(),
                 )
                 self.assertEqual(
-                    result["rate_profile"], accounting_v4.rate_profile_digest()
+                    result["rate_profile"], accounting_floor.rate_profile_digest()
                 )
                 self.assertEqual(
-                    result["assumptions_sha256"], accounting_v4.assumptions_digest()
+                    result["assumptions_sha256"], accounting_floor.assumptions_digest()
                 )
                 self.assertEqual(
                     result["reference_scope"], "conditional partial resource floor"
@@ -257,12 +242,14 @@ class DeepSeekBenchmark(unittest.TestCase):
                 self.assertFalse(result["dep4_communication_modeled"])
                 self.assertEqual(
                     result["reference_seconds"],
-                    accounting_v4.reference_trace(
+                    accounting_floor.reference_trace(
                         result["trace"], strategy=strategy
                     ).seconds,
                 )
                 self.assertEqual(csv_row["source_trace_version"], VERSION)
-                self.assertEqual(csv_row["accounting_version"], accounting_v4.VERSION)
+                self.assertEqual(
+                    csv_row["accounting_version"], accounting_floor.VERSION
+                )
                 for field in (
                     "reference_conditions",
                     "reference_zero_credit",
@@ -287,7 +274,7 @@ class DeepSeekBenchmark(unittest.TestCase):
         case = dict(
             mode="dspark5", strategy="tp4", batch=1, input_tokens=20, output_tokens=4
         )
-        fixture = runtime_fixture(case, reference_version=accounting_v4.VERSION)
+        fixture = runtime_fixture(case, reference_version=accounting_floor.VERSION)
         for change in (
             "missing_runtime",
             "changed_gpu",
@@ -309,15 +296,10 @@ class DeepSeekBenchmark(unittest.TestCase):
                 harness["reference"][field] = "changed"
             with (
                 self.subTest(change=change),
-                patch.object(
-                    accounting_v4,
-                    "reference_trace",
-                    side_effect=AssertionError("invalid identity was priced"),
-                ),
                 self.assertRaises(BindingError),
             ):
                 run_fixture(
-                    case, harness, events, responses, version=accounting_v4.VERSION
+                    case, harness, events, responses, version=accounting_floor.VERSION
                 )
 
     def test_v4_dispatch_rejects_missing_or_relabelled_source_binding(self):
@@ -331,7 +313,7 @@ class DeepSeekBenchmark(unittest.TestCase):
                 {},
                 strategy="tep4",
                 expected_binding=trace["binding"],
-                version=accounting_v4.VERSION,
+                version=accounting_floor.VERSION,
             )
         for field in ("source", "version", "rate_profile"):
             for missing in (False, True):
@@ -348,7 +330,7 @@ class DeepSeekBenchmark(unittest.TestCase):
                         broken,
                         strategy="tep4",
                         expected_binding=trace["binding"],
-                        version=accounting_v4.VERSION,
+                        version=accounting_floor.VERSION,
                     )
 
     def test_request_timeout_parses_and_reaches_service_and_http_client(self):

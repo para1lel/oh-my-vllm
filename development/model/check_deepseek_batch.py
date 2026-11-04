@@ -264,18 +264,12 @@ class TargetCapture:
         self.batch.target_decode_batch = self.original_batch
 
 
-def request_state(worker, torch):
+def request_state(worker):
     return {
         key: dict(
             history=list(request.history),
             computed=request.state_position,
-            mtp_position=request.mtp_position,
             finish=request.finish,
-            counts=fingerprint(torch.from_numpy(request.counts), torch),
-            presence=fingerprint(torch.from_numpy(request.presence), torch),
-            random_offset=request.random_offset,
-            proposal_offset=request.proposal_offset,
-            accept_offset=request.accept_offset,
         )
         for key, request in worker.requests.items()
     }
@@ -473,7 +467,7 @@ def multiround(worker, args, torch, batch, prepare, make_row, rank):
                     actual = dict(
                         outputs=outputs,
                         targets=captured.targets,
-                        requests=request_state(worker, torch),
+                        requests=request_state(worker),
                         state=cache_state(worker, torch, digest=True),
                     )
                     path = args.output / f"multiround-{mode}-rank{rank}-step{step}.pt"

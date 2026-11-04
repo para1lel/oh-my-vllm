@@ -2690,15 +2690,10 @@ class Transformer(nn.Module):
             self.image_newline = nn.Parameter(torch.empty(args.dim))
         for layer in self.layers:
             layer.ffn._prefill_workspace = self._moe_prefill_workspace
-        self._sequence_caches = tuple(
-            value for value in self.buffers() if hasattr(value, "_paged_storage")
-        )
 
     def _apply(self, function, recurse=True):
-        if getattr(self, "_sequence_caches", ()):
-            raise RuntimeError(
-                "mapped model storage does not support tensor conversion"
-            )
+        if getattr(self, "_physical_cache", None) is not None:
+            raise RuntimeError("bound model storage does not support tensor conversion")
         return super()._apply(function, recurse=recurse)
 
     def reserve_cache(self, slots, end_pos):
@@ -2706,10 +2701,6 @@ class Transformer(nn.Module):
         if cache is not None:
             cache.require_active_slots(slots)
             cache.reserve_workspace(len(slots), end_pos)
-        for value in self._sequence_caches:
-            rows = min(end_pos // value._context_ratio, value.size(1))
-            for slot in slots:
-                value._paged_storage.reserve(slot, rows)
 
     def _bind_state_exports(
         self, cache_slots, cache_slots_cpu=None, positions_cpu=None
@@ -2793,9 +2784,7 @@ class Transformer(nn.Module):
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
         self._bind_state_exports(cache_slots, cache_slots_cpu, cache_positions_cpu)
-        if reserve_cache and (
-            self._sequence_caches or hasattr(self, "_physical_cache")
-        ):
+        if reserve_cache and hasattr(self, "_physical_cache"):
             slots = cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
             end = start_pos + input_ids.size(1)
             self.reserve_cache(

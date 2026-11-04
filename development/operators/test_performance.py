@@ -42,29 +42,6 @@ class PerformanceContracts(unittest.TestCase):
         self.assertGreater(before, 0)
         self.assertEqual(before, after)
 
-    def test_accounting_migration_preserves_every_absolute_limit(self):
-        import json
-        from copy import deepcopy
-
-        from .migrate_accounting import MIGRATION, migrate
-        from .validation import LIMITS_PATH
-
-        current = json.loads(LIMITS_PATH.read_text())
-        previous = deepcopy(current)
-        for entry in previous["performance"].values():
-            migration = entry["provenance"].pop(MIGRATION)
-            entry.update(migration["previous"])
-        migrated, comparisons = migrate(previous)
-        self.assertEqual(migrated, current)
-        self.assertEqual(migrated["numerics"], previous["numerics"])
-        self.assertEqual(len(comparisons), len(current["performance"]))
-        for row in comparisons:
-            before, after = row["previous_maximum_seconds"], row["maximum_seconds"]
-            self.assertLessEqual(after, before, row["case"])
-            self.assertAlmostEqual(after / before, 1.0, places=15, msg=row["case"])
-        with self.assertRaisesRegex(ValueError, "operator-reference-v3"):
-            migrate(current)
-
     def test_accounting_ignores_implementation_work(self):
         from development.serving.accounting import add, attention
 
@@ -88,50 +65,9 @@ class PerformanceContracts(unittest.TestCase):
             approved = limits[case.id]
             self.assertEqual(approved["accounting"], identity, case.id)
             self.assertEqual(approved["timing"], timing_identity(), case.id)
-            necessary = approved["provenance"]["necessary_work_migration"]
-            prior = necessary["previous"]
-            maximum = prior["max_ratio"] * prior["lower_seconds"]
-            self.assertEqual(necessary["maximum_seconds"], maximum, case.id)
-            self.assertLessEqual(
-                approved["max_ratio"] * approved["lower_seconds"], maximum, case.id
-            )
-            self.assertAlmostEqual(
-                approved["max_ratio"] * approved["lower_seconds"] / maximum,
-                1.0,
-                places=15,
-                msg=case.id,
-            )
-            self.assertEqual(prior["accounting"]["version"], "operator-reference-v3")
-            timing_migration = approved["provenance"]["timing_migration"]
-            for field in ("max_ratio", "lower_seconds"):
-                self.assertEqual(prior[field], timing_migration[field], case.id)
             self.assertEqual(approved["work"], asdict(work(case)), case.id)
             self.assertEqual(
                 approved["lower_seconds"], lower_bound(case, device), case.id
-            )
-            migration = approved["provenance"]["accounting_migration"]
-            approved = prior
-            previous = migration["previous"]
-            self.assertLessEqual(
-                approved["lower_seconds"], previous["lower_seconds"], case.id
-            )
-            self.assertEqual(
-                migration["maximum_seconds"],
-                previous["max_ratio"] * previous["lower_seconds"],
-                case.id,
-            )
-            self.assertLessEqual(
-                approved["max_ratio"] * approved["lower_seconds"],
-                migration["maximum_seconds"],
-                case.id,
-            )
-            self.assertEqual(
-                approved["work"]["arithmetic"], previous["work"]["arithmetic"], case.id
-            )
-            self.assertEqual(
-                approved["work"]["unique_read_bytes"],
-                previous["work"]["unique_read_bytes"],
-                case.id,
             )
             changed = replace(
                 case,

@@ -254,4 +254,4 @@ scripts/with-env.sh python -m development.native_build --module collectives
 
 [原生对端](../development/operators/collective_peer.py)提供合成执行, 而非生产适配器.
 CPU 检查不能证明 GPU 数值, graph 安全, 内存容量或性能.
-模型准备, 物理布局, 已接受状态选择和服务集成是后续工作.
+各[模型适配器](adapters.zh.md)提供物理布局和已接受状态选择.

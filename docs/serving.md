@@ -6,9 +6,6 @@ The worker loads the local checkpoint. It uses the repository CUDA modules.
 ## Start
 
 Use the [development environment](development.md).
-`requirements/runtime.txt` supplies the service and inference packages.
-`requirements/development.txt` includes the runtime file.
-One development installation is sufficient.
 
 Build the executable:
 

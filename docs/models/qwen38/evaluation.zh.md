@@ -112,7 +112,7 @@ Top-1 是否相同仅用于诊断, 因为小误差可能交换接近的 logits.
 各用例独立设定门槛. 取这两个实现中较大的误差上限和较小的余弦下限.
 
 选定的项目实现使用 FP32 FFN residual, 按列乘 beta 的 GDN inverse, 以及带缩放的 BF16 GDN attention 系数.
-此校准在算子迁移前固定门槛. 不修改参考数组或算子数值门槛.
+此校准提供固定门槛. 参考数组和算子数值门槛不变.
 
 vLLM 校准使用默认 BF16 路径, FP8 投影, FP32 recurrent state 和 O2 编译.
 其数值 adapter 为各 cache group 分配互不重叠的 cache blocks.

@@ -31,8 +31,6 @@ Efficiency = 理论参考秒数 / 完整 HTTP 秒数 × 100%.
 接受/提议给出该行全部被测请求的 draft token 计数之和.
 普通解码没有草稿接受率.
 
-本报告不提供与旧计量版本或单独开发点比较的加速估计.
-
 ## HTTP 测量
 
 | 模式 | Batch | 输入 tokens | 输出 tokens | 请求数 | 完整 HTTP s | 理论参考 s | Efficiency | 接受/提议 |

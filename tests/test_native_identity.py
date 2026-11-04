@@ -10,7 +10,9 @@ from oh_my_vllm.operators.runtime import native
 
 class NativeIdentityTests(unittest.TestCase):
     def make_cuda_home(self, version="release 13.4, V13.4.99"):
-        root = Path(tempfile.mkdtemp())
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
         compiler = root / "bin/nvcc"
         compiler.parent.mkdir()
         compiler.write_text(f"#!/bin/sh\necho '{version}'\n")

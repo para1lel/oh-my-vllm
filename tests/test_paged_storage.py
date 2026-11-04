@@ -1,18 +1,9 @@
 import gc
-import importlib.util
 import unittest
 import weakref
 
 import torch
 import tvm_ffi
-
-
-class PagedStorageTests(unittest.TestCase):
-    def test_paged_runtime_exists(self):
-        self.assertIsNotNone(
-            importlib.util.find_spec("oh_my_vllm.operators.runtime.paged"),
-            "the bounded CUDA VMM storage runtime is missing",
-        )
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")

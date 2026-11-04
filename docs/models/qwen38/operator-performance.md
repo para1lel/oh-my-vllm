@@ -82,15 +82,6 @@ It includes kernel group definitions, rates, and cache policy.
 Approved limits also bind the complete resource totals and lower-bound value.
 Approved limits bind this identity, the timing-policy identity, the case, generated inputs, and compatible device settings.
 Ordinary acceptance does not load calibration timings.
-When accounting changes, keep each approved maximum latency during ratio conversion:
-
-```text
-new_max_ratio = old_max_ratio * old_reference / new_reference
-```
-
-Keep the previous accounting identity, resource values, and ratio in migration provenance.
-This conversion must not increase the approved maximum latency.
-The [migration command](../../../development/operators/migrate_accounting.py) records each previous limit and rounds the new ratio downward when necessary.
 
 Restore state and RNG from prepared device copies before each independent sample.
 Complete each reset before the start event.

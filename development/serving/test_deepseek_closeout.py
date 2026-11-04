@@ -8,9 +8,9 @@ from oh_my_vllm.models.deepseek_v41.trace import execution_modes, runtime_identi
 
 from . import deepseek_acceptance as gate
 from . import deepseek_accounting as source
-from . import deepseek_accounting_v2 as arithmetic
-from . import deepseek_accounting_v4 as floor
-from . import deepseek_accounting_v5 as packed
+from . import deepseek_accounting_floor as floor
+from . import deepseek_accounting_math as arithmetic
+from . import deepseek_accounting_packed as packed
 from .deepseek_benchmark import reference_configuration, runtime_reference
 from .deepseek_runtime_trace import assemble_trace, response_manifest
 from .test_deepseek_benchmark import run_fixture, runtime_fixture
@@ -159,7 +159,9 @@ class PackedHistory(unittest.TestCase):
                 output_tokens=2,
             )
             trace = source.ideal_trace(case, model=MODEL)
-            records = source.validate_trace(trace, strategy=strategy, model=MODEL)[0]
+            records = source.validate_trace(
+                trace, strategy=strategy, model=MODEL
+            ).calls[0]
             groups, _directions, _unions = packed.call_groups(
                 records, strategy=strategy, model=MODEL
             )

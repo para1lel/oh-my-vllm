@@ -115,7 +115,7 @@ Round the NRMSE and absolute error outward to steps of 0.01 and 0.1, and the cos
 Set the limits independently for each case. Keep the larger error limits and the smaller cosine limit from these two implementations.
 
 The selected project implementation uses FP32 FFN residuals, beta-weighted GDN inverse columns, and scaled BF16 GDN attention coefficients.
-This calibration fixes the limits before operator migration. It does not change the reference arrays or operator numerical limits.
+This calibration supplies the fixed limits. The reference arrays and operator numerical limits do not change.
 
 The vLLM calibration uses the default BF16 path, FP8 projections, FP32 recurrent state, and O2 compilation.
 Its numerical adapter supplies disjoint cache blocks for each cache group.

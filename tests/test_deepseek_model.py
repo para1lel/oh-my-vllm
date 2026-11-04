@@ -997,29 +997,6 @@ class DeepSeekModel(unittest.TestCase):
         self.assertTrue(torch.equal(indices, torch.tensor([[3, 2, 0]])))
         torch.testing.assert_close(weights, expected, rtol=2e-7, atol=2e-7)
 
-    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_lazy_cache_keeps_empty_context_storage_dense(self):
-        from oh_my_vllm.models.deepseek_v41.storage import sequence_cache
-
-        previous_device = torch.get_default_device()
-        torch.set_default_device("cuda")
-        try:
-            value = sequence_cache(
-                SimpleNamespace(lazy_cache=True), (2, 0, 32), dtype=torch.bfloat16
-            )
-            self.assertEqual(value.shape, (2, 0, 32))
-            self.assertEqual(value.device.type, "cuda")
-            self.assertFalse(hasattr(value, "_paged_storage"))
-        finally:
-            torch.set_default_device(previous_device)
-
-    def test_mapped_models_reject_storage_conversion_before_access(self):
-        model = Transformer.__new__(Transformer)
-        torch.nn.Module.__init__(model)
-        model._sequence_caches = (torch.empty(0),)
-        with self.assertRaisesRegex(RuntimeError, "mapped.*conversion"):
-            model.float()
-
     def test_candidate_selection_keeps_a_compact_causal_block_mask(self):
         scores = torch.tensor(
             [[[1.0, 2, 3, 4, 5], [3.0, 2, 1, -torch.inf, -torch.inf]]]
@@ -2020,13 +1997,13 @@ class DeepSeekModel(unittest.TestCase):
                 }
                 for name, value in transformer.named_buffers():
                     value.copy_(initial[name])
-                worker = SimpleNamespace(
-                    model=transformer,
-                    args=args,
-                    device=torch.device("cpu"),
-                    decode_cycle=2,
-                    decode_graph_limit=0,
-                )
+                from tests.test_deepseek_speculation import _worker
+
+                worker = _worker()
+                worker.model = transformer
+                worker.args = args
+                worker.decode_cycle = 2
+                worker.decode_graph_limit = 0
                 result = target_decode_batch(
                     worker, tokens.tolist(), uniform_starts, slots.tolist()
                 )

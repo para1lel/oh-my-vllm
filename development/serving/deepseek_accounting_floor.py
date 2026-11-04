@@ -11,11 +11,11 @@ import json
 from dataclasses import asdict, dataclass, replace
 from types import MappingProxyType
 
-from . import deepseek_accounting as v31
-from . import deepseek_accounting_v2 as v2
+from . import deepseek_accounting as accounting
+from . import deepseek_accounting_math as arithmetic
 
 VERSION = "deepseek-http-resource-floor-v4"
-RATES = MappingProxyType(dict(v2.RATES))
+RATES = MappingProxyType(dict(arithmetic.RATES))
 ASSUMPTIONS = MappingProxyType(
     {
         "algorithm": "released-target-matrices-formats-order-and-placement",
@@ -86,82 +86,65 @@ def assumptions_digest():
     return _digest(dict(ASSUMPTIONS))
 
 
-def rate_profile_digest(model=v2.DEEPSEEK_V41_MODEL):
+def rate_profile_digest(model=arithmetic.DEEPSEEK_V41_MODEL):
     return _digest([VERSION, dict(RATES), dict(ASSUMPTIONS), asdict(model)])
 
 
 def _projection(rows, outputs, width, storage, strategy, *, sharded=False):
     if not rows:
-        return v2.Work(), 0
+        return arithmetic.Work(), 0
     shards = 4 if sharded and strategy != "dep4" else 1
     options = dict(
         storage=storage,
         shard_axis=0 if shards > 1 else None,
         shards=shards,
     )
-    work = v2.projection_work(rows, outputs, width, include_weights=False, **options)
-    first = v2.projection_work(1, outputs, width, **options)
-    empty = v2.projection_work(1, outputs, width, include_weights=False, **options)
+    work = arithmetic.projection_work(
+        rows, outputs, width, include_weights=False, **options
+    )
+    first = arithmetic.projection_work(1, outputs, width, **options)
+    empty = arithmetic.projection_work(
+        1, outputs, width, include_weights=False, **options
+    )
     return work, int(first.hbm_bytes - empty.hbm_bytes)
 
 
 def _dense(rows, logits, model, strategy):
     if not rows:
-        return v2.Work(), 0
+        return arithmetic.Work(), 0
     functions = (
-        (v2.attention_input_work, True),
-        (v2.attention_output_work, True),
-        (v2.shared_expert_work, True),
-        (v2.router_work, False),
-        (v2.engram_projection_work, False),
+        (arithmetic.attention_input_work, True),
+        (arithmetic.attention_output_work, True),
+        (arithmetic.shared_expert_work, True),
+        (arithmetic.router_work, False),
+        (arithmetic.engram_projection_work, False),
     )
-    work = v2.Work()
+    work = arithmetic.Work()
     weights = 0
     for operation, parallel in functions:
         options = (model, strategy) if parallel else (model,)
         extra = operation(rows, *options, include_weights=False)
         first = operation(1, *options)
         empty = operation(1, *options, include_weights=False)
-        work = v2.add_work(work, extra)
+        work = arithmetic.add_work(work, extra)
         weights += int(first.hbm_bytes - empty.hbm_bytes)
     hc_width = model.hc_mult * model.hidden_size
-    work = v2.add_work(
+    work = arithmetic.add_work(
         work,
-        v2.Work(fp32_flops=4 * rows * model.hc_mix * hc_width * model.num_layers),
+        arithmetic.Work(
+            fp32_flops=4 * rows * model.hc_mix * hc_width * model.num_layers
+        ),
     )
     weights += model.num_layers * 2 * model.hc_mix * hc_width * 4
     if logits:
-        head = v2.output_head_work(logits, model, strategy, include_weights=False)
-        first = v2.output_head_work(1, model, strategy)
-        empty = v2.output_head_work(1, model, strategy, include_weights=False)
-        work = v2.add_work(work, head)
+        head = arithmetic.output_head_work(
+            logits, model, strategy, include_weights=False
+        )
+        first = arithmetic.output_head_work(1, model, strategy)
+        empty = arithmetic.output_head_work(1, model, strategy, include_weights=False)
+        work = arithmetic.add_work(work, head)
         weights += int(first.hbm_bytes - empty.hbm_bytes)
     return work, weights
-
-
-def candidate_pairs(length, ratio, limit):
-    """Count valid keys when the latest eight-position block must be selected."""
-    block = ASSUMPTIONS["candidate_block_size"]
-    if limit < block or limit % block:
-        raise ValueError("candidate limit must contain complete blocks")
-    groups, remainder = divmod(length, ratio)
-    if not groups:
-        return 0
-
-    def prefix(count):
-        if count <= limit:
-            return count * (count + 1) // 2
-        tail = count - limit
-        cycles, partial = divmod(tail, block)
-        return (
-            limit * (limit + 1) // 2
-            + tail * (limit - block)
-            + cycles * block * (block + 1) // 2
-            + partial * (partial + 1) // 2
-        )
-
-    last = min(groups, limit - block + (groups - 1) % block + 1)
-    return ratio * prefix(groups - 1) + (remainder + 1) * last
 
 
 def _index(requests, layer, model, strategy):
@@ -185,14 +168,14 @@ def _index(requests, layer, model, strategy):
         new_keys, model.index_head_dim, model.head_dim, "bf16", strategy
     )
     pairs = sum(
-        candidate_pairs(length, ratio, model.candidate_positions)
+        arithmetic.candidate_pairs(length, ratio, model.candidate_positions)
         if layer.uses_candidate_mask
-        else v2.index_score_pairs(0, length, ratio)
+        else arithmetic.index_score_pairs(0, length, ratio)
         for length in requests
     )
     score = 2 * pairs * model.index_heads * model.index_head_dim
     return (
-        v2.add_work(query, head, key),
+        arithmetic.add_work(query, head, key),
         query_weights + head_weights + key_weights,
         score,
     )
@@ -209,7 +192,7 @@ def _compressor(lengths, layer, model, strategy):
         strategy,
     )
     if ratio > 1:
-        work = v2.scale_work(work, 2)
+        work = arithmetic.scale_work(work, 2)
         weights *= 2
     return work, weights
 
@@ -220,32 +203,36 @@ def _target_work(requests, model, strategy):
     logits = sum(row["output_tokens"] for row in requests)
     work, weights = _dense(rows, logits, model, strategy)
     score_flops = 0
-    for layer in v2.layer_table(model):
+    for layer in arithmetic.layer_table(model):
         pairs = sum(
-            v2.window_pairs(0, length, model.window_size)
+            arithmetic.window_pairs(0, length, model.window_size)
             + (
-                v2.compressed_pairs(0, length, layer.compress_ratio, model.index_topk)
+                arithmetic.compressed_pairs(
+                    0, length, layer.compress_ratio, model.index_topk
+                )
                 if layer.compress_ratio
                 else 0
             )
             for length in lengths
         )
         shards = 1 if strategy == "dep4" else 4
-        work = v2.add_work(
+        work = arithmetic.add_work(
             work,
-            v2.Work(bf16_flops=4 * pairs * model.num_heads * model.head_dim / shards),
+            arithmetic.Work(
+                bf16_flops=4 * pairs * model.num_heads * model.head_dim / shards
+            ),
         )
         if layer.owns_compressed_kv:
             compressor, weight_bytes = _compressor(lengths, layer, model, strategy)
-            work = v2.add_work(work, compressor)
+            work = arithmetic.add_work(work, compressor)
             weights += weight_bytes
         if layer.owns_index_keys:
             projection, weight_bytes, score = _index(lengths, layer, model, strategy)
-            work = v2.add_work(work, projection)
+            work = arithmetic.add_work(work, projection)
             weights += weight_bytes
             score_flops += score
     if strategy == "dep4":
-        work = v2.add_work(work, v2.Work(bf16_flops=score_flops))
+        work = arithmetic.add_work(work, arithmetic.Work(bf16_flops=score_flops))
         score_flops = 0
     return work, weights, score_flops
 
@@ -269,7 +256,7 @@ def _route_totals(calls, model, strategy):
 
 
 def _routed(assignments, rank, rows, model, strategy):
-    work = v2.Work()
+    work = arithmetic.Work()
     weights = 0
     unions = []
     for buckets in assignments:
@@ -279,11 +266,11 @@ def _routed(assignments, rank, rows, model, strategy):
         else:
             received = buckets[rank]
             union = (received + rows - 1) // rows
-        extra = v2.routed_expert_work(
+        extra = arithmetic.routed_expert_work(
             received, 0, model, strategy, include_weights=False
         )
-        weight = v2.routed_expert_work(0, union, model, strategy)
-        work = v2.add_work(work, extra)
+        weight = arithmetic.routed_expert_work(0, union, model, strategy)
+        work = arithmetic.add_work(work, extra)
         weights += int(weight.hbm_bytes)
         unions.append(union)
     return work, weights, tuple(unions)
@@ -344,17 +331,26 @@ def _seconds(ranks, pooled_score, pooled_wire):
 
 
 def reference_trace(
-    trace, *, strategy, model=v2.DEEPSEEK_V41_MODEL, expected_binding=None
+    trace, *, strategy, model=arithmetic.DEEPSEEK_V41_MODEL, expected_binding=None
 ):
     """Validate a v3.1 source trace and price whole-HTTP necessary resources.
 
     HBM weight-union bounds are reported for review, but receive zero latency
     credit until a complete on-chip retention upper bound is authenticated.
     """
-    calls = v31.validate_trace(
+    target = accounting.validate_trace(
         trace, strategy=strategy, model=model, expected_binding=expected_binding
     )
-    requests = trace["manifest"]["requests"]
+    return reference_resources(target, model=model)
+
+
+def reference_resources(
+    target: accounting.TargetTrace, *, model=arithmetic.DEEPSEEK_V41_MODEL
+):
+    """Price whole-HTTP resources from an authenticated target trace."""
+    strategy = target.binding["strategy"]
+    calls = target.calls
+    requests = target.manifest["requests"]
     rows = sum(row["input_tokens"] + row["output_tokens"] - 1 for row in requests)
     assignments, dispatch = _route_totals(calls, model, strategy)
     sent, received = _dep4_wire(dispatch, model)
@@ -370,7 +366,7 @@ def reference_trace(
         routed, expert_weights, union = _routed(
             assignments, rank, rows, model, strategy
         )
-        work = v2.add_work(dense, routed)
+        work = arithmetic.add_work(dense, routed)
         ranks.append(
             RankResources(
                 fp8_flops=work.fp8_flops,
@@ -391,11 +387,11 @@ def reference_trace(
         strategy=strategy,
         acceptance="trace-resource-floor",
         calls=len(calls),
-        accepted=trace["binding"]["accepted"],
-        proposed=trace["binding"]["proposed"],
+        accepted=target.binding["accepted"],
+        proposed=target.binding["proposed"],
         rate_profile=rate_profile_digest(model),
         assumptions_sha256=assumptions_digest(),
-        source_trace_version=trace["binding"]["version"],
+        source_trace_version=target.binding["version"],
         ranks=tuple(ranks),
         pooled_index_bf16_flops=pooled_score,
         pooled_wire_sent_bytes=wire,
@@ -404,8 +400,8 @@ def reference_trace(
     )
 
 
-def reference_case(case, *, model=v2.DEEPSEEK_V41_MODEL):
+def reference_case(case, *, model=arithmetic.DEEPSEEK_V41_MODEL):
     """Return a favorable balanced-routing scale, not runtime acceptance."""
-    trace = v31.ideal_trace(case, model=model)
+    trace = accounting.ideal_trace(case, model=model)
     result = reference_trace(trace, strategy=case["strategy"], model=model)
     return replace(result, acceptance="ideal-routing-resource-floor")

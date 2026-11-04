@@ -1,7 +1,6 @@
-"""Accepted-output resource reference, with a two-microbatch lower-bound relaxation.
+"""Accepted-output target reference and authenticated four-rank trace contract.
 
-The latency profile is a version-bound estimate, not a physical latency proof.
-The unchanged v1/v2 and v3 calculators remain available in versioned modules.
+The collective profile is an estimate, not a physical latency proof.
 """
 
 import hashlib
@@ -10,21 +9,19 @@ import math
 from dataclasses import dataclass, replace
 from functools import lru_cache
 
-from . import deepseek_accounting_v2 as v2
-from . import deepseek_accounting_v3 as v3
+from . import deepseek_accounting_math as arithmetic
+from .deepseek_accounting_math import (
+    DEEPSEEK_V41_MODEL,
+    RATES,
+    WORLD_SIZE,
+    Group,
+    Work,
+    collective_profile_digest,
+    critical_seconds,
+    scale_accumulation_work,
+)
 
 VERSION = "deepseek-http-reference-v3.1"
-DEEPSEEK_V41_MODEL = v2.DEEPSEEK_V41_MODEL
-ModelSpec = v2.ModelSpec
-Work = v2.Work
-Group = v2.Group
-BindingError = v2.BindingError
-TraceError = v2.TraceError
-RATES = v2.RATES
-WORLD_SIZE = v2.WORLD_SIZE
-STRATEGIES = v2.STRATEGIES
-collective_profile_digest = v2.collective_profile_digest
-efficiency_percent = v2.efficiency_percent
 RULE_VERSION = "k32-fp32-scale-accumulation-v3.1"
 HISTORY_CACHE_BYTES = 128 * 1024 * 1024
 
@@ -39,30 +36,6 @@ class PooledHistoryGroup(HistoryGroup):
     pass
 
 
-def scale_accumulation_work(work):
-    """One FP32 FMA per output and K32 group is the minimum scale accumulation."""
-    if not work.fp8_flops:
-        return work
-    return replace(work, fp32_flops=work.fp32_flops + work.fp8_flops / 32)
-
-
-def group_seconds(group):
-    return v2.group_seconds(replace(group, work=scale_accumulation_work(group.work)))
-
-
-def critical_seconds(rank_groups):
-    priced = [
-        [
-            replace(group, work=scale_accumulation_work(group.work))
-            if group.work.fp8_flops
-            else group
-            for group in groups
-        ]
-        for groups in rank_groups
-    ]
-    return v2.critical_seconds(priced)
-
-
 def digest(value):
     content = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(content.encode()).hexdigest()
@@ -70,23 +43,8 @@ def digest(value):
 
 def rate_profile_digest():
     return digest(
-        [VERSION, RULE_VERSION, HISTORY_CACHE_BYTES, v2.rate_profile_digest()]
+        [VERSION, RULE_VERSION, HISTORY_CACHE_BYTES, arithmetic.rate_profile_digest()]
     )
-
-
-def communication_model_metadata(strategy, communication_model="lower_bound"):
-    if communication_model == "wire":
-        return v2.communication_model_metadata(strategy, communication_model)
-    if communication_model != "lower_bound" or strategy not in STRATEGIES:
-        raise ValueError("unknown strategy or communication model")
-    return {
-        "accounting_version": VERSION,
-        "communication_model": communication_model,
-        "profile_digest": collective_profile_digest(),
-        "communication_rule_version": RULE_VERSION,
-        "dep4_communication_modeled": strategy == "dep4",
-        "dep4_communication_measured": False,
-    }
 
 
 def build_binding(**values):
@@ -99,19 +57,76 @@ def build_binding(**values):
     return binding
 
 
+class BindingError(ValueError):
+    """The accounting identity is absent or different."""
+
+
+class TraceError(ValueError):
+    """A call record does not satisfy the trace contract."""
+
+
+@dataclass(frozen=True, slots=True)
+class TargetTrace:
+    """HTTP identity and ordered calls after trace validation."""
+
+    binding: dict
+    manifest: dict
+    calls: tuple[tuple[dict, ...], ...]
+
+
+BINDING_FIELDS = (
+    "source",
+    "native_modules",
+    "checkpoint_config",
+    "checkpoint_index",
+    "tokenizer",
+    "gpu_uuids",
+    "strategy",
+    "effective_strategy",
+    "owner_plan",
+    "sampling",
+    "case_id",
+    "rate_profile",
+    "accepted",
+    "proposed",
+)
+
+
 def validate_binding(binding, *, expected=None):
     if not isinstance(binding, dict) or binding.get("version") != VERSION:
         raise BindingError("accounting identity has a different version")
     if binding.get("rate_profile") != rate_profile_digest():
         raise BindingError("accounting rate profile differs")
-    old = {**binding, "version": v2.VERSION, "rate_profile": v2.rate_profile_digest()}
-    v2.validate_binding(old)
+    try:
+        arithmetic.validate_execution_strategy(
+            binding.get("strategy"), binding.get("effective_strategy")
+        )
+    except ValueError as error:
+        raise BindingError(str(error)) from error
+    for name in BINDING_FIELDS:
+        if name not in binding:
+            raise BindingError(f"accounting identity lacks {name}")
+        value = binding[name]
+        if value is None or value == "" or value == [] or value == {}:
+            raise BindingError(f"accounting identity has an empty {name}")
+    uuids = binding["gpu_uuids"]
+    if (
+        not isinstance(uuids, list)
+        or len(uuids) != WORLD_SIZE
+        or len(set(uuids)) != WORLD_SIZE
+    ):
+        raise BindingError("accounting identity requires four different GPU UUIDs")
+    for name in ("accepted", "proposed"):
+        if type(binding[name]) is not int or binding[name] < 0:
+            raise BindingError(f"{name} must be a nonnegative integer")
+    if binding["accepted"] > binding["proposed"]:
+        raise BindingError("accepted tokens exceed proposed tokens")
     if (
         not isinstance(binding.get("manifest_sha256"), str)
         or len(binding["manifest_sha256"]) != 64
     ):
         raise BindingError("accounting identity lacks manifest_sha256")
-    if expected is not None and expected != binding:
+    if expected is not None and binding != expected:
         raise BindingError("accounting identity changed")
     return binding
 
@@ -333,9 +348,14 @@ def validate_trace(trace, *, strategy, model=DEEPSEEK_V41_MODEL, expected_bindin
                 raise TraceError("incomplete prefill or output differs from HTTP usage")
     if (accepted, proposed) != (binding["accepted"], binding["proposed"]):
         raise TraceError("trace counters differ from the accounting identity")
-    return [
-        tuple(calls[call][rank] for rank in range(WORLD_SIZE)) for call in sorted(calls)
-    ]
+    return TargetTrace(
+        binding,
+        trace["manifest"],
+        tuple(
+            tuple(calls[call][rank] for rank in range(WORLD_SIZE))
+            for call in sorted(calls)
+        ),
+    )
 
 
 def received_assignments(records, rank, layer, strategy):
@@ -351,7 +371,7 @@ def valid_index_pairs(rows, layer, model=DEEPSEEK_V41_MODEL):
         return 0
     limit = model.candidate_positions if layer.uses_candidate_mask else None
     return sum(
-        v2.index_score_pairs(
+        arithmetic.index_score_pairs(
             row["start"], row["count"], layer.compress_ratio, candidate_limit=limit
         )
         for row in rows
@@ -376,98 +396,13 @@ def historical_reads(rows, layer, model=DEEPSEEK_V41_MODEL):
 
 @lru_cache(maxsize=8192)
 def _collect(kind, dtype, size, *, output=None):
-    return v2._collective_work(
-        kind, dtype, size, size if output is None else output, 1, "lower_bound"
+    return arithmetic.collective_work(
+        kind, dtype, size, size if output is None else output
     )
 
 
 def _gather(dtype, output):
     return _collect("all_gather", dtype, math.ceil(output / WORLD_SIZE), output=output)
-
-
-@lru_cache(maxsize=128)
-def _one_layer(model, layer):
-    return replace(
-        model,
-        num_layers=1,
-        compress_ratios=(layer.compress_ratio,),
-        kv_source_layers=(0,) if layer.owns_compressed_kv else (),
-        index_source_layers=(0,) if layer.owns_index_keys else (),
-        engram_layers=(0,) if layer.has_engram else (),
-    )
-
-
-def _plan(record, global_rows):
-    rows = record["request_rows"]
-    return v2.CallPlan(
-        rank=record["rank"],
-        phase=record["phase"],
-        requests=len(rows),
-        rows=sum(row["count"] for row in rows),
-        global_rows=global_rows,
-        logit_rows=sum(row["logit_rows"] for row in rows),
-        context_end=max((row["start"] + row["count"] - 1 for row in rows), default=0),
-        accepted=sum(row["accepted"] for row in rows),
-        proposed=sum(row["proposed"] for row in rows),
-        sparse_pairs=0,
-        index_pairs=0,
-        engram_unique_rows=0,
-        touched_experts=0,
-        route_matrix=((0, 0, 0, 0),) * WORLD_SIZE,
-    )
-
-
-@lru_cache(maxsize=512)
-def _local_groups(rows, model, strategy, include_weights):
-    plan = v2.CallPlan(
-        0, "decode", 1, rows, rows, 0, 0, 0, 0, 0, 0, 0, 0, ((0, 0, 0, 0),) * WORLD_SIZE
-    )
-    return tuple(
-        (group.name, group.work)
-        for group in v2.call_groups(
-            plan,
-            model,
-            strategy,
-            include_weights=include_weights,
-            communication_model="wire",
-        )
-    )
-
-
-@lru_cache(maxsize=512)
-def _index_projection(
-    rows, new_keys, model, strategy, include_weights, key_weights=None
-):
-    shards = 1 if strategy == "dep4" else WORLD_SIZE
-    common = dict(
-        shard_axis=0 if shards > 1 else None,
-        shards=shards,
-        include_weights=include_weights,
-    )
-    work = v2.add_work(
-        v2.projection_work(
-            rows,
-            model.index_heads * model.index_head_dim,
-            model.q_lora_rank,
-            storage="fp8",
-            **common,
-        ),
-        v2.projection_work(
-            rows, model.index_heads, model.hidden_size, storage="bf16", **common
-        ),
-    )
-    if new_keys:
-        work = v2.add_work(
-            work,
-            v2.projection_work(
-                new_keys,
-                model.index_head_dim,
-                model.head_dim,
-                storage="bf16",
-                include_weights=include_weights if key_weights is None else key_weights,
-            ),
-        )
-    return work
 
 
 def _choose(alternatives):
@@ -504,7 +439,7 @@ def index_alternatives(records, layer, model, strategy, weights, key_weights=Non
             )
             continue
         shards = 1 if strategy == "dep4" else WORLD_SIZE
-        one = _one_layer(model, layer)
+        one = arithmetic.layer_model(model, layer)
         pairs = valid_index_pairs(rows, layer, model)
         new_keys = (
             sum(
@@ -515,7 +450,7 @@ def index_alternatives(records, layer, model, strategy, weights, key_weights=Non
             if layer.owns_compressed_kv
             else 0
         )
-        base = _index_projection(
+        base = arithmetic.index_projection_work(
             count,
             new_keys,
             one,
@@ -544,7 +479,7 @@ def index_alternatives(records, layer, model, strategy, weights, key_weights=Non
         query_bytes = count * model.index_heads * (model.index_head_dim + 1) * 2
         top_bytes = (
             sum(
-                v2.compressed_pairs(
+                arithmetic.compressed_pairs(
                     row["start"], row["count"], layer.compress_ratio, model.index_topk
                 )
                 for row in rows
@@ -576,25 +511,15 @@ def engram_alternatives(records, layer, model):
     full, sharded = [], []
     for record in records:
         count = sum(row["count"] for row in record["request_rows"])
-        # Disjoint hash columns prove this floor without token/hash identities.
-        unique = model.engram_columns if count and layer.has_engram else 0
-        packed = model.engram_head_dim + model.engram_scale_bytes
-        row_bytes = packed + 2 * model.engram_head_dim
         full.append(
-            [
-                Group(
-                    "engram.lookup",
-                    Work(host_bytes=unique * packed, hbm_bytes=unique * row_bytes),
-                )
-            ]
+            [Group("engram.lookup", arithmetic.engram_lookup_work(count, layer, model))]
         )
         sharded.append(
             [
                 Group(
                     "engram.lookup",
-                    Work(
-                        host_bytes=unique * packed / WORLD_SIZE,
-                        hbm_bytes=unique * row_bytes / WORLD_SIZE,
+                    arithmetic.engram_lookup_work(
+                        count, layer, model, shards=WORLD_SIZE
                     ),
                 ),
                 Group(
@@ -604,7 +529,7 @@ def engram_alternatives(records, layer, model):
                         "bf16",
                         count * model.engram_columns * model.engram_head_dim * 2,
                     )
-                    if unique
+                    if count and layer.has_engram
                     else Work(),
                 ),
             ]
@@ -614,11 +539,15 @@ def engram_alternatives(records, layer, model):
 
 def _route_work(records, rank, layer, model, element_bytes):
     matrix = [record["dispatch_rows"][layer] for record in records]
-    wire = v2.route_wire_pressure_bytes(matrix, rank, model.hidden_size * element_bytes)
+    wire = arithmetic.route_wire_pressure_bytes(
+        matrix, rank, model.hidden_size * element_bytes
+    )
     return Work(
         nvlink_bytes=wire,
         collective_seconds=(
-            v2._dep4_all_to_all_seconds(wire, "bf16" if element_bytes == 2 else "fp32")
+            arithmetic.dep4_all_to_all_seconds(
+                wire, "bf16" if element_bytes == 2 else "fp32"
+            )
             if wire
             else 0
         ),
@@ -640,31 +569,29 @@ def call_groups(
     weights = [True] * WORLD_SIZE if weights is None else weights
     head_weights = weights if head_weights is None else head_weights
     totals = [sum(row["count"] for row in r["request_rows"]) for r in records]
-    global_rows = sum(totals) if strategy == "dep4" else totals[0]
-    plans = [_plan(record, global_rows) for record in records]
     ranks = [
         [
             Group(
                 "embedding",
-                v2.embedding_work(plan.rows, model, strategy) if plan.rows else Work(),
+                arithmetic.embedding_work(count, model, strategy) if count else Work(),
             )
         ]
-        for plan in plans
+        for count in totals
     ]
-    for rank, plan in enumerate(plans):
+    for rank, count in enumerate(totals):
         ranks[rank].append(
             Group(
                 "embedding.communication",
-                _collect("all_reduce", "bf16", plan.rows * model.hidden_size * 2)
-                if strategy != "dep4" and plan.rows
+                _collect("all_reduce", "bf16", count * model.hidden_size * 2)
+                if strategy != "dep4" and count
                 else Work(),
             )
         )
-    table = v2.layer_table(model)
+    table = arithmetic.layer_table(model)
     kv_seen = [{} for _ in range(WORLD_SIZE)]
     for layer in table:
-        one = _one_layer(model, layer)
-        for rank, plan in enumerate(plans):
+        one = arithmetic.layer_model(model, layer)
+        for rank, count in enumerate(totals):
             record = records[rank]
             assignments = received_assignments(records, rank, layer.layer_id, strategy)
             touched = (
@@ -672,7 +599,7 @@ def call_groups(
                 if touched_weights is None
                 else touched_weights[rank][layer.layer_id]
             )
-            work = v2.routed_expert_work(
+            work = arithmetic.routed_expert_work(
                 assignments,
                 touched,
                 one,
@@ -684,8 +611,8 @@ def call_groups(
                 ),
             )
             local = {}
-            if plan.rows:
-                local = dict(_local_groups(plan.rows, one, strategy, weights[rank]))
+            if count:
+                local = dict(arithmetic.local_work(count, one, strategy, weights[rank]))
             kv, _ = historical_reads(record["request_rows"], layer, model)
             window_bytes = (
                 sum(
@@ -709,9 +636,9 @@ def call_groups(
                 kv -= min(shared, previous, HISTORY_CACHE_BYTES)
                 kv_seen[rank][source] = max(previous, shared)
             pairs = sum(
-                v2.window_pairs(row["start"], row["count"], model.window_size)
+                arithmetic.window_pairs(row["start"], row["count"], model.window_size)
                 + (
-                    v2.compressed_pairs(
+                    arithmetic.compressed_pairs(
                         row["start"],
                         row["count"],
                         layer.compress_ratio,
@@ -748,24 +675,22 @@ def call_groups(
                 dispatch = _route_work(records, rank, layer.layer_id, model, 2)
                 routed = _route_work(records, rank, layer.layer_id, model, 4)
             else:
-                dense = _collect(
-                    "all_reduce", "fp32", plan.rows * model.hidden_size * 4
-                )
+                dense = _collect("all_reduce", "fp32", count * model.hidden_size * 4)
                 dispatch = Work()
                 if strategy == "tp4":
-                    routed = v2.add_work(
+                    routed = arithmetic.add_work(
                         _gather(
                             "bf16",
-                            plan.rows
+                            count
                             * model.experts_per_token
                             * model.moe_intermediate
                             * 2,
                         ),
-                        _gather("fp32", plan.rows * model.hidden_size * 4),
+                        _gather("fp32", count * model.hidden_size * 4),
                     )
                 else:
                     routed = _collect(
-                        "all_reduce", "fp32", plan.rows * model.hidden_size * 4
+                        "all_reduce", "fp32", count * model.hidden_size * 4
                     )
             for name, value in (
                 ("dense", dense),
@@ -783,22 +708,23 @@ def call_groups(
                     Group(f"{layer.layer_id}.{group.name}", group.work)
                     for group in chosen[rank]
                 )
-    for rank, plan in enumerate(plans):
+    for rank, record in enumerate(records):
+        logit_rows = sum(row["logit_rows"] for row in record["request_rows"])
         ranks[rank].append(
             Group(
                 "output_head",
-                v2.output_head_work(
-                    plan.logit_rows, model, strategy, include_weights=head_weights[rank]
+                arithmetic.output_head_work(
+                    logit_rows, model, strategy, include_weights=head_weights[rank]
                 )
-                if plan.logit_rows
+                if logit_rows
                 else Work(),
             )
         )
         ranks[rank].append(
             Group(
                 "head.communication",
-                _gather("fp32", plan.logit_rows * model.vocab_size * 4)
-                if strategy != "dep4" and plan.logit_rows
+                _gather("fp32", logit_rows * model.vocab_size * 4)
+                if strategy != "dep4" and logit_rows
                 else Work(),
             )
         )
@@ -820,8 +746,8 @@ def call_groups(
 
 def _resource_times(groups, *, pooled=False):
     groups = [g for g in groups if isinstance(g, PooledHistoryGroup) == pooled]
-    work = v2.add_work(
-        *(v2.scale_work(group.work, group.repetitions) for group in groups)
+    work = arithmetic.add_work(
+        *(arithmetic.scale_work(group.work, group.repetitions) for group in groups)
     )
     work = scale_accumulation_work(work)
     return (
@@ -858,7 +784,7 @@ def candidate_handoff(records, model):
     rows = records[0]["request_rows"]
     size = (
         sum(
-            v2.compressed_pairs(
+            arithmetic.compressed_pairs(
                 row["start"] + block_size - 1, row["count"], block_size, blocks
             )
             for row in rows
@@ -868,7 +794,7 @@ def candidate_handoff(records, model):
     return [
         Group(
             "index.candidate_handoff",
-            v2.add_work(_gather("fp32", size), Work(hbm_bytes=size)),
+            arithmetic.add_work(_gather("fp32", size), Work(hbm_bytes=size)),
         )
     ]
 
@@ -955,7 +881,7 @@ def choose_index_groups(common, options, records, model, strategy):
         else None
     )
     handoff = candidate_handoff(records, model) if source is not None else []
-    handoff_seconds = v2.serial_seconds(handoff)
+    handoff_seconds = arithmetic.serial_seconds(handoff)
     handoff_resources = _resource_vector([handoff] * WORLD_SIZE)
 
     def price(state):
@@ -1014,37 +940,11 @@ def reference_trace(
     strategy,
     model=DEEPSEEK_V41_MODEL,
     expected_binding=None,
-    communication_model=None,
 ):
-    if (
-        isinstance(trace, dict)
-        and isinstance(trace.get("binding"), dict)
-        and trace["binding"].get("version") == v3.VERSION
-    ):
-        return v3.reference_trace(
-            trace,
-            strategy=strategy,
-            model=model,
-            expected_binding=expected_binding,
-            communication_model=communication_model,
-        )
-    if (
-        isinstance(trace, dict)
-        and isinstance(trace.get("binding"), dict)
-        and trace["binding"].get("version") in (v2.VERSION, v2.LEGACY_VERSION)
-    ):
-        return v2.reference_trace(
-            trace,
-            strategy=strategy,
-            model=model,
-            expected_binding=expected_binding,
-            communication_model=communication_model,
-        )
-    if communication_model not in (None, "lower_bound"):
-        raise BindingError("communication model differs from the trace version")
-    calls = validate_trace(
+    target = validate_trace(
         trace, strategy=strategy, model=model, expected_binding=expected_binding
     )
+    calls = target.calls
     dense_seen, head_seen, key_seen = set(), set(), set()
     _collect.cache_clear()
     touched = [[0] * model.num_layers for _ in range(WORLD_SIZE)]
@@ -1057,7 +957,7 @@ def reference_trace(
             active = bool(record["request_rows"])
             logits = any(row["logit_rows"] for row in record["request_rows"])
             key_flags = []
-            for layer in v2.layer_table(model):
+            for layer in arithmetic.layer_table(model):
                 new_keys = (
                     layer.owns_compressed_kv
                     and layer.owns_index_keys
@@ -1109,15 +1009,14 @@ def reference_trace(
             for row in record["request_rows"]
         )
         total += overlap_seconds(groups, count)
-    metadata = communication_model_metadata(strategy)
-    return v2.ReferenceResult(
+    return ReferenceResult(
         version=VERSION,
         seconds=total,
         acceptance="trace",
         strategy=strategy,
         calls=len(calls),
         communication_model="lower_bound",
-        profile_digest=metadata["profile_digest"],
+        profile_digest=collective_profile_digest(),
         communication_rule_version=RULE_VERSION,
         communication_is_modeled=strategy == "dep4",
         communication_is_measured=False,
@@ -1131,14 +1030,14 @@ def _ideal_record(rank, call, phase, rows, global_rows, model, strategy):
         else [row for row in rows if (row["id"] - 1) % WORLD_SIZE == rank]
     )
     count = sum(row["count"] for row in local)
-    assignments = list(v2._route_row(count * model.experts_per_token))
+    assignments = list(_route_row(count * model.experts_per_token))
     dispatch = (
         [min(count, a) for a in assignments] if strategy == "dep4" else [0] * WORLD_SIZE
     )
     received = (
         count * model.experts_per_token
         if strategy == "tp4"
-        else v2._route_row(global_rows * model.experts_per_token)[rank]
+        else _route_row(global_rows * model.experts_per_token)[rank]
     )
     bins = (
         model.routed_experts
@@ -1152,13 +1051,13 @@ def _ideal_record(rank, call, phase, rows, global_rows, model, strategy):
         "request_rows": local,
         "expert_assignments": [assignments.copy() for _ in range(model.num_layers)],
         "dispatch_rows": [dispatch.copy() for _ in range(model.num_layers)],
-        "touched_experts": [v2._expected_distinct(bins, received)] * model.num_layers,
+        "touched_experts": [_expected_distinct(bins, received)] * model.num_layers,
     }
 
 
 def ideal_trace(case, *, strategy=None, model=DEEPSEEK_V41_MODEL):
     strategy = strategy or case.get("strategy", "tp4")
-    v2.validate_execution_strategy(strategy, strategy)
+    arithmetic.validate_execution_strategy(strategy, strategy)
     manifest = {
         "mode": case["mode"],
         "requests": [
@@ -1203,7 +1102,7 @@ def ideal_trace(case, *, strategy=None, model=DEEPSEEK_V41_MODEL):
             for rank, record in enumerate(records):
                 n = received_assignments(records, rank, 0, strategy)
                 record["touched_experts"] = [
-                    v2._expected_distinct(bins, n)
+                    _expected_distinct(bins, n)
                 ] * model.num_layers
         accepted += a * case["batch"]
         start += count
@@ -1234,32 +1133,7 @@ def ideal_trace(case, *, strategy=None, model=DEEPSEEK_V41_MODEL):
     return {"binding": binding, "manifest": manifest, "calls": calls}
 
 
-def reference_case(
-    case,
-    *,
-    strategy=None,
-    model=DEEPSEEK_V41_MODEL,
-    communication_model="lower_bound",
-    version=VERSION,
-):
-    if version == v3.VERSION:
-        return v3.reference_case(
-            case,
-            strategy=strategy,
-            model=model,
-            communication_model=communication_model,
-        )
-    if version in (v2.VERSION, v2.LEGACY_VERSION) or communication_model == "wire":
-        return v2.reference_case(
-            case,
-            strategy=strategy,
-            model=model,
-            communication_model="wire"
-            if version == v2.LEGACY_VERSION
-            else communication_model,
-        )
-    if version != VERSION:
-        raise ValueError("unknown accounting version")
+def reference_case(case, *, strategy=None, model=DEEPSEEK_V41_MODEL):
     strategy = strategy or case.get("strategy", "tp4")
     if case.get("strategy", strategy) != strategy:
         raise ValueError("strategy differs from the case strategy")
@@ -1267,6 +1141,41 @@ def reference_case(
         ideal_trace(case, strategy=strategy, model=model),
         strategy=strategy,
         model=model,
-        communication_model=communication_model,
     )
     return replace(result, acceptance="ideal")
+
+
+@dataclass(frozen=True, slots=True)
+class ReferenceResult:
+    """The reference seconds and calculation identity for one case or trace."""
+
+    version: str
+    seconds: float
+    acceptance: str
+    strategy: str
+    calls: int
+    communication_model: str
+    profile_digest: str | None
+    communication_rule_version: str
+    communication_is_modeled: bool
+    communication_is_measured: bool
+
+
+def efficiency_percent(reference_seconds, http_seconds):
+    """Return the reference seconds as a percentage of the full HTTP seconds."""
+    if not math.isfinite(http_seconds) or http_seconds <= 0:
+        raise ValueError("full HTTP seconds must be finite and positive")
+    if not math.isfinite(reference_seconds) or reference_seconds < 0:
+        raise ValueError("reference seconds must be finite and nonnegative")
+    return 100 * reference_seconds / http_seconds
+
+
+def _route_row(assignments):
+    base, remainder = divmod(assignments, WORLD_SIZE)
+    return tuple(base + (destination < remainder) for destination in range(WORLD_SIZE))
+
+
+def _expected_distinct(bins, draws):
+    if draws <= 0:
+        return 0
+    return min(bins, round(bins * (1 - (1 - 1 / bins) ** draws)))

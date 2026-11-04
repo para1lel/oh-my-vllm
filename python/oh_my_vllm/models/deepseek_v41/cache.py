@@ -5,9 +5,8 @@ from math import ceil
 
 import torch
 
-from .packed_cache import IndexWorkspace, PackedHistory, PackedPage, PageTable
+from .packed_cache import IndexWorkspace, PackedPage, PageTable
 from .state import StateExports
-from .storage import release_sequence_slot, reserve_sequence_slot
 
 
 def _blocks(value):
@@ -52,11 +51,10 @@ def _operation(operation):
 
 @dataclass
 class _FaPage:
-    compressed: list[PackedPage | torch.Tensor]
-    index: list[PackedPage | torch.Tensor]
+    compressed: list[PackedPage]
+    index: list[PackedPage]
     engram: list[torch.Tensor]
     valid_tokens: int = 0
-    physical_id: int | None = None
 
 
 @dataclass
@@ -129,129 +127,71 @@ class DeepSeekCache:
         self._tails = []
         self.exports = StateExports()
         model._state_export = self.exports
-        for layer in getattr(model, "layers", ()):
-            attention = getattr(layer, "attn", None)
-            if attention is None:
-                continue
-            window = getattr(attention, "window_kv_cache", None)
-            if window is not None:
-                self._window.append(window)
-                attention._state_export = self.exports
-        for layer in getattr(model, "mtp", ()):
-            attention = getattr(layer, "attn", None)
-            window = getattr(attention, "window_kv_cache", None)
-            if window is not None:
-                self._mtp_window.append(window)
-                attention._state_export = self.exports
-        for layer in getattr(model, "layers", ()):
-            attention = getattr(layer, "attn", None)
-            if attention is None:
-                continue
-            compressed = getattr(attention, "compress_kv_cache", None)
-            if compressed is not None:
+        for layer in model.layers:
+            attention = layer.attn
+            self._window.append(attention.window_kv_cache)
+            attention._state_export = self.exports
+            if attention.is_kv_source:
                 self._compressed.append(
-                    (compressed, int(getattr(attention, "compress_ratio", 1)))
+                    (attention.compress_kv_cache, attention.compress_ratio)
                 )
-            indexer = getattr(attention, "indexer", None)
-            index = getattr(indexer, "k_cache", None)
-            if index is not None:
+                if attention.compress_ratio > 1:
+                    compressor = attention.compressor
+                    self._tails.append((compressor.kv_state, compressor.score_state))
+                    compressor._state_export = self.exports
+            if attention.indexer is not None and attention.indexer.owns_k:
                 self._index.append(
-                    (index, int(getattr(attention, "compress_ratio", 1)))
+                    (attention.indexer.k_cache, attention.compress_ratio)
                 )
-            compressor = getattr(attention, "compressor", None)
-            kv_state = getattr(compressor, "kv_state", None)
-            score_state = getattr(compressor, "score_state", None)
-            if kv_state is not None and score_state is not None:
-                self._tails.append((kv_state, score_state))
-                compressor._state_export = self.exports
-        engram = getattr(getattr(model, "engram_hash", None), "cache", None)
-        if engram is not None:
-            self._engram.append(engram)
-        histories = [
-            value
-            for value in (
-                *(value for value, _ in self._compressed),
-                *(value for value, _ in self._index),
-                *self._engram,
-            )
-            if isinstance(value, PackedHistory)
-        ]
-        self.page_table = None
+        for layer in model.mtp:
+            self._mtp_window.append(layer.attn.window_kv_cache)
+            layer.attn._state_export = self.exports
+        if model.engram_hash is not None:
+            self._engram.append(model.engram_hash.cache)
+        self.histories = (
+            *(value for value, _ in self._compressed),
+            *(value for value, _ in self._index),
+            *self._engram,
+        )
+        reference = self._window[0]
+        self.fa_capacity = fa_capacity or (
+            1 + reference.size(0) * ceil(max_seq_len / block_tokens)
+        )
+        self.page_table = PageTable(
+            reference.size(0),
+            max_seq_len,
+            block_tokens,
+            self.fa_capacity,
+            reference.device,
+        )
         self.index_workspace = None
-        if histories:
-            reference = histories[0]
-            capacity = fa_capacity or (
-                1 + reference.shape[0] * ceil(max_seq_len / block_tokens)
-            )
-            self.fa_capacity = capacity
-            self.page_table = PageTable(
-                reference.shape[0],
+        if self._index:
+            index = self._index[0][0]
+            self.index_workspace = IndexWorkspace(
+                reference.size(0),
                 max_seq_len,
-                block_tokens,
-                capacity,
-                reference.device,
+                index.shape[-1],
+                index.device,
+                index.lazy,
+                index.dtype,
             )
-            index = next(
-                (value for value, _ in self._index if isinstance(value, PackedHistory)),
-                None,
+        index_owners = {id(value) for value, _ratio in self._index}
+        for value in self.histories:
+            value.bind(
+                self.page_table,
+                self.index_workspace if id(value) in index_owners else None,
             )
-            if index is not None:
-                self.index_workspace = IndexWorkspace(
-                    reference.shape[0],
-                    max_seq_len,
-                    index.shape[-1],
-                    index.device,
-                    index.lazy,
-                    index.dtype,
-                )
-            index_owners = {id(value) for value, _ratio in self._index}
-            for value in histories:
-                value.bind(
-                    self.page_table,
-                    self.index_workspace if id(value) in index_owners else None,
-                )
-            model._physical_cache = self
-        self.histories = tuple(histories)
-
-    @property
-    def host_allocated_bytes(self):
-        return self.used_bytes
+        model._physical_cache = self
 
     def stats(self):
-        staging = [
-            value
-            for value in (
-                *(value for value, _ in self._compressed),
-                *(value for value, _ in self._index),
-                *self._engram,
-            )
-            if hasattr(value, "_paged_storage")
-        ]
-        mapped = 0
-        if staging:
-            from ...operators.runtime.paged import mapped_bytes
-
-            mapped = mapped_bytes()
         return {
-            "sequence_staging_mapped_bytes": mapped,
-            "sequence_staging_logical_bytes": sum(
-                value.numel() * value.element_size() for value in staging
-            ),
             "gpu_logical_page_bytes": (
                 len(self.fa_pages) * self._fa_page_bytes()
                 + len(self.mamba_pages) * self._mamba_page_bytes()
             ),
-            "packed_pool_capacity_bytes": (
-                self.fa_capacity * self._fa_page_bytes()
-                if self.page_table is not None
-                else 0
-            ),
-            "packed_pool_generation": self.page_table.generation
-            if self.page_table is not None
-            else None,
-            "packed_pool_graph_leases": self.page_table.leases
-            if self.page_table is not None
-            else 0,
+            "packed_pool_capacity_bytes": self.fa_capacity * self._fa_page_bytes(),
+            "packed_pool_generation": self.page_table.generation,
+            "packed_pool_graph_leases": self.page_table.leases,
             "index_workspace_reserved_bytes": (
                 self.index_workspace.values.numel()
                 * self.index_workspace.values.element_size()
@@ -272,34 +212,9 @@ class DeepSeekCache:
         for value in self.histories:
             value.reserve_page(block)
         return _FaPage(
-            [
-                value.page(block)
-                if isinstance(value, PackedHistory)
-                else torch.zeros(
-                    (ceil(self.block_tokens / ratio), *value.shape[2:]),
-                    dtype=value.dtype,
-                    device=value.device,
-                )
-                for value, ratio in self._compressed
-            ],
-            [
-                value.page(block)
-                if isinstance(value, PackedHistory)
-                else torch.zeros(
-                    (ceil(self.block_tokens / ratio), *value.shape[2:]),
-                    dtype=value.dtype,
-                    device=value.device,
-                )
-                for value, ratio in self._index
-            ],
-            [
-                value.page(block)
-                if isinstance(value, PackedHistory)
-                else torch.zeros(
-                    (self.block_tokens,), dtype=value.dtype, device=value.device
-                )
-                for value in self._engram
-            ],
+            [value.page(block) for value, _ratio in self._compressed],
+            [value.page(block) for value, _ratio in self._index],
+            [value.page(block) for value in self._engram],
         )
 
     def _new_mamba_page(self):
@@ -322,7 +237,6 @@ class DeepSeekCache:
         page = self.fa_pages.get(block)
         if page is None:
             page = self._new_fa_page(block)
-            page.physical_id = block if self.page_table is not None else None
             self.fa_pages[block] = page
         return page
 
@@ -356,8 +270,7 @@ class DeepSeekCache:
                 raise ValueError("DeepSeek FA table has an unusable block")
         return fa, mamba
 
-    def ensure_row(self, row):
-        fa, mamba = self._validate_row(row)
+    def _ensure_pages(self, fa, mamba):
         for block in fa:
             if block:
                 self._fa_page(block)
@@ -369,51 +282,24 @@ class DeepSeekCache:
         """Bind the scheduler's logical pages before physical model writes."""
         if type(end_pos) is not int or not 0 <= end_pos <= self.max_seq_len:
             raise ValueError("DeepSeek active endpoint is out of bounds")
-        fa, _mamba = self._validate_row(row, end=end_pos)
-        self.ensure_row(row)
-        if self.page_table is not None:
-            self.page_table.bind(slot, fa)
+        fa, mamba = self._validate_row(row, end=end_pos)
+        self._ensure_pages(fa, mamba)
+        self.page_table.bind(slot, fa)
 
     def require_active_slots(self, slots):
-        if self.page_table is not None and any(
-            slot not in self.page_table.active for slot in slots
-        ):
+        if any(slot not in self.page_table.active for slot in slots):
             raise ValueError("bind a DeepSeek cache row before model execution")
-
-    def ensure_mamba_row(self, row):
-        _fa, mamba = self._validate_row(row)
-        for block in mamba:
-            if block:
-                self._mamba_page(block)
 
     def clear_slot(self, slot):
         self.exports.discard(slot)
-        if self.page_table is not None:
-            self.page_table.bind(slot, [])
+        self.page_table.bind(slot, [])
         for value in self._window:
             value[slot].zero_()
         for value in self._mtp_window:
             value[slot].zero_()
-        for value, _ratio in self._compressed:
-            if not isinstance(value, PackedHistory):
-                release_sequence_slot(value, slot)
-        for value, _ratio in self._index:
-            if not isinstance(value, PackedHistory):
-                release_sequence_slot(value, slot)
-        for value in self._engram:
-            if not isinstance(value, PackedHistory):
-                release_sequence_slot(value, slot)
         for kv, score in self._tails:
             kv[slot].zero_()
             score[slot].fill_(-torch.inf)
-
-    def reserve_slot(self, slot, end):
-        for value, ratio in (*self._compressed, *self._index):
-            if not isinstance(value, PackedHistory):
-                reserve_sequence_slot(value, slot, end // ratio)
-        for value in self._engram:
-            if not isinstance(value, PackedHistory):
-                reserve_sequence_slot(value, slot, end)
 
     def reserve_workspace(self, batch, end):
         if self.index_workspace is not None:
@@ -451,7 +337,7 @@ class DeepSeekCache:
     def begin_step(self, row, slot, *, start_pos, end_pos, minimum_end=None):
         if not 0 <= start_pos < end_pos <= self.max_seq_len:
             raise ValueError("DeepSeek state export range is out of bounds")
-        _fa, mamba = self._validate_row(row, end=end_pos)
+        fa, mamba = self._validate_row(row, end=end_pos)
         minimum_end = end_pos if minimum_end is None else minimum_end
         if type(minimum_end) is not int or not start_pos < minimum_end <= end_pos:
             raise ValueError("invalid DeepSeek minimum accepted endpoint")
@@ -461,15 +347,14 @@ class DeepSeekCache:
             self._state_destinations(row, start_pos, end_pos, mamba).values()
         )
         endpoints.update(range(minimum_end, end_pos + 1))
-        if self.page_table is not None:
-            self.activate_row(row, slot, end_pos=end_pos)
-            fa, _mamba = self._validate_row(row, end=end_pos)
-            for page_index in range(
-                start_pos // self.block_tokens, (end_pos - 1) // self.block_tokens + 1
-            ):
-                page = self.fa_pages[fa[page_index]]
-                prefix = max(0, start_pos - page_index * self.block_tokens)
-                page.valid_tokens = min(page.valid_tokens, prefix)
+        self._ensure_pages(fa, mamba)
+        self.page_table.bind(slot, fa)
+        for page_index in range(
+            start_pos // self.block_tokens, (end_pos - 1) // self.block_tokens + 1
+        ):
+            page = self.fa_pages[fa[page_index]]
+            prefix = max(0, start_pos - page_index * self.block_tokens)
+            page.valid_tokens = min(page.valid_tokens, prefix)
         self.exports.begin(slot, start_pos, endpoints, minimum_end=minimum_end)
 
     def mtp_checkpoint_ends(self, slots, first, last, final_end):
@@ -555,28 +440,6 @@ class DeepSeekCache:
             if not block:
                 continue
             page = self._fa_page(block)
-            for sources, targets in (
-                (self._compressed, page.compressed),
-                (self._index, page.index),
-            ):
-                for (value, ratio), destination in zip(sources, targets, strict=True):
-                    if isinstance(value, PackedHistory):
-                        continue
-                    first = max(start_pos // ratio, page_start // ratio)
-                    last = min(accepted_end // ratio, ceil(page_end / ratio))
-                    if first < last:
-                        offset = page_start // ratio
-                        destination[first - offset : last - offset].copy_(
-                            value[slot, first:last]
-                        )
-            for value, destination in zip(self._engram, page.engram, strict=True):
-                if isinstance(value, PackedHistory):
-                    continue
-                first = max(start_pos, page_start)
-                if first < page_end:
-                    destination[first - page_start : page_end - page_start].copy_(
-                        value[slot, first:page_end]
-                    )
             page.valid_tokens = max(page.valid_tokens, page_end - page_start)
         for block, endpoint in destinations.items():
             page = self._mamba_page(block)
@@ -599,21 +462,18 @@ class DeepSeekCache:
                 destination[: endpoint - page_start].copy_(
                     source[slot, page_start:endpoint]
                 )
-        if self.page_table is not None:
-            proposed_end = max(self.exports.endpoints(slot), default=accepted_end)
-            for page_index in range(
-                first_page, (proposed_end - 1) // self.block_tokens + 1
-            ):
-                block = fa_blocks[page_index]
-                valid = max(
-                    0,
-                    min(
-                        self.block_tokens, accepted_end - page_index * self.block_tokens
-                    ),
-                )
-                for history in self.histories:
-                    history.discard_after(block, valid)
-                self.fa_pages[block].valid_tokens = valid
+        proposed_end = max(self.exports.endpoints(slot), default=accepted_end)
+        for page_index in range(
+            first_page, (proposed_end - 1) // self.block_tokens + 1
+        ):
+            block = fa_blocks[page_index]
+            valid = max(
+                0,
+                min(self.block_tokens, accepted_end - page_index * self.block_tokens),
+            )
+            for history in self.histories:
+                history.discard_after(block, valid)
+            self.fa_pages[block].valid_tokens = valid
         for block, endpoint in destinations.items():
             page = self.mamba_pages[block]
             page.endpoint = endpoint
@@ -661,35 +521,9 @@ class DeepSeekCache:
                             "DeepSeek restore FA page is unavailable or incomplete"
                         )
         self.clear_slot(slot)
-        if self.page_table is not None:
-            self.page_table.bind(slot, fa_blocks)
+        self.page_table.bind(slot, fa_blocks)
         if not start_pos:
             return
-        self.reserve_slot(slot, start_pos)
-        for page_index, block in enumerate(fa_blocks):
-            page_start = page_index * self.block_tokens
-            if page_start >= start_pos:
-                break
-            if not block:
-                continue
-            page = self.fa_pages[block]
-            page_end = min(start_pos, page_start + self.block_tokens)
-            for targets, sources in (
-                (self._compressed, page.compressed),
-                (self._index, page.index),
-            ):
-                for (value, ratio), source in zip(targets, sources, strict=True):
-                    if isinstance(value, PackedHistory):
-                        continue
-                    first = page_start // ratio
-                    last = min(start_pos // ratio, ceil(page_end / ratio))
-                    if first < last:
-                        value[slot, first:last].copy_(source[: last - first])
-            for value, source in zip(self._engram, page.engram, strict=True):
-                if not isinstance(value, PackedHistory):
-                    value[slot, page_start:page_end].copy_(
-                        source[: page_end - page_start]
-                    )
         for targets, sources in (
             (self._window, state.window),
             (self._mtp_window, state.mtp_window),
@@ -784,19 +618,7 @@ class DeepSeekCache:
         return size * torch.empty((), dtype=dtype).element_size()
 
     def _fa_page_bytes(self):
-        return sum(
-            value.page_bytes(self.block_tokens)
-            if isinstance(value, PackedHistory)
-            else self._shape_size(
-                (ceil(self.block_tokens / ratio), *value.shape[2:]), value.dtype
-            )
-            for value, ratio in (*self._compressed, *self._index)
-        ) + sum(
-            value.page_bytes(self.block_tokens)
-            if isinstance(value, PackedHistory)
-            else self._shape_size((self.block_tokens,), value.dtype)
-            for value in self._engram
-        )
+        return sum(value.page_bytes(self.block_tokens) for value in self.histories)
 
     def _mamba_page_bytes(self):
         return (
@@ -837,7 +659,7 @@ class DeepSeekCache:
         if self.requests is None or self.free_slots is None:
             return
         request = self.requests.get(request_id)
-        slot = getattr(request, "cache_slot", None) if request is not None else None
+        slot = request.cache_slot if request is not None else None
         if slot is not None:
             self.clear_slot(slot)
             self.free_slots.add(slot)
@@ -849,7 +671,7 @@ class DeepSeekCache:
             if request_id not in self.requests:
                 raise ValueError("DeepSeek cache store request is unknown")
             request = self.requests[request_id]
-            if getattr(request, "cache_slot", None) is None:
+            if request.cache_slot is None:
                 raise ValueError("DeepSeek cache store request is not resident")
         for block in operation["fa_blocks"]:
             self._validate_block_id(block, self.fa_capacity, "FA")
@@ -881,9 +703,7 @@ class DeepSeekCache:
             mamba,
             size,
             request_id,
-            "deepseek_v41_packed_fa"
-            if self.page_table is not None
-            else "deepseek_v41_dense_fa",
+            "deepseek_v41_packed_fa",
             1,
         )
         self.used_bytes += size
@@ -929,12 +749,10 @@ class DeepSeekCache:
         return "complete", snapshot.bytes
 
     def _validate_load(self, operation, snapshot):
-        layout = (
-            "deepseek_v41_packed_fa"
-            if self.page_table is not None
-            else "deepseek_v41_dense_fa"
-        )
-        if snapshot.layout_id != layout or snapshot.layout_version != 1:
+        if (
+            snapshot.layout_id != "deepseek_v41_packed_fa"
+            or snapshot.layout_version != 1
+        ):
             raise ValueError(
                 "DeepSeek host snapshot layout does not match the physical pool"
             )
@@ -955,7 +773,7 @@ class DeepSeekCache:
             request = self.requests.get(snapshot.request_id)
             if request is None:
                 raise ValueError("DeepSeek cache load request is unknown")
-            if getattr(request, "cache_slot", None) is not None:
+            if request.cache_slot is not None:
                 raise ValueError("DeepSeek cache load request is already resident")
         if len(operation["fa_blocks"]) != len(snapshot.fa) or len(
             operation["mamba_blocks"]
@@ -1029,22 +847,15 @@ class DeepSeekCache:
 
     def reset(self):
         """Start an empty cache epoch without replacing physical pool addresses."""
-        if self.page_table is not None:
-            if self.page_table.closed or self.page_table.leases:
-                raise RuntimeError(
-                    "close captured graphs before resetting the packed pool"
-                )
-            if self.page_table.values.is_cuda:
-                torch.cuda.synchronize(self.page_table.values.device)
-            for history in self.histories:
-                for block in history.initialized:
-                    history.discard_after(block, 0)
-            self.page_table.generation += 1
-        slots = (
-            self._window[0].size(0)
-            if self._window
-            else (self.histories[0].shape[0] if self.histories else 0)
-        )
+        if self.page_table.closed or self.page_table.leases:
+            raise RuntimeError("close captured graphs before resetting the packed pool")
+        if self.page_table.values.is_cuda:
+            torch.cuda.synchronize(self.page_table.values.device)
+        for history in self.histories:
+            for block in history.initialized:
+                history.discard_after(block, 0)
+        self.page_table.generation += 1
+        slots = self.page_table.values.size(0)
         for slot in range(slots):
             self.clear_slot(slot)
         self.exports.clear()
@@ -1056,22 +867,12 @@ class DeepSeekCache:
         self.unusable = False
 
     def close(self):
-        if self.page_table is not None:
-            self.page_table.close()
+        self.page_table.close()
         for value in self.histories:
             value.close()
         if self.index_workspace is not None:
             self.index_workspace.close()
         self.exports.clear()
-        for value in (
-            *(value for value, _ in self._compressed),
-            *(value for value, _ in self._index),
-            *self._engram,
-        ):
-            owner = getattr(value, "_paged_storage", None)
-            if owner is not None:
-                for slot in range(value.shape[0]):
-                    owner.release(slot)
         self.snapshots.clear()
         self.fa_pages.clear()
         self.mamba_pages.clear()

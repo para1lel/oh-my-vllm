@@ -31,6 +31,7 @@ class GraphCapture(unittest.TestCase):
     def device(self, events):
         device = Device.__new__(Device)
         device.graph_failed = False
+        device.capture_stream = None
         device.transfer_engines = set()
         device._failed_graph_resources = []
         device.wait_pinned_safe = lambda: events.append("handoff")

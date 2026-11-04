@@ -254,4 +254,4 @@ scripts/with-env.sh python -m development.native_build --module collectives
 
 The [native peer](../development/operators/collective_peer.py) supplies synthetic execution, not a production adapter.
 CPU checks do not prove GPU numerics, graph safety, memory capacity, or performance.
-Model preparation, physical layouts, accepted-state selection, and service integration are subsequent work.
+Each [model adapter](adapters.md) supplies physical layouts and accepted-state selection.

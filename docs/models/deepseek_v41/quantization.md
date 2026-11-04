@@ -252,17 +252,4 @@ They check scale rules, nearest-even ties, signed zero, exponent boundaries, and
 CUDA cases check stream order, invalid metadata, empty history, and temporary storage bounds.
 These checks do not replace independent full-model endpoint fixtures or the approved HTTP and AgentX workloads.
 
-## Reference execution
-
-Use an isolated development environment for the released TileLang reference.
-Do not add TileLang to inference dependencies.
-With this quantizer source, TileLang 0.1.8 can reuse input shared storage before all input stores complete.
-Use a CUDA block barrier before each reference quantizer writes its output shared storage.
-Add `T.sync_threads()` immediately before `T.copy(y_local, y_shared)` in `act_quant_kernel` and `fp4_quant_kernel`.
-Do not change the equations, casts, or original checkpoint files.
-
-Record the original source, patch, modified source, compiler, and runtime identities in each reference manifest.
-Check packed and in-place formats with Compute Sanitizer Racecheck before you generate expected arrays.
-Do not freeze arrays unless repeated target and DSpark endpoints are bit-exact.
-Identify this backend as a reference with a synchronization patch, not an unmodified release.
-Do not import candidate modules to generate expected arrays.
+The [numerical acceptance guide](evaluation.md) defines independent fixtures, frozen limits, and reference generation.
