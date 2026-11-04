@@ -10,13 +10,23 @@ Dense and grouped projections reset the raw FP32 dot for each K32 group.
 The activation scale uses MUL. The weight scale uses FMA into the running
 sum. FP4 values convert accurately to FP8 before the raw dot. FP4 weight scales
 apply to each output row; FP8 weight scales apply to 32-row groups.
-Dense projection needs no device scratch. Grouped scratch holds the device row
-offsets and the compacted nonempty groups. The grouped launch covers the
-compacted groups and the output column tiles. Each block walks its group rows,
-so the launch does not use a host row bound. Device counts must be within
+Dense projection needs no device scratch. Grouped scratch holds device row and
+tile offsets, and the compacted nonempty groups. Persistent blocks visit
+independent 32-row by 64-column tiles. FP4 and FP8 values convert exactly to FP16
+with the native K32 reduction layout. At most 64 routed rows use parallel raw
+dots and ordered scale accumulation. The launch does not use a host expert row
+bound. Device counts must be within
 max_rows and sum to the input rows; otherwise, the output is NaN. Host metadata
 and storage overlap failures occur before launch. Grouped calls do not upload
 host descriptors.
+
+The padded entry accepts counts whose sum is at most the input capacity.
+It reads only this prefix and writes zeros to the output tail. Caller-owned
+INT32 status storage has shape (1,). Invalid device counts set an error bit.
+Invalid counts or a prior status error zero the complete padded output.
+Status persists until the caller resets it at Execute start. Check status at the
+step boundary before cache commit. Use the same workspace query with capacity
+as its row count. Its capacity <= groups * max_rows condition still applies.
 """
 
 from typing import NamedTuple
@@ -27,6 +37,7 @@ FUNCTIONS = (
     "project",
     "grouped_workspace_size",
     "grouped_project",
+    "grouped_project_padded",
 )
 
 

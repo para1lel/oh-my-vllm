@@ -1,10 +1,13 @@
+import gc
 import sys
 import unittest
+import weakref
 from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
+import torch
 from oh_my_vllm.operators.runtime.device import Device
 
 
@@ -178,6 +181,82 @@ class GraphCapture(unittest.TestCase):
         with self.patches(events, synchronize=lambda: None), device.graph(owner.run):
             self.assertEqual(events, ["lease", "handoff", "operation"])
         self.assertEqual(events, ["lease", "handoff", "operation", "reset", "release"])
+
+    def test_graph_keeps_callable_and_input_owner_without_an_owning_lease(self):
+        class Owner:
+            def __init__(self):
+                self.input = torch.ones(1)
+
+        class Operation:
+            def __init__(self, owner, events):
+                self.owner = weakref.ref(owner)
+                self.input = torch.zeros(1)
+                self.events = events
+
+            @property
+            def __self__(self):
+                return self.owner()
+
+            def __call__(self):
+                self.events.append("operation")
+
+        for forwarded in (False, True):
+            for failure in (None, "sync", "reset"):
+                with self.subTest(forwarded=forwarded, failure=failure):
+                    events = []
+                    device = self.device(events)
+                    owner = Owner()
+                    if forwarded:
+                        owner.graph_lease = GraphOwner(events).graph_lease
+                    operation = Operation(owner, events)
+                    references = tuple(
+                        weakref.ref(value)
+                        for value in (owner, owner.input, operation, operation.input)
+                    )
+
+                    def synchronize(failure=failure):
+                        if failure == "sync":
+                            raise RuntimeError("sync failed")
+
+                    def reset(failure=failure, references=references):
+                        self.assertTrue(
+                            all(reference() is not None for reference in references)
+                        )
+                        if failure == "reset":
+                            raise RuntimeError("reset failed")
+
+                    graph = SimpleNamespace(replay=lambda: None, reset=reset)
+                    with self.patches(events, graph=graph, synchronize=synchronize):
+                        context = device.graph(operation)
+                        context.__enter__()
+                        del owner, operation
+                        gc.collect()
+                        self.assertTrue(
+                            all(reference() is not None for reference in references)
+                        )
+                        if failure is None:
+                            context.__exit__(None, None, None)
+                        else:
+                            with self.assertRaisesRegex(
+                                RuntimeError, f"{failure} failed"
+                            ):
+                                context.__exit__(None, None, None)
+                        del context
+                        gc.collect()
+                        if failure is None:
+                            self.assertTrue(
+                                all(reference() is None for reference in references)
+                            )
+                            self.assertEqual(device._failed_graph_resources, [])
+                            if forwarded:
+                                self.assertIn("release", events)
+                        else:
+                            self.assertTrue(
+                                all(reference() is not None for reference in references)
+                            )
+                            self.assertEqual(len(device._failed_graph_resources), 1)
+                            self.assertTrue(device.graph_failed)
+                            self.assertNotIn("release", events)
 
     def test_graph_cleanup_failure_poison_the_device_and_retains_owners(self):
         events = []

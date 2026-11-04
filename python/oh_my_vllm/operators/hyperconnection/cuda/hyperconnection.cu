@@ -174,9 +174,8 @@ void fp32_project(TensorView values, TensorView weight, TensorView output,
   tensor_contract(values, values, kDLFloat, 32, {rows, width});
   tensor_contract(weight, values, kDLFloat, 32, {outputs, width});
   tensor_contract(output, values, kDLFloat, 32, {rows, outputs});
-  TVM_FFI_ICHECK(blas_workspace.device().device_type == kDLCUDA);
-  TVM_FFI_ICHECK(blas_workspace.ndim() == 1 && blas_workspace.dtype().code == kDLUInt &&
-                 blas_workspace.dtype().bits == 8 && blas_workspace.dtype().lanes == 1);
+  TVM_FFI_ICHECK(blas_workspace.ndim() == 1);
+  tensor_contract(blas_workspace, values, kDLUInt, 8, {blas_workspace.size(0)});
   TVM_FFI_ICHECK(blas_workspace.size(0) == 0 || blas_workspace.size(0) >= workspace_size(rows));
   TVM_FFI_ICHECK(blas_workspace.size(0) == 0 ||
                  reinterpret_cast<uintptr_t>(blas_workspace.data_ptr()) % 256 == 0);
@@ -199,8 +198,13 @@ void fp32_project(TensorView values, TensorView weight, TensorView output,
     int chunk = hc_projection::project_chunk(step_rows, outputs, width);
     TVM_FFI_ICHECK(chunk > 0)
         << "FP32 projection shape and row count have no measured released layout";
-    hc_projection::multiply_released_chunked(input, weight_values, output_values, rows, outputs,
-                                             width, width, outputs, chunk, stream);
+    if (blas_workspace.size(0))
+      hc_projection::multiply_released_tiled(
+          input, weight_values, output_values, rows, outputs, width, width, outputs, chunk,
+          blas_workspace.data_ptr(), blas_workspace.size(0), stream);
+    else
+      hc_projection::multiply_released_chunked(input, weight_values, output_values, rows, outputs,
+                                               width, width, outputs, chunk, stream);
   }
   check_cuda(cudaGetLastError());
 }

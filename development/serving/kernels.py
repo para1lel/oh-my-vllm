@@ -165,7 +165,7 @@ def context_groups(rows, *, writes=True, embedding_bytes=0):
     return result
 
 
-def draft_groups(queries, stage, *, writes=True, embedding_bytes=0):
+def draft_groups(queries, stage, *, writes=False, embedding_bytes=0):
     rows = len(queries)
     full = stage != 0
     return [
@@ -205,14 +205,15 @@ def wy_groups(queries, state_bytes):
             carry = add(
                 carry,
                 dict(
-                    bf16_flops=4 * 48 * 128 * 128 * n,
+                    bf16_flops=(2 if start == 0 else 4) * 48 * 128 * 128 * n,
                     fp32_flops=48 * (2 * 128 * 128 + 2 * 128 * n),
                 ),
             )
             output = add(
                 output,
                 dict(
-                    bf16_flops=2 * 48 * 128 * 128 * n + 48 * 128 * n * (n + 1),
+                    bf16_flops=(0 if start == 0 else 2) * 48 * 128 * 128 * n
+                    + 48 * 128 * n * (n + 1),
                     fp32_flops=48 * (2 * 128 * n + n),
                 ),
             )
@@ -315,7 +316,13 @@ def pass_groups(logical):
     samples = sum(
         row["count"] if logical["verify"] else int(row["tokens"] > 0) for row in rows
     )
-    result = target_groups(rows, logical["verify"]) + sample_groups(samples)
+    output = sample_groups(samples)
+    if logical["mtp"]:
+        output = [
+            group("output.norm", normalization(sum(row["count"] for row in rows))),
+            *output[1:],
+        ]
+    result = target_groups(rows, logical["verify"]) + output
     if logical["mtp"]:
         result.extend(context_groups(sum(row["context_count"] for row in rows)))
         for stage in range(4):

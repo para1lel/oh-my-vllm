@@ -21,6 +21,7 @@
 | `operator workspace` | noun | An owner of temporary GPU tensors and mutable native execution resources for operator computation. |
 | `prefill` | noun | The worker operation for a prompt or an accepted history. |
 | `prefix reuse` | noun | The use of cached state for the same accepted token prefix. |
+| `projection wave` | noun | A group of token rows used together for routed expert computation. Its collective messages can have smaller row counts. |
 | `push` | verb | Send Git revisions to a remote repository. |
 | `rollback` | noun | The removal of unaccepted token or cache state. |
 | `state commit` | noun | The operation that accepts validated token history and cache state. |

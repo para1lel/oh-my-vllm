@@ -24,6 +24,16 @@ uses epsilon 1e-20 and clamp 1e-6. It allocates no device workspace and does
 not synchronize. Metadata errors raise before launch. The caller retains all
 buffers through Eager completion or graph release.
 
+engram_lookup_stage(weight, scales, ids, packed, start) gathers host U8
+FP8 rows and UE8M0 scales into caller-owned host storage. ids is contiguous
+I64. Each packed row contains width value bytes, width / 32 scale bytes,
+one mask byte, and padding to 16 bytes. Out-of-shard rows have mask byte 1.
+engram_lookup_decode(packed, output) decodes CUDA packed rows to BF16 on the
+caller's stream. width is divisible by 32 and at most 8192; each call has
+at most 65536 rows. Inputs and outputs must not overlap. The caller protects
+pinned storage until transfer completion and retains device storage through
+execution. Stage outside CUDA Graph recording.
+
 Inputs must be finite and bounded
 so FP32 intermediate values and BF16 outputs remain finite.
 Retain inputs through Eager completion or graph release.
@@ -61,7 +71,15 @@ through Eager completion or graph release.
 
 from typing import NamedTuple
 
-FUNCTIONS = ("rms", "rope", "quantize", "rms_grouped", "engram")
+FUNCTIONS = (
+    "rms",
+    "rope",
+    "quantize",
+    "rms_grouped",
+    "engram",
+    "engram_lookup_stage",
+    "engram_lookup_decode",
+)
 
 
 class Inputs(NamedTuple):

@@ -14,7 +14,7 @@ from torch import nn
 
 from .engram import EngramLayout, NgramHashState
 from .image_processor import IMAGE, IMAGE_END, IMAGE_NEW_LINE, IMAGE_START
-from .indexing import INDEX_SCORE_WORK_BYTES, score_chunks
+from .indexing import INDEX_SCORE_WORK_BYTES, score_chunks, topk_indices
 from .kernel import (
     NATIVE_ROW_LIMIT,
     act_quant,
@@ -28,18 +28,22 @@ from .kernel import (
     hc_expand,
     hc_prepare,
     hc_split_sinkhorn,
+    invalidate_packed_weights,
     make_hc_workspace,
     markov_linear,
     require_sparse_status,
     reset_sparse_status,
+    retain_cached_tensor,
     rms,
     sparse_attn,
 )
+from .moe_prefill import PrefillWorkspace, projection_rows
 from .storage import sequence_cache
 from .vision import Aligner, ViT
 
 # Set once by Transformer.__init__; one model per process, so layers just read them.
 world_size = 1
+expert_world_size = 1
 rank = 0
 default_dtype = (
     torch.float8_e4m3fn
@@ -192,7 +196,7 @@ class ParallelEmbedding(nn.Module):
             f"Vocabulary size must be divisible by world size (world_size={world_size})"
         )
         self.part_vocab_size = vocab_size // world_size
-        self.vocab_start_idx = rank * self.part_vocab_size
+        self.vocab_start_idx = (rank if world_size > 1 else 0) * self.part_vocab_size
         self.vocab_end_idx = self.vocab_start_idx + self.part_vocab_size
         self.weight = nn.Parameter(torch.empty(self.part_vocab_size, self.dim))
 
@@ -253,8 +257,10 @@ class _RoutedState:
     weights: object = None
     pointers: object = None
     registered: tuple = ()
+    generation: int = 0
 
     def clear_weights(self):
+        self.generation += 1
         self.weights = None
         self.pointers = None
 
@@ -371,7 +377,49 @@ class Linear(nn.Module):
 
     def _load_from_state_dict(self, *args, **kwargs):
         self._invalidate_routed_bindings()
+        if self.scale is not None:
+            invalidate_packed_weights(self.weight, self.scale)
         return super()._load_from_state_dict(*args, **kwargs)
+
+
+_PLAIN_LINEAR_FORWARD = Linear.forward
+
+
+def _plain_fp8_linear(layer):
+    return (
+        type(layer) is Linear
+        and getattr(layer.forward, "__func__", None) is _PLAIN_LINEAR_FORWARD
+        and getattr(layer.forward, "__self__", None) is layer
+        and layer.weight.dtype == torch.float8_e4m3fn
+        and not layer._forward_hooks
+        and not layer._forward_pre_hooks
+        and layer._compiled_call_impl is None
+        and not nn.modules.module._global_forward_hooks
+        and not nn.modules.module._global_forward_pre_hooks
+    )
+
+
+def separate_request_math(values, logical_rows):
+    return values.is_cuda and logical_rows == 1 and world_size > 1
+
+
+def request_linear(layer, values, *, separate_requests=False):
+    if separate_requests and values.size(0) > 1:
+        return torch.cat(
+            [layer(values[index : index + 1]) for index in range(values.size(0))]
+        )
+    return layer(values)
+
+
+def request_einsum(equation, values, weight, *, separate_requests=False):
+    if separate_requests and values.size(0) > 1:
+        return torch.cat(
+            [
+                torch.einsum(equation, values[index : index + 1], weight)
+                for index in range(values.size(0))
+            ]
+        )
+    return torch.einsum(equation, values, weight)
 
 
 class ColumnParallelLinear(Linear):
@@ -402,9 +450,28 @@ class RowParallelLinear(Linear):
         )
         self.part_in_features = in_features // world_size
         super().__init__(self.part_in_features, out_features, bias, dtype)
+        self._local_projection = None
+        if world_size == 1 and expert_world_size == 4:
+            from .local_tp import LocalRowProjection
+
+            self._local_projection = LocalRowProjection(4)
+
+    def _apply(self, fn, recurse=True):
+        if self._local_projection is not None:
+            self._local_projection.clear()
+        return super()._apply(fn, recurse=recurse)
+
+    def _load_from_state_dict(self, *args, **kwargs):
+        if self._local_projection is not None:
+            self._local_projection.clear()
+        return super()._load_from_state_dict(*args, **kwargs)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        y = linear(x, self.weight)
+        y = (
+            linear(x, self.weight)
+            if self._local_projection is None
+            else self._local_projection(x, self.weight, self.scale, linear)
+        )
         if world_size > 1:
             y = y.float()
             dist.all_reduce(y)
@@ -433,7 +500,9 @@ class ParallelEngramEmbedding(nn.Module):
         self.num_embeddings = num_embeddings
         self.dim = dim
         self.part_num_embeddings = (num_embeddings + world_size - 1) // world_size
-        self.vocab_start_idx = rank * self.part_num_embeddings
+        self.vocab_start_idx = (
+            rank if world_size > 1 else 0
+        ) * self.part_num_embeddings
         self.vocab_end_idx = self.vocab_start_idx + self.part_num_embeddings
 
         self.block_size = fp8_block_size
@@ -455,7 +524,85 @@ class ParallelEngramEmbedding(nn.Module):
             )
         )
 
+    def _staged_lookup(self, indices):
+        from .kernel import _transform_module
+
+        if indices.dtype not in (torch.int32, torch.int64):
+            raise RuntimeError("Engram indices must be int32 or int64")
+        if torch.cuda.is_current_stream_capturing():
+            raise RuntimeError("stage Engram lookup before CUDA Graph recording")
+        module = _transform_module()
+        device = indices.device
+        host_indices = (
+            indices.to(device="cpu", dtype=torch.int64).contiguous().flatten()
+        )
+        count = host_indices.numel()
+        output = torch.empty((count, self.dim), dtype=torch.bfloat16, device=device)
+        if not count:
+            return output.reshape(*indices.shape, self.dim)
+        capacity = min(65536, count)
+        stride = ((self.dim + self.dim // 32 + 16) // 16) * 16
+        signature = (device, capacity, stride)
+        buffers = getattr(self, "_lookup_buffers", None)
+        if buffers is None or buffers[0] != signature:
+            if buffers is not None:
+                for _, _, event in buffers[1]:
+                    event.synchronize()
+            torch.cuda.current_stream(device).synchronize()
+            slots = [
+                (
+                    torch.empty(
+                        (capacity, stride),
+                        dtype=torch.uint8,
+                        device="cpu",
+                        pin_memory=True,
+                    ),
+                    torch.empty((capacity, stride), dtype=torch.uint8, device=device),
+                    torch.cuda.Event(),
+                )
+                for _ in range(2)
+            ]
+            self._lookup_buffers = (signature, slots)
+        slots = self._lookup_buffers[1]
+        weight = self.weight.detach().view(torch.uint8)
+        scales = self.scale.detach().view(torch.uint8)
+        for chunk, first in enumerate(range(0, count, capacity)):
+            host, packed, event = slots[chunk % 2]
+            event.synchronize()
+            length = min(capacity, count - first)
+            staging = host[:length]
+            device_rows = packed[:length]
+            module.engram_lookup_stage(
+                weight,
+                scales,
+                host_indices[first : first + length],
+                staging,
+                self.vocab_start_idx,
+            )
+            stream = torch.cuda.current_stream(device)
+            packed.record_stream(stream)
+            output.record_stream(stream)
+            try:
+                device_rows.copy_(staging, non_blocking=True)
+                module.engram_lookup_decode(device_rows, output[first : first + length])
+                event.record(stream)
+            except BaseException:
+                stream.synchronize()
+                raise
+        return output.reshape(*indices.shape, self.dim)
+
     def forward(self, indices: torch.Tensor) -> torch.Tensor:
+        if (
+            indices.device.type == "cuda"
+            and self.weight.dtype == torch.float8_e4m3fn
+            and self.scale.dtype == torch.float8_e8m0fnu
+            and self.dim % 32 == 0
+        ):
+            with torch.cuda.device(indices.device):
+                values = self._staged_lookup(indices)
+                if world_size > 1:
+                    dist.all_reduce(values)
+                return values
         device = indices.device
         host_indices = indices.to(device="cpu")
         mask = (host_indices < self.vocab_start_idx) | (
@@ -533,6 +680,7 @@ class Engram(nn.Module):
         )
 
 
+@retain_cached_tensor
 @lru_cache(2)
 def precompute_freqs_cis(
     dim, seqlen, original_seq_len, base, factor, beta_fast, beta_slow
@@ -575,15 +723,17 @@ def apply_rotary_emb(
     x = torch.view_as_complex(x.float().unflatten(-1, (-1, 2)))
     if inverse:
         freqs_cis = freqs_cis.conj()
+    batch = x.size(0) if freqs_cis.ndim == 3 else 1
     if x.ndim == 3:
-        freqs_cis = freqs_cis.view(1, x.size(1), x.size(-1))
+        freqs_cis = freqs_cis.view(batch, x.size(1), x.size(-1))
     else:
-        freqs_cis = freqs_cis.view(1, x.size(1), 1, x.size(-1))
+        freqs_cis = freqs_cis.view(batch, x.size(1), 1, x.size(-1))
     x = torch.view_as_real(x * freqs_cis).flatten(-2)
     y.copy_(x)
     return y
 
 
+@retain_cached_tensor
 @lru_cache(1)
 def get_window_topk_idxs(window_size: int, bsz: int, seqlen: int, start_pos: int):
     """Which sliding-window cache slots each query attends to; -1 marks a slot holding nothing.
@@ -604,13 +754,15 @@ def get_window_topk_idxs(window_size: int, bsz: int, seqlen: int, start_pos: int
     return idxs.int().unsqueeze(0).expand(bsz, -1, -1).contiguous()
 
 
-def position_rows(table: torch.Tensor, position: torch.Tensor, length: int):
-    """Rows of `table` for `length` positions that start at a device position.
-
-    A captured graph reads `position` at replay, so the rows follow the current step.
-    """
-    rows = position + torch.arange(length, device=position.device, dtype=torch.int64)
-    return table.index_select(0, rows)
+def position_rows(
+    table: torch.Tensor, position: torch.Tensor, length: int, *, stride=1
+):
+    """Read shared or request-local positions without a device-to-host read."""
+    rows = (
+        position
+        + torch.arange(length, device=position.device, dtype=torch.int64) * stride
+    )
+    return table.index_select(0, rows.flatten()).reshape(*rows.shape, *table.shape[1:])
 
 
 def position_window_topk_idxs(
@@ -624,6 +776,8 @@ def position_window_topk_idxs(
     oldest = position.remainder(window_size) + 1
     idxs = (offsets + oldest).remainder(window_size)
     idxs = torch.where(idxs > position, -1, idxs)  # ring still filling
+    if position.ndim:
+        return idxs.int().unsqueeze(1).contiguous()
     return idxs.int().unsqueeze(0).expand(bsz, -1, -1).contiguous()
 
 
@@ -648,6 +802,7 @@ def compressed_context_width(end_pos: int, ratio: int, capacity: int) -> int:
     return min(context_token_bucket(end_pos) // ratio, capacity)
 
 
+@retain_cached_tensor
 @lru_cache(1)
 def get_prefill_window_topk_idxs(
     window_size: int, bsz: int, seqlen: int, start_pos: int
@@ -852,13 +1007,18 @@ class Indexer(torch.nn.Module):
                         group_start : group_start + latent.size(1) * ratio : ratio
                     ]
                 else:
-                    if latent.size(1) != 1:
-                        raise ValueError(
-                            "device positions are only for one-token decode steps"
-                        )
                     group_start = position.div(ratio, rounding_mode="floor") * ratio
-                    freqs = self.freqs_cis.index_select(0, group_start.reshape(1))
-                k = self.k_norm(self.wk(latent), logical_rows=logical_rows)
+                    freqs = position_rows(
+                        self.freqs_cis, group_start, latent.size(1), stride=ratio
+                    )
+                k = self.k_norm(
+                    request_linear(
+                        self.wk,
+                        latent,
+                        separate_requests=separate_request_math(x, logical_rows),
+                    ),
+                    logical_rows=logical_rows,
+                )
                 apply_rotary_emb(k[..., -rd:], freqs)
                 fp4_act_quant(k, fp4_block_size, True)
                 if position is None:
@@ -867,10 +1027,9 @@ class Indexer(torch.nn.Module):
                         start_pos // ratio : start_pos // ratio + k.size(1),
                     ] = k
                 else:
-                    group = position.div(ratio, rounding_mode="floor").expand_as(
-                        cache_slots
-                    )
-                    self.k_cache[cache_slots, group] = k.squeeze(1)
+                    groups = position.reshape(-1, 1).div(ratio, rounding_mode="floor")
+                    groups = groups + torch.arange(k.size(1), device=x.device)
+                    self.k_cache[cache_slots[:, None], groups] = k
             shared_attn.index_k = self.k_cache[:, :width][cache_slots]
 
         q = self.wq_b(qr).unflatten(-1, (self.n_local_heads, self.index_head_dim))
@@ -883,19 +1042,76 @@ class Indexer(torch.nn.Module):
         fp4_act_quant(q, fp4_block_size, True)
 
         index_k = shared_attn.index_k[:, :width]
-        weights = self.weights_proj(x) * (self.softmax_scale * self.n_heads**-0.5)
-        positions = torch.arange(width, device=x.device)
+        weights = request_linear(
+            self.weights_proj,
+            x,
+            separate_requests=separate_request_math(x, logical_rows),
+        ) * (self.softmax_scale * self.n_heads**-0.5)
+        request_widths = None
+        if position is not None and position.device.type == "cpu":
+            # CPU top-k tie selection depends on the physical row width.
+            starts = position.reshape(-1).tolist()
+            if len(starts) == 1:
+                starts *= bsz
+            request_widths = tuple((start + seqlen) // ratio for start in starts)
+        groups = range(bsz) if separate_request_math(x, logical_rows) else (None,)
+        indices, candidates = [], []
+        for request in groups:
+            selected = slice(None) if request is None else slice(request, request + 1)
+            selected_position = (
+                position[selected]
+                if position is not None and position.ndim != 0
+                else position
+            )
+            selected_widths = (
+                request_widths[selected] if request_widths is not None else None
+            )
+            candidate_blocks = (
+                shared_attn.candidates[selected] if self.uses_candidates else None
+            )
+            result, blocks = self._select_indices(
+                q[selected],
+                index_k[selected],
+                weights[selected],
+                start_pos,
+                offset,
+                position=selected_position,
+                request_widths=selected_widths,
+                candidate_blocks=candidate_blocks,
+            )
+            indices.append(result)
+            if blocks is not None:
+                candidates.append(blocks)
+        if self.is_candidate_source:
+            shared_attn.candidates = torch.cat(candidates, dim=0)
+        return torch.cat(indices, dim=0)
+
+    def _select_indices(
+        self,
+        query,
+        keys,
+        weights,
+        start_pos,
+        offset,
+        *,
+        position=None,
+        request_widths=None,
+        candidate_blocks=None,
+    ):
+        width = keys.size(1)
+        ratio = self.compress_ratio
+        positions = torch.arange(width, device=query.device)
         indices, candidates = [], []
         for first, last, index_score in score_chunks(
-            q,
-            index_k,
+            query,
+            keys,
             weights,
             work_bytes=INDEX_SCORE_WORK_BYTES,
             rank_sum=world_size > 1,
         ):
             base = start_pos if position is None else position
             compress_lens = (
-                (base + torch.arange(first + 1, last + 1, device=x.device)) // ratio
+                (base + torch.arange(first + 1, last + 1, device=query.device)) // ratio
             ).unsqueeze(-1)
             index_score.masked_fill_(positions >= compress_lens, -torch.inf)
             if self.is_candidate_source:
@@ -905,22 +1121,20 @@ class Indexer(torch.nn.Module):
                         compress_lens,
                         self.candidate_topk_blocks,
                         self.candidate_block_size,
+                        request_widths=request_widths,
                     )
                 )
             elif self.uses_candidates:
-                keep = shared_attn.candidates[:, first:last].repeat_interleave(
+                keep = candidate_blocks[:, first:last].repeat_interleave(
                     self.candidate_block_size, dim=-1
-                )[..., : index_k.size(1)]
+                )[..., :width]
                 index_score.masked_fill_(~keep, -torch.inf)
             topk = min(self.index_topk, width)
-            idxs = (
-                index_score.topk(topk, dim=-1, sorted=False).indices.sort(dim=-1).values
-            )
+            idxs = topk_indices(index_score, topk, request_widths=request_widths)
             indices.append(torch.where(idxs < compress_lens, idxs + offset, -1).int())
             del index_score
-        if self.is_candidate_source:
-            shared_attn.candidates = torch.cat(candidates, dim=1)
-        return torch.cat(indices, dim=1)
+        blocks = torch.cat(candidates, dim=1) if self.is_candidate_source else None
+        return torch.cat(indices, dim=1), blocks
 
 
 def select_candidate_blocks(
@@ -928,6 +1142,8 @@ def select_candidate_blocks(
     compress_lens: torch.Tensor | int,
     topk_blocks: int,
     block_size: int,
+    *,
+    request_widths=None,
 ) -> torch.Tensor:
     """Level one of the two-level top-k: keep the `topk_blocks` highest-scoring blocks per query.
 
@@ -949,12 +1165,23 @@ def select_candidate_blocks(
         torch.arange(num_blocks, device=logits.device) == last, torch.inf
     )
 
-    top = scores.topk(min(topk_blocks, num_blocks), dim=-1)
-    # fewer reachable blocks than topk_blocks means leftover picks came back -inf: drop them
-    keep = torch.zeros_like(scores, dtype=torch.bool).scatter_(
-        -1, top.indices, top.values > -torch.inf
+    if request_widths is None:
+        top = scores.topk(min(topk_blocks, num_blocks), dim=-1)
+        # fewer reachable blocks than topk_blocks means leftover picks came back -inf: drop them
+        return torch.zeros_like(scores, dtype=torch.bool).scatter_(
+            -1, top.indices, top.values > -torch.inf
+        )
+    block_widths = tuple(
+        (width + block_size - 1) // block_size for width in request_widths
     )
-    return keep
+    top = topk_indices(
+        scores, min(topk_blocks, num_blocks), request_widths=block_widths
+    )
+    padded = F.pad(scores, (0, 1), value=-torch.inf)
+    keep = torch.zeros_like(padded, dtype=torch.bool).scatter_(
+        -1, top, padded.gather(-1, top) > -torch.inf
+    )
+    return keep[..., :num_blocks]
 
 
 class Attention(nn.Module):
@@ -1088,13 +1315,21 @@ class Attention(nn.Module):
                 self.window_kv_cache[cache_slots, start_pos % win] = kv.squeeze(1)
                 topk_idxs = get_window_topk_idxs(win, bsz, seqlen, start_pos)
             else:
-                ring = position.remainder(win).expand_as(cache_slots)
+                ring = position.reshape(-1).remainder(win).expand_as(cache_slots)
                 self.window_kv_cache[cache_slots, ring] = kv.squeeze(1)
                 topk_idxs = position_window_topk_idxs(win, bsz, position)
             window_kv = self.window_kv_cache[cache_slots]
         else:  # chunked prefill: attend over the previous ring and this causal chunk
             previous = min(start_pos, win)
-            if start_pos >= win:
+            if position is not None:
+                previous_positions = position.reshape(-1, 1) + torch.arange(
+                    -previous, 0, device=x.device
+                )
+                offsets = previous_positions.remainder(win)
+                previous_kv = self.window_kv_cache[cache_slots].gather(
+                    1, offsets[..., None].expand(bsz, previous, self.head_dim)
+                )
+            elif start_pos >= win:
                 ring_start = start_pos % win
                 previous_kv = torch.cat(
                     (
@@ -1108,12 +1343,18 @@ class Attention(nn.Module):
             window_kv = torch.cat((previous_kv, kv), dim=1)
             write_kv = kv[:, -win:]
             write_start = start_pos + seqlen - write_kv.size(1)
-            positions = torch.arange(
-                write_start,
-                start_pos + seqlen,
-                device=x.device,
-            ).remainder(win)
-            self.window_kv_cache[cache_slots[:, None], positions[None, :]] = write_kv
+            if position is None:
+                positions = torch.arange(
+                    write_start,
+                    start_pos + seqlen,
+                    device=x.device,
+                ).remainder(win)[None, :]
+            else:
+                positions = (
+                    position.reshape(-1, 1)
+                    + torch.arange(seqlen - write_kv.size(1), seqlen, device=x.device)
+                ).remainder(win)
+            self.window_kv_cache[cache_slots[:, None], positions] = write_kv
             topk_idxs = get_prefill_window_topk_idxs(win, bsz, seqlen, start_pos)
         return window_kv, topk_idxs.to(x.device)
 
@@ -1188,12 +1429,10 @@ class Attention(nn.Module):
                     group_start : group_start + latent.size(1) * ratio : ratio
                 ]
             else:
-                if latent.size(1) != 1:
-                    raise ValueError(
-                        "device positions are only for one-token decode steps"
-                    )
                 group_start = position.div(ratio, rounding_mode="floor") * ratio
-                freqs = self.freqs_cis.index_select(0, group_start.reshape(1))
+                freqs = position_rows(
+                    self.freqs_cis, group_start, latent.size(1), stride=ratio
+                )
             apply_rotary_emb(latent[..., -self.rope_head_dim :], freqs)
             # Compressed KV uses groups of 16 with E4M3 scales; the indexer uses 32 with E8M0.
             fp4_act_quant(latent, 16, True, scale_dtype=torch.float8_e4m3fn)
@@ -1203,10 +1442,9 @@ class Attention(nn.Module):
                     start_pos // ratio : start_pos // ratio + latent.size(1),
                 ] = latent
             else:
-                group = position.div(ratio, rounding_mode="floor").expand_as(
-                    cache_slots
-                )
-                self.compress_kv_cache[cache_slots, group] = latent.squeeze(1)
+                groups = position.reshape(-1, 1).div(ratio, rounding_mode="floor")
+                groups = groups + torch.arange(latent.size(1), device=x.device)
+                self.compress_kv_cache[cache_slots[:, None], groups] = latent
         if self.is_kv_source:
             # Slot indexing makes a copy, so publish only after the current write.
             width = (
@@ -1229,8 +1467,6 @@ class Attention(nn.Module):
         position: torch.Tensor | None = None,
     ):
         bsz, seqlen, _ = x.size()
-        if position is not None and seqlen != 1:
-            raise ValueError("device positions are only for one-token decode steps")
         if cache_slots is None:
             cache_slots = torch.arange(bsz, device=x.device)
         if position is None:
@@ -1282,7 +1518,12 @@ class Attention(nn.Module):
         # Linear. convert.py dequantizes it to bf16; an fp8 grouped GEMM would halve the memory.
         o = o.view(bsz, seqlen, self.n_local_groups, -1)
         wo_a = self.wo_a.weight.view(self.n_local_groups, self.o_lora_rank, -1)
-        o = torch.einsum("bsgd,grd->bsgr", o, wo_a)
+        o = request_einsum(
+            "bsgd,grd->bsgr",
+            o,
+            wo_a,
+            separate_requests=separate_request_math(x, logical_rows),
+        )
         x = self.wo_b(o.flatten(2))
         return x
 
@@ -1403,8 +1644,23 @@ class Expert(nn.Module):
         from .kernel import swiglu
 
         dtype = x.dtype
-        gate = self.w1(x)
-        up = self.w3(x)
+        if _plain_fp8_linear(self.w1) and _plain_fp8_linear(self.w3):
+            assert self.w1.bias is None and self.w3.bias is None
+            encoded, scales = act_quant(x, fp8_block_size, scale_fmt, scale_dtype)
+            gate, up = (
+                fp8_gemm(
+                    encoded,
+                    scales,
+                    projection.weight,
+                    projection.weight.scale,
+                    scale_dtype,
+                    block_size=fp8_block_size,
+                )
+                for projection in (self.w1, self.w3)
+            )
+        else:
+            gate = self.w1(x)
+            up = self.w3(x)
         if x.is_cuda and gate.size(-1) in (576, 2304):
             product = swiglu(gate, up, weights, self.swiglu_limit)
         else:
@@ -1445,14 +1701,18 @@ class MoE(nn.Module):
         n_routed_experts, n_activated_experts = args.get_moe_config(layer_id)
         self.layer_id = layer_id
         self.dim = args.dim
-        assert n_routed_experts % world_size == 0, (
+        self.data_parallel = args.parallel_strategy == "DEP4"
+        self.expert_world_size = expert_world_size if self.data_parallel else world_size
+        assert n_routed_experts % self.expert_world_size == 0, (
             f"Number of experts must be divisible by world size (world_size={world_size})"
         )
         self.n_routed_experts = n_routed_experts
         self.expert_parallel = args.parallel_strategy in ("TEP4", "DEP4")
         self.tensor_parallel = args.parallel_strategy == "TP4"
         self.n_local_experts = (
-            n_routed_experts // world_size if self.expert_parallel else n_routed_experts
+            n_routed_experts // self.expert_world_size
+            if self.expert_parallel
+            else n_routed_experts
         )
         self.n_activated_experts = n_activated_experts
         self.experts_start_idx = (
@@ -1482,6 +1742,7 @@ class MoE(nn.Module):
             swiglu_limit=args.swiglu_limit,
         )
         self._routed_state = _RoutedState()
+        self._prefill_workspace = None
 
     def __setattr__(self, name, value):
         if name == "experts":
@@ -1492,6 +1753,8 @@ class MoE(nn.Module):
 
     def _apply(self, fn, recurse=True):
         self._routed_state.clear_weights()
+        if self._prefill_workspace is not None:
+            self._prefill_workspace.clear()
         return super()._apply(fn, recurse=recurse)
 
     def _load_from_state_dict(self, *args, **kwargs):
@@ -1568,15 +1831,6 @@ class MoE(nn.Module):
             local_weights = sorted_weights.unsqueeze(-1)
             local_counts = None
             local_count_tensor = count_tensor
-            pointers = state.pointers
-            if pointers is None:
-                from .kernel import _static_pointer_arrays
-
-                pointers = tuple(
-                    _static_pointer_arrays(projection, sorted_x.device)
-                    for projection in (prepared.gate, prepared.up, prepared.down)
-                )
-                state.pointers = pointers
         else:
             first = sum(counts[: self.experts_start_idx])
             local_counts = counts[self.experts_start_idx : self.experts_end_idx]
@@ -1589,15 +1843,29 @@ class MoE(nn.Module):
             local_count_tensor = count_tensor[
                 self.experts_start_idx : self.experts_end_idx
             ].to(dtype=torch.int32)
+        pointers = state.pointers
+        if pointers is None and local_x.is_cuda and prepared.gate[0][0].is_cuda:
+            from .kernel import _static_pointer_arrays
+
+            pointers = tuple(
+                _static_pointer_arrays(projection, local_x.device)
+                for projection in (prepared.gate, prepared.up, prepared.down)
+            )
+            state.pointers = pointers
+        if pointers is None:
             pointers = (None, None, None)
         from .kernel import grouped_fp4_gemm, swiglu
 
+        quantized = None
+        if pointers[0] is not None:
+            quantized = act_quant(local_x, 32, "ue8m0", torch.float8_e8m0fnu)
         gate = grouped_fp4_gemm(
             local_x,
             local_count_tensor,
             prepared.gate,
             counts_list=local_counts,
             pointers=None if pointers[0] is None else pointers[0][:2],
+            quantized=quantized,
         )
         up = grouped_fp4_gemm(
             local_x,
@@ -1605,6 +1873,7 @@ class MoE(nn.Module):
             prepared.up,
             counts_list=local_counts,
             pointers=None if pointers[1] is None else pointers[1][:2],
+            quantized=quantized,
         )
         limit = self.experts[self.experts_start_idx].swiglu_limit
         if local_x.is_cuda and gate.size(-1) in (576, 2304):
@@ -1625,12 +1894,55 @@ class MoE(nn.Module):
         )
         return local_tokens, routed
 
+    def _prepare_prefill_workspace(self, rows, enabled):
+        workspace = self._prefill_workspace
+        if (
+            not enabled
+            or workspace is None
+            or workspace.rows == MAX_MOE_ROWS
+            or rows.size(0) <= MAX_MOE_ROWS
+            or self.data_parallel
+            or not rows.is_cuda
+            or rows.dtype != torch.bfloat16
+            or torch.cuda.is_current_stream_capturing()
+        ):
+            return None
+        state = self._routed_state
+        if state.weights is None:
+            self.prepare_routed_experts()
+        prepared = state.weights
+        if prepared is False:
+            return None
+        expert = self.experts[self.experts_start_idx]
+        if prepared.gate[0][0].size(0) not in (576, 2304) or expert.swiglu_limit != 10:
+            return None
+        if state.pointers is None:
+            from .kernel import _static_pointer_arrays
+
+            state.pointers = tuple(
+                _static_pointer_arrays(projection, rows.device)
+                for projection in (prepared.gate, prepared.up, prepared.down)
+            )
+        workspace.reserve(self, rows.device, world_size)
+        return workspace
+
     def _forward_rows(
-        self, x: torch.Tensor, image_mask: torch.Tensor | None = None, *, routing=None
+        self,
+        x: torch.Tensor,
+        image_mask: torch.Tensor | None = None,
+        *,
+        routing=None,
+        shared_output=None,
+        workspace=None,
     ) -> torch.Tensor:
         if routing is None:
             routing = self.gate(x, None if image_mask is None else image_mask.flatten())
         weights, indices = routing
+        trace = getattr(self, "_routing_trace", None)
+        if trace is not None:
+            trace.record(self.layer_id, indices, getattr(self, "_trace_first", 0))
+        if workspace is not None:
+            return workspace.forward_rows(self, x, weights, indices, shared_output)
         output_width = x.size(-1) // world_size if self.tensor_parallel else x.size(-1)
         y = torch.zeros((x.size(0), output_width), dtype=torch.float32, device=x.device)
         flat_indices = indices.flatten()
@@ -1671,13 +1983,18 @@ class MoE(nn.Module):
                 y[idx] += expert(sorted_x[first:last], expert_weights)
                 first = last
         else:
-            local_tokens, routed = grouped
-            y.index_add_(0, local_tokens, routed.float())
+            from .kernel import ordered_expert_sum
+
+            _local_tokens, routed = grouped
+            first = 0 if counts is None else sum(counts[: self.experts_start_idx])
+            ordered_expert_sum(
+                routed, order[first : first + routed.size(0)], y, indices.size(1)
+            )
         if self.tensor_parallel:
             y = _gather_channels(y)
         elif self.expert_parallel and world_size > 1:
             dist.all_reduce(y)
-        y += self.shared_experts(x)
+        y += self.shared_experts(x) if shared_output is None else shared_output
         return y.type_as(x)
 
     def forward(
@@ -1687,32 +2004,103 @@ class MoE(nn.Module):
         *,
         logical_rows=0,
         blas_workspace=None,
+        plan=None,
+        valid_rows=None,
+        dispatch_combine=None,
+        prefill_eager=False,
     ) -> torch.Tensor:
         shape = x.size()
+        self._trace_first = 0
         rows = x.view(-1, self.dim)
+        hook = (
+            dispatch_combine
+            if dispatch_combine is not None
+            else getattr(self, "dispatch_combine", None)
+        )
+        if self.data_parallel and hook is None:
+            routing = self.gate(
+                rows,
+                None if image_mask is None else image_mask.flatten(),
+                logical_rows=logical_rows,
+                blas_workspace=blas_workspace,
+            )
+            exchange = getattr(self, "dep4_exchange", None)
+            if exchange is None:
+                raise RuntimeError("DEP4 requires the request-owned executor")
+            trace = getattr(self, "_routing_trace", None)
+            if trace is not None:
+                trace.record(self.layer_id, routing[1])
+            routed = exchange(self, rows, routing)
+            routed += self.shared_experts(rows)
+            return routed.to(rows.dtype).view(shape)
         mask = None if image_mask is None else image_mask.flatten()
         routing = (
             self.gate(
                 rows, mask, logical_rows=logical_rows, blas_workspace=blas_workspace
             )
-            if logical_rows
+            if logical_rows or hook is not None
             else None
         )
+        if hook is not None:
+            trace = getattr(self, "_routing_trace", None)
+            if trace is not None:
+                trace.record(self.layer_id, routing[1])
+            self._routing_trace = None
+            try:
+                value = hook(
+                    layer=self,
+                    rows=rows,
+                    routing=routing,
+                    valid_rows=valid_rows,
+                    plan=plan,
+                )
+            finally:
+                self._routing_trace = trace
+            if value.shape != rows.shape or value.device != rows.device:
+                raise ValueError(
+                    "expert dispatch must return the input row shape and device"
+                )
+            return value.to(dtype=rows.dtype).view(shape)
         if rows.size(0) <= MAX_MOE_ROWS:
             if routing is not None:
                 return self._forward_rows(rows, mask, routing=routing).view(shape)
             return self._forward_rows(rows, mask).view(shape)
+        workspace = self._prepare_prefill_workspace(rows, prefill_eager)
+        wave_rows = MAX_MOE_ROWS if workspace is None else workspace.rows
+        shared_output = self.shared_experts(rows)
         output = torch.empty_like(rows)
-        for first in range(0, rows.size(0), MAX_MOE_ROWS):
-            last = min(first + MAX_MOE_ROWS, rows.size(0))
+        for first in range(0, rows.size(0), wave_rows):
+            self._trace_first = first
+            last = min(first + wave_rows, rows.size(0))
             chunk_mask = None if mask is None else mask[first:last]
-            if routing is None:
-                output[first:last] = self._forward_rows(rows[first:last], chunk_mask)
+            if workspace is not None:
+                chunk_routing = (
+                    None
+                    if routing is None
+                    else (routing[0][first:last], routing[1][first:last])
+                )
+                chunk_routing = workspace.routing(
+                    self, rows[first:last], chunk_mask, chunk_routing
+                )
+                output[first:last] = self._forward_rows(
+                    rows[first:last],
+                    chunk_mask,
+                    routing=chunk_routing,
+                    shared_output=shared_output[first:last],
+                    workspace=workspace,
+                )
+            elif routing is None:
+                output[first:last] = self._forward_rows(
+                    rows[first:last],
+                    chunk_mask,
+                    shared_output=shared_output[first:last],
+                )
             else:
                 output[first:last] = self._forward_rows(
                     rows[first:last],
                     chunk_mask,
                     routing=(routing[0][first:last], routing[1][first:last]),
+                    shared_output=shared_output[first:last],
                 )
         return output.view(shape)
 
@@ -1771,16 +2159,20 @@ class Block(nn.Module):
         """x: [b,s,hc,d], hc_fn: [mix_hc, hc*d], hc_scale: [3], hc_base: [mix_hc]. Returns the
         pre / post / comb coefficients, split out of one projection of the flattened stream."""
         if logical_rows:
-            if logical_rows != x.size(0):
-                raise ValueError("HC logical rows must match the request batch")
+            rows = x.size(0) * x.size(1)
+            if not 0 < logical_rows <= rows or rows % logical_rows:
+                raise ValueError("HC logical rows must divide the physical rows")
+            grouped = x.reshape(logical_rows, rows // logical_rows, *x.shape[2:])
             values = [
                 self.hc_mixes(
-                    x[:, step : step + 1].contiguous(), hc_fn, hc_scale, hc_base
+                    grouped[:, step : step + 1].contiguous(), hc_fn, hc_scale, hc_base
                 )
-                for step in range(x.size(1))
+                for step in range(grouped.size(1))
             ]
             return tuple(
-                torch.cat([value[index] for value in values], dim=1)
+                torch.cat([value[index] for value in values], dim=1).reshape(
+                    *x.shape[:2], *values[0][index].shape[2:]
+                )
                 for index in range(3)
             )
         # normalized over the whole flattened hc*d stream, one statistic per token
@@ -1819,6 +2211,10 @@ class Block(nn.Module):
         *attn_args,
         logical_rows=0,
         position: torch.Tensor | None = None,
+        plan=None,
+        valid_rows=None,
+        dispatch_combine=None,
+        prefill_eager=False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """`pre_mix` collapses the hc_mult copies down to one input for this block's attention. Each
         sub-block's own `hc_mixes` produces the mix for the *next* one, so attention uses what the
@@ -1826,6 +2222,13 @@ class Block(nn.Module):
 
         image_mask: [b, s] bool, True inside image spans (selects the VL routing bias)."""
         options = {"logical_rows": logical_rows} if logical_rows else {}
+        ffn_options = dict(options)
+        if prefill_eager:
+            ffn_options["prefill_eager"] = True
+        if plan is not None or valid_rows is not None or dispatch_combine is not None:
+            ffn_options.update(
+                plan=plan, valid_rows=valid_rows, dispatch_combine=dispatch_combine
+            )
         attention_options = (
             {**options, "position": position} if position is not None else options
         )
@@ -1892,14 +2295,10 @@ class Block(nn.Module):
             )
             x = self.ffn_norm(x, **options)
             if logical_rows:
-                x = self.ffn(
-                    x,
-                    image_mask,
-                    logical_rows=logical_rows,
-                    blas_workspace=None if workspace is None else workspace["blas"],
+                ffn_options["blas_workspace"] = (
+                    None if workspace is None else workspace["blas"]
                 )
-            else:
-                x = self.ffn(x, image_mask)
+            x = self.ffn(x, image_mask, **ffn_options)
             x = hc_expand(
                 residual,
                 x,
@@ -1925,7 +2324,7 @@ class Block(nn.Module):
         )
         x = self.hc_pre(x, attn_pre)
         x = self.ffn_norm(x, **options)
-        x = self.ffn(x, image_mask, **options)
+        x = self.ffn(x, image_mask, **ffn_options)
         x = self.hc_post(x, residual, ffn_post, ffn_comb)
         return x, ffn_pre
 
@@ -1940,13 +2339,31 @@ class ParallelHead(nn.Module):
         self.norm_eps = norm_eps
         self.hc_eps = hc_eps
         self.part_vocab_size = vocab_size // world_size
+        self.local_partitions = 4 if world_size == 1 and expert_world_size == 4 else 1
         # bf16 in the checkpoint, kept as fp32 here so the logits come out in fp32 directly
         self.weight = nn.Parameter(
             torch.empty(self.part_vocab_size, self.dim, dtype=torch.float32)
         )
 
+    def _project(self, inputs, operation):
+        if self.local_partitions == 1:
+            return operation(inputs, self.weight)
+        return torch.cat(
+            [
+                operation(inputs, weight)
+                for weight in self.weight.chunk(self.local_partitions)
+            ],
+            dim=-1,
+        )
+
     def forward(
-        self, x: torch.Tensor, full_logits=False, logit_start=0, *, logical_rows=0
+        self,
+        x: torch.Tensor,
+        full_logits=False,
+        logit_start=0,
+        *,
+        logical_rows=0,
+        separate_requests=False,
     ):
         """x: [b, s, d]. Generation only needs the last position, so that is the default."""
         if not full_logits:
@@ -1963,18 +2380,28 @@ class ParallelHead(nn.Module):
             and x.size(-1) == self.dim
             and self.weight.dtype == torch.float32
         ):
-            logits = markov_linear(x.float(), self.weight)
+            logits = self._project(x.float(), markov_linear)
+        elif separate_requests and logical_rows == 1 and x.numel() > self.dim:
+            shape = x.shape[:-1]
+            rows = x.reshape(-1, self.dim)
+            logits = torch.cat(
+                [
+                    self._project(rows[index : index + 1].float(), F.linear)
+                    for index in range(rows.size(0))
+                ],
+                dim=0,
+            ).reshape(*shape, self.part_vocab_size)
         elif logical_rows and x.ndim == 3 and x.size(1) > 1:
             # The released verification projects each source step on its own.
             logits = torch.cat(
                 [
-                    F.linear(x[:, step : step + 1].float(), self.weight)
+                    self._project(x[:, step : step + 1].float(), F.linear)
                     for step in range(x.size(1))
                 ],
                 dim=1,
             )
         else:
-            logits = F.linear(x.float(), self.weight)
+            logits = self._project(x.float(), F.linear)
         if world_size > 1:
             all_logits = [torch.empty_like(logits) for _ in range(world_size)]
             dist.all_gather(all_logits, logits)
@@ -1982,6 +2409,7 @@ class ParallelHead(nn.Module):
         return logits
 
 
+@retain_cached_tensor
 @lru_cache(1)
 def get_dspark_topk_idxs(window_size: int, bsz: int, block_size: int, start_pos: int):
     assert start_pos > 0
@@ -2225,11 +2653,15 @@ class Transformer(nn.Module):
     this sets the globals at the top of the file. The tokenizer only feeds the engram token map."""
 
     def __init__(self, args: ModelArgs, tokenizer=None):
-        global world_size, rank, default_dtype
-        world_size = dist.get_world_size() if dist.is_initialized() else 1
+        global world_size, expert_world_size, rank, default_dtype
+        expert_world_size = dist.get_world_size() if dist.is_initialized() else 1
+        world_size = 1 if args.parallel_strategy == "DEP4" else expert_world_size
         rank = dist.get_rank() if dist.is_initialized() else 0
         default_dtype = torch.float8_e4m3fn if args.dtype == "fp8" else torch.bfloat16
         super().__init__()
+        self._moe_prefill_workspace = PrefillWorkspace(
+            projection_rows(strategy=args.parallel_strategy, partitions=world_size)
+        )
         self.max_seq_len = args.max_seq_len
         self.temperature = args.temperature
         self.norm_eps = args.norm_eps
@@ -2262,6 +2694,8 @@ class Transformer(nn.Module):
             self.image_start = nn.Parameter(torch.empty(args.dim))
             self.image_end = nn.Parameter(torch.empty(args.dim))
             self.image_newline = nn.Parameter(torch.empty(args.dim))
+        for layer in self.layers:
+            layer.ffn._prefill_workspace = self._moe_prefill_workspace
         self._sequence_caches = tuple(
             value for value in self.buffers() if hasattr(value, "_paged_storage")
         )
@@ -2279,12 +2713,16 @@ class Transformer(nn.Module):
             for slot in slots:
                 value._paged_storage.reserve(slot, rows)
 
-    def _bind_state_exports(self, cache_slots, cache_slots_cpu=None):
+    def _bind_state_exports(
+        self, cache_slots, cache_slots_cpu=None, positions_cpu=None
+    ):
         export = getattr(self, "_state_export", None)
         if export is not None and export.steps:
-            export.bind(
-                cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
-            )
+            slots = cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
+            if positions_cpu is None:
+                export.bind(slots)
+            else:
+                export.bind(slots, positions=positions_cpu)
 
     @torch.inference_mode()
     def encode_image(
@@ -2325,6 +2763,12 @@ class Transformer(nn.Module):
         check_status: bool = True,
         engram_values: dict[int, torch.Tensor] | None = None,
         reserve_cache: bool = True,
+        logical_rows: int | None = None,
+        cache_positions_cpu=None,
+        routing_trace=None,
+        execution_plan=None,
+        valid_rows=None,
+        dispatch_combine=None,
     ):
         """input_ids: [b, s], every entry a real token id -- generate.py only ever passes positions it
         has already filled, so the padding it uses internally never reaches here. token_types /
@@ -2332,16 +2776,31 @@ class Transformer(nn.Module):
         inside the first (start_pos 0) chunk."""
         if full_logits and not compute_logits:
             raise ValueError("full logits require vocab projection")
-        if position is not None and input_ids.size(1) != 1:
-            raise ValueError("device positions are only for one-token decode steps")
+        if position is not None and (
+            position.device != input_ids.device
+            or position.dtype != torch.int64
+            or (position.ndim != 0 and position.shape != (input_ids.size(0), 1))
+        ):
+            raise ValueError(
+                "device positions must be scalar or one int64 start per request"
+            )
+        if valid_rows is not None and (
+            valid_rows.shape != (input_ids.numel(),)
+            or valid_rows.dtype != torch.bool
+            or valid_rows.device != input_ids.device
+        ):
+            raise ValueError("valid rows must be one device boolean per target row")
         shared_attn.reset_query_state()
         reset_sparse_status()
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
-        self._bind_state_exports(cache_slots, cache_slots_cpu)
+        self._bind_state_exports(cache_slots, cache_slots_cpu, cache_positions_cpu)
         if reserve_cache and self._sequence_caches:
             slots = cache_slots.tolist() if cache_slots_cpu is None else cache_slots_cpu
-            self.reserve_cache(slots, start_pos + input_ids.size(1))
+            end = start_pos + input_ids.size(1)
+            self.reserve_cache(
+                slots, context_token_bucket(end) if position is not None else end
+            )
         image_mask = None if token_types is None else token_types >= 0  # TEXT is -1
         # image tokens take no part in an n-gram and get no engram contribution; text-only needs no mask
         engram_mask = None if image_mask is None else ~image_mask
@@ -2358,13 +2817,37 @@ class Transformer(nn.Module):
             self.merge_image_embeddings(images, h)
         # Expand to hc_mult copies for Hyper-Connections
         h = h.unsqueeze(2).repeat(1, 1, self.hc_mult, 1)
-        logical_rows = (
-            input_ids.size(0) if start_pos > 0 and input_ids.size(1) > 1 else 0
-        )
+        separate_requests = logical_rows is not None
+        if logical_rows is None:
+            logical_rows = (
+                input_ids.size(0) if start_pos > 0 and input_ids.size(1) > 1 else 0
+            )
         options = {"logical_rows": logical_rows} if logical_rows else {}
+        block_options = dict(options)
+        if (
+            self._moe_prefill_workspace.rows > MAX_MOE_ROWS
+            and input_ids.size(1) > 1
+            and not separate_requests
+            and position is None
+            and execution_plan is None
+            and valid_rows is None
+            and dispatch_combine is None
+        ):
+            block_options["prefill_eager"] = True
+        if (
+            execution_plan is not None
+            or valid_rows is not None
+            or dispatch_combine is not None
+        ):
+            block_options.update(
+                plan=execution_plan,
+                valid_rows=valid_rows,
+                dispatch_combine=dispatch_combine,
+            )
         main_hiddens = []
         pre_mix = make_identity_pre_mix(h, self.hc_mult)
         for i, layer in enumerate(self.layers):
+            layer.ffn._routing_trace = routing_trace
             if layer.engram is not None:
                 if engram_values is None:
                     hash_ids = engram_hashes[:, :, layer.engram.layer_hash_index, :]
@@ -2389,7 +2872,7 @@ class Transformer(nn.Module):
                 image_mask,
                 cache_slots,
                 position=position,
-                **options,
+                **block_options,
             )
         h = layer.hc_pre(h, pre_mix)
         if compute_logits:
@@ -2398,6 +2881,7 @@ class Transformer(nn.Module):
                 full_logits=full_logits,
                 logit_start=logit_start,
                 logical_rows=logical_rows,
+                separate_requests=separate_requests,
             )
             output_ids = (
                 sample(logits, self.temperature)

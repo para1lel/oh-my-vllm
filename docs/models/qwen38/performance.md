@@ -97,7 +97,7 @@ This is a conservative resource estimate, not a minimum physical latency proof.
 
 ## Lower-bound calculation
 
-The [reference calculation](../../../development/serving/kernels.py) uses version `http-reference-v4`.
+The [reference calculation](../../../development/serving/kernels.py) uses version `http-reference-v5`.
 It uses the current kernel boundaries and precision rules. It has no measured calibration input.
 
 The [trace validator](../../../development/serving/trace.py) first checks full prefill, continuous accepted positions, proposal dependencies, and output counts.
@@ -161,8 +161,9 @@ Intermediate hidden states, logits, and activation buffers have no memory credit
 FA reads prior KV history once per request and pass.
 New query KV can pass directly to attention without another HBM read.
 Count accepted KV writes once, with 4 KV heads, width 256, and BF16 K and V.
+
 MTP draft attention starts at position 1. The first draft reads its cached context endpoint.
-Subsequent drafts compute new KV.
+Subsequent drafts compute new KV. Their temporary KV writes have no credit.
 
 GDN reads one FP32 recurrent state and one BF16 convolution state when a request starts above position zero.
 Count unique 784-token checkpoints and the accepted endpoint in that pass.
@@ -186,6 +187,9 @@ Preparation, state carry, and output use three serial groups.
 Their products use BF16. Diagonal inversion and state updates use FP32.
 The W/U triangular products include the diagonal after beta multiplication enters the inverse matrix.
 
+A chunk that starts at token position zero has zero initial state.
+Its W/state and Q/state products have no credit.
+
 Short prefill, decode, and verification use FP32 recurrence.
 Small BA projections use FP32 arithmetic on BF16 inputs when fused into convolution or recurrence.
 Other BA projections use BF16 matrix products.
@@ -193,6 +197,9 @@ Use a new accounting version when these fixed dispatch and fusion rules change.
 
 RMS normalization counts four operations per element and two scalar operations per row.
 Residual addition counts one operation per element.
+MTP counts target final normalization for all context rows, also for rows without vocabulary projection.
+Rows shared with vocabulary projection count once.
+
 The FFN activation counts two products per intermediate element.
 GDN convolution counts seven operations per token and channel.
 

@@ -3,6 +3,8 @@
 
 #include "../../runtime/cuda/contracts.cuh"
 #include "fp4_k32.cuh"
+#include "half_k32.cuh"
+#include "tcgen_k32.cuh"
 
 namespace encoded_projection {
 
@@ -81,7 +83,8 @@ template <class Output>
 void launch_grouped_fp4_projection(TensorView encoded, TensorView scales, TensorView weight_ptrs,
                                    TensorView weight_scale_ptrs, TensorView counts,
                                    TensorView output, TensorView scratch, int groups, int rows,
-                                   int outputs, int width, int max_rows, cudaStream_t stream) {
+                                   int outputs, int width, int max_rows, cudaStream_t stream,
+                                   int32_t *status = nullptr) {
   int padded = round128(width);
   auto layout = ScaleConfig::tile_atom_to_shape_SFB(make_shape(1, outputs, padded, 1));
   launch_grouped_fp4_k32(static_cast<const uint8_t *>(encoded.data_ptr()),
@@ -91,7 +94,7 @@ void launch_grouped_fp4_projection(TensorView encoded, TensorView scales, Tensor
                          static_cast<const int32_t *>(counts.data_ptr()),
                          static_cast<uint8_t *>(scratch.data_ptr()),
                          static_cast<Output *>(output.data_ptr()), groups, rows, outputs, width,
-                         max_rows, padded / 2, layout, stream);
+                         max_rows, padded / 2, layout, stream, status);
   check_cuda(cudaGetLastError());
 }
 
@@ -158,9 +161,9 @@ int64_t grouped_workspace_size(int64_t rows, int64_t groups, int64_t max_rows, i
   return grouped_scratch_bytes(static_cast<int>(groups < rows ? groups : rows));
 }
 
-void grouped_project(TensorView encoded, TensorView scales, TensorView weight_ptrs,
-                     TensorView weight_scale_ptrs, TensorView counts, TensorView output,
-                     TensorView scratch, int64_t max_rows) {
+void grouped_project_impl(TensorView encoded, TensorView scales, TensorView weight_ptrs,
+                          TensorView weight_scale_ptrs, TensorView counts, TensorView output,
+                          TensorView scratch, int64_t max_rows, TensorView *status) {
   TVM_FFI_ICHECK(encoded.ndim() == 2 && scales.ndim() == 2 && counts.ndim() == 1);
   TVM_FFI_ICHECK(output.ndim() == 2 && scratch.ndim() == 1);
   int64_t rows = encoded.size(0), width = encoded.size(1), groups = counts.size(0);
@@ -188,18 +191,38 @@ void grouped_project(TensorView encoded, TensorView scales, TensorView weight_pt
     for (auto input : {encoded, scales, weight_ptrs, weight_scale_ptrs, counts})
       separate(writable, input);
   separate(output, scratch);
-  if (!rows)
+  if (status) {
+    tensor_contract(*status, encoded, kDLInt, 32, {1});
+    for (auto tensor : {encoded, scales, weight_ptrs, weight_scale_ptrs, counts, output, scratch})
+      separate(*status, tensor);
+  }
+  if (!rows && !status)
     return;
   tvm::ffi::CUDADeviceGuard guard(encoded.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, encoded.device().device_id));
+  auto *device_status = status ? static_cast<int32_t *>(status->data_ptr()) : nullptr;
   if (fp32)
     launch_grouped_fp4_projection<float>(encoded, scales, weight_ptrs, weight_scale_ptrs, counts,
                                          output, scratch, groups, rows, outputs, width, max_rows,
-                                         stream);
+                                         stream, device_status);
   else
     launch_grouped_fp4_projection<__nv_bfloat16>(encoded, scales, weight_ptrs, weight_scale_ptrs,
                                                  counts, output, scratch, groups, rows, outputs,
-                                                 width, max_rows, stream);
+                                                 width, max_rows, stream, device_status);
+}
+
+void grouped_project(TensorView encoded, TensorView scales, TensorView weight_ptrs,
+                     TensorView weight_scale_ptrs, TensorView counts, TensorView output,
+                     TensorView scratch, int64_t max_rows) {
+  grouped_project_impl(encoded, scales, weight_ptrs, weight_scale_ptrs, counts, output, scratch,
+                       max_rows, nullptr);
+}
+
+void grouped_project_padded(TensorView encoded, TensorView scales, TensorView weight_ptrs,
+                            TensorView weight_scale_ptrs, TensorView counts, TensorView output,
+                            TensorView scratch, int64_t max_rows, TensorView status) {
+  grouped_project_impl(encoded, scales, weight_ptrs, weight_scale_ptrs, counts, output, scratch,
+                       max_rows, &status);
 }
 
 int64_t workspace_size(int64_t rows, int64_t outputs, int64_t width, int64_t bits) {

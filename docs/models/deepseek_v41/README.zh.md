@@ -19,8 +19,16 @@ TEP4 和 DEP4 target decode 使用 Eager execution.
 
 当前公开 capability 是 text.
 在 tokenizer, image processor, rank execution 和 HTTP checks 接通前, image preparation 不加入公开 capability.
-当前 DEP4 command 选择 TEP4 executor 作为 functional fallback.
-它没有提供 DEP4 request ownership 或 expert dispatch.
+
+DEP4 使用 Rust 请求 owner 和四个独立逻辑缓存池.
+每个 owner 使用完整权重计算稠密层, 并从主机映射读取完整 Engram 行.
+路由专家使用 BF16 行 dispatch, 并返回 FP32 本地和.
+空 rank 参加所有专家交换.
+target 和 proposal 轮次会协调本地调用次数不同的 rank.
+DEP4 的 GPU 数值, 状态, 容量和 HTTP 验收仍未完成.
+
+稠密 owner 保留行投影的 MP4 部分和舍入, 以及 MP4 词表分区.
+TP4, TEP4 和 DEP4 的路由 FP32 和保留[本地专家顺序](gemm.zh.md#本地专家求和).
 
 physical cache 在 Rust logical block table 后面保存 model page.
 它支持 prefix reuse, partial block copy, host snapshot 和 restoration.
@@ -83,7 +91,8 @@ physical cache setting 必须覆盖请求的 prompt 和 output.
 
 Python worker 在各 rank-local tensor 和 physical page 中保存 model cache state.
 Rust logical cache transfer 为 protocol seam 返回 completion record.
-DeepSeek-specific DEP4 ownership 仍在开发.
+DEP4 仅在所有 rank 确认完成后释放请求 owner.
+缓存快照在请求释放后保留其 owner rank.
 nonzero multi-token prefill 使用 fused chunk path.
 target 和 MTP seed chunk 会将 total native row 保持在 operator limit 以下.
 

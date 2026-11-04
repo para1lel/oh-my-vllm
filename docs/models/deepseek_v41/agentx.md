@@ -79,6 +79,6 @@ The harness phase counters include 12 requests cancelled after the drain timeout
 The raw request export does not include these cancelled requests.
 Thus, counts from raw request records alone are not complete.
 
-The current DEP4 command uses the TEP4 executor fallback.
-Do not treat a DEP4 result as DEP4 performance evidence until request ownership and expert dispatch are implemented.
+The current DEP4 command uses request ownership and expert dispatch.
+The functional record above used an earlier implementation. It does not prove DEP4 acceptance.
 No complete approved AgentX result set is recorded yet.

@@ -190,6 +190,9 @@ def retained_bytes(config):
         total += 2 * sum(
             draft_bytes(batch, stage == 0, history=stage == 0) for stage in range(4)
         )
+        if batch >= 2:
+            total += sum(draft_bytes(batch, stage == 0) for stage in range(4))
+            total += storage_bytes((((batch * 2, 1024), "bfloat16"),) * 3)
         fields = (
             *accept_plan(batch=batch).storage,
             ((batch, 5, 248320), "float32"),

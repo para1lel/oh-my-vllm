@@ -78,6 +78,6 @@ harness phase counter 包含 drain timeout 后取消的 12 个 request.
 raw request export 不包含这些 cancelled request.
 因此, 只根据 raw request record 得到的 count 不完整.
 
-当前 DEP4 command 使用 TEP4 executor fallback.
-在 request ownership 和 expert dispatch 实现前, 不要把 DEP4 result 作为 DEP4 performance evidence.
+当前 DEP4 command 使用 request ownership 和 expert dispatch.
+以上 functional record 使用较早的实现. 它不能证明 DEP4 已验收.
 当前还没有记录完整的 approved AgentX result set.

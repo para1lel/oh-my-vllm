@@ -24,11 +24,11 @@ from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 
 from .benchmark import ROOT, source_identity
 from .deepseek_accounting import (
-    communication_model_metadata,
     efficiency_percent,
-    reference_case,
+    reference_trace,
 )
 from .deepseek_matrix import HTTP_CASES, case_id
+from .deepseek_runtime_trace import assemble_trace, read_rank_events
 from .device import device_identity, selected_uuids
 
 DEEPSEEK_NATIVE_MODULES = (
@@ -42,6 +42,7 @@ DEEPSEEK_NATIVE_MODULES = (
     "transform",
 )
 SHUTDOWN_GRACE_SECONDS = 35
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 7200
 SERVED_MODEL = "deepseek-v4.1-flash"
 
 
@@ -108,8 +109,8 @@ def checkpoint_identity(model):
     return result
 
 
-def post(port, body):
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=7200)
+def post(port, body, *, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS):
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
     try:
         connection.request(
             "POST",
@@ -151,6 +152,7 @@ def request_body(messages, output, seed):
         "ignore_eos": True,
         "reasoning_effort": "off",
         "seed": seed,
+        "temperature": 0,
     }
 
 
@@ -233,20 +235,34 @@ def numeric_runtime_identity():
     }
 
 
+def checkpoint_descriptor_identity(model):
+    model = Path(model)
+    return {
+        "config": file_sha256(model / "config.json"),
+        "index": file_sha256(model / "model.safetensors.index.json"),
+    }
+
+
 def artifact_identity(arguments, tokenizer, uuids, *, workload):
     cache_configuration = effective_cache_configuration(arguments)
     service_configuration = effective_service_configuration(arguments)
     return {
         "source": source_identity(),
+        "source_commit": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip(),
         "binary": file_sha256(arguments.binary),
         "native": native_identity(),
         "harness_numeric_runtime": numeric_runtime_identity(),
-        "checkpoint": checkpoint_identity(arguments.model),
+        "checkpoint": checkpoint_descriptor_identity(arguments.model),
         "tokenizer": tokenizer.identity,
         "topology": topology_identity(uuids),
         "workload": workload,
         "configuration": {
             "cache_context": arguments.cache_context,
+            "request_timeout_seconds": getattr(
+                arguments, "request_timeout_seconds", DEFAULT_REQUEST_TIMEOUT_SECONDS
+            ),
             **cache_configuration,
             **service_configuration,
             "native_sparse": os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "1"),
@@ -283,6 +299,9 @@ class Service:
         self.arguments = arguments
         self.mode = mode
         self.strategy = strategy
+        self.request_timeout_seconds = getattr(
+            arguments, "request_timeout_seconds", DEFAULT_REQUEST_TIMEOUT_SECONDS
+        )
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
@@ -322,7 +341,7 @@ class Service:
             "--listen",
             f"127.0.0.1:{self.port}",
             "--request-timeout-seconds",
-            "7200",
+            str(self.request_timeout_seconds),
             "--worker-step-timeout-seconds",
             "600",
             "--shutdown-grace-seconds",
@@ -379,7 +398,7 @@ class Service:
             identity = json.loads(source.readline())
         return identity["cache_memory"]["effective_strategy"]
 
-    def run(self, tokenizer, case, prompt_seed):
+    def run(self, tokenizer, case, prompt_seed, *, identity):
         nonce = hashlib.sha256(f"{prompt_seed}:{case_id(case)}".encode()).hexdigest()[
             :32
         ]
@@ -393,49 +412,46 @@ class Service:
         ]
         started = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=case["batch"]) as pool:
-            responses = list(pool.map(lambda body: post(self.port, body), bodies))
-        seconds = time.perf_counter() - started
-        for response in responses:
-            usage = response["usage"]
-            if (
-                usage["prompt_tokens"] != case["input_tokens"]
-                or usage["completion_tokens"] != case["output_tokens"]
-                or usage["prompt_tokens_details"]["cached_tokens"] != 0
-            ):
-                raise ValueError(
-                    f"DeepSeek token count or prefix check failed: {usage}"
+            responses = list(
+                pool.map(
+                    lambda body: post(
+                        self.port,
+                        body,
+                        timeout=self.request_timeout_seconds,
+                    ),
+                    bodies,
                 )
-        effective = self.effective_strategy()
-        metadata = communication_model_metadata(case["strategy"], "lower_bound")
-        if effective == case["strategy"]:
-            reference = reference_case(case, strategy=case["strategy"])
-            reference_seconds = reference.seconds
-            acceptance = reference.acceptance
-            efficiency = efficiency_percent(reference.seconds, seconds)
-            metadata = {
-                "accounting_version": reference.version,
-                "communication_model": reference.communication_model,
-                "profile_digest": reference.profile_digest,
-                "communication_rule_version": reference.communication_rule_version,
-                "dep4_communication_modeled": reference.communication_is_modeled,
-                "dep4_communication_measured": reference.communication_is_measured,
-            }
-        else:
-            reference_seconds = None
-            acceptance = "unavailable"
-            efficiency = None
+            )
+        seconds = time.perf_counter() - started
+        trace = assemble_trace(
+            read_rank_events(self.trace), responses, harness=identity, case=case
+        )
+        reference = reference_trace(
+            trace, strategy=case["strategy"], expected_binding=trace["binding"]
+        )
+        metadata = {
+            "accounting_version": reference.version,
+            "communication_model": reference.communication_model,
+            "profile_digest": reference.profile_digest,
+            "communication_rule_version": reference.communication_rule_version,
+            "dep4_communication_modeled": reference.communication_is_modeled,
+            "dep4_communication_measured": reference.communication_is_measured,
+        }
         return {
             **case,
-            "effective_strategy": effective,
+            "effective_strategy": trace["binding"]["effective_strategy"],
             **metadata,
             "seconds": seconds,
             "request_count": len(responses),
             "output_tokens_per_second": (
                 case["batch"] * case["output_tokens"] / seconds
             ),
-            "ideal_reference_seconds": reference_seconds,
-            "reference_acceptance": acceptance,
-            "ideal_efficiency_percent": efficiency,
+            "reference_seconds": reference.seconds,
+            "reference_acceptance": reference.acceptance,
+            "efficiency_percent": efficiency_percent(reference.seconds, seconds),
+            "accepted": trace["binding"]["accepted"],
+            "proposed": trace["binding"]["proposed"],
+            "trace": trace,
             "responses": responses,
         }
 
@@ -467,9 +483,11 @@ def write_csv(path, results):
         "seconds",
         "request_count",
         "output_tokens_per_second",
-        "ideal_reference_seconds",
+        "reference_seconds",
         "reference_acceptance",
-        "ideal_efficiency_percent",
+        "efficiency_percent",
+        "accepted",
+        "proposed",
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as destination:
@@ -480,7 +498,14 @@ def write_csv(path, results):
         )
 
 
-def main():
+def request_timeout_seconds(value):
+    seconds = int(value)
+    if seconds < 1:
+        raise argparse.ArgumentTypeError("request timeout must be positive seconds")
+    return seconds
+
+
+def argument_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
@@ -491,8 +516,19 @@ def main():
     parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int)
     parser.add_argument(
+        "--request-timeout-seconds",
+        type=request_timeout_seconds,
+        default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        help="timeout for both HTTP client and service requests (default: 7200)",
+    )
+    parser.add_argument(
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
     )
+    return parser
+
+
+def main():
+    parser = argument_parser()
     arguments = parser.parse_args()
     arguments.model = arguments.model.resolve()
     arguments.artifacts = arguments.artifacts.resolve()
@@ -540,7 +576,9 @@ def main():
             )
             for case in selected:
                 print(json.dumps({"event": "start", **case}), flush=True)
-                result = service.run(tokenizer, case, arguments.prompt_seed)
+                result = service.run(
+                    tokenizer, case, arguments.prompt_seed, identity=identity
+                )
                 results.append(result)
                 name = case_id(case).replace(":", "-")
                 (arguments.artifacts / f"{name}.json").write_text(

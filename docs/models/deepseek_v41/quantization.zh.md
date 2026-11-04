@@ -51,7 +51,7 @@ FP8 weight scale 应用于 32 行组.
 每个 raw dot 从零开始.
 执行 `scaled = mul_rn(raw_dot, activation_scale)`.
 执行 `sum = fma_rn(scaled, weight_scale, sum)`.
-不要在 dot product 之前将两个 scale 相乘.
+只有精确的 [指数合并](gemm.zh.md) 可以替换这些操作.
 仅将完成的总和舍入到所选 output type.
 
 RMS normalization 在将 square 加入 accumulator 之前, 对每个 square 舍入.
@@ -88,9 +88,7 @@ TP4 对每个路由投影按输出通道分片.
 分组上投影和所有完整的下投影保留 BF16 输出.
 分组接口还接受 FP32 输出, 不改变工作区大小.
 
-Shared expert 在每个 rank 上保留完整权重.
-在路由输出交换后添加其输出.
-不对 shared output 执行跨 rank reduction.
+Shared expert 使用[共享投影规则](gemm.zh.md#共享专家投影).
 Attention output projection 保留其 FP32 rank reduction 之前的 local BF16 舍入.
 
 Sparse attention 按原顺序处理 selected index, 每个 block 包含 64 个 slot.
@@ -216,12 +214,14 @@ Dense projection 不使用 device scratch storage.
 
 Grouped projection 使用 device row offset, 不上传 host descriptor.
 算子会在 device scratch 中压缩非空 group.
-grouped launch 覆盖非空 group 和输出 column tile.
-每个 block 遍历其 group row, 因此 launch 不使用 host row bound.
+Persistent block 使用 device offset 处理 32-row by 64-column expert tile.
+总 routed row 不超过 64 时, 使用并行 raw dot, 并按原顺序累加 scale.
+Launch 不受 host expert row bound 控制.
 
 每个 device count 必须在零与准备的最大行数之间.
-这些 count 的总和必须等于完整输入行数.
+严格 grouped 入口要求这些 count 的总和等于完整输入行数.
 无效 device count 生成 NaN output, 且不访问 input 或 weight.
+[固定容量入口](gemm.zh.md#固定容量投影与求和) 使用有效前缀, 将输出尾部清零, 并使用调用方持有的错误状态.
 
 Prepared weight storage 必须保持有效, 直到执行完成或 Graph 释放.
 Prepared cache entry 保留原始 weight 和 scale 的 owner, 而不只是其地址.

@@ -30,6 +30,9 @@ OH_MY_VLLM_GPU_COUNT=4 scripts/with-env.sh scripts/with-gpu.sh python -m develop
 Use `--case` with the identifier from `development/serving/deepseek_matrix.py` for a subset.
 Set `OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT` through the runner's `--cache-context` option.
 Set `OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS=32768` for long-context throughput.
+
+Use `--request-timeout-seconds` to set the same timeout for the HTTP client and service.
+The default is 7200 seconds. The measurement identity records the selected value.
 The runner records source, executable, native modules, checkpoint, tokenizer, topology, and configuration identities.
 It also records the harness Python, PyTorch, CUDA, NCCL, and numerical settings.
 These settings do not independently identify each worker's runtime.

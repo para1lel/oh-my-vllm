@@ -1,8 +1,11 @@
+import gc
 import hashlib
 import json
 import math
 import tempfile
 import unittest
+import weakref
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +15,7 @@ import torch
 from oh_my_vllm.models.deepseek_v41 import model
 from oh_my_vllm.models.deepseek_v41.decode import (
     DecodeBindings,
+    EngramStage,
     pause_state_export,
     sampled_token_ids,
 )
@@ -42,6 +46,645 @@ from safetensors.torch import save_file
 
 
 class DeepSeekModel(unittest.TestCase):
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_decode_graph_owns_cached_inputs_after_lru_eviction(self):
+        from oh_my_vllm.models.deepseek_v41.decode import DecodeGraph
+
+        cached = (
+            model.precompute_freqs_cis,
+            get_window_topk_idxs,
+            get_prefill_window_topk_idxs,
+            get_dspark_topk_idxs,
+        )
+
+        class CachedModel:
+            def __init__(self):
+                attention = SimpleNamespace(
+                    compress_ratio=0,
+                    window_size=128,
+                    window_kv_cache=torch.zeros((4, 128, 1)),
+                )
+                self.layers = [
+                    SimpleNamespace(attn=attention, ffn=SimpleNamespace(), engram=None)
+                ]
+                self.references = ()
+
+            def __call__(self, tokens, start_pos, **kwargs):
+                values = (
+                    model.precompute_freqs_cis(32, 32, 0, 10000, 1, 32, 1),
+                    get_window_topk_idxs(128, 4, 6, 0),
+                    get_prefill_window_topk_idxs(128, 4, 6, start_pos),
+                    get_dspark_topk_idxs(128, 4, 6, start_pos),
+                )
+                self.references = tuple(weakref.ref(value) for value in values)
+                output = torch.cat(
+                    [value.contiguous().view(torch.uint8).flatten() for value in values]
+                )
+                return tokens[:, 0], output, None
+
+        for operation in cached:
+            operation.cache_clear()
+        try:
+            with torch.inference_mode(), torch.device("cuda"):
+                bindings = DecodeBindings(4, (0, 1, 2, 3), "cuda", length=6)
+                bindings.bind([[1] * 6] * 4, 2050)
+                target = CachedModel()
+                expected = target(bindings.token_ids, 2050)[1].clone()
+                graph = DecodeGraph(target, bindings, 2050)
+                graph.capture()
+                references = target.references
+                for length in (7, 8, 9):
+                    model.precompute_freqs_cis(32, 32 + length, 0, 10000, 1, 32, 1)
+                    get_window_topk_idxs(128, 1, length, 0)
+                    get_prefill_window_topk_idxs(128, 1, length, 20)
+                    get_dspark_topk_idxs(128, 1, length, 20)
+                for operation in cached:
+                    operation.cache_clear()
+                gc.collect()
+                self.assertTrue(
+                    all(reference() is not None for reference in references)
+                )
+                for _ in range(2):
+                    graph.replay()
+                    self.assertTrue(torch.equal(graph.logits, expected))
+                del graph
+                gc.collect()
+                self.assertTrue(all(reference() is None for reference in references))
+                bindings.close()
+        finally:
+            for operation in cached:
+                operation.cache_clear()
+
+    def test_cached_tensor_capture_restores_owners_after_nested_failure(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+
+        with kernel.capture_cached_tensors() as outer:
+            first = get_prefill_window_topk_idxs(4, 1, 2, 2)
+            with (
+                self.assertRaisesRegex(RuntimeError, "capture failed"),
+                kernel.capture_cached_tensors() as failed,
+            ):
+                second = get_window_topk_idxs(4, 1, 3, 0)
+                raise RuntimeError("capture failed")
+            get_prefill_window_topk_idxs(4, 1, 2, 2)
+        third = get_dspark_topk_idxs(4, 1, 2, 2)
+        self.assertEqual(set(outer), {id(first)})
+        self.assertEqual(set(failed), {id(second)})
+        self.assertNotIn(id(third), outer)
+        self.assertEqual(get_prefill_window_topk_idxs.cache_parameters()["maxsize"], 1)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cached_projection_and_status_inputs_keep_tensor_owners(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+
+        with (
+            torch.inference_mode(),
+            patch.dict(kernel._PACKED_WEIGHTS, {}, clear=True),
+            patch.dict(kernel._SPARSE_STATUS, {}, clear=True),
+        ):
+            weight = torch.zeros((128, 128), dtype=torch.float8_e4m3fn, device="cuda")
+            scales = torch.full((4, 4), 127, dtype=torch.uint8, device="cuda").view(
+                torch.float8_e8m0fnu
+            )
+            packed = kernel._packed_weight(weight, scales, 8)
+            with kernel.capture_cached_tensors() as owners:
+                self.assertIs(kernel._packed_weight(weight, scales, 8), packed)
+                status = kernel._sparse_status_accumulator(weight.device)
+            references = tuple(weakref.ref(value) for value in (*packed[:2], status))
+            del packed, status
+            kernel.invalidate_packed_weights(weight, scales)
+            kernel._SPARSE_STATUS.clear()
+            gc.collect()
+            self.assertTrue(all(reference() is not None for reference in references))
+            owners.clear()
+            gc.collect()
+            self.assertTrue(all(reference() is None for reference in references))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_prepared_expert_pointer_arrays_own_the_packed_targets(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+
+        with torch.inference_mode(), patch.dict(kernel._PACKED_WEIGHTS, {}, clear=True):
+            weight = torch.zeros((128, 64), dtype=torch.uint8, device="cuda").view(
+                torch.float4_e2m1fn_x2
+            )
+            scales = torch.full((128, 4), 127, dtype=torch.uint8, device="cuda").view(
+                torch.float8_e8m0fnu
+            )
+            pointers = kernel._static_pointer_arrays([(weight, scales)], weight.device)
+            reference = weakref.ref(
+                next(iter(kernel._PACKED_WEIGHTS.values())).packed[1]
+            )
+            kernel.invalidate_packed_weights(weight, scales)
+            gc.collect()
+            self.assertIsNotNone(reference())
+            del pointers
+            gc.collect()
+            self.assertIsNone(reference())
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_capture_pointer_upload_retains_its_cached_host_snapshot(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+
+        values = [16, 32]
+        with (
+            torch.inference_mode(),
+            patch.dict(kernel._CAPTURE_POINTER_HOSTS, {}, clear=True),
+        ):
+            stream = torch.cuda.Stream()
+            stream.wait_stream(torch.cuda.current_stream())
+            graph = torch.cuda.CUDAGraph()
+            with (
+                kernel.capture_cached_tensors() as owners,
+                torch.cuda.graph(graph, stream=stream),
+            ):
+                output = kernel._upload_pointer_array(
+                    values, "ownership-test", torch.device("cuda")
+                ).clone()
+            host = next(iter(kernel._CAPTURE_POINTER_HOSTS.values()))
+            reference = weakref.ref(host)
+            del host
+            kernel._CAPTURE_POINTER_HOSTS.clear()
+            gc.collect()
+            self.assertIsNotNone(reference())
+            graph.replay()
+            self.assertEqual(output.tolist(), values)
+            del graph
+            owners.clear()
+            gc.collect()
+            self.assertIsNone(reference())
+
+    def test_cuda_batch_rejects_unverified_configuration_before_binding(self):
+        from oh_my_vllm.models.deepseek_v41 import batch, kernel
+
+        released = ModelArgs(
+            dim=5120,
+            hc_mult=4,
+            dtype="fp8",
+            expert_dtype="fp4",
+            n_heads=64,
+            head_dim=512,
+            n_routed_experts=384,
+            n_activated_experts=6,
+            index_n_heads=32,
+            index_head_dim=128,
+            index_topk=512,
+            window_size=128,
+        )
+        invalid = dict(
+            dim=1024,
+            hc_mult=2,
+            dtype="bf16",
+            expert_dtype=None,
+            n_heads=32,
+            head_dim=128,
+            n_routed_experts=128,
+            n_activated_experts=3,
+            index_n_heads=16,
+            index_head_dim=64,
+            index_topk=1024,
+            window_size=1024,
+        )
+        for field, value in invalid.items():
+            worker = SimpleNamespace(
+                device="cuda", args=replace(released, **{field: value})
+            )
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
+                batch.target_decode_batch(worker, [[1], [2]], (2, 2), (0, 1))
+            self.assertFalse(hasattr(worker, "decode_bindings"))
+        for name, value in (
+            ("fp8_block_size", 128),
+            ("fp4_block_size", 128),
+            ("scale_fmt", "float32"),
+            ("scale_dtype", torch.float32),
+        ):
+            with (
+                patch.object(model, name, value),
+                self.assertRaisesRegex(ValueError, "UE8M0 K32"),
+            ):
+                batch.require_batch_configuration(released)
+        for name in ("_SPARSE_NATIVE_DISABLED", "_SPARSE_NATIVE_FAILED"):
+            with (
+                patch.object(kernel, name, True),
+                self.assertRaisesRegex(ValueError, "native sparse"),
+            ):
+                batch.require_batch_configuration(released)
+        with (
+            patch.object(kernel, "_SPARSE_NATIVE_DISABLED", False),
+            patch.object(kernel, "_SPARSE_NATIVE_FAILED", False),
+        ):
+            batch.require_batch_configuration(released)
+
+    def test_grouped_local_sum_maps_route_slots_for_each_strategy(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+        from oh_my_vllm.models.deepseek_v41.dispatch import _local_expert_sum
+
+        rows = torch.zeros((2, 32), dtype=torch.bfloat16)
+        indices = torch.tensor([[5, 7, 3, 6, 4, 0], [0, 1, 2, 6, 7, 5]])
+        weights = torch.ones((2, 6), dtype=torch.float32)
+        contributions = torch.tensor(
+            (0, 0, 0, -0.0244140625, 0.0145263671875, 2.514570951461792e-8, 0, 0),
+            dtype=torch.bfloat16,
+        )
+        expected = torch.zeros_like(rows, dtype=torch.float32)
+        expected[0] = -0.009887670166790485
+        expected[1] = 2.514570951461792e-8
+        original_sum = kernel.ordered_expert_sum
+        for strategy in ("TP4", "TEP4", "DEP4"):
+            with self.subTest(strategy=strategy), patch.object(model, "world_size", 1):
+                moe = MoE(
+                    0,
+                    ModelArgs(
+                        dim=32,
+                        moe_inter_dim=32,
+                        n_routed_experts=8,
+                        n_activated_experts=6,
+                        n_shared_experts=1,
+                        dtype="bf16",
+                        parallel_strategy=strategy,
+                    ),
+                )
+                if strategy != "TP4":
+                    moe.experts_start_idx, moe.experts_end_idx = 3, 6
+                seen = []
+
+                def grouped(
+                    values, tokens, route_weights, counts, count_tensor, moe=moe
+                ):
+                    first = sum(counts[: moe.experts_start_idx])
+                    last = sum(counts[: moe.experts_end_idx])
+                    ids = torch.repeat_interleave(torch.arange(8), count_tensor.long())
+                    result = (
+                        contributions[ids[first:last], None].expand(-1, 32).contiguous()
+                    )
+                    return tokens[first:last], result
+
+                def checked_sum(values, routes, output, topk, seen=seen):
+                    original_sum(values, routes, output, topk)
+                    seen.append(output.clone())
+
+                with (
+                    patch.object(moe, "_grouped_routed", side_effect=grouped),
+                    patch.object(kernel, "ordered_expert_sum", side_effect=checked_sum),
+                    patch.object(
+                        moe.shared_experts,
+                        "forward",
+                        return_value=torch.zeros_like(rows),
+                    ),
+                ):
+                    if strategy == "DEP4":
+                        _local_expert_sum(moe, rows, indices, weights)
+                    else:
+                        moe._forward_rows(rows, routing=(weights, indices))
+                self.assertEqual(len(seen), 1)
+                self.assertTrue(
+                    torch.equal(seen[0].view(torch.int32), expected.view(torch.int32))
+                )
+
+    def test_moe_prefill_configuration_and_workspace_lifetime(self):
+        from oh_my_vllm.models.deepseek_v41.moe_prefill import (
+            PrefillWorkspace,
+            projection_rows,
+        )
+
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(projection_rows(), 1024)
+            for strategy, partitions, expected in (
+                ("TEP4", 4, 8192),
+                ("TP4", 4, 8192),
+                ("DEP4", 4, 1024),
+                ("TEP4", 1, 1024),
+            ):
+                self.assertEqual(
+                    projection_rows(strategy=strategy, partitions=partitions), expected
+                )
+        with patch.dict("os.environ", {"OH_MY_VLLM_DEEPSEEK_MOE_PREFILL_ROWS": "1024"}):
+            self.assertEqual(projection_rows(strategy="TEP4", partitions=4), 1024)
+        for value in (1024, "4096", "8192"):
+            self.assertEqual(projection_rows(value), int(value))
+        for value in (0, 2048, 16384, "4096.0", 4096.5, True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                projection_rows(value)
+        with patch.dict("os.environ", {"OH_MY_VLLM_DEEPSEEK_MOE_PREFILL_ROWS": "4096"}):
+            transformer = Transformer(
+                ModelArgs(
+                    n_layers=2,
+                    dim=32,
+                    moe_inter_dim=32,
+                    n_heads=1,
+                    q_lora_rank=32,
+                    o_lora_rank=32,
+                    head_dim=32,
+                    rope_head_dim=16,
+                    vocab_size=32,
+                    max_seq_len=8,
+                    max_batch_size=1,
+                    compress_ratios=[1, 1],
+                    kv_source_layers=[],
+                    index_source_layers=[],
+                    o_groups=1,
+                    dtype="bf16",
+                    expert_dtype=None,
+                )
+            )
+        workspace = transformer._moe_prefill_workspace
+        self.assertIsInstance(workspace, PrefillWorkspace)
+        self.assertTrue(
+            all(
+                layer.ffn._prefill_workspace is workspace
+                for layer in transformer.layers
+            )
+        )
+        self.assertEqual(workspace.buffers, {})
+        for options, length, enabled in (
+            ({}, 2, True),
+            ({"start_pos": 1}, 2, True),
+            ({}, 1, False),
+            ({"logical_rows": 1}, 2, False),
+            ({"position": torch.tensor(0)}, 2, False),
+            ({"execution_plan": object()}, 2, False),
+            ({"valid_rows": torch.ones(2, dtype=torch.bool)}, 2, False),
+            ({"dispatch_combine": object()}, 2, False),
+        ):
+            with self.subTest(options=options, length=length), ExitStack() as stack:
+                calls = []
+
+                def block(value, start, pre_mix, *_args, calls=calls, **kwargs):
+                    calls.append(kwargs.get("prefill_eager", False))
+                    return value, pre_mix
+
+                for layer in transformer.layers:
+                    stack.enter_context(
+                        patch.object(layer, "forward", side_effect=block)
+                    )
+                transformer(
+                    torch.zeros((1, length), dtype=torch.int64),
+                    compute_logits=False,
+                    collect_main_hidden=False,
+                    reserve_cache=False,
+                    check_status=False,
+                    **options,
+                )
+                self.assertEqual(calls, [enabled, enabled])
+        workspace.buffers["sentinel"] = torch.empty(1)
+        transformer.layers[0].ffn._apply(lambda value: value)
+        self.assertEqual(workspace.buffers, {})
+        rows = torch.zeros((2048, 32), dtype=torch.bfloat16)
+        self.assertIsNone(
+            transformer.layers[0].ffn._prepare_prefill_workspace(rows, True)
+        )
+        with patch.object(torch.cuda, "is_current_stream_capturing", return_value=True):
+            cuda_rows = SimpleNamespace(
+                is_cuda=True, dtype=torch.bfloat16, size=lambda _: 2048
+            )
+            self.assertIsNone(
+                transformer.layers[0].ffn._prepare_prefill_workspace(cuda_rows, True)
+            )
+        workspace.partitions = 1
+        workspace.buffers["gather_input"] = torch.empty((3, 2))
+        product = torch.arange(6).float().view(3, 2)
+        positions = torch.tensor((2, 0, 1))
+        with patch(
+            "torch.distributed.all_gather_into_tensor",
+            side_effect=AssertionError("a single partition must not use a collective"),
+        ):
+            for size in (0, 3):
+                selected = workspace._gather_product(product, positions[:size])
+                self.assertTrue(torch.equal(selected, product[positions[:size]]))
+                self.assertIs(workspace._gather_sum(selected), selected)
+
+    def test_moe_prefill_keeps_collective_waves_and_reuses_storage(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+        from oh_my_vllm.models.deepseek_v41.moe_prefill import PrefillWorkspace
+
+        class Native:
+            def __init__(self):
+                self.projections = []
+                self.collectives = []
+
+            def grouped_workspace_size(self, *_args):
+                return 64
+
+            def quantize(self, values, encoded, scales, *_args):
+                encoded.copy_(values.to(torch.float8_e4m3fn).view(torch.uint8))
+                scales.fill_(127)
+
+            def grouped_project(
+                self,
+                encoded,
+                scales,
+                role,
+                first_expert,
+                counts,
+                output,
+                scratch,
+                max_rows,
+            ):
+                self.projections.append((role, encoded.size(0)))
+                values = encoded.view(torch.float8_e4m3fn).float()
+                output.copy_(values[:, :1].expand_as(output))
+                if role == "down":
+                    first = 0
+                    for expert, count in enumerate(counts.tolist(), first_expert):
+                        output[first : first + count].add_(expert / 8)
+                        first += count
+
+            def swiglu(self, gate, up, weights, output, *_args):
+                output.copy_(gate.float() * weights[:, None])
+
+            def expert_sum(self, values, route_rows, output):
+                output.zero_()
+                for row, routes in enumerate(route_rows.tolist()):
+                    for route in sorted(route for route in routes if route >= 0):
+                        output[row].add_(values[route].float())
+
+            def all_reduce(self, values):
+                self.collectives.append(("reduce", tuple(values.shape)))
+                values.add_(2)
+
+            def all_gather_into_tensor(self, output, values):
+                self.collectives.append(
+                    (
+                        "product" if values.dtype == torch.bfloat16 else "sum",
+                        tuple(values.shape),
+                    )
+                )
+                for rank, shard in enumerate(output.view(4, *values.shape)):
+                    shard.copy_(values)
+                    if values.dtype == torch.float32:
+                        shard.add_(rank / 8)
+
+        def gate(value, image_mask=None):
+            ids = (value[:, 1].long()[:, None] + torch.tensor([0, 3, 6])) % 8
+            weights = torch.tensor([0.25, 0.5, 0.75]).expand(value.size(0), -1)
+            return weights, ids
+
+        for strategy in ("TEP4", "TP4"):
+            for wave in (4096, 8192):
+                with self.subTest(strategy=strategy, wave=wave), ExitStack() as stack:
+                    stack.enter_context(patch.object(model, "world_size", 4))
+                    stack.enter_context(patch.object(model, "rank", 1))
+                    native = Native()
+                    for module in (
+                        "_projection_module",
+                        "_transform_module",
+                        "_activation_module",
+                        "_routing_module",
+                    ):
+                        stack.enter_context(
+                            patch.object(kernel, module, return_value=native)
+                        )
+                    stack.enter_context(
+                        patch.object(model.dist, "all_reduce", native.all_reduce)
+                    )
+                    stack.enter_context(
+                        patch.object(
+                            model.dist,
+                            "all_gather_into_tensor",
+                            native.all_gather_into_tensor,
+                        )
+                    )
+                    dim = 128 if strategy == "TP4" else 32
+                    moe = MoE(
+                        0,
+                        ModelArgs(
+                            dim=dim,
+                            moe_inter_dim=128,
+                            n_routed_experts=8,
+                            n_activated_experts=3,
+                            dtype="bf16",
+                            expert_dtype=None,
+                            parallel_strategy=strategy,
+                        ),
+                    )
+                    groups = moe.n_local_experts
+                    projection = tuple(
+                        (torch.empty((32, dim // 2)), None) for _ in range(groups)
+                    )
+                    down = tuple(
+                        (torch.empty((32, 64 if strategy == "TP4" else 16)), None)
+                        for _ in range(groups)
+                    )
+                    moe._routed_state.weights = SimpleNamespace(
+                        gate=projection, up=projection, down=down
+                    )
+                    moe._routed_state.pointers = tuple(
+                        (role, moe.experts_start_idx) for role in ("gate", "up", "down")
+                    )
+                    workspace = PrefillWorkspace(wave)
+                    workspace.reserve(moe, torch.device("cpu"), 4)
+                    addresses = {
+                        name: value.data_ptr()
+                        for name, value in workspace.buffers.items()
+                    }
+                    stack.enter_context(
+                        patch.object(
+                            moe, "_prepare_prefill_workspace", return_value=workspace
+                        )
+                    )
+                    gate_mock = stack.enter_context(
+                        patch.object(moe.gate, "forward", side_effect=gate)
+                    )
+                    for length in (wave + 1025, 1025):
+                        native.projections.clear()
+                        native.collectives.clear()
+                        gate_mock.reset_mock()
+                        value = torch.zeros((1, length, dim), dtype=torch.bfloat16)
+                        value[0, :, 0] = torch.arange(length) % 3
+                        value[0, :, 1] = torch.arange(length) % 8
+                        shared = torch.full((length, dim), -0.5, dtype=torch.bfloat16)
+                        with patch.object(
+                            moe.shared_experts, "forward", return_value=shared
+                        ):
+                            actual = moe(value, prefill_eager=True)
+                        weights, ids = gate(value[0])
+                        expected = torch.zeros((length, dim), dtype=torch.float32)
+                        for expert in range(moe.experts_start_idx, moe.experts_end_idx):
+                            token, slot = (ids == expert).nonzero(as_tuple=True)
+                            contribution = (
+                                value[0, token, 0].float() * weights[token, slot]
+                                + expert / 8
+                            ).to(torch.bfloat16)
+                            expected[token] += contribution[:, None].float()
+                        if strategy == "TEP4":
+                            expected += 2
+                        else:
+                            expected += (
+                                torch.arange(4).repeat_interleave(32)[None, :] / 8
+                            )
+                        expected = (
+                            (expected + shared).to(torch.bfloat16).view_as(actual)
+                        )
+                        self.assertTrue(
+                            torch.equal(
+                                actual.view(torch.int16), expected.view(torch.int16)
+                            )
+                        )
+                        collective_rows = [
+                            min(1024, length - first)
+                            for first in range(0, length, 1024)
+                        ]
+                        expected_collectives = []
+                        for rows in collective_rows:
+                            if strategy == "TEP4":
+                                expected_collectives.append(("reduce", (rows, dim)))
+                            else:
+                                expected_collectives.extend(
+                                    (("product", (rows * 3, 32)), ("sum", (rows, 32)))
+                                )
+                        self.assertEqual(native.collectives, expected_collectives)
+                        self.assertEqual(
+                            [call.args[0].size(0) for call in gate_mock.call_args_list],
+                            collective_rows,
+                        )
+                        self.assertEqual(
+                            max(
+                                count
+                                for role, count in native.projections
+                                if role == "gate"
+                            ),
+                            min(wave, length) * 3
+                            if strategy == "TP4"
+                            else int(
+                                (
+                                    (ids[: min(wave, length)] >= 2)
+                                    & (ids[: min(wave, length)] < 4)
+                                ).sum()
+                            ),
+                        )
+                        workspace.reserve(moe, torch.device("cpu"), 4)
+                        self.assertEqual(
+                            addresses,
+                            {
+                                name: value.data_ptr()
+                                for name, value in workspace.buffers.items()
+                            },
+                        )
+                    if strategy == "TEP4":
+                        native.projections.clear()
+                        native.collectives.clear()
+                        gate_mock.reset_mock()
+                        indices = torch.tensor([[0, 4, 6]]).expand(1025, -1)
+                        weights = torch.ones((1025, 3))
+                        routing = workspace.routing(
+                            moe, value[0], None, (weights, indices)
+                        )
+                        actual = moe._forward_rows(
+                            value[0],
+                            routing=routing,
+                            shared_output=shared,
+                            workspace=workspace,
+                        )
+                        self.assertTrue(
+                            torch.equal(actual, torch.full_like(actual, 1.5))
+                        )
+                        self.assertEqual(native.projections, [])
+                        self.assertEqual(
+                            native.collectives,
+                            [("reduce", (1024, dim)), ("reduce", (1, dim))],
+                        )
+                        gate_mock.assert_not_called()
+
     def test_route_counts_match_bincount_without_a_host_read(self):
         indices = torch.tensor([0, 3, 3, 5, 383, 0], dtype=torch.int32)
         expected = torch.bincount(indices.to(torch.int64), minlength=384).to(
@@ -143,6 +786,10 @@ class DeepSeekModel(unittest.TestCase):
                         ),
                     ):
                         moe = MoE(layer, replace(args, parallel_strategy=strategy))
+                        if strategy == "DEP4":
+                            moe.dep4_exchange = lambda _layer, rows, _routing: (
+                                torch.full_like(rows, 3, dtype=torch.float32)
+                            )
                         shared = moe.shared_experts
                         self.assertEqual(tuple(shared.w1.weight.shape), (8, 4))
                         self.assertEqual(tuple(shared.w2.weight.shape), (4, 8))
@@ -590,6 +1237,78 @@ class DeepSeekModel(unittest.TestCase):
         )
         torch.testing.assert_close(result, expected)
 
+    def test_fp8_expert_quantizes_shared_up_input_once(self):
+        expert = model.Expert(32, 32, dtype=torch.float8_e4m3fn)
+        with torch.no_grad():
+            for projection, value in (
+                (expert.w1, 1.0),
+                (expert.w3, 0.5),
+                (expert.w2, 0.25),
+            ):
+                projection.weight.copy_(
+                    torch.full(projection.weight.shape, value).to(torch.float8_e4m3fn)
+                )
+                projection.scale.view(torch.uint8).fill_(127)
+        values = torch.ones((4, 32), dtype=torch.bfloat16)
+        with patch.object(model, "act_quant", wraps=model.act_quant) as quantize:
+            actual = expert(values)
+        torch.testing.assert_close(
+            actual, torch.full_like(actual, 4096), rtol=0, atol=0
+        )
+        self.assertEqual(quantize.call_count, 2)
+
+    def test_expert_keeps_replaced_projection_calls(self):
+        values = torch.ones((4, 32), dtype=torch.bfloat16)
+        expert = model.Expert(32, 32, dtype=torch.bfloat16)
+        expert.w1, expert.w3, expert.w2 = (torch.nn.Identity() for _ in range(3))
+        torch.testing.assert_close(
+            expert(values), torch.full_like(values, 0.73046875), rtol=0, atol=0
+        )
+
+        class ZeroLinear(model.Linear):
+            def forward(self, values):
+                return torch.zeros_like(values)
+
+        for mode in ("subclass", "instance", "foreign_instance", "hook", "global_hook"):
+            with self.subTest(mode=mode), ExitStack() as stack:
+                expert = model.Expert(32, 32, dtype=torch.float8_e4m3fn)
+                if mode == "subclass":
+                    expert.w1 = ZeroLinear(32, 32, dtype=torch.float8_e4m3fn)
+                with torch.no_grad():
+                    for projection in (expert.w1, expert.w3, expert.w2):
+                        projection.weight.copy_(
+                            torch.ones(projection.weight.shape).to(torch.float8_e4m3fn)
+                        )
+                        projection.scale.view(torch.uint8).fill_(127)
+
+                def zero_gate(module, inputs, output, gate=expert.w1):
+                    return torch.zeros_like(output) if module is gate else None
+
+                if mode == "instance":
+                    stack.enter_context(
+                        patch.object(
+                            expert.w1, "forward", return_value=torch.zeros_like(values)
+                        )
+                    )
+                elif mode == "foreign_instance":
+                    replacement = model.Linear(32, 32, dtype=torch.float8_e4m3fn)
+                    with torch.no_grad():
+                        replacement.weight.view(torch.uint8).zero_()
+                        replacement.scale.view(torch.uint8).fill_(127)
+                    stack.enter_context(
+                        patch.object(expert.w1, "forward", replacement.forward)
+                    )
+                elif mode == "hook":
+                    stack.enter_context(expert.w1.register_forward_hook(zero_gate))
+                elif mode == "global_hook":
+                    stack.enter_context(
+                        torch.nn.modules.module.register_module_forward_hook(zero_gate)
+                    )
+                actual = expert(values)
+                torch.testing.assert_close(
+                    actual, torch.zeros_like(actual), rtol=0, atol=0
+                )
+
     def test_moe_bounds_routed_rows_without_changing_outputs(self):
         class FixedGate(torch.nn.Module):
             def __init__(self):
@@ -611,16 +1330,23 @@ class DeepSeekModel(unittest.TestCase):
                 return weights, indices
 
         class FixedExpert(torch.nn.Module):
-            def __init__(self, offset):
+            def __init__(self, output):
                 super().__init__()
-                self.offset = offset
+                self.output = output
 
             def forward(self, value, weights):
-                return (value + self.offset) * weights
+                return torch.full_like(value, self.output)
 
-        class ZeroExpert(torch.nn.Module):
+        class SharedExpert(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.rows = []
+
             def forward(self, value):
-                return torch.zeros_like(value)
+                self.rows.append(value.size(0))
+                output = value.clone()
+                output[:, 0] = -1
+                return output
 
         args = ModelArgs(
             dim=2,
@@ -635,15 +1361,20 @@ class DeepSeekModel(unittest.TestCase):
         moe = MoE(0, args)
         gate = FixedGate()
         moe.gate = gate
-        moe.experts = torch.nn.ModuleList(FixedExpert(index + 1) for index in range(2))
-        moe.shared_experts = ZeroExpert()
-        value = torch.tensor((1.0, 2.0)).expand(1025, 1, 2)
+        moe.experts = torch.nn.ModuleList(
+            FixedExpert(output) for output in (1, 1 / 256)
+        )
+        moe.shared_experts = SharedExpert()
+        value = torch.zeros((1025, 1, 2), dtype=torch.bfloat16)
+        value[:, 0, 1] = torch.arange(1025) % 3
 
         result = moe(value)
 
-        expected = torch.tensor((2.75, 3.75)).expand_as(result)
-        torch.testing.assert_close(result, expected)
+        expected = torch.full_like(value, 1 / 256)
+        expected[:, 0, 1] = value[:, 0, 1] + 1
+        torch.testing.assert_close(result, expected, rtol=0, atol=0)
         self.assertGreater(gate.calls, 1)
+        self.assertEqual(moe.shared_experts.rows, [1025])
 
     @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
     def test_cuda_moe_grouped_fp4_path_matches_expert_reference(self):
@@ -1067,10 +1798,14 @@ class DeepSeekModel(unittest.TestCase):
                 max_seq_len=16,
             )
             model = Transformer(args)
+            # Equal top-k cutoff scores can select different keys after context padding.
+            generator = torch.Generator(device="cpu").manual_seed(0)
             for parameter in model.parameters():
-                torch.nn.init.normal_(parameter, mean=0.0, std=0.02)
+                torch.nn.init.normal_(
+                    parameter, mean=0.0, std=0.02, generator=generator
+                )
             initial = {name: value.clone() for name, value in model.named_buffers()}
-            tokens = torch.randint(0, 128, (1, 12))
+            tokens = torch.randint(0, 128, (1, 12), generator=generator)
 
             def decode(with_device_position):
                 model(tokens[:, :5], start_pos=0)
@@ -1113,6 +1848,119 @@ class DeepSeekModel(unittest.TestCase):
             shared_attn.compress_kv = None
             shared_attn.index_k = None
             shared_attn.candidates = None
+            torch.set_default_device(previous_device)
+            torch.set_default_dtype(previous_dtype)
+
+    def test_varlen_target_calls_keep_per_request_logits_and_recurrent_state(self):
+        previous_device, previous_dtype = (
+            torch.get_default_device(),
+            torch.get_default_dtype(),
+        )
+        torch.set_default_device("cpu")
+        torch.set_default_dtype(torch.bfloat16)
+        try:
+            args = ModelArgs(
+                vocab_size=128,
+                dim=64,
+                moe_inter_dim=64,
+                n_layers=3,
+                n_mtp_layers=0,
+                n_heads=4,
+                n_routed_experts=4,
+                n_activated_experts=2,
+                q_lora_rank=32,
+                head_dim=32,
+                rope_head_dim=16,
+                o_groups=4,
+                o_lora_rank=16,
+                window_size=4,
+                compress_ratios=(0, 2, 1),
+                kv_source_layers=(1, 2),
+                index_source_layers=(1, 2),
+                index_n_heads=4,
+                index_head_dim=32,
+                index_topk=4,
+                candidate_source_layer=-1,
+                hc_mult=2,
+                dtype="bf16",
+                expert_dtype=None,
+                temperature=0,
+                max_batch_size=2,
+                max_seq_len=32,
+            )
+            transformer = Transformer(args)
+            generator = torch.Generator(device="cpu").manual_seed(0)
+            for parameter in transformer.parameters():
+                torch.nn.init.normal_(
+                    parameter, mean=0.0, std=0.02, generator=generator
+                )
+            starts, slots = (9, 15), torch.tensor([1, 0])
+            input_generator = torch.Generator(device="cpu").manual_seed(0)
+            for slot, start in zip(slots.tolist(), starts, strict=True):
+                transformer(
+                    torch.randint(0, 128, (1, start), generator=input_generator),
+                    cache_slots=torch.tensor([slot]),
+                )
+            initial = {
+                name: value.clone() for name, value in transformer.named_buffers()
+            }
+            for length in (1, 6):
+                tokens = torch.randint(0, 128, (2, length), generator=input_generator)
+                for name, value in transformer.named_buffers():
+                    value.copy_(initial[name])
+                outputs = []
+                for index, start in enumerate(starts):
+                    outputs.append(
+                        transformer(
+                            tokens[index : index + 1],
+                            start_pos=start,
+                            cache_slots=slots[index : index + 1],
+                            full_logits=length > 1,
+                            sample_output=False,
+                            collect_main_hidden=False,
+                        )[1]
+                    )
+                expected = {
+                    name: value.clone() for name, value in transformer.named_buffers()
+                }
+                for name, value in transformer.named_buffers():
+                    value.copy_(initial[name])
+                plan = object()
+                valid_rows = torch.ones(tokens.numel(), dtype=torch.bool)
+                calls = []
+
+                def dispatch(*, layer, rows, routing, valid_rows, plan, calls=calls):
+                    calls.append((layer.layer_id, valid_rows, plan))
+                    return layer._forward_rows(rows, routing=routing)
+
+                actual = transformer(
+                    tokens,
+                    start_pos=max(starts),
+                    position=torch.tensor(starts).view(2, 1),
+                    cache_slots=slots,
+                    cache_slots_cpu=slots.tolist(),
+                    cache_positions_cpu=starts,
+                    full_logits=length > 1,
+                    sample_output=False,
+                    collect_main_hidden=False,
+                    logical_rows=1,
+                    execution_plan=plan,
+                    valid_rows=valid_rows,
+                    dispatch_combine=dispatch,
+                )[1]
+                self.assertEqual([call[0] for call in calls], [0, 1, 2])
+                self.assertTrue(
+                    all(call[1] is valid_rows and call[2] is plan for call in calls)
+                )
+                with self.assertRaisesRegex(ValueError, "one device boolean"):
+                    transformer(tokens, valid_rows=valid_rows[:-1])
+                torch.testing.assert_close(actual, torch.cat(outputs), rtol=0, atol=0)
+                for name, value in transformer.named_buffers():
+                    torch.testing.assert_close(
+                        value, expected[name], rtol=0, atol=0, msg=name
+                    )
+        finally:
+            shared_attn.reset_query_state()
             torch.set_default_device(previous_device)
             torch.set_default_dtype(previous_dtype)
 
@@ -1287,7 +2135,7 @@ class DeepSeekModel(unittest.TestCase):
                 model(
                     ids,
                     start_pos=0,
-                    position=torch.tensor(0, dtype=torch.int64),
+                    position=torch.tensor([[0, 1]], dtype=torch.int64),
                 )
             with patch(
                 "oh_my_vllm.models.deepseek_v41.model.require_sparse_status"
@@ -1390,6 +2238,16 @@ class DeepSeekModel(unittest.TestCase):
             table.scale.data.fill_(1)
 
             result = table(torch.tensor([[1, 3]], device="cuda"))
+            original = result.clone()
+            stream = torch.cuda.Stream()
+            stream.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(stream):
+                repeated = table(
+                    torch.tensor([[3, 1]], dtype=torch.int32, device="cuda")
+                )
+            torch.cuda.current_stream().wait_stream(stream)
+            self.assertTrue(torch.equal(repeated, original.flip(1)))
+            self.assertTrue(torch.equal(result, original))
 
             self.assertEqual(table.weight.device.type, "cpu")
             self.assertFalse(table.weight.is_pinned())
@@ -1404,6 +2262,197 @@ class DeepSeekModel(unittest.TestCase):
         finally:
             torch.set_default_device(previous_device)
             torch.set_default_dtype(previous_dtype)
+
+    def _engram_staging_table(self):
+        table = ParallelEngramEmbedding(8, 32)
+        values = torch.arange(8 * 32, dtype=torch.float32, device="cpu")
+        table.weight.data.copy_((values.reshape(8, 32) / 16).to(table.weight.dtype))
+        table.scale.data.copy_(
+            torch.tensor([125, 126, 127, 128, 129, 127, 126, 125], dtype=torch.uint8)
+            .reshape(8, 1)
+            .view(torch.float8_e8m0fnu)
+        )
+        return table
+
+    def _engram_lookup_reference(self, table, ids):
+        ids = ids.cpu().long()
+        mask = (ids < table.vocab_start_idx) | (ids >= table.vocab_end_idx)
+        local = (ids - table.vocab_start_idx).masked_fill(mask, 0)
+        values = torch.nn.functional.embedding(local, table.weight)
+        scales = torch.nn.functional.embedding(local, table.scale)
+        values = (
+            (values.float().unflatten(-1, (-1, 32)) * scales.float().unsqueeze(-1))
+            .flatten(-2)
+            .to(torch.bfloat16)
+        )
+        return values.masked_fill(mask.unsqueeze(-1), 0)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_engram_staging_waits_before_third_chunk_and_keeps_tail(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+
+        table = self._engram_staging_table()
+        ids = (torch.arange(2 * 65536 + 7, device="cuda") % 10) - 1
+        native = kernel._transform_module()
+        events = []
+        stages = []
+        submissions = []
+        event_type = torch.cuda.Event
+
+        class TrackedEvent:
+            def __init__(self):
+                self.event = event_type()
+                self.ready = False
+                self.records = 0
+                events.append(self)
+
+            def synchronize(self):
+                self.event.synchronize()
+                self.ready = True
+
+            def record(self, stream):
+                self_index = events.index(self)
+                submissions.append(("record", self_index))
+                self.event.record(stream)
+                self.records += 1
+                self.ready = False
+
+        def stage(weight, scales, indices, packed, start):
+            event = events[len(stages) % 2]
+            self.assertTrue(event.ready)
+            if event.records:
+                self.assertTrue(event.event.query())
+            stages.append((packed.data_ptr(), indices.numel()))
+            event.ready = False
+            native.engram_lookup_stage(weight, scales, indices, packed, start)
+
+        def decode(packed, output):
+            native.engram_lookup_decode(packed, output)
+            submissions.append(("decode", (len(stages) - 1) % 2))
+
+        module = SimpleNamespace(
+            engram_lookup_stage=stage,
+            engram_lookup_decode=decode,
+        )
+        with (
+            patch.object(torch.cuda, "Event", TrackedEvent),
+            patch.object(kernel, "_transform_module", return_value=module),
+        ):
+            actual = table(ids)
+        expected = self._engram_lookup_reference(table, ids)
+        self.assertTrue(
+            torch.equal(actual.cpu().view(torch.int16), expected.view(torch.int16))
+        )
+        self.assertEqual([length for _, length in stages], [65536, 65536, 7])
+        self.assertEqual(stages[0][0], stages[2][0])
+        self.assertNotEqual(stages[0][0], stages[1][0])
+        self.assertEqual([event.records for event in events], [2, 1])
+        self.assertEqual(
+            submissions,
+            [
+                ("decode", 0),
+                ("record", 0),
+                ("decode", 1),
+                ("record", 1),
+                ("decode", 0),
+                ("record", 0),
+            ],
+        )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_engram_staging_recovers_after_copy_or_decode_failure(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+
+        native = kernel._transform_module()
+        copy = torch.Tensor.copy_
+        synchronize = torch.cuda.Stream.synchronize
+        for failure in ("copy", "decode"):
+            with self.subTest(failure=failure):
+                table = self._engram_staging_table()
+                ids = torch.tensor([1, 7, 3, -1], device="cuda")
+                table(ids)
+                synchronized = []
+
+                def sync(stream, calls=synchronized):
+                    synchronize(stream)
+                    calls.append(stream.cuda_stream)
+
+                def copy_then_fail(destination, source, *args, **kwargs):
+                    result = copy(destination, source, *args, **kwargs)
+                    if destination.is_cuda and destination.dtype == torch.uint8:
+                        raise RuntimeError("injected Engram copy failure")
+                    return result
+
+                def decode_then_fail(packed, output):
+                    native.engram_lookup_decode(packed, output)
+                    raise RuntimeError("injected Engram decode failure")
+
+                module = SimpleNamespace(
+                    engram_lookup_stage=native.engram_lookup_stage,
+                    engram_lookup_decode=decode_then_fail,
+                )
+                fault = (
+                    patch.object(torch.Tensor, "copy_", copy_then_fail)
+                    if failure == "copy"
+                    else patch.object(kernel, "_transform_module", return_value=module)
+                )
+                fault_stream = torch.cuda.Stream()
+                fault_stream.wait_stream(torch.cuda.current_stream())
+                with (
+                    torch.cuda.stream(fault_stream),
+                    patch.object(torch.cuda.Stream, "synchronize", sync),
+                    fault,
+                    self.assertRaisesRegex(RuntimeError, "injected Engram"),
+                ):
+                    table(ids)
+                self.assertEqual(synchronized, [fault_stream.cuda_stream])
+                updated = ids.flip(0)
+                actual = table(updated)
+                expected = self._engram_lookup_reference(table, updated)
+                self.assertTrue(
+                    torch.equal(
+                        actual.cpu().view(torch.int16), expected.view(torch.int16)
+                    )
+                )
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_engram_stage_refreshes_graph_replay_inputs(self):
+        table = self._engram_staging_table()
+        engram = SimpleNamespace(
+            q_weight=torch.empty(1, device="cuda"),
+            n_hash_cols=1,
+            head_dim=32,
+            layer_hash_index=0,
+            embed=table,
+        )
+        staged_model = SimpleNamespace(
+            layers=[SimpleNamespace(engram=engram)],
+            engram_hash=lambda tokens, *args, **kwargs: tokens[:, :, None, None],
+        )
+        bindings = SimpleNamespace(
+            batch=1,
+            token_ids=torch.tensor([[1]], device="cuda"),
+            cache_slots=None,
+            position=None,
+        )
+        stage = EngramStage(staged_model, 1)
+        stage.stage(bindings, 0)
+        address = stage.buffers[0].data_ptr()
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph, stream=stream):
+            output = stage.buffers[0].clone()
+        torch.cuda.current_stream().wait_stream(stream)
+        for token in (1, 6, 3):
+            bindings.token_ids.fill_(token)
+            stage.stage(bindings, token)
+            graph.replay()
+            expected = self._engram_lookup_reference(table, bindings.token_ids)
+            self.assertEqual(stage.buffers[0].data_ptr(), address)
+            self.assertTrue(
+                torch.equal(output.cpu().view(torch.int16), expected.view(torch.int16))
+            )
 
     def test_dspark_draft_attention_keeps_the_full_proposal_block_visible(self):
         indices = get_dspark_topk_idxs(8, 2, 5, 4)

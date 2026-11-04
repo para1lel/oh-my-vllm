@@ -1,7 +1,7 @@
 # 算子性能计费
 
 [Microbench 契约](operators.zh.md)定义固定用例, 校准, 计时和验收.
-本文定义 `operator-reference-v3` 资源策略.
+本文定义 `operator-reference-v4` 资源策略.
 [计算实现](../../../development/operators/accounting.py)使用 HTTP 资源速率和资源时间公式.
 它使用独立版本, 不改变 HTTP 计费.
 
@@ -90,6 +90,7 @@ new_max_ratio = old_max_ratio * old_reference / new_reference
 
 在迁移来源信息中保留旧计费 identity, 资源值和倍率.
 此换算不得提高已批准的最大延迟.
+[迁移命令](../../../development/operators/migrate_accounting.py)记录每项旧门槛, 并在需要时向下舍入新倍率.
 
 在每个独立样本前, 从准备好的设备副本恢复状态与 RNG.
 在开始事件前完成每次恢复.

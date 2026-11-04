@@ -10,6 +10,8 @@ pub enum RustMessage {
     Prepare {
         rpc_id: u64,
         request_id: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner_rank: Option<u32>,
         request: serde_json::Value,
     },
     Execute(ExecuteMsg),
@@ -52,6 +54,8 @@ pub struct BenchmarkProfile {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegisterMsg {
     pub request_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_rank: Option<u32>,
     pub prompt_token_ids: Vec<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<usize>,
@@ -65,6 +69,23 @@ pub struct ExecuteMsg {
     pub finished_request_ids: Vec<u64>,
     pub preempted_request_ids: Vec<u64>,
     pub num_batched_tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rank_plan: Option<Vec<RankSchedule>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RankSchedule {
+    pub rank: u32,
+    pub request_ids: Vec<u64>,
+    pub finished_request_ids: Vec<u64>,
+    pub preempted_request_ids: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RankCompletion {
+    pub rank: u32,
+    pub step_id: u64,
+    pub schedule: RankSchedule,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -87,6 +108,8 @@ pub struct ScheduledRequestMsg {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AbortMsg {
     pub request_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc_id: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -110,10 +133,17 @@ pub enum WorkerMessage {
         rpc_id: u64,
         completed: Vec<CacheCompletion>,
         host_cache_bytes: u64,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        cache_rank_completions: Vec<u32>,
     },
     Prepared {
         rpc_id: u64,
         prompt_token_ids: Vec<u32>,
+    },
+    AbortResult {
+        rpc_id: u64,
+        request_id: u64,
+        ranks: Vec<u32>,
     },
     Error(ErrorMsg),
     StatsResult {
@@ -126,6 +156,8 @@ pub enum WorkerMessage {
 pub struct ExecuteResultMsg {
     pub rpc_id: u64,
     pub outputs: Vec<RequestResultMsg>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rank_completions: Vec<RankCompletion>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

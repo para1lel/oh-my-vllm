@@ -55,7 +55,21 @@ class ChainDevice:
         )
 
     def uploads(self):
-        return SimpleNamespace(copy=self.copy, close=lambda: None)
+        prepared = []
+
+        def prepare(destination, source):
+            snapshot = torch.zeros_like(source)
+            prepared.append((destination, snapshot))
+            return snapshot
+
+        def update(writer, *args):
+            writer(*args)
+            for destination, source in prepared:
+                self.copy(destination, source)
+
+        return SimpleNamespace(
+            copy=self.copy, prepare=prepare, update=update, close=lambda: None
+        )
 
     def gather(self, destination, source, indices):
         destination[:] = source[indices]
@@ -551,6 +565,9 @@ class Constraints(unittest.TestCase):
             (False, 1, [4, 5], []),
             (False, 70, [4] + [7] * 70, []),
             (False, 70, [4] + [7] * 70, [8]),
+            (False, 62, [4] + [7] * 62, [7]),
+            (False, 63, [4] + [7] * 63, [7]),
+            (False, 64, [4] + [7] * 63 + [8], [8, 8, 8]),
             (True, 2, [4, 5, 6], [8]),
         ):
             request.history = history
@@ -559,15 +576,47 @@ class Constraints(unittest.TestCase):
                 tokenizer.valid_tokens = valid
                 mask = np.ones(248320, np.uint8)
                 mask[10] = 0
+                request.draft_guard_position = None
                 expected = request.mask(
                     request.constraint, thinking, generated, 2, prefix, mask.copy()
                 )
-                packed = request.packed_mask(
-                    np.packbits(mask, bitorder="little"), thinking, generated, 2, prefix
-                )
-                np.testing.assert_array_equal(
-                    np.unpackbits(packed, bitorder="little"), expected
-                )
+                request.prepare_draft_guard()
+                raw = np.packbits(mask, bitorder="little")
+                for _ in range(2):
+                    packed = request.packed_mask(raw, thinking, generated, 2, prefix)
+                    np.testing.assert_array_equal(
+                        np.unpackbits(packed, bitorder="little"), expected
+                    )
+        self.assertLessEqual(len(request.filtered_masks), 32)
+        request.history = [4, 5, 6]
+        request.prepare_draft_guard()
+        self.assertTrue(request.draft_guard_safe)
+        self.assertFalse(request.needs_repetition_guard([7, 8, 9]))
+        self.assertTrue(request.needs_repetition_guard([7, 8, 9, 10]))
+        request.append([7])
+        self.assertTrue(request.needs_repetition_guard([]))
+        request.options["sampling"]["repetition_guard"] = False
+        for blocked in (*range(40), 0):
+            tokenizer.eos = {256 if blocked % 2 else 258}
+            mask = np.ones(248320, np.uint8)
+            mask[blocked] = 0
+            expected = request.mask(thinking=False, generated=0, mask=mask.copy())
+            packed = request.packed_mask(
+                np.packbits(mask, bitorder="little"), False, 0, 0, []
+            )
+            np.testing.assert_array_equal(
+                np.unpackbits(packed, bitorder="little"), expected
+            )
+        self.assertEqual(len(request.filtered_masks), 32)
+        for eos in ({256}, {258}, {256}):
+            tokenizer.eos = eos
+            expected = request.mask(thinking=False, generated=0, mask=mask.copy())
+            packed = request.packed_mask(
+                np.packbits(mask, bitorder="little"), False, 0, 0, []
+            )
+            np.testing.assert_array_equal(
+                np.unpackbits(packed, bitorder="little"), expected
+            )
         single = SamplingInputs(5)
         with patch("oh_my_vllm.models.qwen38.sampling.batch_masks") as masks:
             request.constraint.matcher = None
@@ -916,7 +965,13 @@ class Constraints(unittest.TestCase):
                 self.slots, self.rng = "slots", "rng"
                 self.target_token_rows = None
                 self.copied = {}
+                self.metadata_inputs = SimpleNamespace(update=self.update_metadata)
                 self.operation = SimpleNamespace(outputs=SimpleNamespace(tokens=kept))
+
+            def update_metadata(self, values):
+                self.copied.update(
+                    zip(("gather", "drafts", "slots", "rng"), values, strict=True)
+                )
 
             def copy(self, destination, source):
                 self.copied[destination] = source
@@ -973,8 +1028,8 @@ class Constraints(unittest.TestCase):
         speculation.accept(batch, None, None, sampler, False)
         self.assertIs(type(first.drafts_greedy), bool)
         packed = acceptance.copied["drafts"]
-        self.assertIsInstance(packed, torch.Tensor)
-        self.assertEqual(packed.dtype, torch.int64)
+        self.assertIsInstance(packed, np.ndarray)
+        self.assertEqual(packed.dtype, np.int64)
         self.assertEqual(
             packed.tolist(),
             [[*proposed, *([-1] * (4 - len(proposed))), 1]],

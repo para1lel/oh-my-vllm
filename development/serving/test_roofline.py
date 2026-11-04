@@ -20,6 +20,7 @@ from .kernels import (
     gdn_groups,
     group,
     normalization,
+    pass_groups,
     reference,
     resources,
     sample_groups,
@@ -532,6 +533,45 @@ class Roofline(unittest.TestCase):
     def test_reference_resources_follow_kernel_dependencies(self):
         self.assertEqual(resources(sample_groups(1))["fp32_flops"], 25602)
         self.assertEqual(resources(draft_groups([(4, 1)], 0))["fp32_flops"], 147286)
+        for stage in range(1, 4):
+            heads = next(
+                item
+                for item in draft_groups([(4 + stage, 1)], stage)
+                if item.name == "fa.heads"
+            )
+            self.assertEqual(heads.work["hbm_bytes"], 4 * 512)
+        logical = dict(
+            mtp=True,
+            verify=False,
+            requests=[
+                dict(
+                    start=0,
+                    count=32768,
+                    end=32768,
+                    tokens=1,
+                    context_count=32768,
+                    proposed=0,
+                )
+            ],
+        )
+        final_norm = next(
+            item for item in pass_groups(logical) if item.name == "output.norm"
+        )
+        self.assertEqual(final_norm.work["fp32_flops"], 32768 * (5 * 5120 + 2))
+        self.assertEqual(final_norm.work["hbm_bytes"], 4 * 5120)
+        logical["mtp"] = False
+        ordinary_norm = next(
+            item for item in pass_groups(logical) if item.name == "output.norm"
+        )
+        self.assertEqual(ordinary_norm.work["fp32_flops"], 5 * 5120 + 2)
+        initial = wy_groups([(0, 128)], 0)
+        continued = wy_groups([(784, 128)], 0)
+        self.assertEqual(initial[0].work, continued[0].work)
+        for index in (1, 2):
+            self.assertEqual(
+                continued[index].work["bf16_flops"] - initial[index].work["bf16_flops"],
+                2 * 48 * 128 * 128 * 64,
+            )
         work = dict(
             hbm_bytes=7.7e12,
             fp8_flops=4.5e15,

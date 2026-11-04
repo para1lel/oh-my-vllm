@@ -4,6 +4,7 @@
 #include <limits>
 #include "../../runtime/cuda/contracts.cuh"
 #include "engram.cuh"
+#include "engram_lookup.cuh"
 
 namespace {
 

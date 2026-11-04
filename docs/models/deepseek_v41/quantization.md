@@ -51,7 +51,7 @@ FP8 weight scales apply to 32-row groups.
 Start each raw dot at zero.
 Apply `scaled = mul_rn(raw_dot, activation_scale)`.
 Apply `sum = fma_rn(scaled, weight_scale, sum)`.
-Do not multiply the two scales before the dot product.
+Only the exact [exponent combination](gemm.md) can replace these operations.
 Round only the completed sum to the selected output type.
 
 RMS normalization rounds each square before it adds the square to an accumulator.
@@ -88,9 +88,7 @@ Count these two tensors in temporary-storage estimates.
 Grouped up projections and all complete down projections keep BF16 output.
 The grouped interface also accepts FP32 output without a workspace size change.
 
-Shared experts keep full weights on each rank.
-Add their output after the routed output exchange.
-Do not reduce the shared output across ranks.
+Shared experts use the [shared projection rules](gemm.md#shared-expert-projections).
 Attention output projections keep their local BF16 rounding before FP32 rank reduction.
 
 Sparse attention processes selected indices in their original order, in blocks of 64.
@@ -217,12 +215,14 @@ Dense projection does not use device scratch storage.
 
 Grouped projection uses device row offsets without host descriptor uploads.
 The operator compacts the nonempty groups in its device scratch.
-The grouped launch covers the nonempty groups and the output column tiles.
-Each block walks its group rows, so the launch does not use a host row bound.
+Persistent blocks use device offsets for 32-row by 64-column expert tiles.
+At most 64 routed rows use parallel raw dots with ordered scale accumulation.
+No host expert row bound controls the launch.
 
 Each device count must be between zero and the prepared maximum row count.
-The counts must sum to the full input row count.
+The strict grouped entry checks that counts sum to the full input row count.
 Invalid device counts produce NaN output without input or weight access.
+The [fixed-capacity entries](gemm.md#fixed-capacity-projections-and-sums) use a valid prefix, zero output tails, and caller-owned error status.
 
 Prepared weight storage must stay valid until execution completes or the Graph is released.
 Prepared cache entries keep the original weight and scale owners, not only their addresses.

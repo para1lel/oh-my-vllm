@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
-from development.serving import deepseek_accounting as acct
+from development.serving import deepseek_accounting_v2 as acct
 
 TINY = acct.ModelSpec(
     vocab_size=16,

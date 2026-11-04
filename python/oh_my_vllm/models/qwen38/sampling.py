@@ -270,10 +270,12 @@ class Sampling:
 
     def upload_packed(self, select_token):
         values = (
-            self.inputs.history,
-            self.inputs.mask,
-            self.inputs.parameters,
-            self.inputs.random,
+            self.inputs.presence_history_view
+            if self.inputs.compact
+            else self.inputs.full_history_view,
+            self.inputs.mask_view,
+            self.inputs.parameters_view,
+            self.inputs.random_view,
         )
         key = (self.inputs.compact, self.inputs.history_needed, select_token)
         if key != self.packed_input_key:
@@ -305,7 +307,14 @@ class Sampling:
         self.inputs.mask_changed = True
 
     def select_from_logits(
-        self, requests, graph, *, prefixes=None, stream="target", sample=True
+        self,
+        requests,
+        graph,
+        *,
+        prefixes=None,
+        stream="target",
+        sample=True,
+        readback=None,
     ):
         prefixes = [[] for _ in requests] if prefixes is None else prefixes
         d = self.device
@@ -334,7 +343,11 @@ class Sampling:
         )
         tokens = None
         if sample:
-            tokens = d.download(self.operation.outputs.tokens, None)
+            tokens = (
+                d.download(self.operation.outputs.tokens, None)
+                if readback is None
+                else readback(self.operation.outputs.tokens)
+            )
             counters = [
                 int(offset) + int(temperature > 0)
                 for offset, temperature in zip(

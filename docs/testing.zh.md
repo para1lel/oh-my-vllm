@@ -48,6 +48,14 @@ GPU 命令通过 wrapper 执行:
 scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_chain
 ```
 
+[草稿流水线检查](../development/operators/check_draft_pipeline.py)将约束采样, RNG, 惩罚和 KV 与顺序执行比较.
+它检查 stop, grammar 拒绝, 录制或快照失败后未使用的计算.
+将 `MODEL_ROOT` 设为 Qwen checkpoint 目录.
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_pipeline
+```
+
 ## 记录
 
 保留当前说明和各已批准 workload 的最新完整结果.

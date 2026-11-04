@@ -45,6 +45,11 @@ Its reuse key includes the context plan and target hidden tensor identity.
 A changed key closes the old context graph before input replacement.
 Context with media uses Eager execution.
 
+For at least two requests, constrained drafts can overlap GPU computation and CPU sampling preparation.
+The worker submits the next draft before it waits for token readback.
+Sampling follows the grammar and penalty uploads on the caller's stream.
+The worker restores KV rows when it discards a draft computation.
+
 ## Media
 
 The worker downloads and decodes media.

@@ -12,7 +12,8 @@ __device__ __forceinline__ uint32_t fp4_to_fp8_four(uint16_t packed) {
 }
 
 __global__ void fp4_group_offsets(const int32_t *counts, int groups, const int32_t *compact_counts,
-                                  int32_t *offsets, int bound, int rows, int max_rows) {
+                                  int32_t *offsets, int32_t *tiles, int bound, int rows,
+                                  int max_rows, int column_tiles, int32_t *status) {
   int64_t sum = 0;
   bool valid = true;
   for (int group = 0; group < groups; ++group) {
@@ -21,11 +22,31 @@ __global__ void fp4_group_offsets(const int32_t *counts, int groups, const int32
     sum += count;
   }
   int64_t compact_sum = 0;
+  int64_t tile_sum = 0;
   for (int group = 0; group < bound; ++group) {
     offsets[group] = static_cast<int32_t>(compact_sum);
-    compact_sum += compact_counts[group];
+    tiles[group] = tile_sum;
+    int count = compact_counts[group];
+    compact_sum += count;
+    tile_sum += (count > 0 && count <= max_rows ? (count + 31) / 32 : 0) * column_tiles;
   }
-  offsets[bound] = valid && sum == rows && compact_sum == rows ? rows : -1;
+  valid = valid && compact_sum == sum && (status ? sum <= rows : sum == rows);
+  if (status && !valid)
+    atomicOr(status, 1);
+  valid = valid && (!status || *status == 0);
+  offsets[bound] = valid ? static_cast<int32_t>(sum) : -1;
+  tiles[bound] = tile_sum;
+}
+
+template <class Output>
+__global__ void fp4_clear_tail(Output *output, const int32_t *offsets, int groups, int capacity,
+                               int outputs) {
+  int live_rows = offsets[groups];
+  if (live_rows < 0)
+    live_rows = 0;
+  for (int64_t index = int64_t(live_rows) * outputs + blockIdx.x * blockDim.x + threadIdx.x;
+       index < int64_t(capacity) * outputs; index += int64_t(gridDim.x) * blockDim.x)
+    output[index] = Output(0.f);
 }
 
 template <class Output, class ScaleLayout, bool Grouped>
@@ -259,13 +280,13 @@ __global__ void fp4_group_compact(const int32_t *counts, const int64_t *weight_p
   }
 }
 
-/* Scratch layout: offsets, compacted counts, compacted weight pointers, and
- * compacted scale pointers, each region rounded to 16 bytes. */
+/* Scratch layout: row offsets, compacted counts, compacted weight pointers,
+ * compacted scale pointers, and tile offsets, each region rounded to 16 bytes. */
 inline int64_t grouped_scratch_bytes(int bound) {
   int64_t offsets = ((int64_t(bound) + 1) * 4 + 15) / 16 * 16;
   int64_t counts = (int64_t(bound) * 4 + 15) / 16 * 16;
   int64_t pointers = (int64_t(bound) * 8 + 15) / 16 * 16;
-  return offsets + counts + pointers + pointers;
+  return offsets + counts + pointers + pointers + offsets;
 }
 
 template <class Output, class ScaleLayout>
@@ -273,7 +294,7 @@ void launch_grouped_fp4_k32(const uint8_t *input, const uint8_t *input_scales,
                             const int64_t *weight_ptrs, const int64_t *weight_scale_ptrs,
                             const int32_t *counts, uint8_t *scratch, Output *output, int groups,
                             int rows, int outputs, int width, int max_rows, int weight_stride,
-                            ScaleLayout layout, cudaStream_t stream) {
+                            ScaleLayout layout, cudaStream_t stream, int32_t *status) {
   int bound = groups < rows ? groups : rows;
   int64_t offsets_bytes = ((int64_t(bound) + 1) * 4 + 15) / 16 * 16;
   int64_t counts_bytes = (int64_t(bound) * 4 + 15) / 16 * 16;
@@ -283,21 +304,26 @@ void launch_grouped_fp4_k32(const uint8_t *input, const uint8_t *input_scales,
   auto *compact_weight_ptrs = reinterpret_cast<int64_t *>(scratch + offsets_bytes + counts_bytes);
   auto *compact_scale_ptrs =
       reinterpret_cast<int64_t *>(scratch + offsets_bytes + counts_bytes + pointers_bytes);
+  auto *tile_offsets =
+      reinterpret_cast<int32_t *>(scratch + offsets_bytes + counts_bytes + 2 * pointers_bytes);
   fp4_group_compact<<<1, 128, 0, stream>>>(counts, weight_ptrs, weight_scale_ptrs, groups, bound,
                                            compact_counts, compact_weight_ptrs, compact_scale_ptrs);
-  fp4_group_offsets<<<1, 1, 0, stream>>>(counts, groups, compact_counts, offsets, bound, rows,
-                                         max_rows);
-  // The launch covers the column tiles and the compacted groups. Each block
-  // walks its group's rows, so the grid does not depend on a host row bound.
-  int tiles = outputs / 32;
-  if (rows <= 16)
+  fp4_group_offsets<<<1, 1, 0, stream>>>(counts, groups, compact_counts, offsets, tile_offsets,
+                                         bound, rows, max_rows, (outputs + 63) / 64, status);
+  if (!rows)
+    return;
+  if (rows <= 64)
     fp4_decode_rawdots<Output, ScaleLayout><<<dim3(outputs / 8, bound), 256, 0, stream>>>(
         input, input_scales, compact_weight_ptrs, compact_scale_ptrs, offsets, output, bound, rows,
         outputs, width, weight_stride, layout);
   else
-    fp4_k32_kernel<Output, ScaleLayout, true><<<dim3(tiles, bound), 128, 0, stream>>>(
+    launch_half_k32<Output, ScaleLayout, 4, true>(
         input, nullptr, input_scales, nullptr, output, compact_weight_ptrs, compact_scale_ptrs,
-        offsets, bound, rows, outputs, width, weight_stride, layout);
+        offsets, tile_offsets, bound, rows, outputs, width, weight_stride, layout, stream);
+  if (status) {
+    int blocks = static_cast<int>(min((int64_t(rows) * outputs + 255) / 256, int64_t(148 * 8)));
+    fp4_clear_tail<<<blocks, 256, 0, stream>>>(output, offsets, bound, rows, outputs);
+  }
 }
 
 } // namespace encoded_projection

@@ -7,7 +7,7 @@ use clap::{Args, Parser, Subcommand};
 use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
 use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
 use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
-use oh_my_vllm_zmq_worker::models::{ModelPolicy, select_model};
+use oh_my_vllm_zmq_worker::models::{ModelPolicy, ServiceCache, select_model};
 use tracing::{Instrument, info};
 use tracing_subscriber::EnvFilter;
 
@@ -221,10 +221,6 @@ async fn run() -> Result<()> {
     let model = select_model(&cli.model)?;
     let config = cli.worker_config(model)?;
     let speculative_tokens = config.num_speculative_tokens;
-    let mode = config
-        .speculative_mode
-        .clone()
-        .expect("resolved speculative mode");
     let run_prompts = if let Cmd::Run {
         tokens,
         prompt_file,
@@ -264,7 +260,7 @@ async fn run() -> Result<()> {
     } else {
         None
     };
-    let mut client = WorkerClient::launch_with_model(config.clone(), model)
+    let client = WorkerClient::launch_with_model(config.clone(), model)
         .await
         .context("launch worker")?;
     let blocks = cli.scheduler_blocks.unwrap_or(client.logical_num_blocks);
@@ -291,7 +287,7 @@ async fn run() -> Result<()> {
         block_size = config.block_size,
         max_model_len = config.max_model_len,
         num_speculative_tokens = speculative_tokens,
-        speculative_mode = mode.as_str(),
+        speculative_mode = config.speculative_mode.as_deref().unwrap_or("none"),
         worker_fa_pool_blocks = client.logical_num_blocks,
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,
@@ -300,6 +296,29 @@ async fn run() -> Result<()> {
         rust_sources_sha256 = env!("OH_MY_VLLM_RUST_SOURCES_SHA256"),
         "BENCH_CONFIG"
     );
+    if let Some(dep4) = client.dep4_cache(kv.empty_like()) {
+        run_scheduler(cli, client, dep4, run_prompts, bench_prompts).await
+    } else {
+        run_scheduler(cli, client, kv, run_prompts, bench_prompts).await
+    }
+}
+
+async fn run_scheduler<P: ServiceCache>(
+    cli: Cli,
+    mut client: WorkerClient,
+    kv: P,
+    run_prompts: Option<Vec<Vec<u32>>>,
+    bench_prompts: Option<Vec<Vec<u32>>>,
+) -> Result<()> {
+    kv.attach_client(&mut client);
+    let config = client.configuration();
+    let speculative_tokens = config.num_speculative_tokens;
+    let mode = config
+        .speculative_mode
+        .clone()
+        .expect("resolved speculative mode");
+    let sched_max_num_seqs = config.max_num_seqs as usize;
+    let sched_max_batched = config.max_num_batched_tokens as usize;
     let mut scheduler = Scheduler::new(
         SchedulerConfig {
             max_num_seqs: sched_max_num_seqs,
@@ -456,9 +475,9 @@ struct RequestPhases {
     last_step: usize,
 }
 
-async fn execute_batch(
+async fn execute_batch<P: ServiceCache>(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler<HybridCoordinator>,
+    scheduler: &mut Scheduler<P>,
     next_id: &mut u64,
     prompts: &[Vec<u32>],
     max_tokens: usize,
@@ -500,7 +519,9 @@ async fn execute_batch(
                         started.elapsed().as_secs_f64()
                     },
                 );
-                if !scheduler.add_request(Request::new(id, prompt.clone(), max_tokens, vec![])) {
+                let mut request = Request::new(id, prompt.clone(), max_tokens, vec![]);
+                client.bind_request_cache(&mut request);
+                if !scheduler.add_request(request) {
                     tracing::error!(id, "prompt rejected: exceeds pool capacity");
                     continue;
                 }

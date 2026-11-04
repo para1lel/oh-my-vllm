@@ -17,6 +17,7 @@ class StateExports:
     def __init__(self):
         self.steps = {}
         self.batch = ()
+        self.positions = None
 
     def begin(self, slot, start_pos, endpoints, *, minimum_end=None):
         endpoints = tuple(sorted(set(endpoints)))
@@ -36,13 +37,23 @@ class StateExports:
             raise ValueError("invalid DeepSeek minimum accepted endpoint")
         self.steps[slot] = _Step(endpoints, minimum_end)
 
-    def bind(self, slots):
+    def bind(self, slots, *, positions=None):
         slots = tuple(slots)
         if len(set(slots)) != len(slots) or any(
             type(slot) is not int or slot < 0 for slot in slots
         ):
             raise ValueError("invalid DeepSeek state export batch slots")
+        if positions is not None:
+            positions = tuple(positions)
+            if len(positions) != len(slots) or any(
+                type(position) is not int or position < 0 for position in positions
+            ):
+                raise ValueError("invalid DeepSeek state export batch positions")
         self.batch = slots
+        self.positions = positions
+
+    def _start(self, index, start_pos):
+        return start_pos if self.positions is None else self.positions[index]
 
     def _selected(self, batch_size, start_pos, end_pos):
         if not self.steps:
@@ -52,8 +63,10 @@ class StateExports:
         for index, slot in enumerate(self.batch):
             step = self.steps.get(slot)
             if step is not None:
+                first = self._start(index, start_pos)
+                last = end_pos + first - start_pos
                 for end in step.endpoints:
-                    if start_pos < end <= end_pos:
+                    if first < end <= last:
                         yield index, slot, step, end
 
     def window(self, cache, values, start_pos):
@@ -64,17 +77,18 @@ class StateExports:
             key = end, id(cache)
             if key in step.windows:
                 continue
+            local_start = self._start(index, start_pos)
             snapshot = torch.zeros_like(cache[slot])
             first = max(0, end - width)
-            previous_end = min(start_pos, end)
+            previous_end = min(local_start, end)
             if first < previous_end:
                 positions = torch.arange(first, previous_end, device=cache.device)
                 offsets = positions.remainder(width)
                 snapshot[offsets] = cache[slot, offsets]
-            first = max(first, start_pos)
+            first = max(first, local_start)
             positions = torch.arange(first, end, device=cache.device)
             snapshot[positions.remainder(width)] = values[
-                index, first - start_pos : end - start_pos
+                index, first - local_start : end - local_start
             ]
             step.windows[key] = snapshot
 
@@ -123,11 +137,13 @@ class StateExports:
             key = end, id(kv)
             if key in step.tails:
                 continue
+            local_start = self._start(index, start_pos)
+            local_origin = local_start - local_start % ratio
             snapshot_kv = torch.zeros_like(kv[0])
             snapshot_score = torch.full_like(score[0], -torch.inf)
             remainder = end % ratio
             if remainder:
-                first, last = end - remainder - origin, end - origin
+                first, last = end - remainder - local_origin, end - local_origin
                 snapshot_kv[:remainder].copy_(values[index, first:last])
                 snapshot_score[:remainder].copy_(scores[index, first:last])
             step.tails[key] = snapshot_kv, snapshot_score
@@ -154,3 +170,4 @@ class StateExports:
     def clear(self):
         self.steps.clear()
         self.batch = ()
+        self.positions = None

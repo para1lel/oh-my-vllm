@@ -259,17 +259,30 @@ class DeepSeekQuantizationCUDA(DeepSeekQuantization):
                 self.assertEqual(codes.shape, (2, 0, width))
                 self.assertEqual(scales.shape, (2, 0, groups))
 
-    def test_nonfinite_compressed_scales_fail_native_attention_closed(self):
+    def test_nonfinite_compressed_values_reject_the_step_before_commit(self):
         query = torch.zeros((1, 1, 16, 512), dtype=torch.bfloat16)
         window = torch.ones((1, 1, 512), dtype=torch.bfloat16)
         indices = torch.ones((1, 1, 1), dtype=torch.int32)
         sink = torch.zeros(16, dtype=torch.float32)
         for value in (torch.nan, torch.inf):
-            with self.subTest(value=value):
+            with (
+                self.subTest(value=value),
+                patch.object(kernel, "_SPARSE_STATUS", {}),
+                patch.object(kernel, "_SPARSE_NATIVE_DISABLED", False),
+                patch.object(kernel, "_SPARSE_NATIVE_FAILED", False),
+            ):
                 compressed = torch.full_like(window, value)
-                self.assertIsNone(
-                    kernel._sparse_attn_native(query, sink, indices, window, compressed)
+                kernel.reset_sparse_status()
+                output = kernel._sparse_attn_native(
+                    query, sink, indices, window, compressed
                 )
+                torch.testing.assert_close(
+                    output, torch.zeros_like(query), atol=0, rtol=0
+                )
+                with self.assertRaisesRegex(RuntimeError, "no state is committed"):
+                    kernel.require_sparse_status()
+                self.assertTrue(kernel._SPARSE_NATIVE_DISABLED)
+                self.assertTrue(kernel._SPARSE_NATIVE_FAILED)
 
     def test_native_attention_preserves_released_quantized_key_values(self):
         window = torch.full((1, 1, 512), 2, dtype=torch.bfloat16)

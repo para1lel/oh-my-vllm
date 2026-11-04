@@ -78,6 +78,7 @@ pub struct WorkerClient {
     config: WorkerConfig,
     descriptor: ModelDescriptor,
     model_family: ModelFamily,
+    execution: crate::models::execution::ModelExecution,
     sock: DealerSendHalf,
     inbox: mpsc::Receiver<Result<crate::protocol::WorkerMessage>>,
     reader: JoinHandle<()>,
@@ -269,6 +270,7 @@ impl WorkerClient {
         });
         Ok(Self {
             config,
+            execution: crate::models::execution::ModelExecution::new(model_family, &descriptor),
             descriptor,
             model_family,
             sock: send,
@@ -319,6 +321,7 @@ impl WorkerClient {
         );
         let msg = RustMessage::Register(RegisterMsg {
             request_id,
+            owner_rank: self.execution.owner(request_id),
             prompt_token_ids,
             max_tokens,
         });
@@ -327,8 +330,26 @@ impl WorkerClient {
         }
     }
 
+    pub async fn cancel_scheduled_request(&mut self, request_id: u64) -> Result<()> {
+        if self.execution.needs_rank_ack() {
+            // The scheduler's finished notification still owns DEP request release.
+            Ok(())
+        } else {
+            self.cancel_prepare(request_id).await
+        }
+    }
+
     pub async fn cancel_prepare(&mut self, request_id: u64) -> Result<()> {
-        let msg = RustMessage::Abort(AbortMsg { request_id });
+        let abort_rpc = if self.execution.needs_rank_ack() {
+            self.rpc_id += 1;
+            Some(self.rpc_id)
+        } else {
+            None
+        };
+        let msg = RustMessage::Abort(AbortMsg {
+            request_id,
+            rpc_id: abort_rpc,
+        });
         timeout(Duration::from_secs(1), Self::send_raw(&mut self.sock, &msg))
             .await
             .map_err(|_| Error::Timeout)??;
@@ -346,6 +367,25 @@ impl WorkerClient {
         if self.pending_prepare.is_some_and(|(id, _)| id == request_id) {
             self.pending_prepare = None;
             self.prepared_reply = None;
+        }
+        if let Some(rpc_id) = abort_rpc {
+            let reply = timeout(Duration::from_secs(1), self.recv_for(rpc_id))
+                .await
+                .map_err(|_| Error::Timeout)??;
+            match reply {
+                crate::protocol::WorkerMessage::AbortResult {
+                    request_id: id,
+                    ranks,
+                    ..
+                } if id == request_id => {
+                    self.execution.abort(id, &ranks)?;
+                }
+                reply => {
+                    return Err(Error::UnexpectedMessageType(format!(
+                        "wrong abort reply: {reply:?}"
+                    )));
+                }
+            }
         }
         Ok(())
     }
@@ -369,6 +409,7 @@ impl WorkerClient {
             &RustMessage::Prepare {
                 rpc_id,
                 request_id,
+                owner_rank: self.execution.owner(request_id),
                 request,
             },
         )
@@ -497,6 +538,12 @@ impl WorkerClient {
             finished_request_ids: finished_request_ids.to_vec(),
             preempted_request_ids: preempted_request_ids.to_vec(),
             num_batched_tokens: num_batched_tokens as u32,
+            rank_plan: self.execution.schedule(
+                self.step_id,
+                scheduled,
+                finished_request_ids,
+                preempted_request_ids,
+            )?,
         });
         Self::send_raw(&mut self.sock, &msg).await?;
 
@@ -511,6 +558,7 @@ impl WorkerClient {
         match reply {
             crate::protocol::WorkerMessage::ExecuteResult(r) => {
                 validate_reply_ids(scheduled, &r.outputs)?;
+                self.execution.complete(self.step_id, &r.rank_completions)?;
                 if !self.serving_enabled
                     && let Some(error) = r.outputs.iter().find_map(|output| output.error.as_ref())
                 {
@@ -588,27 +636,54 @@ impl WorkerClient {
         self.model_family
     }
 
+    pub fn dep4_cache(
+        &self,
+        template: oh_my_vllm_kv_cache::HybridCoordinator,
+    ) -> Option<crate::models::Dep4Cache> {
+        self.execution
+            .owners
+            .as_ref()
+            .map(|owners| crate::models::Dep4Cache::new(template, owners.clone()))
+    }
+
+    pub(crate) fn attach_request_owners(
+        &mut self,
+        owners: std::sync::Arc<
+            std::sync::Mutex<crate::models::deepseek_v41::ownership::RequestOwners>,
+        >,
+    ) {
+        self.execution.owners = Some(owners);
+    }
+
+    pub fn bind_request_cache(&mut self, request: &mut oh_my_vllm_scheduler::Request) {
+        self.execution.bind_cache(request);
+    }
+
     pub fn model_policy(&self) -> ModelPolicy {
         ModelPolicy::for_family(self.model_family)
     }
 
-    pub async fn cache_step(
+    pub async fn cache_step<P: crate::models::ServiceCache>(
         &mut self,
-        scheduler: &mut oh_my_vllm_scheduler::Scheduler<oh_my_vllm_kv_cache::HybridCoordinator>,
+        scheduler: &mut oh_my_vllm_scheduler::Scheduler<P>,
     ) -> Result<()> {
         if !scheduler.cache_pending() {
             return Ok(());
         }
         self.rpc_id += 1;
         let rpc_id = self.rpc_id;
-        let operations = scheduler.cache_operations();
+        let mut operations = scheduler.cache_operations();
+        self.execution.route_cache(&mut operations)?;
         Self::send_raw(&mut self.sock, &RustMessage::Cache { rpc_id, operations }).await?;
         match self.recv_for(rpc_id).await? {
             crate::protocol::WorkerMessage::CacheResult {
                 completed,
                 host_cache_bytes,
+                cache_rank_completions,
                 ..
             } => {
+                self.execution
+                    .complete_cache(&cache_rank_completions, &completed)?;
                 if host_cache_bytes != self.host_cache_bytes {
                     return Err(Error::UnexpectedMessageType(
                         "host cache capacity changed".into(),
@@ -763,6 +838,7 @@ impl WorkerClient {
                 crate::protocol::WorkerMessage::Error(error) => error.rpc_id,
                 crate::protocol::WorkerMessage::StatsResult { rpc_id, .. } => *rpc_id,
                 crate::protocol::WorkerMessage::CacheResult { rpc_id, .. } => *rpc_id,
+                crate::protocol::WorkerMessage::AbortResult { rpc_id, .. } => *rpc_id,
                 other => {
                     return Err(Error::UnexpectedMessageType(format!("{other:?}")));
                 }
@@ -778,6 +854,7 @@ impl WorkerClient {
                     crate::protocol::WorkerMessage::Error(_) => true,
                     crate::protocol::WorkerMessage::StatsResult { .. } => true,
                     crate::protocol::WorkerMessage::CacheResult { .. } => true,
+                    crate::protocol::WorkerMessage::AbortResult { .. } => true,
                     _ => false,
                 };
                 if !valid {

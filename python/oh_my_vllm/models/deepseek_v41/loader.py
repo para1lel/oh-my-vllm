@@ -91,7 +91,7 @@ def _parameter_specs(config, layout, rank, strategy):
         shape = list(stored["shape"])
         axis, start = rule["shard_axis"], 0
         dtype = rule["promoted_dtype"] or stored["dtype"]
-        if ".engram.embed." in name:
+        if ".engram.embed." in name and strategy != "DEP4":
             axis, shape[0] = 0, (shape[0] + 3) // 4
             start = rank * shape[0]
         else:
@@ -532,11 +532,25 @@ class RankLoader:
                 torch.cuda.empty_cache()
             else:
                 self._load_parameter_pools(pools)
+        parameter_bytes = {
+            "dense_device_bytes": 0,
+            "routed_expert_device_bytes": 0,
+            "host_parameter_bytes": 0,
+        }
+        for name, parameter in parameters.items():
+            if parameter.device.type != "cuda":
+                kind = "host_parameter_bytes"
+            elif ".ffn.experts." in name:
+                kind = "routed_expert_device_bytes"
+            else:
+                kind = "dense_device_bytes"
+            parameter_bytes[kind] += parameter.numel() * parameter.element_size()
         return {
             "format": "original-safetensors-stream",
             "world_size": 4,
             "rank": self.rank,
             "parameter_count": len(parameters),
+            **parameter_bytes,
         }
 
     def close(self):

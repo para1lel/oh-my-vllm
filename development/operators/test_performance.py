@@ -9,6 +9,62 @@ from .cases import load_cases
 
 
 class PerformanceContracts(unittest.TestCase):
+    def test_captured_sparse_bound_ignores_unselected_history(self):
+        import torch
+
+        from .check_deepseek_released import sparse_case
+
+        query = torch.zeros((1, 1, 16, 512), dtype=torch.bfloat16, device="cpu")
+        tensors = {
+            "input_0": query,
+            "input_2": torch.zeros(16, device="cpu"),
+            "input_3": torch.zeros((1, 1, 1), dtype=torch.int32, device="cpu"),
+            "output_0": torch.zeros_like(query),
+            "kw_native_window": torch.ones(
+                (1, 1, 512), dtype=torch.bfloat16, device="cpu"
+            ),
+            "kw_native_compressed": torch.empty(
+                (1, 0, 512), dtype=torch.bfloat16, device="cpu"
+            ),
+        }
+        _, _, before = sparse_case(tensors, 0, module=object())
+        tensors["kw_native_window"] = torch.cat(
+            (
+                tensors["kw_native_window"],
+                torch.zeros((1, 15, 512), dtype=torch.bfloat16, device="cpu"),
+            ),
+            dim=1,
+        )
+        tensors["kw_native_compressed"] = torch.zeros(
+            (1, 32, 512), dtype=torch.bfloat16, device="cpu"
+        )
+        _, _, after = sparse_case(tensors, 0, module=object())
+        self.assertGreater(before, 0)
+        self.assertEqual(before, after)
+
+    def test_accounting_migration_preserves_every_absolute_limit(self):
+        import json
+        from copy import deepcopy
+
+        from .migrate_accounting import MIGRATION, migrate
+        from .validation import LIMITS_PATH
+
+        current = json.loads(LIMITS_PATH.read_text())
+        previous = deepcopy(current)
+        for entry in previous["performance"].values():
+            migration = entry["provenance"].pop(MIGRATION)
+            entry.update(migration["previous"])
+        migrated, comparisons = migrate(previous)
+        self.assertEqual(migrated, current)
+        self.assertEqual(migrated["numerics"], previous["numerics"])
+        self.assertEqual(len(comparisons), len(current["performance"]))
+        for row in comparisons:
+            before, after = row["previous_maximum_seconds"], row["maximum_seconds"]
+            self.assertLessEqual(after, before, row["case"])
+            self.assertAlmostEqual(after / before, 1.0, places=15, msg=row["case"])
+        with self.assertRaisesRegex(ValueError, "operator-reference-v3"):
+            migrate(current)
+
     def test_accounting_ignores_implementation_work(self):
         from development.serving.accounting import add, attention
 
@@ -32,14 +88,29 @@ class PerformanceContracts(unittest.TestCase):
             approved = limits[case.id]
             self.assertEqual(approved["accounting"], identity, case.id)
             self.assertEqual(approved["timing"], timing_identity(), case.id)
+            necessary = approved["provenance"]["necessary_work_migration"]
+            prior = necessary["previous"]
+            maximum = prior["max_ratio"] * prior["lower_seconds"]
+            self.assertEqual(necessary["maximum_seconds"], maximum, case.id)
+            self.assertLessEqual(
+                approved["max_ratio"] * approved["lower_seconds"], maximum, case.id
+            )
+            self.assertAlmostEqual(
+                approved["max_ratio"] * approved["lower_seconds"] / maximum,
+                1.0,
+                places=15,
+                msg=case.id,
+            )
+            self.assertEqual(prior["accounting"]["version"], "operator-reference-v3")
             timing_migration = approved["provenance"]["timing_migration"]
             for field in ("max_ratio", "lower_seconds"):
-                self.assertEqual(approved[field], timing_migration[field], case.id)
+                self.assertEqual(prior[field], timing_migration[field], case.id)
             self.assertEqual(approved["work"], asdict(work(case)), case.id)
             self.assertEqual(
                 approved["lower_seconds"], lower_bound(case, device), case.id
             )
             migration = approved["provenance"]["accounting_migration"]
+            approved = prior
             previous = migration["previous"]
             self.assertLessEqual(
                 approved["lower_seconds"], previous["lower_seconds"], case.id

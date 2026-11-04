@@ -1,29 +1,37 @@
 import unittest
+from contextlib import nullcontext
 from types import MethodType, SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import torch
 from oh_my_vllm.models.deepseek_v41 import kernel, model
+from oh_my_vllm.models.deepseek_v41.decode import DecodeBindings, DecodeGraph
 
 
-def fp4_literal(rows):
-    encoded = torch.zeros((rows, 64), dtype=torch.float32, device="cuda")
+def fp4_literal(rows, width=64):
+    encoded = torch.zeros((rows, width), dtype=torch.float32, device="cuda")
     encoded[:, 8] = -1
     encoded[:, 32] = 64
     encoded[:, 48] = 32
     encoded[:, 63] = 3
     encoded = encoded.to(torch.float8_e4m3fn)
-    raw = torch.zeros((128, 32), dtype=torch.uint8, device="cuda")
+    raw = torch.zeros((128, width // 2), dtype=torch.uint8, device="cuda")
     raw[:, 4], raw[:, 16], raw[:, 24], raw[:, 31] = 2, 6, 4, 32
     row_shifts = torch.arange(rows, device="cuda") % 3 - 1
     column_shifts = torch.arange(128, device="cuda") % 5 - 2
     input_scales = (
-        (torch.tensor([113, 127], device="cuda") + row_shifts[:, None])
+        (
+            torch.tensor([113, 127] + [127] * (width // 32 - 2), device="cuda")
+            + row_shifts[:, None]
+        )
         .to(torch.uint8)
         .view(torch.float8_e8m0fnu)
     )
     weight_scales = (
-        (torch.tensor([126, 128], device="cuda") + column_shifts[:, None])
+        (
+            torch.tensor([126, 128] + [127] * (width // 32 - 2), device="cuda")
+            + column_shifts[:, None]
+        )
         .to(torch.uint8)
         .view(torch.float8_e8m0fnu)
     )
@@ -37,9 +45,9 @@ def fp4_literal(rows):
     )
 
 
-def grouped_literal(counts=(1, 0, 33, 2), max_rows=33, dtype=torch.bfloat16):
+def grouped_literal(counts=(1, 0, 33, 2), max_rows=33, dtype=torch.bfloat16, width=64):
     rows = sum(counts)
-    encoded, scales, weight, weight_scales, factors = fp4_literal(rows)
+    encoded, scales, weight, weight_scales, factors = fp4_literal(rows, width)
     weights = [
         (
             weight.clone(),
@@ -57,7 +65,7 @@ def grouped_literal(counts=(1, 0, 33, 2), max_rows=33, dtype=torch.bfloat16):
         counts=torch.tensor(counts, dtype=torch.int32, device="cuda"),
         output=torch.full((rows, 128), -7, dtype=dtype, device="cuda"),
         scratch=torch.empty(
-            module.grouped_workspace_size(rows, 4, max_rows, 128, 64),
+            module.grouped_workspace_size(rows, 4, max_rows, 128, width),
             dtype=torch.uint8,
             device="cuda",
         ),
@@ -110,7 +118,268 @@ def prepared_moe_literal(device, strategy="TP4", experts=4):
     return moe, values, routing
 
 
+def pack_weight_bytes(raw_weight, raw_scales, packed_weight, packed_scales, bits):
+    if packed_weight.data_ptr() != raw_weight.data_ptr():
+        packed_weight.zero_()
+        packed_weight[:, : raw_weight.size(1)].copy_(raw_weight)
+    packed_scales.zero_()
+    packed_scales[: raw_scales.numel()].copy_(raw_scales.flatten())
+
+
+class _RoutedDecodeModel(torch.nn.Module):
+    def __init__(self, moe, values, routing):
+        super().__init__()
+        layer = torch.nn.Module()
+        layer.ffn = moe
+        layer.engram = None
+        layer.attn = SimpleNamespace(compress_ratio=0, window_size=128)
+        self.layers = torch.nn.ModuleList([layer])
+        self.values, self.routing = values, routing
+
+    def forward(self, _tokens, **_options):
+        value = self.layers[0].ffn._forward_rows(self.values, routing=self.routing)
+        return None, value, None
+
+
 class GroupedProjectionPrecision(unittest.TestCase):
+    def test_decode_graph_rejects_rebound_expert_bindings_without_synchronization(self):
+        for strategy in ("TP4", "TEP4"):
+            for segmented in (False, True):
+                for change in (
+                    "expert",
+                    "projection",
+                    "weight",
+                    "scale",
+                    "load",
+                    "apply",
+                ):
+                    with (
+                        self.subTest(
+                            strategy=strategy, segmented=segmented, change=change
+                        ),
+                        patch.object(model, "world_size", 1),
+                    ):
+                        moe, values, routing = prepared_moe_literal("cpu", strategy)
+                        layer = SimpleNamespace(
+                            ffn=moe,
+                            engram=None,
+                            attn=SimpleNamespace(compress_ratio=0, window_size=128),
+                        )
+                        target = Mock()
+                        target._state_export = None
+                        target.layers = [layer]
+                        target.modules.return_value = (moe,)
+
+                        def forward(
+                            *_args, moe=moe, values=values, routing=routing, **_kwargs
+                        ):
+                            return (
+                                None,
+                                moe._forward_rows(values, routing=routing),
+                                None,
+                            )
+
+                        target.side_effect = forward
+                        bindings = DecodeBindings(1, (0,), "cpu")
+                        bindings.bind([1], 132)
+                        stream, native_graph = Mock(), Mock()
+                        with (
+                            patch("torch.cuda.Stream", return_value=stream),
+                            patch("torch.cuda.CUDAGraph", return_value=native_graph),
+                            patch("torch.cuda.current_stream", return_value=stream),
+                            patch(
+                                "torch.cuda.stream",
+                                side_effect=lambda *_: nullcontext(),
+                            ),
+                            patch(
+                                "torch.cuda.graph",
+                                side_effect=lambda *_args, **_kwargs: nullcontext(),
+                            ),
+                            patch("torch.cuda.synchronize") as synchronize,
+                            patch(
+                                "oh_my_vllm.models.deepseek_v41.decode.require_sparse_status"
+                            ),
+                        ):
+                            graph = DecodeGraph(
+                                target, bindings, 132, segmented=segmented
+                            )
+                            graph.capture()
+                            synchronize.reset_mock()
+                            graph.replay()
+                            native_graph.replay.assert_called_once()
+                            synchronize.assert_not_called()
+                            native_graph.replay.reset_mock()
+                            expert = moe.experts[0]
+                            if change == "expert":
+                                moe.experts[0] = model.Expert(
+                                    32, 64, dtype=torch.float4_e2m1fn_x2
+                                )
+                            elif change == "projection":
+                                expert.w2 = model.Linear(
+                                    64, 32, dtype=torch.float4_e2m1fn_x2
+                                )
+                            elif change in ("weight", "scale"):
+                                previous = getattr(expert.w2, change)
+                                replacement = (
+                                    previous.view(torch.uint8)
+                                    .clone()
+                                    .view(previous.dtype)
+                                )
+                                setattr(
+                                    expert.w2,
+                                    change,
+                                    torch.nn.Parameter(
+                                        replacement, requires_grad=False
+                                    ),
+                                )
+                            elif change == "load":
+                                moe.load_state_dict(moe.state_dict(), assign=True)
+                            else:
+                                expert.w2._apply(lambda value: value)
+                            with self.assertRaisesRegex(
+                                RuntimeError, "bindings.*changed"
+                            ):
+                                graph.replay()
+                            native_graph.replay.assert_not_called()
+                            synchronize.assert_not_called()
+                            # Repreparation cannot validate the old graph.
+                            moe.prepare_routed_experts()
+                            with self.assertRaisesRegex(
+                                RuntimeError, "bindings.*changed"
+                            ):
+                                graph.replay()
+                            native_graph.replay.assert_not_called()
+                            synchronize.assert_not_called()
+                            replacement_graph = DecodeGraph(
+                                target, bindings, 132, segmented=segmented
+                            )
+                            replacement_graph.capture()
+                            synchronize.reset_mock()
+                            replacement_graph.replay()
+                            native_graph.replay.assert_called_once()
+                            synchronize.assert_not_called()
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_cuda_decode_graph_rebind_reject_and_recapture_match_eager_bits(self):
+        with patch.object(model, "world_size", 1):
+            moe, values, routing = prepared_moe_literal("cuda")
+            target = _RoutedDecodeModel(moe, values, routing)
+            bindings = DecodeBindings(1, (0,), "cuda")
+            bindings.bind([1], 132)
+            with torch.inference_mode():
+                expected = target(bindings.token_ids)[1].clone()
+                graph = DecodeGraph(target, bindings, 132).capture()
+                graph.replay()
+                self.assertTrue(
+                    torch.equal(
+                        graph.logits.view(torch.uint8), expected.view(torch.uint8)
+                    )
+                )
+                for expert in moe.experts:
+                    weight = expert.w2.weight.view(torch.uint8).clone()
+                    weight[0, 0] = 4
+                    expert.w2.weight = torch.nn.Parameter(
+                        weight.view(torch.float4_e2m1fn_x2), requires_grad=False
+                    )
+                with self.assertRaisesRegex(RuntimeError, "bindings.*changed"):
+                    graph.replay()
+                expected = target(bindings.token_ids)[1].clone()
+                wanted = torch.zeros_like(values)
+                wanted[:, 0] = 3
+                self.assertTrue(torch.equal(expected, wanted))
+                with self.assertRaisesRegex(RuntimeError, "bindings.*changed"):
+                    graph.replay()
+                replacement = DecodeGraph(target, bindings, 132).capture()
+                replacement.replay()
+                self.assertTrue(
+                    torch.equal(
+                        replacement.logits.view(torch.uint8), expected.view(torch.uint8)
+                    )
+                )
+
+    def test_packed_projection_refreshes_after_in_place_state_load(self):
+        for inference in (False, True):
+            with (
+                self.subTest(inference=inference),
+                torch.inference_mode(inference),
+                patch.dict(kernel._PACKED_WEIGHTS, {}, clear=True),
+                patch.object(
+                    kernel,
+                    "_projection_module",
+                    return_value=SimpleNamespace(pack_weights=pack_weight_bytes),
+                ),
+            ):
+                layer = model.Linear(64, 32, dtype=torch.float4_e2m1fn_x2)
+                with torch.no_grad():
+                    layer.weight.view(torch.uint8).fill_(18)
+                    layer.scale.view(torch.uint8).fill_(127)
+                alias_weight = layer.weight[8:24]
+                alias_scale = layer.scale[8:24]
+                self.assertNotEqual(alias_weight.data_ptr(), layer.weight.data_ptr())
+                self.assertNotEqual(alias_scale.data_ptr(), layer.scale.data_ptr())
+                alias_first = kernel._packed_weight(alias_weight, alias_scale, 4)
+                first = kernel._packed_weight(layer.weight, layer.scale, 4)
+                self.assertIs(
+                    first, kernel._packed_weight(layer.weight, layer.scale, 4)
+                )
+                addresses = (layer.weight.data_ptr(), layer.scale.data_ptr())
+                state = {
+                    name: value.view(torch.uint8).clone().view(value.dtype)
+                    for name, value in layer.state_dict().items()
+                }
+                state["weight"].view(torch.uint8).fill_(52)
+                state["scale"].view(torch.uint8).fill_(129)
+                layer.load_state_dict(state, assign=False)
+                self.assertEqual(
+                    addresses, (layer.weight.data_ptr(), layer.scale.data_ptr())
+                )
+                refreshed = kernel._packed_weight(layer.weight, layer.scale, 4)
+                self.assertTrue(
+                    torch.equal(refreshed[0][:, :32], state["weight"].view(torch.uint8))
+                )
+                self.assertTrue(
+                    torch.equal(
+                        refreshed[1][:64], state["scale"].view(torch.uint8).flatten()
+                    )
+                )
+                self.assertEqual(int(first[0][0, 0]), 18)
+                self.assertEqual(int(first[1][0]), 127)
+                alias_refreshed = kernel._packed_weight(alias_weight, alias_scale, 4)
+                self.assertTrue(
+                    torch.equal(
+                        alias_refreshed[1][:32],
+                        state["scale"][8:24].view(torch.uint8).flatten(),
+                    )
+                )
+                self.assertEqual(int(alias_first[1][0]), 127)
+
+    def test_packed_projection_tracks_direct_shared_view_mutations(self):
+        with (
+            patch.dict(kernel._PACKED_WEIGHTS, {}, clear=True),
+            patch.object(
+                kernel,
+                "_projection_module",
+                return_value=SimpleNamespace(pack_weights=pack_weight_bytes),
+            ),
+            torch.no_grad(),
+        ):
+            layer = model.Linear(64, 32, dtype=torch.float4_e2m1fn_x2)
+            layer.weight.view(torch.uint8).fill_(18)
+            layer.scale.view(torch.uint8).fill_(127)
+            first = kernel._packed_weight(layer.weight, layer.scale, 4)
+            layer.scale.detach().view(torch.uint8).fill_(129)
+            updated_scale = kernel._packed_weight(layer.weight, layer.scale, 4)
+            self.assertEqual(int(updated_scale[1][0]), 129)
+            self.assertEqual(int(first[1][0]), 127)
+            layer.weight.detach().view(torch.uint8).fill_(52)
+            updated_weight = kernel._packed_weight(layer.weight, layer.scale, 4)
+            self.assertTrue(torch.all(updated_weight[0][:, :32] == 52))
+            self.assertTrue(torch.all(updated_weight[0][:, 32:] == 0))
+            self.assertIs(
+                updated_weight, kernel._packed_weight(layer.weight, layer.scale, 4)
+            )
+            self.assertEqual(len(kernel._PACKED_WEIGHTS), 1)
+
     def test_prepared_experts_refresh_after_rebinding_and_state_assignment(self):
         devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
         for device in devices:
@@ -298,25 +567,104 @@ class GroupedProjectionPrecision(unittest.TestCase):
                     torch.testing.assert_close(grouped[1], want, rtol=0, atol=0)
 
     def test_prepared_expert_parallel_ranges_keep_zero_row_steps(self):
-        devices = ("cpu", "cuda") if torch.cuda.is_available() else ("cpu",)
-        for device in devices:
-            for rank in (0, 1):
-                with (
-                    self.subTest(device=device, rank=rank),
-                    patch.object(model, "world_size", 4),
-                    patch.object(model, "rank", rank),
-                ):
-                    moe, values, _ = prepared_moe_literal(device, "TEP4", 8)
-                    if rank:
-                        with torch.no_grad():
-                            for expert in moe.experts[2:4]:
-                                expert.w2.weight.view(torch.uint8)[0, 0] = 6
-                    for counts, rows in (
-                        ([1, 0, 1, 0, 0, 0, 0, 0], [rank]),
-                        ([0, 0, 2, 0, 0, 0, 0, 0], [0, 1] if rank else []),
-                        ([2, 0, 0, 0, 0, 0, 0, 0], [] if rank else [0, 1]),
-                        ([1, 0, 1, 0, 0, 0, 0, 0], [rank]),
+        devices = [("cpu", "cpu")]
+        if torch.cuda.is_available():
+            devices.extend((("cuda", "cpu"), ("cuda", "cuda")))
+        for device, default_device in devices:
+            for strategy in ("TEP4", "DEP4"):
+                for rank in (0, 1):
+                    with (
+                        self.subTest(
+                            device=device,
+                            default_device=default_device,
+                            strategy=strategy,
+                            rank=rank,
+                        ),
+                        torch.device(default_device),
+                        patch.object(
+                            model, "world_size", 4 if strategy == "TEP4" else 1
+                        ),
+                        patch.object(model, "expert_world_size", 4),
+                        patch.object(model, "rank", rank),
                     ):
+                        moe, values, _ = prepared_moe_literal(device, strategy, 8)
+                        if rank:
+                            with torch.no_grad():
+                                for expert in moe.experts[2:4]:
+                                    expert.w2.weight.view(torch.uint8)[0, 0] = 6
+                        with torch.no_grad():
+                            second = moe.experts[moe.experts_start_idx + 1]
+                            second.w2.weight.view(torch.uint8)[0, 0] = 4
+                        empty = moe._grouped_routed(
+                            values[:0],
+                            torch.empty(0, dtype=torch.long, device=device),
+                            torch.empty(0, device=device),
+                            [0] * 8,
+                            torch.zeros(8, dtype=torch.int32, device=device),
+                        )
+                        self.assertIsNone(empty)
+                        self.assertIsNone(moe._routed_state.pointers)
+                        pointers = None
+                        first_value = 3 if rank else 0.75
+                        for counts, rows, expected in (
+                            ([1, 0, 1, 0, 0, 0, 0, 0], [rank], first_value),
+                            (
+                                [0, 0, 2, 0, 0, 0, 0, 0],
+                                [0, 1] if rank else [],
+                                first_value,
+                            ),
+                            ([0, 1, 0, 1, 0, 0, 0, 0], [rank], 1.5),
+                            (
+                                [2, 0, 0, 0, 0, 0, 0, 0],
+                                [] if rank else [0, 1],
+                                first_value,
+                            ),
+                            ([1, 0, 1, 0, 0, 0, 0, 0], [rank], first_value),
+                        ):
+                            grouped = moe._grouped_routed(
+                                values.repeat(2, 1),
+                                torch.arange(2, device=device),
+                                torch.ones(2, device=device),
+                                counts,
+                                torch.tensor(counts, device=device),
+                            )
+                            if not rows:
+                                self.assertIsNone(grouped)
+                            else:
+                                torch.testing.assert_close(
+                                    grouped[0], torch.tensor(rows, device=device)
+                                )
+                                want = torch.zeros(
+                                    (len(rows), 32), dtype=torch.bfloat16, device=device
+                                )
+                                want[:, 0] = expected
+                                torch.testing.assert_close(
+                                    grouped[1], want, rtol=0, atol=0
+                                )
+                            if device == "cuda":
+                                self.assertIsNotNone(moe._routed_state.pointers)
+                                if pointers is not None:
+                                    self.assertIs(moe._routed_state.pointers, pointers)
+                                pointers = moe._routed_state.pointers
+                                for (
+                                    weight_ptrs,
+                                    scale_ptrs,
+                                    weight_host,
+                                    scale_host,
+                                ) in pointers:
+                                    self.assertEqual(weight_ptrs.device, values.device)
+                                    self.assertEqual(scale_ptrs.device, values.device)
+                                    for host in (weight_host, scale_host):
+                                        self.assertEqual(host.device.type, "cpu")
+                                        self.assertTrue(host.is_pinned())
+                        expert = moe.experts[moe.experts_start_idx]
+                        with torch.no_grad():
+                            weight = expert.w2.weight.detach().clone()
+                            weight.view(torch.uint8)[0, 0] = 2 if rank else 6
+                        expert.w2.weight = torch.nn.Parameter(
+                            weight, requires_grad=False
+                        )
+                        self.assertIsNone(moe._routed_state.pointers)
                         grouped = moe._grouped_routed(
                             values.repeat(2, 1),
                             torch.arange(2, device=device),
@@ -324,17 +672,12 @@ class GroupedProjectionPrecision(unittest.TestCase):
                             counts,
                             torch.tensor(counts, device=device),
                         )
-                        if not rows:
-                            self.assertIsNone(grouped)
-                        else:
-                            torch.testing.assert_close(
-                                grouped[0], torch.tensor(rows, device=device)
-                            )
-                            want = torch.zeros(
-                                (len(rows), 32), dtype=torch.bfloat16, device=device
-                            )
-                            want[:, 0] = 3 if rank else 0.75
-                            torch.testing.assert_close(grouped[1], want, rtol=0, atol=0)
+                        want = torch.zeros((1, 32), dtype=torch.bfloat16, device=device)
+                        want[:, 0] = 0.75 if rank else 3
+                        torch.testing.assert_close(grouped[1], want, rtol=0, atol=0)
+                        if device == "cuda":
+                            self.assertIsNotNone(moe._routed_state.pointers)
+                            self.assertIsNot(moe._routed_state.pointers, pointers)
 
     def test_rebinding_one_owner_does_not_invalidate_another_shared_owner(self):
         with patch.object(model, "world_size", 1):
@@ -652,6 +995,137 @@ class GroupedProjectionPrecision(unittest.TestCase):
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
 class ProjectionPrecisionCuda(unittest.TestCase):
+    def test_dense_prefill_graph_keeps_new_quantization_storage_and_k32_order(self):
+        values = torch.zeros((129, 128), dtype=torch.bfloat16, device="cuda")
+        values[:, (0, 32, 64)] = 1
+        weight = torch.zeros((1280, 128), device="cuda")
+        weight[:, (0, 32)] = 1
+        weight[:, 64] = -1
+        weight[640:, 32:] = 0
+        weight = weight.to(torch.float8_e4m3fn)
+        scales = torch.ones((40, 4), device="cuda")
+        scales[:, 1] = 2**-25
+        scales = scales.to(torch.float8_e8m0fnu)
+
+        def run():
+            encoded, input_scales = kernel.act_quant(
+                values, 32, "ue8m0", torch.float8_e8m0fnu
+            )
+            return kernel.fp8_gemm(
+                encoded,
+                input_scales,
+                weight,
+                scales,
+                block_size=32,
+                output_dtype=torch.float32,
+            )
+
+        run()
+        graph = torch.cuda.CUDAGraph()
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        try:
+            with torch.cuda.graph(graph, stream=stream):
+                output = run()
+            for value in (1, 2, 0.5):
+                values[:, (0, 32, 64)] = value
+                graph.replay()
+                expected = run()
+                self.assertTrue(
+                    torch.equal(output.view(torch.uint8), expected.view(torch.uint8))
+                )
+                self.assertEqual(output[:, :640].count_nonzero().item(), 0)
+                self.assertTrue(
+                    torch.equal(
+                        output[:, 640:], torch.full_like(output[:, 640:], value)
+                    )
+                )
+        finally:
+            stream.synchronize()
+            graph.reset()
+
+    def test_routed_gate_up_share_quantization_and_replay_exactly(self):
+        original = kernel.grouped_fp4_gemm
+
+        def separate_quantization(*args, **kwargs):
+            kwargs.pop("quantized", None)
+            return original(*args, **kwargs)
+
+        for strategy in ("TP4", "TEP4", "DEP4"):
+            with self.subTest(strategy=strategy), patch.object(model, "world_size", 1):
+                moe, values, _ = prepared_moe_literal("cuda", strategy)
+                with torch.no_grad():
+                    for index, expert in enumerate(moe.experts):
+                        expert.w2.scale.fill_(1 << index)
+                values = values.repeat(3, 1)
+                tokens = torch.arange(3, device="cuda")
+                coefficients = torch.ones(3, device="cuda")
+                counts = torch.tensor((1, 0, 2, 0), device="cuda", dtype=torch.int32)
+
+                host_counts = None if strategy == "TP4" else [1, 0, 2, 0]
+
+                def run(
+                    moe=moe,
+                    values=values,
+                    tokens=tokens,
+                    coefficients=coefficients,
+                    counts=counts,
+                    host_counts=host_counts,
+                ):
+                    return moe._grouped_routed(
+                        values, tokens, coefficients, host_counts, counts
+                    )[1]
+
+                run()
+                with patch.object(
+                    kernel, "grouped_fp4_gemm", side_effect=separate_quantization
+                ):
+                    expected = run()
+                quantize = Mock(wraps=kernel.act_quant)
+                with (
+                    patch.object(kernel, "act_quant", quantize),
+                    patch.object(model, "act_quant", quantize),
+                ):
+                    actual = run()
+                self.assertEqual(quantize.call_count, 2)
+                self.assertTrue(
+                    torch.equal(actual.view(torch.uint8), expected.view(torch.uint8))
+                )
+                graph = torch.cuda.CUDAGraph()
+                stream = torch.cuda.Stream()
+                stream.wait_stream(torch.cuda.current_stream())
+                try:
+                    with torch.cuda.graph(graph, stream=stream):
+                        replayed = run()
+                    values[:, 0].fill_(2)
+                    counts.copy_(
+                        torch.tensor((0, 2, 0, 1), device="cuda", dtype=torch.int32)
+                    )
+                    if host_counts is not None:
+                        host_counts[:] = (0, 2, 0, 1)
+                    graph.replay()
+                    with patch.object(
+                        kernel, "grouped_fp4_gemm", side_effect=separate_quantization
+                    ):
+                        expected = run()
+                    self.assertTrue(
+                        torch.equal(
+                            replayed.view(torch.uint8), expected.view(torch.uint8)
+                        )
+                    )
+                finally:
+                    stream.synchronize()
+                    graph.reset()
+                prepared = moe._routed_state.weights.gate
+                encoded, scales = kernel.act_quant(
+                    values, 32, "ue8m0", torch.float8_e8m0fnu
+                )
+                for quantized in ((encoded[:1], scales), (encoded, scales[:1])):
+                    with self.assertRaisesRegex(ValueError, "matching FP8 and K32"):
+                        kernel.grouped_fp4_gemm(
+                            values, counts, prepared, quantized=quantized
+                        )
+
     def test_fp4_projection_decodes_every_packed_four_value_word(self):
         encoded = torch.zeros((4, 32), dtype=torch.float32, device="cuda")
         encoded[:, :4] = torch.eye(4, device="cuda")
@@ -736,13 +1210,200 @@ class ProjectionPrecisionCuda(unittest.TestCase):
                 ((1, 0, 3, 2), (6, 0, 0, 0)),
                 ((1, 0, 13, 2), (0, 16, 0, 0)),
                 ((1, 0, 14, 2), (0, 0, 17, 0)),
+                ((1, 0, 257, 2), (128, 1, 0, 131)),
+                ((1, 0, 1025, 2), (0, 1028, 0, 0)),
             ):
                 with self.subTest(dtype=dtype, counts=counts):
                     self.check_grouped_replay(dtype, value, counts, changed)
 
+    def test_padded_grouped_projection_replays_device_live_rows_and_zeroes_tail(self):
+        module = kernel._projection_module()
+        for dtype in (torch.bfloat16, torch.float32):
+            for capacity in (36, 260):
+                case = grouped_literal(
+                    (1, 0, capacity - 3, 2),
+                    max_rows=capacity - 3,
+                    dtype=dtype,
+                    width=128 if capacity > 64 else 64,
+                )
+                status = torch.zeros((1,), dtype=torch.int32, device="cuda")
+                encoded, scales = case.encoded.clone(), case.scales.clone()
+
+                def run(case=case, status=status, dtype=dtype):
+                    return kernel.grouped_fp4_gemm_padded(
+                        case.encoded,
+                        case.scales,
+                        case.counts,
+                        case.weights,
+                        pointers=case.pointers,
+                        status=status,
+                        max_rows=case.max_rows,
+                        output_dtype=dtype,
+                        output=case.output,
+                        scratch=case.scratch,
+                    )
+
+                run()
+                graph = torch.cuda.CUDAGraph()
+                stream = torch.cuda.Stream()
+                stream.wait_stream(torch.cuda.current_stream())
+                try:
+                    with torch.cuda.graph(graph, stream=stream):
+                        run()
+                    valid = [(0, 0, 0, 0), (1, 0, 0, 0), (1, 0, 3, 2), (16, 1, 0, 19)]
+                    if capacity > 64:
+                        valid += [(32, 32, 0, 0), (32, 33, 0, 0), (128, 1, 0, 131)]
+                    valid += [(1, 0, capacity - 3, 2)]
+                    for counts in valid:
+                        live = sum(counts)
+                        for execution in ("eager", "graph"):
+                            with self.subTest(
+                                dtype=dtype,
+                                capacity=capacity,
+                                counts=counts,
+                                execution=execution,
+                            ):
+                                with torch.cuda.stream(stream):
+                                    case.counts.copy_(
+                                        torch.tensor(
+                                            counts, dtype=torch.int32, device="cuda"
+                                        )
+                                    )
+                                    case.encoded.copy_(encoded)
+                                    case.scales.copy_(scales)
+                                    case.encoded[live:].fill_(127)
+                                    case.scales[live:].fill_(255)
+                                    case.output.fill_(-7)
+                                    status.zero_()
+                                    graph.replay() if execution == "graph" else run()
+                                    actual = case.output.clone()
+                                stream.synchronize()
+                                kernel.require_padded_status(status)
+                                reference = torch.empty(
+                                    (live, 128), dtype=dtype, device="cuda"
+                                )
+                                module.grouped_project(
+                                    case.encoded[:live],
+                                    case.scales[:live],
+                                    *case.pointers,
+                                    case.counts,
+                                    reference,
+                                    case.scratch,
+                                    case.max_rows,
+                                )
+                                expected = torch.zeros_like(actual)
+                                expected[:live] = reference
+                                self.assertTrue(
+                                    torch.equal(
+                                        actual.view(torch.uint8),
+                                        expected.view(torch.uint8),
+                                    )
+                                )
+                    invalid = (
+                        (-1, 2, 2, 0),
+                        (capacity // 2, capacity - capacity // 2 + 1, 0, 0),
+                        (capacity - 2, 0, 0, 0),
+                        (2**31 - 1, 2**31 - 1, 0, 0),
+                    )
+                    for counts in invalid:
+                        for execution in ("eager", "graph"):
+                            with self.subTest(
+                                dtype=dtype,
+                                capacity=capacity,
+                                invalid=counts,
+                                execution=execution,
+                            ):
+                                with torch.cuda.stream(stream):
+                                    case.counts.copy_(
+                                        torch.tensor(
+                                            counts, dtype=torch.int32, device="cuda"
+                                        )
+                                    )
+                                    status.zero_()
+                                    graph.replay() if execution == "graph" else run()
+                                stream.synchronize()
+                                with self.assertRaisesRegex(
+                                    RuntimeError, "device metadata"
+                                ):
+                                    kernel.require_padded_status(status)
+                                self.assertEqual(case.output.count_nonzero().item(), 0)
+                    case.counts.copy_(torch.tensor((1, 0, 0, 0), device="cuda"))
+                    status.fill_(8)
+                    run()
+                    self.assertEqual(status.item(), 8)
+                    self.assertEqual(case.output.count_nonzero().item(), 0)
+                    with self.assertRaisesRegex(ValueError, "shape and dtype"):
+                        kernel.grouped_fp4_gemm_padded(
+                            case.encoded,
+                            case.scales,
+                            case.counts,
+                            case.weights,
+                            pointers=case.pointers,
+                            status=status,
+                            output=torch.empty(
+                                (capacity, 256), dtype=dtype, device="cuda"
+                            ),
+                            output_dtype=dtype,
+                        )
+                    for bad_weight, bad_scale in (
+                        (case.weights[-1][0][:32], case.weights[-1][1][:32]),
+                        (case.weights[-1][0][:, :16], case.weights[-1][1]),
+                        (case.weights[-1][0], case.weights[-1][1][:, :1]),
+                    ):
+                        with (
+                            self.subTest(bad_weight=bad_weight.shape),
+                            self.assertRaisesRegex(ValueError, "shapes must match"),
+                        ):
+                            kernel.grouped_fp4_gemm_padded(
+                                case.encoded,
+                                case.scales,
+                                case.counts,
+                                [*case.weights[:-1], (bad_weight, bad_scale)],
+                                pointers=case.pointers,
+                                status=status,
+                                output_dtype=dtype,
+                            )
+                finally:
+                    stream.synchronize()
+                    graph.reset()
+
+    def test_padded_grouped_zero_capacity_still_rejects_live_counts(self):
+        case = grouped_literal((0, 0, 0, 0), max_rows=1)
+        status = torch.zeros((1,), dtype=torch.int32, device="cuda")
+        module = kernel._projection_module()
+        module.grouped_project_padded(
+            case.encoded,
+            case.scales,
+            *case.pointers,
+            case.counts,
+            case.output,
+            case.scratch,
+            case.max_rows,
+            status,
+        )
+        kernel.require_padded_status(status)
+        case.counts[0] = 1
+        module.grouped_project_padded(
+            case.encoded,
+            case.scales,
+            *case.pointers,
+            case.counts,
+            case.output,
+            case.scratch,
+            case.max_rows,
+            status,
+        )
+        with self.assertRaisesRegex(RuntimeError, "device metadata"):
+            kernel.require_padded_status(status)
+
     def check_grouped_replay(self, dtype, value, counts, changed):
         module = kernel._projection_module()
-        case = grouped_literal(counts, max_rows=max(33, sum(counts)), dtype=dtype)
+        case = grouped_literal(
+            counts,
+            max_rows=max(33, sum(counts)),
+            dtype=dtype,
+            width=128 if sum(counts) >= 256 else 64,
+        )
         stream = torch.cuda.Stream()
         stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(stream):

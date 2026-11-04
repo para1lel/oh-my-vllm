@@ -15,6 +15,7 @@ from pathlib import Path
 from oh_my_vllm.models.qwen38.cache_budget import gpu_blocks
 from oh_my_vllm.models.qwen38.tokenizer import Tokenization, tokenizer_identity
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
+from oh_my_vllm.source import source_identity
 from oh_my_vllm.worker.execution import execution_policy
 
 from .accounting import RATES, VERSION
@@ -94,34 +95,6 @@ def post(port, body):
         return value
     finally:
         connection.close()
-
-
-def source_identity():
-    names = (
-        subprocess.check_output(
-            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-            cwd=ROOT,
-        )
-        .decode()
-        .split("\0")
-    )
-    digest = hashlib.sha256()
-    for name in sorted(set(names)):
-        path = ROOT / name
-        if path.is_file() and (
-            name.startswith(("python/", "crates/", "development/serving/"))
-            or name
-            in {
-                "Cargo.toml",
-                "Cargo.lock",
-                "requirements/development.txt",
-                "requirements/runtime.txt",
-                "development/native_build.py",
-            }
-        ):
-            digest.update(name.encode())
-            digest.update(path.read_bytes())
-    return digest.hexdigest()
 
 
 def checkpoint_identity(model):

@@ -335,6 +335,15 @@ class LogicalRowsCuda(unittest.TestCase):
                     stream.synchronize()
                     graph.reset()
                 before = output.clone()
+                for invalid_workspace in (
+                    workspace[:1].expand(workspace.numel()),
+                    workspace.cpu(),
+                ):
+                    with self.assertRaisesRegex(Exception, "Check failed"):
+                        module.fp32_project(
+                            flat, weight, output, invalid_workspace, batch
+                        )
+                    self.assertTrue(torch.equal(output, before))
                 for invalid in (-1, flat.size(0) + 1, flat.size(0) - 1):
                     with self.assertRaisesRegex(Exception, "logical rows"):
                         module.fp32_project(flat, weight, output, workspace, invalid)
@@ -494,6 +503,42 @@ class LogicalRowsCuda(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "operator limit"):
             module.project_chunk(32769, 384)
 
+    def test_fp32_tiled_projection_keeps_each_chunk_band(self):
+        module = kernel._hyperconnection_module()
+        generator = torch.Generator(device="cuda").manual_seed(217)
+        workspace = torch.empty(32 * 1024 * 1024, dtype=torch.uint8, device="cuda")
+        for outputs in (128, 384, 512):
+            boundaries = {1, 2, 7, 8, 9, 31, 32, 33, 32768}
+            previous = int(module.project_chunk(2, outputs))
+            for rows in range(3, 32769):
+                chunk = int(module.project_chunk(rows, outputs))
+                if chunk != previous:
+                    boundaries.update((rows - 1, rows))
+                previous = chunk
+            values = torch.randn((32768, 5120), generator=generator, device="cuda")
+            values[0].zero_()
+            values[1, ::2] = -0.0
+            weight = torch.randn((outputs, 5120), generator=generator, device="cuda")
+            cases = [(rows, 0) for rows in sorted(boundaries)]
+            cases.extend(((24, 3), (32768, 2)))
+            for rows, logical_rows in cases:
+                with self.subTest(
+                    outputs=outputs, rows=rows, logical_rows=logical_rows
+                ):
+                    actual = torch.empty((rows, outputs), device="cuda")
+                    expected = torch.empty_like(actual)
+                    module.fp32_project(
+                        values[:rows], weight, actual, workspace, logical_rows
+                    )
+                    module.fp32_project(
+                        values[:rows], weight, expected, workspace[:0], logical_rows
+                    )
+                    self.assertTrue(
+                        torch.equal(
+                            actual.view(torch.int32), expected.view(torch.int32)
+                        )
+                    )
+
     def test_fp32_projection_keeps_the_extended_row_order(self):
         # Rows above 8192 must keep the measured single-chunk arithmetic, and
         # the HC table must have no hole. The reference runs the same fused
@@ -563,7 +608,7 @@ class LogicalRowsCuda(unittest.TestCase):
     def test_hc_grouped_projection_matches_the_released_order_across_steps(self):
         module = kernel._hyperconnection_module()
         generator = torch.Generator(device="cuda").manual_seed(101)
-        for batch, steps in ((3, 8), (4, 2)):
+        for batch, steps in ((3, 8), (4, 2), (4, 817)):
             with self.subTest(batch=batch, steps=steps):
                 rows = batch * steps
                 source = torch.randn(
@@ -578,9 +623,27 @@ class LogicalRowsCuda(unittest.TestCase):
                 )
                 scale = torch.ones(3, device="cuda")
                 base = torch.zeros(24, device="cuda")
-                storage = kernel.make_hc_workspace(source.device, max_rows=rows)
+                storage = kernel.make_hc_workspace(
+                    source.device, max_rows=min(rows, kernel.NATIVE_ROW_LIMIT)
+                )
+                for name in (
+                    "mixed",
+                    "post",
+                    "comb",
+                    "collapsed",
+                    "next_pre_a",
+                    "flat",
+                    "statistics",
+                ):
+                    value = storage[name]
+                    if value.size(0) < rows:
+                        storage[name] = torch.empty(
+                            (rows, *value.shape[1:]),
+                            dtype=value.dtype,
+                            device=source.device,
+                        )
                 residual = source.view(rows, 4, 5120)
-                module.hc_prepare_grouped(
+                arguments = (
                     residual,
                     incoming,
                     weight,
@@ -596,6 +659,7 @@ class LogicalRowsCuda(unittest.TestCase):
                     storage["blas"],
                     batch,
                 )
+                module.hc_prepare_grouped(*arguments)
                 expected = torch.empty_like(storage["mixed"])
                 reference = torch.empty((batch, 24), device="cuda")
                 for step in range(steps):
@@ -607,7 +671,28 @@ class LogicalRowsCuda(unittest.TestCase):
                     )
                     expected[step::steps] = reference
                 expected *= storage["statistics"][:, 1:2]
-                self.assertTrue(torch.equal(storage["mixed"], expected))
+                self.assertTrue(
+                    torch.equal(
+                        storage["mixed"].view(torch.int32), expected.view(torch.int32)
+                    )
+                )
+                if steps == 817:
+                    stream = torch.cuda.Stream()
+                    stream.wait_stream(torch.cuda.current_stream())
+                    graph = torch.cuda.CUDAGraph()
+                    with torch.cuda.graph(graph, stream=stream):
+                        module.hc_prepare_grouped(*arguments)
+                    torch.cuda.current_stream().wait_stream(stream)
+                    storage["mixed"].fill_(123)
+                    graph.replay()
+                    self.assertTrue(
+                        torch.equal(
+                            storage["mixed"].view(torch.int32),
+                            expected.view(torch.int32),
+                        )
+                    )
+                    torch.cuda.current_stream().synchronize()
+                    graph.reset()
 
     def test_hc_chunked_projection_is_capture_safe(self):
         module = kernel._hyperconnection_module()

@@ -6,6 +6,9 @@ model construction and small reference cases usable before a workspace is attach
 
 import hashlib
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
 from typing import NamedTuple
 
 import torch
@@ -16,6 +19,44 @@ from ...operators.sparse_attention.plan import scratch_bytes as sparse_scratch_b
 from ...operators.transform.api import FUNCTIONS as TRANSFORM_FUNCTIONS
 from .quantization import act_quant, fp4_values
 from .quantization import fp4_act_quant as fp4_act_quant
+
+_CAPTURED_TENSORS = ContextVar("deepseek_graph_cached_tensors", default=None)
+
+
+@contextmanager
+def capture_cached_tensors():
+    owners = {}
+    token = _CAPTURED_TENSORS.set(owners)
+    try:
+        yield owners
+    finally:
+        _CAPTURED_TENSORS.reset(token)
+
+
+def retain_graph_tensors(value):
+    owners = _CAPTURED_TENSORS.get()
+    if owners is not None:
+        pending = [value]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, torch.Tensor):
+                owners[id(item)] = item
+            elif isinstance(item, (list, tuple)):
+                pending.extend(item)
+            elif isinstance(item, dict):
+                pending.extend(item.values())
+    return value
+
+
+def retain_cached_tensor(operation):
+    @wraps(operation)
+    def selected(*args, **kwargs):
+        return retain_graph_tensors(operation(*args, **kwargs))
+
+    for name in ("cache_clear", "cache_info", "cache_parameters"):
+        if hasattr(operation, name):
+            setattr(selected, name, getattr(operation, name))
+    return selected
 
 
 class _PinnedMetadataUploader:
@@ -68,6 +109,7 @@ _POINTER_UPLOADS = {}
 _CAPTURE_POINTER_HOSTS = {}
 
 
+@retain_cached_tensor
 def _upload_pointer_array(values, role, device):
     """Upload one expert pointer array without a blocking host copy."""
     if torch.cuda.is_current_stream_capturing():
@@ -78,6 +120,7 @@ def _upload_pointer_array(values, role, device):
             host = torch.empty((len(values),), dtype=torch.int64, pin_memory=True)
             host.copy_(torch.tensor(values, dtype=torch.int64, device="cpu"))
             _CAPTURE_POINTER_HOSTS[key] = host
+        retain_graph_tensors(host)
         result = torch.empty((len(values),), dtype=torch.int64, device=device)
         result.copy_(host, non_blocking=True)
         return result
@@ -112,6 +155,7 @@ def _disable_sparse_native():
     _SPARSE_NATIVE_DISABLED = True
 
 
+@retain_cached_tensor
 def _sparse_status_accumulator(device):
     key = str(device)
     accumulator = _SPARSE_STATUS.get(key)
@@ -147,6 +191,7 @@ class _PackedWeightCacheEntry(NamedTuple):
     packed: tuple
     raw_weight: object
     raw_scales: object
+    versions: tuple
 
 
 def _native_available(x):
@@ -156,28 +201,64 @@ def _native_available(x):
 def _projection_module():
     global _PROJECTION_MODULE
     if _PROJECTION_MODULE is None:
+        from ...operators.projection.api import FUNCTIONS
         from ...operators.runtime.native import load
 
-        _PROJECTION_MODULE, _, _ = load(
-            "projection",
-            (
-                "pack_weights",
-                "workspace_size",
-                "project",
-                "grouped_workspace_size",
-                "grouped_project",
-            ),
-        )
+        _PROJECTION_MODULE, _, _ = load("projection", FUNCTIONS)
     return _PROJECTION_MODULE
 
 
 def _routing_module():
     global _ROUTING_MODULE
     if _ROUTING_MODULE is None:
+        from ...operators.routing.api import FUNCTIONS
         from ...operators.runtime.native import load
 
-        _ROUTING_MODULE, _, _ = load("routing", ("route",))
+        _ROUTING_MODULE, _, _ = load("routing", FUNCTIONS)
     return _ROUTING_MODULE
+
+
+def ordered_expert_sum(values, sorted_routes, output, topk):
+    """Add BF16 projection rows in expert order, with one unique route per slot."""
+    route_rows = torch.full(
+        (output.size(0), topk), -1, dtype=torch.int32, device=values.device
+    )
+    route_rows.view(-1).scatter_(
+        0,
+        sorted_routes,
+        torch.arange(values.size(0), dtype=torch.int32, device=values.device),
+    )
+    if values.is_cuda:
+        _routing_module().expert_sum(values, route_rows, output)
+        return
+    ordered = route_rows.masked_fill(route_rows < 0, values.size(0)).sort(dim=1).values
+    output.zero_()
+    for slot in range(topk):
+        selected = ordered[:, slot].long()
+        active = selected < values.size(0)
+        output[active] += values[selected[active]].float()
+
+
+def ordered_expert_sum_padded(
+    values, sorted_routes, counts, output, topk, status, *, route_rows=None
+):
+    """Use device counts for the live prefix and zero tokens with no local routes."""
+    if route_rows is None:
+        route_rows = torch.empty(
+            (output.size(0), topk), dtype=torch.int32, device=values.device
+        )
+    if route_rows.shape != (output.size(0), topk):
+        raise ValueError("padded expert sum needs one map slot per token and route")
+    _routing_module().expert_sum_padded(
+        values, sorted_routes, counts, output, route_rows, status
+    )
+    return output
+
+
+def require_padded_status(status):
+    """Reject invalid device metadata at the step boundary before cache commit."""
+    if status.item():
+        raise RuntimeError("padded grouped operator rejected device metadata")
 
 
 def _activation_module():
@@ -226,7 +307,27 @@ def _scale_bytes(rows, width):
     return _round128(rows) * (_round128(width) // 32)
 
 
+def invalidate_packed_weights(weight, scales):
+    storages = {
+        (value.device, value.untyped_storage().data_ptr())
+        for value in (weight, scales)
+        if value is not None
+    }
+    for key, entry in tuple(_PACKED_WEIGHTS.items()):
+        if any(
+            (value.device, value.untyped_storage().data_ptr()) in storages
+            for value in (entry.raw_weight, entry.raw_scales)
+        ):
+            del _PACKED_WEIGHTS[key]
+
+
+@retain_cached_tensor
 def _packed_weight(weight, scales, bits):
+    # Inference tensors have no version counter. Change them through Linear's
+    # state-loading entry point, which invalidates entries for shared storage.
+    versions = tuple(
+        None if value.is_inference() else value._version for value in (weight, scales)
+    )
     key = (
         weight.data_ptr(),
         scales.data_ptr(),
@@ -236,7 +337,7 @@ def _packed_weight(weight, scales, bits):
         (scales.dtype, scales.shape, scales.stride()),
     )
     cached = _PACKED_WEIGHTS.get(key)
-    if cached is not None:
+    if cached is not None and cached.versions == versions:
         return cached.packed
     module = _projection_module()
     raw_weight = weight.view(torch.uint8)
@@ -263,7 +364,7 @@ def _packed_weight(weight, scales, bits):
     )
     module.pack_weights(raw_weight, raw_scales, packed_weight, packed_scales, bits)
     packed = (packed_weight, packed_scales, width)
-    _PACKED_WEIGHTS[key] = _PackedWeightCacheEntry(packed, weight, scales)
+    _PACKED_WEIGHTS[key] = _PackedWeightCacheEntry(packed, weight, scales, versions)
     return packed
 
 
@@ -287,15 +388,18 @@ def _static_pointer_arrays(packed, device):
     weight_host = torch.tensor(
         [weight.data_ptr() for weight, _, _ in packed],
         dtype=torch.int64,
+        device="cpu",
         pin_memory=True,
     )
     scale_host = torch.tensor(
         [scales.data_ptr() for _, scales, _ in packed],
         dtype=torch.int64,
+        device="cpu",
         pin_memory=True,
     )
     weight_ptrs = weight_host.to(device, non_blocking=True)
     scale_ptrs = scale_host.to(device, non_blocking=True)
+    weight_ptrs._packed_owners = scale_ptrs._packed_owners = tuple(packed)
     return weight_ptrs, scale_ptrs, weight_host, scale_host
 
 
@@ -361,6 +465,7 @@ def grouped_fp4_gemm(
     pointers=None,
     max_rows=None,
     output_dtype=torch.bfloat16,
+    quantized=None,
 ):
     """Apply one FP4 projection to each consecutive routed expert segment.
 
@@ -368,7 +473,8 @@ def grouped_fp4_gemm(
     `counts_list`, the caller keeps the counts on the device and `max_rows`
     defaults to every input row. With `counts_list`, the host list is validated
     and supplies `max_rows`. `pointers` supplies prepared device pointer arrays
-    for the full expert order.
+    for the full expert order. `quantized` supplies a shared encoded FP8 input
+    and UE8M0 K32 scales for native execution.
     """
     output_dtype = _projection_output_dtype(output_dtype) or torch.bfloat16
     if values.ndim != 2:
@@ -399,12 +505,26 @@ def grouped_fp4_gemm(
         weight.is_cuda and weight.dtype == torch.float4_e2m1fn_x2
         for weight, _ in weights
     ):
-        encoded, input_scale = act_quant(
-            values,
-            32,
-            "ue8m0",
-            torch.float8_e8m0fnu,
-        )
+        if quantized is None:
+            encoded, input_scale = act_quant(
+                values,
+                32,
+                "ue8m0",
+                torch.float8_e8m0fnu,
+            )
+        else:
+            encoded, input_scale = quantized
+            if (
+                encoded.shape != values.shape
+                or encoded.device != values.device
+                or encoded.dtype != torch.float8_e4m3fn
+                or input_scale.shape != (values.size(0), values.size(1) // 32)
+                or input_scale.device != values.device
+                or input_scale.dtype != torch.float8_e8m0fnu
+            ):
+                raise ValueError(
+                    "shared grouped FP4 input must use matching FP8 and K32 scales"
+                )
         if pointers is None:
             packed = [_packed_weight(weight, scale, 4) for weight, scale in weights]
             weight_ptrs, scale_ptrs = _grouped_pointer_arrays(packed, values.device)
@@ -442,6 +562,8 @@ def grouped_fp4_gemm(
         )
         return output
 
+    if quantized is not None:
+        raise ValueError("shared grouped FP4 input requires native CUDA execution")
     counts_list = counts.tolist() if counts_list is None else counts_list
     outputs = []
     first = 0
@@ -468,6 +590,81 @@ def grouped_fp4_gemm(
     if outputs:
         return torch.cat(outputs, dim=0)
     return values.new_empty((0, weights[0][0].size(0)), dtype=output_dtype)
+
+
+def grouped_fp4_gemm_padded(
+    encoded,
+    input_scales,
+    counts,
+    weights,
+    *,
+    pointers,
+    status,
+    max_rows=None,
+    output_dtype=torch.bfloat16,
+    output=None,
+    scratch=None,
+):
+    """Project the device-count prefix and zero every output row after the prefix.
+
+    The caller retains packed weights and scales until completion or graph release.
+    Invalid counts or a prior status error zero the complete output. The caller
+    resets status at Execute start and rejects it before cache commit.
+    The workspace query requires capacity <= len(weights) * max_rows.
+    """
+    if encoded.ndim != 2 or counts.ndim != 1:
+        raise ValueError("padded FP4 inputs need a matrix and an expert count vector")
+    if not encoded.is_cuda:
+        raise ValueError("padded FP4 execution requires CUDA inputs")
+    if encoded.dtype not in (torch.uint8, torch.float8_e4m3fn):
+        raise ValueError("padded FP4 activations must be encoded FP8 values")
+    if input_scales.dtype not in (torch.uint8, torch.float8_e8m0fnu):
+        raise ValueError("padded FP4 activations require UE8M0 scales")
+    if not weights or len(weights) != counts.numel():
+        raise ValueError("padded FP4 weights must match the expert count")
+    output_dtype = _projection_output_dtype(output_dtype) or torch.bfloat16
+    capacity, width = encoded.shape
+    first_weight = weights[0][0]
+    if first_weight.ndim != 2:
+        raise ValueError("padded FP4 weights must be matrices")
+    outputs = first_weight.size(0)
+    for weight, scale in weights:
+        if (
+            weight.dtype != torch.float4_e2m1fn_x2
+            or weight.shape != (outputs, width // 2)
+            or scale.shape != (outputs, width // 32)
+            or scale.dtype not in (torch.uint8, torch.float8_e8m0fnu)
+            or weight.device != encoded.device
+            or scale.device != encoded.device
+        ):
+            raise ValueError("padded FP4 weight and scale shapes must match the input")
+    max_rows = max(1, capacity) if max_rows is None else max_rows
+    if output is None:
+        output = torch.empty(
+            (capacity, outputs), dtype=output_dtype, device=encoded.device
+        )
+    elif output.dtype != output_dtype or output.shape != (capacity, outputs):
+        raise ValueError("padded FP4 output storage must match its shape and dtype")
+    module = _projection_module()
+    if scratch is None:
+        scratch = torch.empty(
+            module.grouped_workspace_size(
+                capacity, len(weights), max_rows, outputs, width
+            ),
+            dtype=torch.uint8,
+            device=encoded.device,
+        )
+    module.grouped_project_padded(
+        encoded.view(torch.uint8),
+        input_scales.view(torch.uint8),
+        *pointers,
+        counts,
+        output,
+        scratch,
+        max_rows,
+        status,
+    )
+    return output
 
 
 def _logical_row_count(rows, logical_rows):
@@ -507,7 +704,9 @@ def fp32_project(values, weight, *, logical_rows=0, workspace=None):
     ):
         module = _hyperconnection_module()
         if workspace is None:
-            workspace = torch.empty(0, dtype=torch.uint8, device=values.device)
+            workspace = torch.empty(
+                module.workspace_size(rows), dtype=torch.uint8, device=values.device
+            )
         output = torch.empty(
             (rows, weight.size(0)), dtype=torch.float32, device=values.device
         )

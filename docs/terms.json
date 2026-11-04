@@ -173,6 +173,15 @@
       ]
     },
     {
+      "term": "projection wave",
+      "part_of_speech": "noun",
+      "meaning": "A group of token rows used together for routed expert computation. Its collective messages can have smaller row counts.",
+      "translation": "供 routed expert 计算共同使用的一组 token 行. 其 collective 消息可以使用更少的行.",
+      "forms": [
+        "projection wave"
+      ]
+    },
+    {
       "term": "push",
       "part_of_speech": "verb",
       "meaning": "Send Git revisions to a remote repository.",

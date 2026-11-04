@@ -1,7 +1,7 @@
 # Operator performance accounting
 
 The [microbench contract](operators.md) defines fixed cases, calibration, timing, and acceptance.
-This document defines the `operator-reference-v3` resource policy.
+This document defines the `operator-reference-v4` resource policy.
 The [calculation](../../../development/operators/accounting.py) uses the HTTP resource rates and resource-time formula.
 It has a separate version and does not change HTTP accounting.
 
@@ -90,6 +90,7 @@ new_max_ratio = old_max_ratio * old_reference / new_reference
 
 Keep the previous accounting identity, resource values, and ratio in migration provenance.
 This conversion must not increase the approved maximum latency.
+The [migration command](../../../development/operators/migrate_accounting.py) records each previous limit and rounds the new ratio downward when necessary.
 
 Restore state and RNG from prepared device copies before each independent sample.
 Complete each reset before the start event.

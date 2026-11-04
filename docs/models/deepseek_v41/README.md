@@ -19,8 +19,16 @@ TEP4 and DEP4 target decode use Eager execution.
 
 The supported public capability is text.
 Image preparation is kept out of the public capability until the tokenizer, image processor, rank execution, and HTTP checks are connected.
-The current DEP4 command selects the TEP4 executor as a functional fallback.
-It does not provide DEP4 request ownership or expert dispatch.
+
+DEP4 uses Rust request owners and four separate logical cache pools.
+Each owner computes dense layers with complete weights and reads complete Engram rows from its host mapping.
+Routed experts use BF16 row dispatch and return FP32 local sums.
+Empty ranks participate in all expert exchanges.
+Target and proposal rounds coordinate ranks with different local call counts.
+DEP4 GPU numerical, state, capacity, and HTTP acceptance are incomplete.
+
+Dense owners keep MP4 partial rounding for row projections and MP4 vocabulary partitions.
+Routed FP32 sums keep the [local expert order](gemm.md#local-expert-sum) in TP4, TEP4, and DEP4.
 
 The physical cache keeps model pages behind the Rust logical block tables.
 It supports prefix reuse, partial block copies, host snapshots, and restoration.
@@ -83,7 +91,8 @@ The physical cache setting must cover the requested prompt and output.
 
 The Python worker keeps model cache state in rank-local tensors and physical pages.
 Rust logical cache transfers return completion records for the protocol seam.
-DeepSeek-specific DEP4 ownership stays in progress.
+DEP4 releases request owners only after all ranks acknowledge completion.
+Cache snapshots keep their owner rank after request release.
 Nonzero multi-token prefill uses the fused chunk path.
 Target and MTP seed chunks keep total native rows below the operator limit.
 

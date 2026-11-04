@@ -239,6 +239,7 @@ async fn executed(socket: &mut DealerSocket, message: &ExecuteMsg) {
         WorkerMessage::ExecuteResult(ExecuteResultMsg {
             rpc_id: message.rpc_id,
             outputs,
+            rank_completions: Vec::new(),
         }),
     )
     .await;

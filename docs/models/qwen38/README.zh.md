@@ -45,6 +45,11 @@ Prefill context 直接持有 target 隐藏 tensor.
 Key 变化会在替换输入前关闭旧 context graph.
 包含媒体的 context 使用 Eager 执行.
 
+当至少有两个请求时, 约束 draft 可以重叠 GPU 计算与 CPU 采样准备.
+Worker 在等待 token 读回前提交下一个 draft.
+采样在调用方 stream 上的 grammar 和 penalty 上传后执行.
+Worker 丢弃 draft 计算时会恢复 KV 行.
+
 ## 媒体
 
 Worker 下载并解码媒体.

@@ -22,6 +22,7 @@ pub struct Request {
     pub max_tokens: usize,
     pub block_hashes: Vec<BlockHash>,
     pub cache_salt: Option<BlockHash>,
+    pub cache_owner_rank: Option<u32>,
     pub record_partial_prefix: bool,
     pub status: RequestStatus,
 }
@@ -45,6 +46,7 @@ impl Request {
             max_tokens,
             block_hashes,
             cache_salt: None,
+            cache_owner_rank: None,
             record_partial_prefix: true,
             status: RequestStatus::Waiting,
         }

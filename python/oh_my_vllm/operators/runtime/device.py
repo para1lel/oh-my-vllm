@@ -248,6 +248,8 @@ class Device:
         owner = getattr(operation, "__self__", operation)
         acquire = getattr(owner, "graph_lease", None)
         with ExitStack() as resources:
+            # Failed cleanup transfers these input owners with the retained graph.
+            resources.callback(lambda owners=(operation, owner): None)
             if acquire is not None:
                 resources.enter_context(acquire())
             graph = self.capture(operation)

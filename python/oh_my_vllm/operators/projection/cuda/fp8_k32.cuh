@@ -11,10 +11,35 @@ namespace encoded_projection {
 
 constexpr int fp8_tile_width = 512, fp8_tile_groups = fp8_tile_width / 32;
 
+template <class Output, class ScaleLayout, int Bits, bool Grouped>
+void launch_half_k32(const uint8_t *input, const uint8_t *weight, const uint8_t *input_scales,
+                     const uint8_t *weight_scales, Output *output, const int64_t *weight_ptrs,
+                     const int64_t *scale_ptrs, const int32_t *offsets, const int32_t *tiles,
+                     int groups, int rows, int outputs, int width, int weight_stride,
+                     ScaleLayout layout, cudaStream_t stream);
+
+template <class Output, class ScaleLayout>
+void launch_tcgen_k32(const uint8_t *input, const uint8_t *weight, const uint8_t *input_scales,
+                      const uint8_t *weight_scales, Output *output, int rows, int outputs,
+                      int width, ScaleLayout weight_layout, cudaStream_t stream);
+
 __device__ __forceinline__ float fp8_scale(uint8_t code) {
   if (code == 255)
     return __uint_as_float(0x7fc00000u);
   return __uint_as_float(code == 0 ? 0x00400000u : uint32_t(code) << 23);
+}
+
+__device__ __forceinline__ float fp8_scaled_add(float raw, uint8_t activation, uint8_t weight,
+                                                float total) {
+  int combined = int(activation) + int(weight);
+  // K32 raw dots are multiples of 2^-18 and have magnitude below 2^23.
+  // These bounds make the first power-of-two multiply exact, including subnormals.
+  if (activation <= 232 && weight != 255 && combined >= 105 && combined <= 381) {
+    int exponent = combined - 254;
+    uint32_t bits = exponent >= -126 ? uint32_t(exponent + 127) << 23 : 1u << (exponent + 149);
+    return __fmaf_rn(raw, __uint_as_float(bits), total);
+  }
+  return __fmaf_rn(__fmul_rn(raw, fp8_scale(activation)), fp8_scale(weight), total);
 }
 
 __device__ __forceinline__ int fp8_address(int row, int column) {
@@ -242,6 +267,11 @@ void launch_fp8_k32(const uint8_t *input, const uint8_t *weight, const uint8_t *
   else if (outputs <= 1024 && width >= 1024)
     fp8_k32_kernel<Output, ScaleLayout, 1><<<dim3(outputs / 8, (rows + 15) / 16), 128, 0, stream>>>(
         input, weight, input_scales, weight_scales, output, rows, outputs, width, weight_layout);
+  else if (rows >= 128 && outputs > 1024 && outputs % 256 == 0 && width <= 6144 &&
+           reinterpret_cast<uintptr_t>(input) % 128 == 0 &&
+           reinterpret_cast<uintptr_t>(weight) % 128 == 0)
+    launch_tcgen_k32(input, weight, input_scales, weight_scales, output, rows, outputs, width,
+                     weight_layout, stream);
   else if (rows >= 32)
     fp8_k32_kernel<Output, ScaleLayout, 4, 2>
         <<<dim3(outputs / 32, (rows + 31) / 32), 128, 0, stream>>>(input, weight, input_scales,

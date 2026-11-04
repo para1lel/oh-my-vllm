@@ -916,8 +916,8 @@ class DeepSeekSpeculation(unittest.TestCase):
     def test_execute_groups_complete_initial_prefills(self):
         worker = Worker.__new__(Worker)
         worker.requests = {
-            1: SimpleNamespace(cache_slot=None, history=[10, 11, 12]),
-            2: SimpleNamespace(cache_slot=None, history=[20, 21, 22]),
+            1: SimpleNamespace(cache_slot=None, history=[10, 11, 12], prompt_len=3),
+            2: SimpleNamespace(cache_slot=None, history=[20, 21, 22], prompt_len=3),
         }
         worker._execute_prefill_group = Mock(
             return_value={

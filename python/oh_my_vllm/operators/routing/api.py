@@ -2,11 +2,19 @@
 
 Logits and biases must be finite, with finite corrected scores. Mask values
 are zero for text and one for images. Invalid rows produce NaN coefficients.
+
+Expert sums consume BF16 projection rows in increasing expert order. The padded
+sum uses device counts for the live prefix of values and sorted route positions.
+Its INT32 map has shape (token_capacity, topk), with at most six route slots.
+Unused token rows get zero FP32 output. Invalid counts, positions, or duplicate
+slots set caller-owned INT32 status storage of shape (1,). Status persists until
+the caller resets it at Execute start. A nonzero status prevents values reads
+and zeros the complete output. Check it at the step boundary before cache commit.
 """
 
 from typing import NamedTuple
 
-FUNCTIONS = ("route",)
+FUNCTIONS = ("route", "expert_sum", "expert_sum_padded")
 
 
 class Weights(NamedTuple):

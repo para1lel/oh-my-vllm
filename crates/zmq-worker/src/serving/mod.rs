@@ -6,6 +6,7 @@ mod sampling;
 #[cfg(all(test, unix))]
 mod tests;
 
+use crate::models::ServiceCache;
 use crate::{client::WorkerClient, error::Error as WorkerError, models::output::Parser};
 use anyhow::{Context, Result};
 use axum::{
@@ -22,7 +23,6 @@ use axum::{
 };
 use clap::Args;
 use events::Output;
-use oh_my_vllm_kv_cache::HybridCoordinator;
 use oh_my_vllm_scheduler::{Request as EngineRequest, Scheduler};
 use request::Request;
 use resources::{Budget, Lease, serialized_bytes, unix_seconds};
@@ -543,9 +543,9 @@ async fn delete(State(app): State<App>, Path(id): Path<String>) -> Response {
     }
 }
 
-pub async fn serve(
+pub async fn serve<P: ServiceCache>(
     client: WorkerClient,
-    scheduler: Scheduler<HybridCoordinator>,
+    scheduler: Scheduler<P>,
     args: ServeArgs,
 ) -> Result<()> {
     let model_name = args
@@ -782,9 +782,9 @@ async fn cancel_admit(client: &mut WorkerClient, pending: PendingAdmission) -> R
     Ok(())
 }
 
-async fn wait_admit(
+async fn wait_admit<P: ServiceCache>(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler<HybridCoordinator>,
+    scheduler: &mut Scheduler<P>,
     active: &mut BTreeMap<u64, Active>,
     pending: &mut Option<PendingAdmission>,
 ) -> Result<()> {
@@ -805,9 +805,9 @@ async fn wait_admit(
     }
 }
 
-async fn complete_admit(
+async fn complete_admit<P: ServiceCache>(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler<HybridCoordinator>,
+    scheduler: &mut Scheduler<P>,
     active: &mut BTreeMap<u64, Active>,
     pending: PendingAdmission,
     prepare_result: std::result::Result<Vec<u32>, WorkerError>,
@@ -909,6 +909,7 @@ async fn complete_admit(
             &[0x6d65646961, id],
         ));
     }
+    client.bind_request_cache(&mut engine_request);
     if !scheduler.add_request(engine_request) {
         client.cancel_prepare(id).await?;
         let _ = ready.send(Err((
@@ -919,13 +920,13 @@ async fn complete_admit(
     }
     if ready.send(Ok(())).is_err() {
         scheduler.abort(id);
-        client.cancel_prepare(id).await?;
+        client.cancel_scheduled_request(id).await?;
         running.fail_with_status("client disconnected", "cancelled");
         return Ok(());
     }
     if let Err(error) = send_events(&mut running, start_events) {
         scheduler.abort(id);
-        client.cancel_prepare(id).await?;
+        client.cancel_scheduled_request(id).await?;
         running.fail_delivery(&error);
         return Ok(());
     }
@@ -1003,13 +1004,14 @@ struct EngineContext {
     step_timeout: Duration,
 }
 
-async fn engine(
-    client: WorkerClient,
-    mut scheduler: Scheduler<HybridCoordinator>,
+async fn engine<P: ServiceCache>(
+    mut client: WorkerClient,
+    mut scheduler: Scheduler<P>,
     mut incoming: mpsc::Receiver<Submission>,
     context: EngineContext,
     mut shutdown: oneshot::Receiver<()>,
 ) {
+    scheduler.cache_policy().attach_client(&mut client);
     let health = &context.health;
     let configuration = client.configuration();
     scheduler.enable_host_cache(client.host_cache_bytes);
@@ -1025,6 +1027,9 @@ async fn engine(
     let mut restarts = 0u64;
     let mut launches = 0u64;
     loop {
+        scheduler
+            .cache_policy()
+            .attach_client(client.as_mut().unwrap());
         let mut active = BTreeMap::new();
         let mut pending = None;
         let (result, stopping) = tokio::select! {
@@ -1185,9 +1190,9 @@ async fn execute(
     Ok(output)
 }
 
-async fn run_engine(
+async fn run_engine<P: ServiceCache>(
     client: &mut WorkerClient,
-    scheduler: &mut Scheduler<HybridCoordinator>,
+    scheduler: &mut Scheduler<P>,
     incoming: &mut mpsc::Receiver<Submission>,
     context: &EngineContext,
     epoch: u64,
@@ -1472,9 +1477,9 @@ async fn run_engine(
     Ok(())
 }
 
-fn update_resource_counts(
+fn update_resource_counts<P: ServiceCache>(
     health: &Mutex<Value>,
-    scheduler: &Scheduler<HybridCoordinator>,
+    scheduler: &Scheduler<P>,
     active: usize,
     pending: usize,
 ) {

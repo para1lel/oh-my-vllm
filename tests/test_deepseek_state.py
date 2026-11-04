@@ -123,6 +123,64 @@ class DeepSeekStateExports(unittest.TestCase):
                 torch.testing.assert_close(actual_kv, expected_kv)
                 torch.testing.assert_close(actual_score, expected_score)
 
+    def test_varlen_graph_endpoints_match_eager_windows_and_compressor_tails(self):
+        from types import SimpleNamespace
+
+        from oh_my_vllm.models.deepseek_v41.decode_state import GraphStateExports
+        from oh_my_vllm.models.deepseek_v41.state import StateExports
+
+        slots, positions, length = (1, 0), (9, 15), 6
+        bindings = SimpleNamespace(
+            batch=2,
+            length=length,
+            cache_slots_cpu=slots,
+            positions_cpu=positions,
+            cache_slots=torch.tensor(slots),
+            position=torch.tensor(positions).view(2, 1),
+        )
+        ring = torch.zeros(2, 8, 1)
+        for slot, start in zip(slots, positions, strict=True):
+            for position in range(start - 8, start):
+                ring[slot, position % 8] = position
+        values = torch.tensor(positions).view(2, 1, 1) + torch.arange(length).view(
+            1, -1, 1
+        )
+        values = values.float()
+        tail_values = torch.tensor(positions).view(2, 1, 1) + torch.arange(
+            -1, length
+        ).view(1, -1, 1)
+        tail_values = tail_values.float()
+        kv, score = torch.zeros(2, 2, 1), torch.zeros(2, 2, 1)
+        exports = []
+        for _ in range(2):
+            export = StateExports()
+            for slot, start in zip(slots, positions, strict=True):
+                export.begin(slot, start, range(start + 1, start + length + 1))
+            export.bind(slots, positions=positions)
+            exports.append(export)
+        exports[0].window(ring, values, max(positions))
+        exports[0].tail(kv, score, tail_values, tail_values + 100, max(positions))
+        captured = GraphStateExports(bindings, max(positions))
+        captured.window(ring, values, max(positions))
+        captured.tail(kv, score, tail_values, tail_values + 100, max(positions))
+        captured.publish(exports[1])
+        values.fill_(-1)
+        tail_values.fill_(-1)
+        for slot, start in zip(slots, positions, strict=True):
+            for end in range(start + 1, start + length + 1):
+                torch.testing.assert_close(
+                    exports[1].window_state(slot, end, ring),
+                    exports[0].window_state(slot, end, ring),
+                    rtol=0,
+                    atol=0,
+                )
+                for actual, expected in zip(
+                    exports[1].tail_state(slot, end, kv),
+                    exports[0].tail_state(slot, end, kv),
+                    strict=True,
+                ):
+                    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
     def test_capture_rejects_an_unbound_batch_and_incomplete_endpoint(self):
         from oh_my_vllm.models.deepseek_v41.state import StateExports
 

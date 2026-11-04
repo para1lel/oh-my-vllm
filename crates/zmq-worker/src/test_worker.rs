@@ -80,6 +80,7 @@ impl TestWorker {
             logical_num_blocks,
             mamba_blocks: config.mamba_blocks.unwrap(),
             host_cache_bytes: config.host_cache_bytes.unwrap_or(0),
+            execution: crate::models::execution::ModelExecution::new(model_family, &descriptor),
             descriptor,
             model_family,
             config,

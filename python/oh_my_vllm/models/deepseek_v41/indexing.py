@@ -8,6 +8,36 @@ import torch
 INDEX_SCORE_WORK_BYTES = 256 * 1024 * 1024
 
 
+def topk_indices(scores, count, *, request_widths=None):
+    if scores.ndim != 3 or type(count) is not int or not 0 <= count <= scores.size(-1):
+        raise ValueError("index top-k requires [batch, query, width] and a valid count")
+    if request_widths is None:
+        return scores.topk(count, dim=-1, sorted=False).indices.sort(dim=-1).values
+    if len(request_widths) != scores.size(0) or any(
+        type(width) is not int or not 0 <= width <= scores.size(-1)
+        for width in request_widths
+    ):
+        raise ValueError(
+            "index top-k widths must cover each request within the score table"
+        )
+    indices = torch.full(
+        (*scores.shape[:2], count),
+        scores.size(-1),
+        dtype=torch.int64,
+        device=scores.device,
+    )
+    for request, width in enumerate(request_widths):
+        selected = min(count, width)
+        if selected:
+            indices[request, :, :selected] = (
+                scores[request, :, :width]
+                .topk(selected, dim=-1, sorted=False)
+                .indices.sort(dim=-1)
+                .values
+            )
+    return indices
+
+
 def score_chunks(
     query: torch.Tensor,
     keys: torch.Tensor,

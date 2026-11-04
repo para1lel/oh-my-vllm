@@ -41,6 +41,20 @@ class TorchAdapterTests(unittest.TestCase):
     def test_cpu_stream_is_the_zero_stream(self):
         self.assertEqual(torch_adapter.current_stream("cpu"), 0)
 
+    def test_stream_scope_restores_the_previous_raw_stream_after_failure(self):
+        device = tvm_ffi.device("cuda:0")
+        previous = tvm_ffi.get_raw_stream(device)
+        with torch_adapter.use_stream("cuda:0", 7):
+            self.assertEqual(tvm_ffi.get_raw_stream(device), 7)
+            with (
+                self.assertRaisesRegex(RuntimeError, "submit failed"),
+                torch_adapter.use_stream("cuda:0", 11),
+            ):
+                self.assertEqual(tvm_ffi.get_raw_stream(device), 11)
+                raise RuntimeError("submit failed")
+            self.assertEqual(tvm_ffi.get_raw_stream(device), 7)
+        self.assertEqual(tvm_ffi.get_raw_stream(device), previous)
+
     def test_native_shape_is_created_inside_the_adapter(self):
         shape = torch_adapter.native_shape((2, 3))
 
@@ -107,6 +121,7 @@ class CudaTorchAdapterTests(unittest.TestCase):
         device = Device()
         uploads = device.uploads()
         stream = torch.cuda.Stream(device="cuda:0")
+        other_stream = torch.cuda.Stream(device="cuda:0")
         calls = []
 
         def raw_stream():
@@ -139,20 +154,29 @@ class CudaTorchAdapterTests(unittest.TestCase):
                 ),
                 torch.cuda.stream(stream),
             ):
-                uploads.copy(upload_output, source)
-                uploads.prepare_range(range_output, capacity_bytes=32).copy(
-                    source[:8], offset=16
-                )
+                snapshot = uploads.prepare(upload_output, source)
+                uploads.update(snapshot.copy_, source)
+                source.add_(1)
+                ranged = uploads.prepare_range(range_output, capacity_bytes=32)
+                ranged.copy(source[:8], offset=16)
+                ranged.copy(source[:8] + 1, offset=16)
+                ranged.copy(source[8:12], offset=32)
                 setup_output = device.upload(source)
+                with torch.cuda.stream(other_stream):
+                    uploads.update(snapshot.copy_, source + 1)
             torch.cuda.synchronize()
             self.assertEqual(
                 [name for name, _ in calls],
-                ["upload_bytes", "upload_bytes", "copy_bytes"],
+                ["upload_bytes"] * 4 + ["copy_bytes", "upload_bytes"],
             )
-            self.assertEqual({value for _, value in calls}, {stream.cuda_stream})
-            self.assertTrue(torch.equal(device.download(upload_output, None), source))
+            self.assertEqual({value for _, value in calls[:-1]}, {stream.cuda_stream})
+            self.assertEqual(calls[-1][1], other_stream.cuda_stream)
+            self.assertTrue(
+                torch.equal(device.download(upload_output, None), source + 1)
+            )
             expected = torch.zeros(64, dtype=torch.uint8)
-            expected[16:24] = source[:8]
+            expected[16:24] = source[:8] + 1
+            expected[32:36] = source[8:12]
             self.assertTrue(torch.equal(device.download(range_output, None), expected))
             self.assertTrue(torch.equal(device.download(setup_output, None), source))
         finally:

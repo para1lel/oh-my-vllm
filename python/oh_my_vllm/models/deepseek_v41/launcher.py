@@ -57,8 +57,11 @@ def _rank_entry(
     if os.getppid() != parent_pid:
         os.kill(os.getpid(), signal.SIGTERM)
     os.environ["CUDA_VISIBLE_DEVICES"] = device
-    if rank:
-        os.environ.pop("OH_MY_VLLM_EXECUTION_TRACE", None)
+    trace_path = os.environ.get("OH_MY_VLLM_EXECUTION_TRACE")
+    if trace_path:
+        from .trace import rank_trace_path
+
+        os.environ["OH_MY_VLLM_EXECUTION_TRACE"] = rank_trace_path(trace_path, rank)
     import torch
     import torch.distributed as dist
 
@@ -79,7 +82,12 @@ def _rank_entry(
             if message is None:
                 break
             try:
-                reply = worker.handle(message)
+                if strategy == "dep4":
+                    from .rank_plan import handle_rank
+
+                    reply = handle_rank(worker, message, rank)
+                else:
+                    reply = worker.handle(message)
                 results.send((rank, reply if reply is not None else {"type": "ack"}))
             except Exception as error:
                 results.send(
@@ -162,6 +170,12 @@ class GroupWorker:
                 self.result_readers.append(reader)
             ready = self._collect(STARTUP_TIMEOUT_SECONDS)
             self._ready = self._validate_ready(ready)
+            if strategy == "dep4":
+                memory = dict(self._ready.get("cache_memory") or {})
+                memory["ranks"] = [
+                    ready[rank].get("cache_memory") for rank in range(WORLD_SIZE)
+                ]
+                self._ready["cache_memory"] = memory
         except BaseException:
             self.close()
             raise
@@ -268,7 +282,13 @@ class GroupWorker:
         except BaseException:
             self.close()
             raise
-        return replies[0] if replies[0].get("type") != "ack" else None
+        if self.strategy == "dep4":
+            from .rank_plan import merge_replies
+
+            reply = merge_replies(message, replies)
+        else:
+            reply = replies[0]
+        return reply if reply.get("type") != "ack" else None
 
     def close(self):
         if getattr(self, "_closed", False):

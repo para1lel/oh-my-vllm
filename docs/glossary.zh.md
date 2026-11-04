@@ -21,6 +21,7 @@
 | `operator workspace` | 名词 | 持有算子计算所用临时 GPU 张量和可变 native 执行资源的对象. |
 | `prefill` | 名词 | worker 对 prompt 或已接受历史执行的操作. |
 | `prefix reuse` | 名词 | 对相同的已接受 token 前缀复用缓存状态. |
+| `projection wave` | 名词 | 供 routed expert 计算共同使用的一组 token 行. 其 collective 消息可以使用更少的行. |
 | `push` | 动词 | 将 Git 修订版本发送至远端仓库. |
 | `rollback` | 名词 | 移除尚未接受的 token 或 cache 状态. |
 | `state commit` | 名词 | 接受已验证 token 历史和 cache 状态的操作. |

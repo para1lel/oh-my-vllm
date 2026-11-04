@@ -11,6 +11,7 @@ from ...operators.mtp.plan import accept_plan, context_plan, draft_plan
 from ...operators.mtp.workspace import prepare_accept, prepare_context, prepare_draft
 from ...worker.metadata import Metadata
 from .draft_chain import DraftChain, can_chain
+from .draft_pipeline import DraftPipeline, can_pipeline
 from .model import MAX_GRAPH_WORKSPACES
 from .sampling import Sampling
 
@@ -170,6 +171,7 @@ class Draft(GraphOperation):
         self.output = None
         self._row_bindings = None
         self._row_views = None
+        self.previous_hidden = None
 
     def row_views(self):
         bindings = (
@@ -204,6 +206,8 @@ class Draft(GraphOperation):
         self.operation.close()
 
     def run(self):
+        if self.previous_hidden is not None:
+            self.copy(self.hidden, self.previous_hidden)
         positions, slots, tables, starts, lengths = self.metadata
         inputs = mtp.Inputs(
             mtp.InputView(
@@ -219,16 +223,14 @@ class Draft(GraphOperation):
 
 
 class Acceptance(GraphOperation):
-    def __init__(self, device, batch):
+    def __init__(self, device, batch, arrays):
         super().__init__(device)
         self.operation = prepare_accept(accept_plan(batch=batch), device)
         self.target = device.empty((batch, 5, 248320), "float32")
         self.target_tokens = device.empty((batch, 5), "int64")
         self.proposal = device.empty((batch, 4, 248320), "float32")
-        self.drafts = device.empty((batch, 5), "int64")
-        self.rng = device.empty((batch, 2), "uint64")
-        self.slots = device.empty((batch, 5), "int32")
-        self.gather = device.empty((batch * 5,), "int32")
+        self.metadata_inputs = Metadata(device, arrays, single_upload=True)
+        self.gather, self.drafts, self.slots, self.rng = self.metadata_inputs.arrays
         self.proposal_rows = tuple(
             device.view(self.proposal, (4, 248320), index * 4 * 248320)
             for index in range(batch)
@@ -244,6 +246,7 @@ class Acceptance(GraphOperation):
 
     def close(self):
         super().close()
+        self.metadata_inputs.close()
         self.operation.close()
 
     def run(self):
@@ -277,6 +280,7 @@ class Speculation:
         self.context_key = None
         self.drafts = {}
         self.chains = {}
+        self.pipelines = {}
         self.acceptance = {}
         self.media = media
         self.trace = trace
@@ -286,6 +290,7 @@ class Speculation:
             *self.context_decode.values(),
             *self.drafts.values(),
             *self.chains.values(),
+            *self.pipelines.values(),
             *self.acceptance.values(),
         ):
             operation.close()
@@ -306,12 +311,6 @@ class Speculation:
             value, residual, indices, owners, graph, prefixes=prefixes, sample=False
         )
         count = len(requests)
-        if count not in self.acceptance:
-            self.acceptance[count] = Acceptance(d, count)
-        operation = self.acceptance[count]
-        operation.greedy = sampler.greedy and all(
-            request.drafts_greedy for request in requests
-        )
         target_rows, drafts, slots, random = [], [], [], []
         for index, request in enumerate(requests):
             first, last = batch.schedule.sequence_rows[index : index + 2]
@@ -340,20 +339,30 @@ class Speculation:
                     break
             slots.append(selected[:5])
             random.append((request.seed ^ 0xD1B54A32D192ED03, request.accept_offset))
-            destination = operation.proposal_rows[index]
+            if not request.drafts_greedy and request.proposals is None:
+                raise ValueError("stochastic drafts require proposal probabilities")
+        arrays = (
+            np.asarray(target_rows, np.int32),
+            np.asarray(drafts, np.int64),
+            np.asarray(slots, np.int32),
+            np.asarray(random, np.uint64),
+        )
+        if count not in self.acceptance:
+            self.acceptance[count] = Acceptance(d, count, arrays)
+        else:
+            self.acceptance[count].metadata_inputs.update(arrays)
+        operation = self.acceptance[count]
+        operation.greedy = sampler.greedy and all(
+            request.drafts_greedy for request in requests
+        )
+        for index, request in enumerate(requests):
             if not request.drafts_greedy:
-                if request.proposals is None:
-                    raise ValueError("stochastic drafts require proposal probabilities")
-                operation.copy(destination, request.proposals)
-        operation.copy(operation.gather, torch.tensor(target_rows, dtype=torch.int32))
+                operation.copy(operation.proposal_rows[index], request.proposals)
         d.module.gather_rows(
             operation.target_token_rows if operation.greedy else operation.target_rows,
             sampler.token_rows if operation.greedy else probability,
             operation.gather,
         )
-        operation.copy(operation.drafts, torch.tensor(drafts, dtype=torch.int64))
-        operation.copy(operation.slots, torch.tensor(slots, dtype=torch.int32))
-        operation.copy(operation.rng, torch.tensor(random, dtype=torch.uint64))
         operation.capacity = self.cache.slots
         operation.execute(graph)
         kept = d.download(operation.operation.outputs.tokens, None)
@@ -530,6 +539,7 @@ class Speculation:
         for index in active:
             request = batch.requests[index]
             request.drafts = []
+            request.prepare_draft_guard()
             request.drafts_greedy = bool(request.parameters()[0] == 0)
             if not request.drafts_greedy and request.proposals is None:
                 request.proposals = d.scratch((4, 248320), "float32")
@@ -556,7 +566,21 @@ class Speculation:
             operation.store([batch.requests[index] for index in active])
             return
         previous = {index: endpoints[index][0] for index in active}
-        for stage in range(4):
+        first_stage = 0
+        if can_pipeline(batch, active, graph, self.cache.blocks):
+            count = len(active)
+            if count not in self.pipelines:
+                self.pipelines[count] = DraftPipeline(
+                    d,
+                    [Draft(d, self.weights, count, stage == 0) for stage in range(4)],
+                    self.cache.fa[-1],
+                )
+            operation = self.pipelines[count]
+            operation.prepare(batch, active, endpoints)
+            first_stage, active, previous = operation.execute(
+                batch, active, graph, self.record_draft
+            )
+        for stage in range(first_stage, 4):
             if not active:
                 break
             count = len(active)

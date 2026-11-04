@@ -19,7 +19,7 @@ from development.serving.kernels import (
     serial_seconds,
 )
 
-VERSION = "operator-reference-v3"
+VERSION = "operator-reference-v4"
 CACHE_CAPACITY = 128 * 1024 * 1024
 VOCABULARY = 248320
 

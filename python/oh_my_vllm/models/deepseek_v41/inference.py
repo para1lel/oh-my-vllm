@@ -4,7 +4,6 @@ import copy
 import hashlib
 import json
 import os
-import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,14 +19,22 @@ from .adapter import (
     MAX_CONTEXT_TOKENS,
     validate_config,
 )
+from .batch import execute_decode_group
 from .cache import DeepSeekCache
-from .decode import DecodeBindings, DecodeGraph, EngramStage, decode_cycle
+from .decode import (
+    DecodeBindings,
+    DecodeGraph,
+    EngramStage,
+    capture_decode_graph,
+    decode_cycle,
+)
 from .descriptor import build_descriptor
 from .loader import DEFAULT_TILE_ROWS, RankLoader
 from .model import ModelArgs, Transformer, context_token_bucket
 from .request import Request
 from .speculation import verify_greedy_drafts
 from .tokenizer import Tokenization
+from .trace import TargetTrace, runtime_identity
 
 DEFAULT_CACHE_CONTEXT = 65536
 MAX_NATIVE_ROWS = 384
@@ -100,7 +107,7 @@ class Worker:
         ).lower()
         if strategy not in {"tp4", "tep4", "dep4"}:
             raise ValueError("DeepSeek strategy must be TP4, TEP4, or DEP4")
-        model_strategy = "tep4" if strategy == "dep4" else strategy
+        model_strategy = strategy
         inference_bytes = (root / "inference/config.json").read_bytes()
         if hashlib.sha256(inference_bytes).hexdigest() != INFERENCE_CONFIG_SHA256:
             raise ValueError("DeepSeek inference configuration identity differs")
@@ -166,6 +173,11 @@ class Worker:
         with self.startup_trace.measure("weight_load"):
             self.weight_info = self.weights.load_into(self.model)
         self.model.eval()
+        if strategy == "dep4":
+            from .dep4 import Dep4Executor
+
+            self.dep4_executor = Dep4Executor(self.model)
+            self.target_call_id_provider = lambda: self.dep4_executor.call
         self.decode_cycle = decode_cycle(self.model)
         # TEP4 and DEP4 read routed counts on the host, so they cannot capture.
         self.decode_graph_enabled = (
@@ -183,6 +195,11 @@ class Worker:
         self.decode_graphs = {}
         self.decode_bindings = {}
         self.decode_engram = {}
+        self.batch_decode_enabled = (
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_BATCH_DECODE") == "1"
+        )
+        self.routing_trace_enabled = bool(os.environ.get("OH_MY_VLLM_EXECUTION_TRACE"))
+        self.target_call = 0
         self.requests = {}
         self.slots = set(range(config["max_num_seqs"]))
         with self.startup_trace.measure("cache_construct"):
@@ -228,8 +245,20 @@ class Worker:
                     "prefill": "eager",
                     "decode_only": "eager",
                     "mixed": "eager",
+                    "runtime": (
+                        runtime_identity(self.rank)
+                        if os.environ.get("OH_MY_VLLM_EXECUTION_TRACE")
+                        else None
+                    ),
                 },
             )
+        if strategy == "dep4":
+            if self.routing_trace_enabled:
+                from .dep4_trace import Dep4Trace
+
+                self.trace = Dep4Trace(self, self.trace)
+                self.dep4_executor.accounting = self.trace
+            self.dep4_executor.record_round = self.trace.record
         self.startup_trace.record("ready")
 
     def ready(self):
@@ -245,6 +274,11 @@ class Worker:
                 "physical_cache": {
                     "block_tokens": self.cache.block_tokens,
                     "host_cache_bytes": self.cache.host_limit,
+                    "fa_capacity": self.cache.fa_capacity,
+                    "accepted_state_capacity": self.cache.mamba_capacity,
+                    "request_slots": self.args.max_batch_size,
+                    "context_tokens": self.runtime_max_context,
+                    "kv_dtype": "bf16",
                 },
             },
         }
@@ -307,6 +341,10 @@ class Worker:
         request.cache_slot = None
 
     def _release(self, request_id):
+        accounting = getattr(getattr(self, "dep4_executor", None), "accounting", None)
+        if accounting is not None:
+            accounting.frontiers.pop(request_id, None)
+        getattr(self, "target_trace_frontiers", {}).pop(request_id, None)
         request = self.requests.pop(request_id, None)
         if request is not None:
             self._free_slot(request)
@@ -343,7 +381,9 @@ class Worker:
                         "DeepSeek resident cache position differs from the schedule"
                     )
 
-    def _decode_graph_step(self, token, position, slot, *, collect_main_hidden):
+    def _decode_graph_step(
+        self, token, position, slot, *, collect_main_hidden, routes=None
+    ):
         """Replay a captured decode step, or return None for the Eager path.
 
         A graph is captured on the first step of each (slot, context bucket,
@@ -367,6 +407,7 @@ class Worker:
             context,
             position % self.decode_cycle,
             collect_main_hidden,
+            routes is not None,
         )
         graph = self.decode_graphs.get(key)
         if graph is None:
@@ -381,35 +422,16 @@ class Worker:
                 position,
                 collect_main_hidden=collect_main_hidden,
                 engram_values=values,
+                routing_trace=routes,
             )
-            try:
-                graph.capture()
-            except Exception as error:
-                # Capture uses the model collectives. A local unwind would leave the
-                # other ranks in a collective, so report and exit this rank process.
-                message = (
-                    f"DeepSeek graph capture failed on rank {self.rank}: {error!r}"
-                )
-                try:
-                    print(message, file=sys.stderr, flush=True)
-                    trace_path = os.environ.get("OH_MY_VLLM_DEEPSEEK_GRAPH_TRACE")
-                    if trace_path:
-                        import traceback
-
-                        with open(
-                            trace_path.replace("{rank}", str(self.rank)),
-                            "a",
-                            encoding="utf-8",
-                        ) as output:
-                            output.write(f"{message}\n{traceback.format_exc()}\n")
-                finally:
-                    os._exit(1)
+            capture_decode_graph(graph, self.rank)
             self.decode_graphs[key] = graph
         else:
             bindings.bind(token, position)
             self.model.reserve_cache(list(slots), context)
             stage.stage(bindings, position)
         graph.replay()
+        self._graph_routes = graph.routing_trace
         self.model._bind_state_exports(bindings.cache_slots, bindings.cache_slots_cpu)
         if hasattr(self, "cache"):
             self.cache.export_decoded_step(slots, position, position + 1)
@@ -424,18 +446,25 @@ class Worker:
         full_logits=False,
         compute_logits=True,
         logit_start=0,
+        accounting=None,
     ):
         cache_slots = torch.tensor([slot], device=self.device)
         output_ids = logits = main_hidden = None
         logit_chunks = [] if full_logits else None
         limit_rows = getattr(self, "prefill_rows", DEFAULT_PREFILL_ROWS)
+        if full_logits and start_pos > 0 and len(token_ids) <= DS_PARK_DRAFT_TOKENS + 1:
+            limit_rows = max(limit_rows, len(token_ids))
         execution = "eager"
         for offset in range(0, len(token_ids), limit_rows):
             chunk = token_ids[offset : offset + limit_rows]
             chunk_start = start_pos + offset
+            chunk_compute_logits = compute_logits and (
+                full_logits or offset + len(chunk) == len(token_ids)
+            )
+            routes = None if accounting is None else accounting.routes(len(chunk))
             graph = None
             if (
-                compute_logits
+                chunk_compute_logits
                 and not full_logits
                 and len(chunk) == 1
                 and chunk_start > 0
@@ -445,9 +474,11 @@ class Worker:
                     chunk_start,
                     slot,
                     collect_main_hidden=getattr(self, "dspark", False),
+                    **({"routes": routes} if routes is not None else {}),
                 )
             if graph is not None:
                 execution = "graph"
+                routes = self._graph_routes if accounting is not None else None
                 chunk_logits, chunk_hidden = graph
                 output_ids = None
             else:
@@ -458,11 +489,20 @@ class Worker:
                     start_pos=chunk_start,
                     cache_slots=cache_slots,
                     full_logits=full_logits,
-                    compute_logits=compute_logits,
+                    compute_logits=chunk_compute_logits,
                     collect_main_hidden=getattr(self, "dspark", False),
                     logit_start=chunk_logit_start,
                     sample_output=not full_logits,
                     cache_slots_cpu=(slot,),
+                    **({"routing_trace": routes} if routes is not None else {}),
+                )
+            if accounting is not None:
+                accounting.append(
+                    routes,
+                    chunk_start,
+                    len(chunk),
+                    chunk_compute_logits,
+                    verification=full_logits,
                 )
             logits = chunk_logits
             if logit_chunks is not None:
@@ -517,6 +557,7 @@ class Worker:
         *,
         full_logits=False,
         compute_logits=True,
+        accounting=None,
     ):
         if not token_batches:
             raise ValueError("DeepSeek target batch must contain a request")
@@ -535,6 +576,9 @@ class Worker:
                     cache_slots[offset : offset + subbatch_limit],
                     full_logits=full_logits,
                     compute_logits=compute_logits,
+                    accounting=None
+                    if accounting is None
+                    else accounting.subset(offset, offset + subbatch_limit),
                 )
             )
         if len(groups) == 1:
@@ -560,6 +604,7 @@ class Worker:
         *,
         full_logits=False,
         compute_logits=True,
+        accounting=None,
     ):
         if full_logits and not compute_logits:
             raise ValueError("full logits require vocab projection")
@@ -571,9 +616,14 @@ class Worker:
         logit_chunks = [] if full_logits else None
         execution = "eager"
         for offset in range(0, length, chunk_size):
+            chunk_length = min(chunk_size, length - offset)
+            chunk_compute_logits = compute_logits and (
+                full_logits or offset + chunk_length == length
+            )
+            routes = None if accounting is None else accounting.routes(chunk_length)
             graph = None
             if (
-                compute_logits
+                chunk_compute_logits
                 and not full_logits
                 and len(token_batches) == 1
                 and length == 1
@@ -584,9 +634,11 @@ class Worker:
                     start_pos + offset,
                     cache_slots_cpu[0],
                     collect_main_hidden=getattr(self, "dspark", False),
+                    **({"routes": routes} if routes is not None else {}),
                 )
             if graph is not None:
                 execution = "graph"
+                routes = self._graph_routes if accounting is not None else None
                 output_ids = None
                 chunk_logits, chunk_hidden = graph
             else:
@@ -598,9 +650,18 @@ class Worker:
                     start_pos=start_pos + offset,
                     cache_slots=cache_slots,
                     full_logits=full_logits,
-                    compute_logits=compute_logits,
+                    compute_logits=chunk_compute_logits,
                     collect_main_hidden=getattr(self, "dspark", False),
                     cache_slots_cpu=cache_slots_cpu,
+                    **({"routing_trace": routes} if routes is not None else {}),
+                )
+            if accounting is not None:
+                accounting.append(
+                    routes,
+                    start_pos + offset,
+                    chunk_length,
+                    chunk_compute_logits,
+                    verification=full_logits,
                 )
             logits = chunk_logits
             if logit_chunks is not None:
@@ -793,12 +854,18 @@ class Worker:
                 device=self.device,
                 dtype=torch.long,
             )
+            accounting = TargetTrace.for_requests(
+                self, [(item[0]["request_id"], item[1].prompt_len) for item in prepared]
+            )
             _, logits, main_hidden = self._target_batch(
                 [item[3] for item in prepared],
                 start_pos,
                 cache_slots,
                 compute_logits=final,
+                **({"accounting": accounting} if accounting is not None else {}),
             )
+            if accounting is not None:
+                accounting.finish()
             mtp_state_updated = self._seed_mtp_batch(
                 main_hidden,
                 start_pos,
@@ -834,6 +901,9 @@ class Worker:
                 request.state_position = accepted_end
                 self.trace.record(
                     "target",
+                    rank=getattr(self, "rank", 0),
+                    accepted=0,
+                    proposed=0,
                     verify=False,
                     execution=getattr(self, "_target_execution", "eager"),
                     requests=[
@@ -870,6 +940,10 @@ class Worker:
         final = start_pos + len(token_ids) >= len(request.history)
         accepted_end = start_pos
         mtp_state_updated = False
+        accounting = TargetTrace.for_requests(
+            self, [(row["request_id"], request.prompt_len)]
+        )
+        trace_options = {} if accounting is None else {"accounting": accounting}
         if not final:
             if hasattr(self, "cache"):
                 self.cache.begin_step(
@@ -884,6 +958,7 @@ class Worker:
                 start_pos,
                 slot,
                 compute_logits=False,
+                **trace_options,
             )
             mtp_state_updated = self._seed_mtp(
                 main_hidden,
@@ -915,6 +990,7 @@ class Worker:
                     slot,
                     full_logits=True,
                     logit_start=known_count - 1,
+                    **trace_options,
                 )
                 if (
                     not isinstance(logits, torch.Tensor)
@@ -954,7 +1030,9 @@ class Worker:
                 accepted_end = start_pos + accepted_input_count
                 proposals = []
             else:
-                _, logits, main_hidden = self._target(known, start_pos, slot)
+                _, logits, main_hidden = self._target(
+                    known, start_pos, slot, **trace_options
+                )
                 mtp_state_updated = self._seed_mtp(
                     main_hidden,
                     start_pos,
@@ -994,8 +1072,15 @@ class Worker:
                     use_prefix_state=False,
                 )
         request.state_position = accepted_end
+        if accounting is not None:
+            accounting.finish(
+                accepted=accepted, proposed=len(token_ids) - known_count if final else 0
+            )
         self.trace.record(
             "target",
+            rank=getattr(self, "rank", 0),
+            accepted=accepted,
+            proposed=len(token_ids) - known_count if final else 0,
             verify=bool(token_ids[known_count:]) if final else False,
             execution=getattr(self, "_target_execution", "eager"),
             requests=[
@@ -1008,6 +1093,17 @@ class Worker:
             ],
         )
         return self._output(request, row, tokens, text, accepted, proposals)
+
+    def _execute_decode_group(
+        self, rows, *, plan=None, valid_rows=None, dispatch_combine=None
+    ):
+        return execute_decode_group(
+            self,
+            rows,
+            plan=plan,
+            valid_rows=valid_rows,
+            dispatch_combine=dispatch_combine,
+        )
 
     def execute(self, message):
         self._validate_execute_message(message)
@@ -1028,6 +1124,7 @@ class Worker:
                 self.cache.copy_prefix(row["fa_block_copies"])
         initial_prefill_groups = {}
         prefill_groups = {}
+        decode_groups = {}
         for row in message["scheduled"]:
             request = self.requests[row["request_id"]]
             if row.get("prefill_token_ids") is not None:
@@ -1035,7 +1132,23 @@ class Worker:
             token_ids = list(row["token_ids"])
             start_pos = int(row["num_computed_tokens"])
             end_pos = start_pos + len(token_ids)
-            if token_ids and end_pos == len(request.history):
+            if (
+                getattr(self, "batch_decode_enabled", False)
+                and token_ids
+                and start_pos >= request.prompt_len
+                and len(request.history) - start_pos == 1
+                and 1 <= len(token_ids) <= 6
+            ):
+                length = len(token_ids)
+                window = self.args.window_size
+                key = (
+                    length,
+                    start_pos % self.decode_cycle,
+                    context_token_bucket(end_pos),
+                    min(window, start_pos) if length > 1 else window,
+                )
+                decode_groups.setdefault(key, []).append(row)
+            elif token_ids and end_pos == len(request.history):
                 initial_prefill_groups.setdefault(
                     (start_pos, len(token_ids)),
                     [],
@@ -1046,15 +1159,18 @@ class Worker:
                     [],
                 ).append(row)
         outputs_by_id = {}
-        prefill_ids = set()
+        executed_ids = set()
         for rows in initial_prefill_groups.values():
             outputs_by_id.update(self._execute_prefill_group(rows, final=True))
-            prefill_ids.update(row["request_id"] for row in rows)
+            executed_ids.update(row["request_id"] for row in rows)
         for rows in prefill_groups.values():
             outputs_by_id.update(self._execute_prefill_group(rows))
-            prefill_ids.update(row["request_id"] for row in rows)
+            executed_ids.update(row["request_id"] for row in rows)
+        for rows in decode_groups.values():
+            outputs_by_id.update(self._execute_decode_group(rows))
+            executed_ids.update(row["request_id"] for row in rows)
         for row in message["scheduled"]:
-            if row["request_id"] not in prefill_ids:
+            if row["request_id"] not in executed_ids:
                 outputs_by_id[row["request_id"]] = self._execute_row(row)
         outputs = [outputs_by_id[row["request_id"]] for row in message["scheduled"]]
         return {
@@ -1125,6 +1241,11 @@ class Worker:
                         "model": "deepseek_v41",
                         "rank": self.rank,
                         "requests": len(self.requests),
+                        "weight_info": self.weight_info,
+                        "fa_capacity": self.cache.fa_capacity,
+                        "accepted_state_capacity": self.cache.mamba_capacity,
+                        "request_slots": self.args.max_batch_size,
+                        "context_tokens": self.runtime_max_context,
                         "decode_graph_enabled": self.decode_graph_enabled,
                         "decode_graph_limit": self.decode_graph_limit,
                         "decode_graphs": len(self.decode_graphs),
@@ -1139,6 +1260,8 @@ class Worker:
         try:
             torch.cuda.synchronize(self.device)
             self.decode_graphs.clear()
+            for bindings in self.decode_bindings.values():
+                bindings.close()
             self.decode_bindings.clear()
             self.decode_engram.clear()
             self.trace.close()

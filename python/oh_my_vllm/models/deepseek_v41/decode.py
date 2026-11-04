@@ -6,40 +6,135 @@ buffers. The caller binds them, replays the graph, then samples on the host.
 
 import math
 import operator
-from contextlib import contextmanager
+import os
+import sys
+import traceback
+from contextlib import contextmanager, nullcontext
 
 import torch
 
-from .kernel import require_sparse_status
+from .decode_state import GraphStateExports, redirect_state_exports
+from .kernel import capture_cached_tensors, require_sparse_status
 from .model import context_token_bucket, sample
 
 
 class DecodeBindings:
     """Reusable device inputs and cache slots for one decode batch shape."""
 
-    def __init__(self, batch: int, cache_slots, device):
+    def __init__(self, batch: int, cache_slots, device, *, length=1, varlen=False):
         slots = tuple(operator.index(slot) for slot in cache_slots)
         if (
-            len(slots) != batch
+            batch < 1
+            or length < 1
+            or len(slots) != batch
             or len(set(slots)) != len(slots)
             or any(slot < 0 for slot in slots)
         ):
             raise ValueError("invalid DeepSeek decode cache slots")
-        self.batch = batch
+        self.batch, self.length, self.varlen = batch, length, varlen
         self.cache_slots_cpu = slots
         self.cache_slots = torch.tensor(slots, dtype=torch.int64, device=device)
-        self.token_ids = torch.zeros((batch, 1), dtype=torch.int64, device=device)
-        self.position = torch.zeros((), dtype=torch.int64, device=device)
+        positions = batch if varlen else 1
+        self.storage = torch.zeros(
+            batch * length + positions, dtype=torch.int64, device=device
+        )
+        self.token_ids = self.storage[: batch * length].view(batch, length)
+        self.position = self.storage[batch * length :].view(
+            (batch, 1) if varlen else ()
+        )
         self.position_cpu = None
+        self.positions_cpu = None
+        self.valid_rows = torch.ones(batch * length, dtype=torch.bool, device=device)
+        self.credited = torch.empty((batch, length), dtype=torch.bool, device=device)
+        self.upload_device = self.uploads = None
+        if varlen and self.storage.is_cuda:
+            from ...operators.runtime.device import Device
+
+            self.upload_device = Device()
+            self.uploads = self.upload_device.uploads()
 
     def bind(self, token_ids, position):
-        """Write the next token and its position into the fixed device buffers."""
-        tokens = torch.as_tensor(
-            token_ids, dtype=torch.int64, device=self.token_ids.device
-        ).reshape(self.batch, 1)
-        self.token_ids.copy_(tokens)
-        self.position_cpu = operator.index(position)
-        self.position.fill_(self.position_cpu)
+        """Copy host metadata before replay into the fixed device inputs."""
+        if not self.varlen:
+            cursor = operator.index(position)
+            if cursor < 0:
+                raise ValueError("decode position must be nonnegative")
+            tokens = torch.as_tensor(
+                token_ids, dtype=torch.int64, device=self.token_ids.device
+            )
+            self.token_ids.copy_(tokens.reshape(self.batch, self.length))
+            self.position.fill_(cursor)
+            self.position_cpu = cursor
+            self.positions_cpu = (cursor,) * self.batch
+            return
+        positions = tuple(operator.index(value) for value in position)
+        if len(positions) != self.batch or any(value < 0 for value in positions):
+            raise ValueError("decode positions must cover every request")
+        self.position_cpu = max(positions)
+        self.positions_cpu = positions
+        position_tensor = torch.tensor(positions, dtype=torch.int64, device="cpu")
+        if isinstance(token_ids, torch.Tensor) and token_ids.is_cuda:
+            self.token_ids.copy_(token_ids.reshape(self.batch, self.length))
+            self.uploads.copy(self.position, position_tensor.reshape_as(self.position))
+            return
+        tokens = torch.as_tensor(token_ids, dtype=torch.int64, device="cpu").reshape(-1)
+        if tokens.numel() != self.batch * self.length:
+            raise ValueError("decode tokens must cover the prepared batch shape")
+        source = torch.cat((tokens, position_tensor))
+        if self.uploads is None:
+            self.storage.copy_(source)
+        else:
+            self.uploads.copy(self.storage, source)
+
+    def bind_valid_rows(self, valid_rows):
+        if valid_rows is None:
+            self.valid_rows.fill_(True)
+        else:
+            if (
+                valid_rows.shape != self.valid_rows.shape
+                or valid_rows.dtype != torch.bool
+                or valid_rows.device != self.valid_rows.device
+            ):
+                raise ValueError("valid rows must be one device boolean per target row")
+            self.valid_rows.copy_(valid_rows)
+
+    def credit_rows(self, counts):
+        if len(counts) != self.batch or any(
+            not 0 <= value <= self.length for value in counts
+        ):
+            raise ValueError("credited counts differ from the prepared batch")
+        source = (
+            torch.arange(self.length, device="cpu")[None, :]
+            < torch.tensor(counts, device="cpu")[:, None]
+        )
+        if self.uploads is None:
+            self.credited.copy_(source)
+        else:
+            self.uploads.copy(self.credited, source)
+        return self.credited.flatten()
+
+    def close(self):
+        if self.uploads is not None:
+            self.uploads.close()
+        if self.upload_device is not None:
+            self.upload_device.close()
+
+
+def capture_decode_graph(graph, rank):
+    try:
+        graph.capture()
+    except Exception as error:
+        message = f"DeepSeek graph capture failed on rank {rank}: {error!r}"
+        try:
+            print(message, file=sys.stderr, flush=True)
+            trace_path = os.environ.get("OH_MY_VLLM_DEEPSEEK_GRAPH_TRACE")
+            if trace_path:
+                with open(
+                    trace_path.replace("{rank}", str(rank)), "a", encoding="utf-8"
+                ) as output:
+                    output.write(f"{message}\n{traceback.format_exc()}\n")
+        finally:
+            os._exit(1)
 
 
 def sampled_token_ids(logits, temperature=0.0):
@@ -68,12 +163,12 @@ def pause_state_export(model):
     if export is None:
         yield
         return
-    saved = export.steps, export.batch
+    saved = export.steps, export.batch, getattr(export, "positions", None)
     export.steps = {}
     try:
         yield
     finally:
-        export.steps, export.batch = saved
+        export.steps, export.batch, export.positions = saved
 
 
 def retained_graph_resources(model):
@@ -81,8 +176,8 @@ def retained_graph_resources(model):
 
     The mHC workspace grows after a larger prefill chunk, and a routed expert
     rebind can drop the prepared weights. A graph keeps its capture-time
-    buffers alive, so its recorded addresses stay valid. Packed expert weights
-    stay alive in the kernel weight cache, which no runtime path clears.
+    buffers alive, so its recorded addresses stay valid. Replay separately
+    checks that the expert binding generation has not changed.
     """
     retained = []
     for layer in getattr(model, "layers", ()):
@@ -118,15 +213,34 @@ class DecodeGraph:
         *,
         collect_main_hidden=False,
         engram_values=None,
+        full_logits=False,
+        segmented=False,
+        routing_trace=None,
+        plan=None,
+        dispatch_combine=None,
     ):
+        self.plan = plan
+        self.dispatch_combine = dispatch_combine
         self.model = model
         self.bindings = bindings
         self.start_pos = start_pos
         self.collect_main_hidden = collect_main_hidden
         self.engram_values = engram_values
+        self.full_logits = full_logits
+        self.segmented = segmented
+        self.routing_trace = routing_trace
+        self.state_exports = GraphStateExports(bindings, start_pos)
         self.cycle = decode_cycle(model)
         self.residue = start_pos % self.cycle
-        self.context_bucket = context_token_bucket(start_pos + 1)
+        self.context_bucket = context_token_bucket(start_pos + bindings.length)
+        self.window_prefixes = (
+            tuple(
+                (layer.attn.window_size, min(start_pos, layer.attn.window_size))
+                for layer in model.layers
+            )
+            if bindings.length > 1
+            else ()
+        )
         engram_layers = {
             index
             for index, layer in enumerate(model.layers)
@@ -140,6 +254,7 @@ class DecodeGraph:
         self.graph = torch.cuda.CUDAGraph()
         self.output = None
         self.retained = ()
+        self.routed_bindings = ()
 
     def reserve(self):
         """Reserve paged cache rows through the end of the captured bucket."""
@@ -148,35 +263,78 @@ class DecodeGraph:
         )
 
     def _forward(self):
-        return self.model(
-            self.bindings.token_ids,
-            start_pos=self.start_pos,
-            cache_slots=self.bindings.cache_slots,
-            position=self.bindings.position,
-            sample_output=False,
-            cache_slots_cpu=self.bindings.cache_slots_cpu,
-            collect_main_hidden=self.collect_main_hidden,
-            check_status=False,
-            engram_values=self.engram_values,
-            reserve_cache=False,
+        context = (
+            redirect_state_exports(self.model, self.state_exports)
+            if self.segmented
+            else nullcontext()
+        )
+        with context:
+            return self.model(
+                self.bindings.token_ids,
+                start_pos=self.start_pos,
+                cache_slots=self.bindings.cache_slots,
+                position=self.bindings.position,
+                sample_output=False,
+                cache_slots_cpu=self.bindings.cache_slots_cpu,
+                collect_main_hidden=self.collect_main_hidden,
+                check_status=False,
+                engram_values=self.engram_values,
+                reserve_cache=False,
+                full_logits=self.full_logits,
+                logical_rows=1 if self.segmented else None,
+                cache_positions_cpu=(
+                    self.bindings.positions_cpu if self.bindings.varlen else None
+                ),
+                routing_trace=self.routing_trace,
+                execution_plan=self.plan,
+                valid_rows=self.bindings.valid_rows,
+                dispatch_combine=self.dispatch_combine,
+            )
+
+    def _saved_recurrent_state(self):
+        if self.bindings.length == 1:
+            return ()
+        values = []
+        for layer in self.model.layers:
+            attention = layer.attn
+            values.append(attention.window_kv_cache)
+            compressor = getattr(attention, "compressor", None)
+            if compressor is not None and compressor.compress_ratio > 1:
+                values.extend((compressor.kv_state, compressor.score_state))
+        return tuple(
+            (value, value.index_select(0, self.bindings.cache_slots).clone())
+            for value in values
         )
 
     def capture(self):
         """Run the operator warmups, then record the step."""
-        if int(self.bindings.position) != self.start_pos:
+        if self.bindings.position_cpu != self.start_pos:
             raise ValueError("bind the capture position before recording")
         current = torch.cuda.current_stream()
         with pause_state_export(self.model):
+            saved = self._saved_recurrent_state()
             torch.cuda.synchronize()
             self.stream.wait_stream(current)
             with torch.cuda.stream(self.stream):
                 for _ in range(2):
+                    for value, previous in saved:
+                        value.index_copy_(0, self.bindings.cache_slots, previous)
                     self._forward()
+                for value, previous in saved:
+                    value.index_copy_(0, self.bindings.cache_slots, previous)
             current.wait_stream(self.stream)
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph, stream=self.stream):
+            with (
+                capture_cached_tensors() as cached,
+                torch.cuda.graph(self.graph, stream=self.stream),
+            ):
                 self.output = self._forward()
-        self.retained = retained_graph_resources(self.model)
+        self.retained = (*retained_graph_resources(self.model), *cached.values())
+        self.routed_bindings = tuple(
+            (layer, state, state.generation)
+            for layer in self.model.layers
+            if (state := getattr(layer.ffn, "_routed_state", None)) is not None
+        )
         torch.cuda.synchronize()
         return self
 
@@ -189,16 +347,33 @@ class DecodeGraph:
         return self.output[2]
 
     def replay(self):
+        if any(
+            getattr(layer.ffn, "_routed_state", None) is not state
+            or state.generation != generation
+            for layer, state, generation in self.routed_bindings
+        ):
+            raise RuntimeError("DeepSeek graph expert bindings have changed")
         position = self.bindings.position_cpu
         if position is None:
             raise ValueError("bind the decode position before replay")
         if (
-            context_token_bucket(position + 1) != self.context_bucket
-            or position % self.cycle != self.residue
+            context_token_bucket(position + self.bindings.length) != self.context_bucket
+            or any(
+                value % self.cycle != self.residue
+                for value in self.bindings.positions_cpu
+            )
+            or any(
+                min(value, window) != prefix
+                for window, prefix in self.window_prefixes
+                for value in self.bindings.positions_cpu
+            )
         ):
             raise ValueError("decode position is outside the captured graph")
         self.graph.replay()
         require_sparse_status()
+        export = getattr(self.model, "_state_export", None)
+        if self.segmented and export is not None:
+            self.state_exports.publish(export)
 
 
 class EngramStage:
@@ -210,7 +385,7 @@ class EngramStage:
     mask applies.
     """
 
-    def __init__(self, model, batch):
+    def __init__(self, model, batch, *, length=1):
         self.model = model
         self.batch = batch
         self.layers = {
@@ -224,7 +399,7 @@ class EngramStage:
             device = torch.get_default_device()
         self.buffers = {
             index: torch.zeros(
-                (batch, 1, engram.n_hash_cols * engram.head_dim),
+                (batch, length, engram.n_hash_cols * engram.head_dim),
                 dtype=torch.bfloat16,
                 device=device,
             )

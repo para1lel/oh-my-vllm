@@ -59,6 +59,10 @@ impl<P: CachePolicy> Scheduler<P> {
         scheduler
     }
 
+    pub fn cache_policy(&self) -> &P {
+        &self.kv
+    }
+
     pub fn cache_resource_counts(&self) -> P::Resources {
         self.kv.resource_counts()
     }

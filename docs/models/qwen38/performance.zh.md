@@ -96,7 +96,7 @@ efficiency = reference_seconds / HTTP_seconds
 
 ## 下界计算
 
-[参考计算](../../../development/serving/kernels.py)使用版本 `http-reference-v4`.
+[参考计算](../../../development/serving/kernels.py)使用版本 `http-reference-v5`.
 它使用当前 kernel 边界和精度规则, 不使用实测校准输入.
 
 [Trace 验证器](../../../development/serving/trace.py)先检查完整 prefill, 连续接受位置, proposal 依赖和输出数量.
@@ -160,8 +160,9 @@ BF16 矩阵每元素使用两字节.
 FA 对每个请求和 pass 读取一次历史 KV.
 新 query KV 可以直接交给 attention, 不再读取 HBM.
 接受的 KV 只计一次写入, 使用 4 个 KV head, 宽度 256, K 和 V 均为 BF16.
+
 MTP draft attention 从位置 1 开始. 首个 draft 读取缓存的 context endpoint.
-后续 draft 计算新 KV.
+后续 draft 计算新 KV. 其临时 KV 写入不计分.
 
 当请求起点大于零时, GDN 读取一份 FP32 recurrent state 和一份 BF16 convolution state.
 计算该 pass 中每个不同的 784-token checkpoint 和接受终点.
@@ -185,6 +186,9 @@ Preparation, state carry 和 output 构成三个串行组.
 其乘积使用 BF16. 对角求逆和 state update 使用 FP32.
 Beta 乘法进入 inverse matrix 后, W/U 三角乘积包含对角线.
 
+从 token 位置零开始的 chunk 具有零初始 state.
+其 W/state 和 Q/state 乘积不计分.
+
 短 prefill, decode 和 verification 使用 FP32 recurrence.
 融合进 convolution 或 recurrence 的小行 BA projection 对 BF16 输入执行 FP32 算术.
 其他 BA projection 使用 BF16 矩阵乘法.
@@ -192,6 +196,9 @@ Beta 乘法进入 inverse matrix 后, W/U 三角乘积包含对角线.
 
 RMS normalization 每元素计四次操作, 每行另计两次标量操作.
 Residual addition 每元素计一次操作.
+MTP 对全部 context 行计算 target 最终归一化, 包括没有词表投影的行.
+与词表投影共享的行只计一次.
+
 FFN activation 每个 intermediate 元素计两次乘积.
 GDN convolution 每 token 和 channel 计七次操作.
 

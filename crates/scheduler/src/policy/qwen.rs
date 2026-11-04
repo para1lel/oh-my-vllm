@@ -20,6 +20,8 @@ pub struct QwenState {
 pub struct QwenTransferPlan {
     pub fa_blocks: Vec<u32>,
     pub mamba_blocks: Vec<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_rank: Option<u32>,
 }
 
 pub struct QwenTransfer {
@@ -296,6 +298,7 @@ impl CachePolicy for HybridCoordinator {
         transfer.map_or_else(QwenTransferPlan::default, |transfer| QwenTransferPlan {
             fa_blocks: transfer.tables.fa_sources(),
             mamba_blocks: transfer.tables.mamba_sources(),
+            owner_rank: None,
         })
     }
 

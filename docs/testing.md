@@ -48,6 +48,14 @@ Run GPU commands through the wrapper:
 scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_chain
 ```
 
+The [draft pipeline check](../development/operators/check_draft_pipeline.py) compares constrained sampling, RNG, penalties, and KV with sequential execution.
+It checks unused computation after stops, grammar rejection, and recording or snapshot failures.
+Set `MODEL_ROOT` to the Qwen checkpoint directory.
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_pipeline
+```
+
 ## Reporting
 
 Keep current instructions and the latest complete results for each approved workload.

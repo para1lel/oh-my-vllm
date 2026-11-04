@@ -1,6 +1,7 @@
 import ctypes
 from contextlib import suppress
 
+import numpy as np
 import torch
 
 from . import torch_adapter
@@ -13,6 +14,30 @@ def _eager_stream(device):
     if capture.value:
         raise RuntimeError("update host inputs before CUDA Graph recording")
     return stream
+
+
+def _tensor_binding(value):
+    return value.data_ptr(), value.shape, value.stride(), value.dtype, value.device
+
+
+def _numpy_view(value):
+    try:
+        return value.numpy()
+    except (TypeError, RuntimeError):
+        return None
+
+
+def _copy_snapshot(destination, array, source):
+    if (
+        array is not None
+        and not destination.requires_grad
+        and not source.requires_grad
+        and not source.is_conj()
+        and not source.is_neg()
+    ):
+        np.copyto(array, source.numpy(), casting="no")
+    else:
+        destination.copy_(source)
 
 
 class HostStorage:
@@ -126,7 +151,8 @@ class UploadBuffer:
         self.device, self.destination = device, destination
         self.storage, self.event = None, ctypes.c_void_p()
         self.pending = self.untracked = False
-        self.tensor = None
+        self.tensor = self.host_numpy = None
+        self._native = self._native_key = None
         try:
             ranged = capacity_bytes is not None
             size = capacity_bytes if ranged else source.nbytes
@@ -142,6 +168,7 @@ class UploadBuffer:
             )
             elements = size if ranged else source.numel()
             self.tensor = self.tensor.reshape(-1)[:elements].reshape(shape)
+            self.host_numpy = _numpy_view(self.tensor)
         except BaseException:
             self.close()
             raise
@@ -166,13 +193,22 @@ class UploadBuffer:
         ):
             raise ValueError("upload shape or dtype changed")
         self.wait()
-        self.tensor.copy_(source)
+        _copy_snapshot(self.tensor, self.host_numpy, source)
         self._submit(self.destination, self.tensor, stream)
 
     def _submit(self, destination, source, stream):
+        key = _tensor_binding(destination)
+        if self._native is None or key != self._native_key:
+            # DLPack owners must retain the original storage after caller set_.
+            self._native = (
+                torch_adapter.native_tensor(destination.detach()),
+                torch_adapter.native_tensor(source.detach()),
+            )
+            self._native_key = key
         self.pending = self.untracked = True
         try:
-            torch.ops.oh_my_vllm.native_upload(source, destination)
+            with torch_adapter.use_stream(destination.device, stream):
+                torch_adapter._device_module().upload_bytes(*self._native)
             self.device.checked(self.device.runtime.cudaEventRecord(self.event, stream))
             self.untracked = False
         except BaseException:
@@ -181,7 +217,8 @@ class UploadBuffer:
 
     def close(self):
         self.wait()
-        self.tensor = None
+        self._native = self._native_key = None
+        self.host_numpy = self.tensor = None
         error = None
         if self.storage is not None:
             try:
@@ -207,7 +244,7 @@ class RangeUpload(UploadBuffer):
     def __init__(self, device, destination, capacity_bytes):
         self.closed = False
         self.capacity_bytes = capacity_bytes
-        self._views = None
+        self._views = self._range_key = self._range_numpy = None
         super().__init__(device, destination, None, capacity_bytes=capacity_bytes)
         self.staging_bytes = self.storage.size
         self.dtype = destination.dtype
@@ -230,20 +267,28 @@ class RangeUpload(UploadBuffer):
         if not source.nbytes:
             return
         self.wait()
-        snapshot = (
-            self.storage.tensor.view(source.dtype)
-            .reshape(-1)[: source.numel()]
-            .reshape(source.shape)
-        )
-        snapshot.copy_(source)
-        destination = self.device.view(self.destination, source.shape, offset)
-        self._views = destination, snapshot
+        key = source.shape, offset, _tensor_binding(self.destination)
+        if self._views is None or key != self._range_key:
+            snapshot = (
+                self.storage.tensor.view(source.dtype)
+                .reshape(-1)[: source.numel()]
+                .reshape(source.shape)
+            )
+            destination = self.device.view(
+                self.destination.detach(), source.shape, offset
+            )
+            self._native = self._native_key = None
+            self._views = destination, snapshot
+            self._range_key = key
+            self._range_numpy = _numpy_view(snapshot)
+        destination, snapshot = self._views
+        _copy_snapshot(snapshot, self._range_numpy, source)
         self._submit(destination, snapshot, stream)
 
     def close(self):
         self.closed = True
         self.wait()
-        self._views = None
+        self._views = self._range_key = self._range_numpy = None
         super().close()
 
 
@@ -268,6 +313,35 @@ class Uploads:
         if key not in self.buffers:
             self.buffers[key] = UploadBuffer(self.device, destination, source)
         self.buffers[key].copy(source, stream)
+
+    def prepare(self, destination, source):
+        if self.closed:
+            raise RuntimeError("host uploads are closed")
+        if (
+            not isinstance(source, torch.Tensor)
+            or source.device.type != "cpu"
+            or not source.is_contiguous()
+        ):
+            raise ValueError("host uploads require a contiguous CPU Torch tensor")
+        _eager_stream(self.device)
+        key = id(destination)
+        if key not in self.buffers:
+            self.buffers[key] = UploadBuffer(self.device, destination, source)
+        buffer = self.buffers[key]
+        if source.shape != buffer.tensor.shape or source.dtype != buffer.tensor.dtype:
+            raise ValueError("upload shape or dtype changed")
+        return buffer.tensor
+
+    def update(self, writer, *args):
+        if self.closed:
+            raise RuntimeError("host uploads are closed")
+        stream = _eager_stream(self.device)
+        for buffer in self.buffers.values():
+            buffer.wait()
+        # Callers validate all inputs before entering the pinned writer.
+        writer(*args)
+        for buffer in self.buffers.values():
+            buffer._submit(buffer.destination, buffer.tensor, stream)
 
     def prepare_range(self, destination, *, capacity_bytes):
         if self.closed:

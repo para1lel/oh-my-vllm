@@ -4,7 +4,7 @@ import secrets
 import numpy as np
 
 from ...worker.constraints import Constraint
-from ...worker.repetition import HISTORY_WINDOW, cycle_continuations
+from ...worker.repetition import HISTORY_WINDOW, cycle_continuations, may_repeat
 from .tool_grammar import tool_grammar
 
 
@@ -40,6 +40,9 @@ class Request:
         self.counts[0] = np.bincount(tokens, minlength=248320)
         self.presence = np.zeros(248320 // 8, dtype=np.uint8)
         self.sample_masks = {}
+        self.filtered_masks = {}
+        self.draft_guard_position = None
+        self.draft_guard_safe = False
         self.drafts = []
         self.drafts_greedy = True
         self.proposals = None
@@ -84,6 +87,20 @@ class Request:
             return self.rope_positions[:, position]
         return (position + self.rope_delta,) * 3
 
+    def prepare_draft_guard(self):
+        history = self.history[
+            max(self.prompt_len, len(self.history) - HISTORY_WINDOW) :
+        ]
+        self.draft_guard_safe = not may_repeat(history, 3)
+        self.draft_guard_position = len(self.history)
+
+    def needs_repetition_guard(self, prefix):
+        return self.options.get("sampling", {}).get("repetition_guard", True) and not (
+            self.draft_guard_safe
+            and self.draft_guard_position == len(self.history)
+            and len(prefix) <= 3
+        )
+
     def mask(
         self,
         constraint=None,
@@ -108,7 +125,7 @@ class Request:
             mask[self.tokenizer.think_end] = 1
         if thinking or generated < self.minimum:
             mask[list(self.tokenizer.eos)] = 0
-        if self.options.get("sampling", {}).get("repetition_guard", True):
+        if self.needs_repetition_guard(prefix):
             history = self.history[
                 max(self.prompt_len, len(self.history) - HISTORY_WINDOW) :
             ] + list(prefix)
@@ -118,20 +135,36 @@ class Request:
         return mask
 
     def packed_mask(self, mask, thinking, generated, thinking_count, prefix):
+        guard = self.needs_repetition_guard(prefix)
+        budget = self.options.get("thinking_token_budget")
+        force_end = bool(
+            thinking and budget is not None and budget >= 0 and thinking_count >= budget
+        )
+        block_eos = bool(thinking or generated < self.minimum)
+        key = None
+        if not guard:
+            key = (
+                mask.tobytes(),
+                self.tokenizer.valid_tokens,
+                tuple(sorted(self.tokenizer.eos)),
+                self.tokenizer.think_end if force_end else None,
+                block_eos,
+            )
+            if key in self.filtered_masks:
+                return np.frombuffer(self.filtered_masks[key], np.uint8)
         mask = mask.copy()
         valid = self.tokenizer.valid_tokens
         mask[(valid + 7) // 8 :] = 0
         if valid % 8:
             mask[valid // 8] &= (1 << (valid % 8)) - 1
-        budget = self.options.get("thinking_token_budget")
-        if thinking and budget is not None and budget >= 0 and thinking_count >= budget:
+        if force_end:
             mask[:] = 0
             token = self.tokenizer.think_end
             mask[token // 8] = 1 << (token % 8)
-        if thinking or generated < self.minimum:
+        if block_eos:
             for token in self.tokenizer.eos:
                 mask[token // 8] &= 255 ^ (1 << (token % 8))
-        if self.options.get("sampling", {}).get("repetition_guard", True):
+        if guard:
             history = self.history[
                 max(self.prompt_len, len(self.history) - HISTORY_WINDOW) :
             ] + list(prefix)
@@ -143,6 +176,10 @@ class Request:
             if allowed and len(allowed) < remaining:
                 for token in allowed:
                     mask[token // 8] &= 255 ^ (1 << (token % 8))
+        if key is not None:
+            if len(self.filtered_masks) >= 32:
+                self.filtered_masks.pop(next(iter(self.filtered_masks)))
+            self.filtered_masks[key] = mask.tobytes()
         return mask
 
     def parameters(self):
@@ -162,6 +199,8 @@ class Request:
 
     def append(self, tokens):
         self.sample_masks.clear()
+        self.draft_guard_position = None
+        self.draft_guard_safe = False
         kept = []
         for token in tokens:
             if self.generated >= self.limit or self.finish:
