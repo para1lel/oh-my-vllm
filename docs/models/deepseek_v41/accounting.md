@@ -1,152 +1,164 @@
 # DeepSeek reference calculation
 
-The [HTTP procedure](performance.md) selects the reference and validates measured results.
-The calculators have separate identities:
-
-| Calculator | Version | Source |
-|---|---|---|
-| Default HTTP reference and source trace | `deepseek-http-reference-v3.1` | [Trace and binding](../../../development/serving/deepseek_accounting.py), [resource mathematics](../../../development/serving/deepseek_accounting_math.py) |
-| Packed protocol estimate | `deepseek-http-protocol-estimate-v5` | [Packed calculation](../../../development/serving/deepseek_accounting_packed.py) |
-| Conditional partial resource floor | `deepseek-http-resource-floor-v4` | [Floor calculation](../../../development/serving/deepseek_accounting_floor.py) |
-
-## Credit rule
-
-The default resource reference is a lower-bound relaxation for the same accepted output and the stated TP4, TEP4, or DEP4 strategy.
-Collective latency is an empirical estimate, not a proven physical lower bound.
+The [HTTP procedure](performance.md) selects the calculator and validates measured results.
 Efficiency is `reference seconds / full HTTP seconds`.
 
-Each decode call credits accepted drafts plus one target token per request.
-Proposals, rejected rows, padding, masked slots, temporary copies, HTTP, queueing, and scheduling receive zero credit.
-Replicated work adds one copy per rank.
+| Calculator | Version | Use |
+|---|---|---|
+| Default reference and source trace | `deepseek-http-reference-v3.1` | Historical estimate and authenticated target counters |
+| Packed protocol estimate | `deepseek-http-protocol-estimate-v5` | Historical protocol estimate, not a latency floor |
+| Conditional partial floor | `deepseek-http-resource-floor-v4` | Necessary arithmetic and limited MoE wire |
+| Fixed-algorithm roofline | `deepseek-http-roofline-v6` | Current HTTP efficiency reference |
 
-## Rates and formats
+The [source validator](../../../development/serving/deepseek_accounting.py) authenticates all four calculators.
+The [roofline calculator](../../../development/serving/deepseek_accounting_roofline.py) uses the reviewed [partial arithmetic](../../../development/serving/deepseek_accounting_floor.py).
+The [resource functions](../../../development/serving/deepseek_accounting_math.py) give dimensions, formats, and peaks.
 
-| Resource | Rate per rank |
+## Roofline scope
+
+V6 is a conditional resource lower bound for the fixed target algorithm, numerical rules, and four-rank placement.
+It is not a minimum for all algorithms with the same output.
+Maximum overlap and favorable data reuse are permitted.
+Extra weight copies, projection recomputation, wire compression, and cross-token wire-value reuse are not permitted.
+
+TP4 keeps output-channel expert shards.
+TEP4 keeps expert owners and tensor-parallel attention.
+DEP4 keeps request owners and full experts on their owners.
+
+Each request credits `input_tokens + output_tokens - 1` target rows and `output_tokens` logit rows.
+Proposals, rejected rows, padding, copies, scheduler costs, and MTP work receive zero credit.
+Replicated matrices add one copy on each consuming rank.
+Expert arithmetic uses received assignments, also on ranks with no owned requests.
+
+| Resource | Peak per rank |
 |---|---:|
 | HBM | 7.7 TB/s |
 | Dense FP8 tensor | 4.5 PFLOPS |
 | Dense BF16 tensor | 2.25 PFLOPS |
 | FP32 vector | 75 TFLOPS |
 | NVLink 5 | 900 GB/s per direction |
-| PCIe 5.0 x16 host link | 63.02 GB/s per direction |
+| PCIe 5.0 x16 | 63.02 GB/s per direction |
 
-Dense projections use FP8.
-Routed experts keep FP4 storage and use FP8 dot products.
-FP4 uses half a byte per value and one scale per K32 group.
-FP8 uses one byte per value and one E8M0 scale per 32 by 32 block.
-Projection groups count input, output, and weight bytes.
+FP4 expert storage uses FP8 dot products.
+FP8 and BF16 share the tensor resource.
+[Ordered K32 arithmetic](quantization.md) adds at least `FP8_FLOPs / 32` FP32 FLOPs.
+`wo_a`, attention products, and index scores use BF16.
+Router, HC projections, Engram gate, head, and ratio-above-one compressors use FP32.
+Scalar nonlinear estimates receive zero credit.
 
-`wo_a`, sparse attention, and index scores use BF16.
-Router, Hyper-Connections, Engram gate, output head, and compressors with ratio above one use FP32.
-The version and rate digest bind formats, rates, placement, reuse, and overlap rules.
+For each rank, tensor seconds are `FP8_FLOPs/4.5e15 + BF16_FLOPs/2.25e15`.
+Each other resource uses its quantity divided by its peak.
+The reference takes the maximum across ranks and resources.
+A fractional four-rank pool is permitted for TP4 and TEP4 index query work.
+Pooled necessary wire and host bytes divide by four times the related peak.
+There is no empirical latency, observed-call serial sum, or `S/2` term.
 
-The [ordered K32 arithmetic](quantization.md) adds at least one FP32 FMA per output and K32 group:
+## HBM and host necessity
 
-```text
-scale_fp32_flops = 2 * rows * local_outputs * (local_K / 32)
-                 = projection_fp8_flops / 32
-```
+The retention allowance is `F = 1 GiB` per rank, with `1 GiB = 2^30 bytes`.
+It includes registers, data caches, shared memory, and tensor memory.
+It does not include HBM, Torch allocations in HBM, and host memory.
 
-This credit applies to FP8 dense and FP4 routed projections in prefill and decode, on each rank.
-It permits exact scale combination but does not assume that all scale pairs permit combination.
-BF16 and FP32 projections receive no K32 scale credit.
+The [NVIDIA guide](https://docs.nvidia.com/cuda/blackwell-tuning-guide/index.html) gives 126 MB L2, 256 KiB registers per SM, and 256 KiB combined L1/shared memory per SM.
+The [B200 layout](https://cvw.cac.cornell.edu/gpu-architecture/horizon-gpus-blackwell-b200/blackwell_chip) gives a conservative 160-SM physical layout.
+The [SM description](https://cvw.cac.cornell.edu/gpu-architecture/horizon-gpus-blackwell-b200/b200_sm) gives 256 KiB tensor memory per SM.
+Using 126 MiB for L2 gives 246 MiB for these data stores.
+The 1 GiB allowance includes the other small caches and favorable retention.
 
-## Sparse work and placement
+Let `W_union` be the necessary whole-HTTP weight union on one rank.
+Assignment counts give an expert-union bound without assuming new experts on each call.
+Let `W_dense` contain only matrices necessary in each target round, with the head.
+`W_dense` does not include intermittent compressor and index-key matrices.
 
-Position `p` has `min(128,p+1)` window pairs.
-A compressed layer adds `min(512,floor((p+1)/r))` pairs.
-Index sources 2, 8, 14, and 20 score all reachable compressed positions.
-Sources 24, 28, 32, and 36 score at most 16384 candidates per query.
-
-TP4 and TEP4 compare head and query partition at each index source.
-Head partition uses eight heads per rank and a packed FP32 score all-reduce.
-Query partition gathers BF16 queries and head weights, computes all 32 heads on each query owner, and gathers valid top-512 INT32 positions.
-Its score FLOPs and necessary key bytes divide by four in a global resource pool.
-This fractional balance does not prove achievable placement.
-
-A query-to-head transition after layer 20 gathers candidate block IDs.
-Later query partitions keep those IDs on the query owner.
-The calculator compares placement combinations with their resource, communication, and overlap costs.
-Dense and expert partition definitions stay fixed.
-
-Engram compares sharded packed host reads plus BF16 all-reduce with full packed host reads on each GPU.
-Each packed row is 264 bytes.
-Without token or hash identities, the reference credits only 24 disjoint column rows per active layer and call.
-It permits full reuse across requests and tokens.
-DEP4 uses full local host reads and local index scoring.
-
-## History and weights
-
-History has one read per target call, shared physical source, and consuming rank.
-All queries and heads on that rank reuse the read.
-Windows differ at each layer.
-Compressed KV and index keys can share sources.
-
-The first use credits the full necessary historical read.
-A later use of `U` shared bytes credits `max(0,U-128MiB)` bytes from HBM.
-This cache allowance permits favorable retention without unlimited L2 storage.
-Placement comparison includes changes in the necessary subset.
-
-For request range `[s,e)`, the historical window union has `min(s,127)` rows.
-Let `n=floor(e/r)-floor(s/r)` be the new compressed rows.
-Historical selected KV has at least `max(0,min(512,floor(e/r))-n)` rows.
-An uncapped index source reads `floor(s/r)` historical keys.
-A candidate source reads at least `max(0,min(16384,floor(e/r))-n)` historical keys.
-
-The default calculation counts 512 BF16 values per KV row and 128 BF16 values per index-key row.
-Selection reuse is maximal inside a call, with no second read for QK and PV.
-Current projections count new cache writes.
-New index-key projections use each request's position and compression boundary.
-
-Prefill credits dense weights once across chunks.
-For each layer and rank, the cumulative maximum touched-expert count supplies a conservative weight-union bound.
-A chunk credits only the increase in that maximum.
-The output head enters the first chunk with logits, only at each request's final prefill row.
-Decode credits resident dense weights and touched expert weights once per call.
-
-## Communication and overlap
-
-TP4 counts embedding reduction, `wo_b` reduction, routed BF16 product gather, FP32 token-sum gather, and output-head gather.
-TEP4 replaces routed gathers with a routed FP32 output reduction.
-DEP4 sends distinct `(token,destination GPU)` BF16 rows and returns one FP32 local sum per dispatched token.
-Local routes use no wire bytes.
-Per-rank wire pressure is `max(sent,received)`, with a separate rate per direction.
-Expert work uses received assignments, also on ranks with no owned requests.
-
-For serial groups, `S=sum_g max_rank(time(rank,g))`.
-Each group uses its maximum resource time.
-FP8 and BF16 times add on the shared tensor resource.
-For at least two credited target rows:
+A target round gives at most one new row in ordinary mode or six in DSpark5.
+One request has at least `N = 1 + ceil((output_tokens-1)/limit)` rounds, with prompt completion.
+The next round on that request depends on the preceding result.
+Each round uses the dense matrices.
+At most `F` weight bytes can survive from before that interval.
+Use the longest owned request chain on each rank:
 
 ```text
-R_fixed = max_rank,resource(sum(fixed_work) / rate)
-R_pool = max_resource((sum_rank(fixed_work) + sum(query_work)) / (4 * rate))
-R = max(R_fixed, R_pool)
-B2 = max(R, S / 2)
-call_seconds = min(S, B2)
+weight_read_bytes = max(0, W_union-F, N*max(0,W_dense-F))
 ```
 
-A single target row uses `S`.
-The balanced two-microbatch relaxation permits shared weight tiles and fractional resource balance.
-It does not prove an achievable schedule.
-Resource totals also count collective estimate seconds.
+The union and chain arguments can represent the same reads, so they must not add.
+An empty DEP4 owner still credits its received-expert weight union.
 
-Each collective uses `max(latency_model_seconds,wire_bytes/900e9)` without a second transfer charge.
-The idle, unlocked NCCL profile has 95 stored median points.
-Its raw SHA256 is `c6b55ee5354c7ef6fb58606cca9268fcef90bc535935d4f07750029a81506e49`.
-Lookup uses per-rank input bytes, cumulative maximum, linear interpolation, and endpoint clamps.
-All-gather wire bytes use full output size.
-DEP4 uses the BF16 all-to-all proxy with profile input `ceil(wire_bytes*4/3)`.
+[Native history](cache.md#current-storage) uses 288-byte compressed KV, 68-byte index keys, and 1024-byte BF16 windows.
+The four physical sources receive credit once.
+Consumers do not make new storage.
+For each request, let `P` be the final encoded KV and index payload.
+Initially empty state must publish this history without recomputation.
+At most `F` bytes can stay unwritten, so mandatory cache writes are `max(0,P-F)` per request.
 
-The profile digest binds the raw digest and stored table.
-Medians cannot reconstruct sample minima or prove a lower bound.
-DEP4 communication is modeled, not measured.
-A TEP4 fallback supplies no DEP4 evidence.
+Weight reads and cache writes represent different transfers and add.
+Repeated history reads, window writes, workspace decoding, and intermediate activation traffic receive zero credit without a necessity proof.
 
-## Runtime trace contract
+Engram starts in host storage.
+Its 24 disjoint columns use at least 24 packed rows per active layer, each with 264 bytes.
+Full reuse across all tokens and requests is permitted.
+TP4/TEP4 pool this initial host transfer.
+Each active DEP4 owner uses its local rows.
+Repeated lookups receive zero credit without token and hash identities.
 
-The top-level object has `binding`, `manifest`, and `calls`.
-The manifest is final only after HTTP responses complete.
+## Communication and dependencies
+
+The floor and full protocol diagnostics are separate.
+For fixed full BF16 MoE delivery, TP4/TEP4 use at least `3*rows*H*2` aggregate wire bytes per layer.
+TP4 also uses `3*rows*K*I*2` for the activation product.
+Here `H=5120`, `K=6`, and `I=2304`.
+Favorable rank balance and final BF16 delivery are permitted in these aggregate bounds.
+They do not charge a full FP32 reduction as necessary information.
+
+Embedding, `wo_b`, head, index, and Engram wire receive zero floor credit.
+Greedy selection does not depend on a full vocabulary gather.
+
+DEP4 uses direct BF16 dispatch and reverse FP32 local-sum delivery.
+Let `D[s,d]` count distinct credited `(source token,destination rank)` pairs, also with local pairs.
+For rank `r`, do not count `s=d`:
+
+```text
+out_r = sum_d D[r,d]
+in_r  = sum_s D[s,r]
+sent_r     = H*(2*out_r + 4*in_r)
+received_r = H*(2*in_r  + 4*out_r)
+```
+
+Sum each direction over the whole HTTP workload before taking its resource maximum.
+Do not add independent dispatch and combine maxima as a serial floor.
+Local routes, metadata, count exchange, padding, and trace reductions receive zero credit.
+
+The protocol diagnostics put each useful collective at its dependency:
+
+| Strategy | Ordered dependency |
+|---|---|
+| TP4/TEP4 | Embedding lookup, BF16 reduction, first layer |
+| TP4/TEP4 | Engram lookup, BF16 reduction, Engram projection, layer attention |
+| TP4/TEP4 | Index scoring, FP32 reduction, sparse attention |
+| TP4/TEP4 | `wo_b`, FP32 reduction, router |
+| TP4 | Expert up/gate, BF16 product gather, down, FP32 token-sum gather |
+| TEP4 | Expert up/gate, down, FP32 output reduction |
+| DEP4 | Router, BF16 dispatch, expert up/gate, down, reverse FP32 combine |
+| TP4/TEP4 | Head projection, FP32 vocabulary gather, sampling |
+
+Different rows can overlap these stages.
+V6 gives the global serial-stage diagnostic no extra floor seconds.
+The aggregate resource constraints stay necessary with maximum overlap.
+
+For four ranks, ring all-reduce sends and receives `1.5*N` bytes per rank for an `N`-byte input.
+Ring all-gather sends and receives `0.75*N` bytes for an `N`-byte full output.
+With four target rows, TP4 product gather uses 82944 bytes per direction per rank.
+Its FP32 token-sum gather uses 61440 bytes.
+TEP4 output reduction uses 122880 bytes.
+
+For `D[0,1]=2` and `D[1,0]=1`, rank 0 dispatch sends 20480 bytes and receives 10240 bytes.
+Its reverse combine sends 20480 bytes and receives 40960 bytes.
+These protocol bytes are diagnostics, not extra floor credit.
+
+## Trace and identities
+
+The top-level trace has `binding`, `manifest`, and `calls`.
+The HTTP response finalizes the manifest:
 
 ```text
 manifest = {mode: "ordinary" | "dspark5", requests: [
@@ -154,78 +166,45 @@ manifest = {mode: "ordinary" | "dspark5", requests: [
 ]}
 call = {rank, call, phase: "prefill" | "decode", request_rows: [
   {id, start, count, accepted, proposed, logit_rows}
-], expert_assignments: int32[L,4], dispatch_rows: int32[L,4],
-   touched_experts: int32[L]}
+], expert_assignments: int32[40,4], dispatch_rows: int32[40,4],
+   touched_experts: int32[40]}
 ```
 
-`L=40`.
-Counts are integers.
-Positions and ordinals start at zero.
-IDs are positive, and `response_id` starts with `chatcmpl_` and ends with `_<id>`.
-Manifest lengths are HTTP usage tokens per request.
-DEP4 `owner_rank` stays fixed.
+Each call must have four rank records, also for empty owners.
+Request ranges join without gaps or overlap.
+Decode credits `count=accepted+1`.
+Prefill credits one logit row only at prompt completion.
+TP4/TEP4 repeat request and assignment counters.
+DEP4 records owned requests only.
 
-Each target call has four rank records, also for ranks with no owned requests.
-Each prefill chunk is a separate call.
-Request `start/count` ranges join without gaps or overlap.
-Decode has `count=accepted+1` and `logit_rows=count`.
-Prefill has zero draft counters and one logit row only when its prompt completes.
+Each layer has six assignments per credited row, bucketed by `expert_id//96`.
+TP4 uses all buckets, TEP4 its bucket, and DEP4 its bucket summed across source ranks.
+DEP4 joins expert presence after Execute and records distinct dispatch pairs.
+Validation rejects missing ranks, repeated work, invalid routes, incomplete layers, and incorrect HTTP coverage.
+Mixed phases emit `accounting_error`.
+The assembler rejects the trace.
 
-TP4/TEP4 repeat request rows and assignment matrices on all ranks.
-DEP4 records only owned request rows.
-Assignments use global bucket `d=expert_id//96`.
-Each matrix row sums to `credited rows*6`.
-TP4 computes all four columns, TEP4 its own column, and DEP4 its column summed across source ranks.
+Binding includes source, native modules, checkpoint, tokenizer, four GPU UUIDs, placement, sampling, and manifest digest.
+Runtime identity records batch and Graph settings, but not each step's capture or Eager fallback.
+V6 independently binds its version, peaks, model dimensions, retention allowance, and assumptions digest.
+The acceptance checker recalculates the selected reference from the bound trace.
+A changed identity or stored value fails validation.
 
-`dispatch_rows[layer,d]` counts distinct source token/destination pairs, with local pairs.
-It is zero for other strategies.
-Combine reverses these pairs after the local sum.
-`touched_experts[layer]` counts local expert weights for credited rows only.
-DEP4 joins expert presence after Execute with one packed MAX and counter read.
-Empty ranks supply zero routes and receive the expert union.
+V6 qualification checks four B200 model names in measurement topology.
+Missing names and other models cannot pass.
+Historical diagnostics do not use this hardware check.
 
-Binding holds `version`, `rate_profile`, `manifest_sha256`, source, native module digests, config/index digests, tokenizer, and four GPU UUIDs.
-It also holds strategy, effective strategy, owner plan, sampling, case ID, and accepted/proposed totals.
-The manifest digest uses SHA256 of sorted compact JSON without NaN values.
+## Historical estimates
 
-Validation rejects changed identities, missing ranks, duplicate calls, invalid routing, incomplete layers, repeated work, and incorrect request coverage or output counts.
-A call has one phase.
-Mixed phases emit `accounting_error` with the call ID and reason.
-Inference continues without partial counters, but the HTTP assembler rejects the full trace.
+V3.1 keeps BF16 historical traffic and empirical NCCL median latency.
+The [packed v5 calculator](../../../development/serving/deepseek_accounting_packed.py) keeps per-call weight reloads and its two-microbatch estimate.
+These identities and calculations stay unchanged for old records.
+V5 does not include the sharded Engram reduction in its protocol stages.
+Its end-of-layer Engram placement also differs from the runtime's layer-entry dependency.
+V6 diagnostics correct these details without adding floor credit.
 
-## Packed estimate
-
-The packed calculator uses the [physical cache formats](cache.md#current-storage).
-It separates shared physical history from per-consumer traffic.
-Index workspace decoding counts once per physical source and call.
-Each index consumer reads the decoded keys, and each attention consumer reads packed KV.
-Weight credit assumes no unproved retention between calls.
-Wire time uses bandwidth alone, without the empirical NCCL profile.
-
-TP4 supplies activations after expert up computation and before down computation.
-DEP4 dispatch completes before expert computation.
-Reverse FP32 combine follows expert computation.
-Each direction counts separately.
-Route metadata and count exchanges are diagnostics without extra reference credit.
-
-The estimate keeps the resource and two-microbatch relaxation.
-Serial protocol seconds and the conditional partial floor are separate diagnostics.
-Cache retention, padding, launch latency, overlap, and MTP work do not form a full execution-time model.
-The estimate is not a universal physical minimum.
-
-`source_trace_version` and `source_trace_rate_profile` bind the default source trace.
-`accounting_version`, `rate_profile`, and `assumptions_sha256` bind the calculator.
-Runtime identity also records each rank's batch-decode and Graph settings, with the Graph count limit.
-Those settings do not identify each step's capture or Eager fallback.
-
-## Conditional partial floor
-
-The floor uses fixed target arithmetic, numerical order, formats, parameter placement, and replicated projections.
-Its MoE wire credit assumes fixed output shards, full BF16 row delivery, no extra weight copies, no recomputation, and no unmodeled compression or reuse.
-
-HBM and host strict credit is zero.
-Embedding, `wo_b`, head, index, Engram, and DEP4 dispatch/combine wire also have zero strict credit.
-Proposals, rejected work, padding, copies, scheduler costs, empirical latency, and `S/2` receive zero strict credit.
-Nonlinear scalar estimates also receive zero strict credit.
-Weight unions and `direct_protocol_*` traffic are diagnostics.
-This partial floor proves neither full execution time nor resident capacity.
+Splitting the same accepted work into more calls can increase v5 seconds.
+The estimate label and a 33% ratio do not make v5 a latency lower bound.
+V4 gives zero HBM, host, and DEP4 wire credit and stays a partial reference.
+The [acceptance procedure](performance.md#check-the-long-output-rows) uses v6 for current efficiency acceptance.
+Static case scales are estimates, not HTTP evidence or numerical, capacity, or AgentX acceptance.

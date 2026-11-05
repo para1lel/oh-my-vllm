@@ -1,9 +1,9 @@
 # Python worker
 
 Keep the worker process at the same protocol boundary as the inference implementation.
-Use the inference backend for model paths. Use the placeholder only for the `stub` model.
+Use the selected model adapter for computation.
 
-Put transport in the bridge. Keep token simulation in the placeholder backend.
+Put transport in the bridge.
 Use the runtime dependency file for worker packages.
 
 Rust controls request admission, scheduling, and logical block identities.

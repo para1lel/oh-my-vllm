@@ -640,10 +640,13 @@ impl WorkerClient {
         &self,
         template: oh_my_vllm_kv_cache::HybridCoordinator,
     ) -> Option<crate::models::Dep4Cache> {
-        self.execution
-            .owners
-            .as_ref()
-            .map(|owners| crate::models::Dep4Cache::new(template, owners.clone()))
+        self.execution.owners.as_ref().map(|owners| {
+            crate::models::Dep4Cache::new(
+                template,
+                owners.clone(),
+                self.configuration().max_num_seqs as usize,
+            )
+        })
     }
 
     pub(crate) fn attach_request_owners(

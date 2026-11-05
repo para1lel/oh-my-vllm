@@ -6,6 +6,8 @@
 #include "engram.cuh"
 #include "engram_lookup.cuh"
 #include "packed_history.cuh"
+#include "select.cuh"
+#include "weighted_heads.cuh"
 
 namespace {
 

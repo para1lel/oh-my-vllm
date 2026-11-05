@@ -249,7 +249,13 @@ def execute_decode_group(
             valid_rows=valid_rows,
             dispatch_combine=dispatch_combine,
         )
-        predictions = result.logits.argmax(dim=-1).tolist()
+        prediction_ids = result.logits.argmax(dim=-1)
+        predictions = prediction_ids.tolist()
+        reuse_mtp_inputs = (
+            worker.dspark
+            and getattr(worker, "strategy", None) == "tp4"
+            and result.bindings is not None
+        )
         outputs, credited, request_rows = {}, [], []
         for index, (row, request, slot, token_ids, start_pos) in enumerate(prepared):
             drafts = token_ids[1:]
@@ -269,9 +275,21 @@ def execute_decode_group(
                 if result.hidden is not None
                 else None
             )
-            mtp_updated = worker._seed_mtp(hidden, start_pos, slot, source_length=count)
+            mtp_options = (
+                {"cache_slots": result.bindings.cache_slots[index : index + 1]}
+                if reuse_mtp_inputs
+                else {}
+            )
+            mtp_updated = worker._seed_mtp(
+                hidden, start_pos, slot, source_length=count, **mtp_options
+            )
+            if reuse_mtp_inputs:
+                # Acceptance can stop before the final target prediction.
+                mtp_options["input_ids"] = (
+                    prediction_ids[index].reshape(-1)[count - 1 : count].view(1, 1)
+                )
             proposals = worker._next_proposals(
-                request, tokens, hidden, accepted_end, slot
+                request, tokens, hidden, accepted_end, slot, **mtp_options
             )
             worker.cache.commit(
                 row["request_id"],

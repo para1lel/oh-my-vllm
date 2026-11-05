@@ -18,7 +18,6 @@
 [Bridge](../python/oh_my_vllm/worker/zmq_bridge.py) 负责 ZMQ DEALER 和 msgpack 帧.
 [注册表](../python/oh_my_vllm/models/registry.py)在 GPU 导入前选择模型适配器.
 各适配器通过[公共契约](adapters.zh.md)提供计算, 编解码器, 物理缓存和已接受状态选择.
-显式 `stub` 后端仅提供服务测试行为.
 
 模型权重遵循适配器的设备和主机放置计划.
 按顺序执行的层可以复用临时缓冲区.

@@ -13,7 +13,7 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(long, env = "OH_MY_VLLM_MODEL", default_value = "stub")]
+    #[arg(long, env = "OH_MY_VLLM_MODEL")]
     model: PathBuf,
     #[arg(long, default_value = "/tmp/oh-my-vllm.ipc")]
     socket: PathBuf,
@@ -653,9 +653,9 @@ mod tests {
     use super::*;
     use oh_my_vllm_zmq_worker::models::select_model;
 
-    fn cli(flags: &[&str]) -> Cli {
+    fn cli(model_path: &str, flags: &[&str]) -> Cli {
         Cli::try_parse_from(
-            ["omv", "--model", "stub"]
+            ["omv", "--model", model_path]
                 .into_iter()
                 .chain(flags.iter().copied())
                 .chain(["run", "--tokens", "1", "--max-tokens", "1"]),
@@ -665,14 +665,24 @@ mod tests {
 
     #[test]
     fn selected_model_preserves_cli_defaults_modes_and_rejections() {
-        let model = select_model(std::path::Path::new("stub")).unwrap();
+        let directory = std::env::temp_dir().join(format!("omv-cli-model-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let raw = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/qwen38/config.json",
+        ))
+        .strip_suffix(b"\n")
+        .unwrap();
+        std::fs::write(directory.join("config.json"), raw).unwrap();
+        let model = select_model(&directory).unwrap();
+        let model_path = directory.to_str().unwrap();
         for (flags, mode, count) in [
             (vec![], "none", 0),
             (vec!["--speculative-mode", "mtp"], "mtp", 4),
             (vec!["--num-speculative-tokens", "4"], "mtp", 4),
             (vec!["--speculative-mode", "none"], "none", 0),
         ] {
-            let config = cli(&flags).worker_config(model).unwrap();
+            let config = cli(model_path, &flags).worker_config(model).unwrap();
             assert_eq!(config.block_size, 784);
             assert_eq!(config.tensor_parallel_size, 1);
             assert_eq!(config.max_model_len, 262144);
@@ -696,18 +706,24 @@ mod tests {
                 "4",
             ],
         ] {
-            assert!(cli(&flags).worker_config(model).is_err(), "{flags:?}");
+            assert!(
+                cli(model_path, &flags).worker_config(model).is_err(),
+                "{flags:?}"
+            );
         }
-        let config = cli(&[
-            "--max-model-len",
-            "128",
-            "--max-num-seqs",
-            "2",
-            "--max-num-batched-tokens",
-            "32",
-            "--mamba-blocks",
-            "16",
-        ])
+        let config = cli(
+            model_path,
+            &[
+                "--max-model-len",
+                "128",
+                "--max-num-seqs",
+                "2",
+                "--max-num-batched-tokens",
+                "32",
+                "--mamba-blocks",
+                "16",
+            ],
+        )
         .worker_config(model)
         .unwrap();
         assert_eq!((config.max_model_len, config.max_num_seqs), (128, 2));
@@ -719,6 +735,8 @@ mod tests {
         assert!(validate_prompt_tokens(&[vec![248320]], model).is_err());
         let benchmark = Cli::try_parse_from([
             "omv",
+            "--model",
+            model_path,
             "bench",
             "--batch-size",
             "2",
@@ -738,5 +756,6 @@ mod tests {
         assert!(args.parse_prompts("1 2\n3 248320", model).is_err());
         args.batch_size = 33;
         assert!(args.prompts(262144, model).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

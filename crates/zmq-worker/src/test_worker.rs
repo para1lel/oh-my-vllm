@@ -32,7 +32,7 @@ impl TestWorker {
         };
         let mut peer = DealerSocket::new();
         peer.connect(&address).await?;
-        let descriptor = stub_descriptor(&config);
+        let descriptor = qwen_descriptor(&config);
         peer.send(ZmqMessage::from(encode(
             &crate::protocol::WorkerMessage::Ready {
                 descriptor: descriptor.clone(),
@@ -50,7 +50,7 @@ impl TestWorker {
                 mamba_blocks,
                 ..
             } => validate_ready(
-                ModelPolicy::for_family(ModelFamily::Stub),
+                ModelPolicy::for_family(ModelFamily::Qwen38),
                 &config,
                 &descriptor,
                 logical_num_blocks,
@@ -119,39 +119,46 @@ impl TestWorker {
     }
 }
 
-pub(crate) fn stub_descriptor(config: &WorkerConfig) -> ModelDescriptor {
+pub(crate) fn qwen_descriptor(config: &WorkerConfig) -> ModelDescriptor {
+    let fa_layers: Vec<_> = (3..64)
+        .step_by(4)
+        .chain((config.num_speculative_tokens == 4).then_some(64))
+        .collect();
+    let gdn_layers: Vec<_> = (0..64).filter(|layer| layer % 4 != 3).collect();
     serde_json::from_value(serde_json::json!({
         "schema_version": 1,
-        "architecture": "OhMyVllmStubForTesting",
-        "model_type": "oh_my_vllm_stub",
-        "checkpoint_sha256": "6cafe580d6f80a355f3e30bf2c8a7559aef2b081845084d16e9eca733c09d7c2",
-        "config_sha256": "3b7c7f7627a034cd753e4d4db30346a940e49b635952460c51b2ba5f4f332f18",
-        "tokenizer_sha256": "243e380a5f7db0cea0f70d4ddc53663d47e9f2b191b928fa5ccbba201ecf99b7",
+        "architecture": "Qwen3_5ForConditionalGeneration",
+        "model_type": "qwen3_5",
+        "checkpoint_sha256": "a".repeat(64),
+        "config_sha256": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+        "tokenizer_sha256": "b".repeat(64),
         "vocabulary_size": 248320,
         "max_context_tokens": 262144,
         "capabilities": [
             "text", "images", "video", "tools", "reasoning",
             "structured_outputs", "prefix_cache", "host_offload",
         ],
-        "weight_formats": ["f32"],
+        "weight_formats": ["bf16", "f32", "qwen_fp8_e4m3_block128x128_fp32_scales"],
         "cache_schema": {
             "schema_version": 1,
             "groups": [
                 {
-                    "name": "fa", "kind": "model_checkpoint",
+                    "name": "fa", "kind": "full_attention",
                     "block_tokens": 784, "capacity_blocks": config.num_gpu_blocks.unwrap(),
                     "storage": {
-                        "type": "layout", "id": "oh_my_vllm_stub_fa_metadata", "version": 1,
+                        "type": "layout", "id": "qwen38_paired_fa_kv_bf16", "version": 1,
                     },
-                    "layers": [0], "source": {"type": "owned"},
+                    "layers": fa_layers, "source": {"type": "owned"},
                 },
                 {
-                    "name": "gdn", "kind": "model_checkpoint",
+                    "name": "gdn", "kind": "recurrent",
                     "block_tokens": 784, "capacity_blocks": config.mamba_blocks.unwrap(),
                     "storage": {
-                        "type": "layout", "id": "oh_my_vllm_stub_gdn_metadata", "version": 1,
+                        "type": "layout",
+                        "id": "qwen38_paired_gdn_f32_conv_bf16_hidden_bf16",
+                        "version": 1,
                     },
-                    "layers": [0], "source": {"type": "owned"},
+                    "layers": gdn_layers, "source": {"type": "owned"},
                 },
             ],
         },
@@ -172,7 +179,10 @@ async fn terminate_reports_unconfirmed_cleanup_for_an_unowned_process_group() {
     let config = WorkerConfig {
         num_gpu_blocks: Some(128),
         mamba_blocks: Some(64),
-        ..WorkerConfig::for_model("stub".into(), ModelPolicy::for_family(ModelFamily::Stub))
+        ..WorkerConfig::for_model(
+            "/synthetic-qwen".into(),
+            ModelPolicy::for_family(ModelFamily::Qwen38),
+        )
     };
     let mut worker = TestWorker::launch(config).await.unwrap();
     let mut leader_command = Command::new("/bin/sh");
@@ -266,6 +276,16 @@ async fn rejected_ready_reaps_the_owned_process_group_and_removes_the_socket() {
             std::process::id(),
         ));
         std::fs::create_dir(&directory).unwrap();
+        std::fs::write(
+            directory.join("config.json"),
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/qwen38/config.json"
+            ))
+            .strip_suffix(b"\n")
+            .unwrap(),
+        )
+        .unwrap();
         let socket = directory.join("worker.ipc");
         let launcher = directory.join("worker.sh");
         let source = r#"
@@ -276,7 +296,7 @@ import sys
 import time
 import msgpack
 import zmq
-from oh_my_vllm.models.stub import build_descriptor
+from tests.test_models import sample_descriptor
 address = sys.argv[sys.argv.index("--socket") + 1]
 context = zmq.Context()
 socket = context.socket(zmq.DEALER)
@@ -286,7 +306,7 @@ init = msgpack.unpackb(socket.recv(), raw=False)
 assert init["descriptor_version"] == 1
 child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
 Path(address.removeprefix("ipc://") + ".pids").write_text(f"{os.getpid()} {child.pid}")
-d = build_descriptor(1608, 128)
+d = sample_descriptor(num_speculative_tokens=0)
 d["schema_version"] = 2
 reply = dict(type="ready", descriptor=d, logical_num_blocks=1608, mamba_blocks=128)
 payload = msgpack.packb(reply, use_bin_type=True)
@@ -316,7 +336,10 @@ time.sleep(300)
             mamba_blocks: Some(128),
             python_executable: launcher,
             init_timeout: Duration::from_secs(5),
-            ..WorkerConfig::for_model("stub".into(), ModelPolicy::for_family(ModelFamily::Stub))
+            ..WorkerConfig::for_model(
+                directory.clone(),
+                ModelPolicy::for_family(ModelFamily::Qwen38),
+            )
         };
         for selected in [false, true] {
             let invalid = WorkerConfig {
@@ -324,8 +347,11 @@ time.sleep(300)
                 ..config.clone()
             };
             let result = if selected {
-                WorkerClient::launch_with_model(invalid, ModelPolicy::for_family(ModelFamily::Stub))
-                    .await
+                WorkerClient::launch_with_model(
+                    invalid,
+                    ModelPolicy::for_family(ModelFamily::Qwen38),
+                )
+                .await
             } else {
                 WorkerClient::launch(invalid).await
             };
@@ -336,7 +362,7 @@ time.sleep(300)
         assert!(matches!(
             WorkerClient::launch_with_model(
                 config.clone(),
-                ModelPolicy::for_family(ModelFamily::Qwen38),
+                ModelPolicy::for_family(ModelFamily::DeepSeekV41),
             )
             .await,
             Err(Error::ModelConfiguration(_))
@@ -358,6 +384,16 @@ time.sleep(300)
         ));
         assert!(!socket.exists());
         assert!(!socket.with_extension("ipc.pids").exists());
+        std::fs::write(
+            directory.join("config.json"),
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/qwen38/config.json"
+            ))
+            .strip_suffix(b"\n")
+            .unwrap(),
+        )
+        .unwrap();
         // Each synthetic worker and its child stay inside the launcher's owned group.
         let result = WorkerClient::launch(config).await;
         if oversized {

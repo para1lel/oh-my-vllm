@@ -6,7 +6,7 @@ use std::path::Path;
 
 use oh_my_vllm_model_contract::ModelDescriptor;
 
-use super::{ModelFamily, deepseek_v41, qwen38, stub};
+use super::{ModelFamily, deepseek_v41, qwen38};
 use crate::client::WorkerConfig;
 use crate::error::{Error, Result};
 
@@ -39,7 +39,6 @@ impl ModelPolicy {
         match self.family {
             ModelFamily::DeepSeekV41 => deepseek_v41::policy::defaults(),
             ModelFamily::Qwen38 => qwen38::policy::defaults(),
-            ModelFamily::Stub => stub::defaults(),
         }
     }
 
@@ -47,7 +46,6 @@ impl ModelPolicy {
         match self.family {
             ModelFamily::DeepSeekV41 => deepseek_v41::policy::vocabulary_size(),
             ModelFamily::Qwen38 => qwen38::policy::vocabulary_size(),
-            ModelFamily::Stub => stub::vocabulary_size(),
         }
     }
 
@@ -55,7 +53,6 @@ impl ModelPolicy {
         match self.family {
             ModelFamily::DeepSeekV41 => deepseek_v41::policy::max_offline_batch_size(),
             ModelFamily::Qwen38 => qwen38::policy::max_offline_batch_size(),
-            ModelFamily::Stub => stub::max_offline_batch_size(),
         }
     }
 
@@ -63,7 +60,6 @@ impl ModelPolicy {
         match self.family {
             ModelFamily::DeepSeekV41 => deepseek_v41::policy::served_model_name(),
             ModelFamily::Qwen38 => qwen38::policy::served_model_name(),
-            ModelFamily::Stub => stub::served_model_name(),
         }
     }
 
@@ -71,7 +67,6 @@ impl ModelPolicy {
         match self.family {
             ModelFamily::DeepSeekV41 => deepseek_v41::policy::resolve_speculation(mode, drafts),
             ModelFamily::Qwen38 => qwen38::policy::resolve_speculation(mode, drafts),
-            ModelFamily::Stub => stub::resolve_speculation(mode, drafts),
         }
     }
 
@@ -83,7 +78,6 @@ impl ModelPolicy {
         match self.family {
             ModelFamily::DeepSeekV41 => deepseek_v41::policy::validate_options(config),
             ModelFamily::Qwen38 => qwen38::policy::validate_options(config),
-            ModelFamily::Stub => stub::validate_options(config),
         }
     }
 
@@ -111,18 +105,12 @@ impl ModelPolicy {
                 logical_num_blocks,
                 mamba_blocks,
             )?,
-            ModelFamily::Stub => {
-                stub::validate_ready(config, descriptor, logical_num_blocks, mamba_blocks)?
-            }
         }
         Ok(self.family)
     }
 }
 
 pub fn select_model(path: &Path) -> Result<ModelPolicy> {
-    if path.as_os_str() == "stub" {
-        return Ok(ModelPolicy::for_family(ModelFamily::Stub));
-    }
     require_options(!path.as_os_str().is_empty(), "model path must not be empty")?;
     let raw = read_config(path)?;
     let config: serde_json::Value = serde_json::from_slice(&raw)
@@ -268,7 +256,6 @@ mod tests {
                 "qwen3_5",
             ),
             (json!("Qwen3_5ForConditionalGeneration"), "qwen3_5"),
-            (json!(["OhMyVllmStubForTesting"]), "oh_my_vllm_stub"),
         ] {
             config["architectures"] = architectures;
             config["model_type"] = json!(model_type);
@@ -342,28 +329,15 @@ mod tests {
     }
 
     #[test]
-    fn only_literal_stub_selects_the_metadata_simulation() {
-        let policy = select_model(Path::new("stub")).unwrap();
-        assert_eq!(policy.vocabulary_size(), 248320);
-        assert_eq!(policy.max_offline_batch_size(), 32);
-        assert_eq!(policy.served_model_name(), "qwen3.8-27b-fp8");
-        for path in ["", "stub/", "stub/.", "./stub", "/stub", "unknown"] {
+    fn selection_requires_a_model_configuration() {
+        for path in ["", "stub", "unknown"] {
             assert!(select_model(Path::new(path)).is_err(), "{path}");
-            assert!(
-                policy
-                    .validate_options(&WorkerConfig::for_model(path.into(), policy))
-                    .is_err(),
-                "{path}"
-            );
         }
         let qwen = ModelPolicy::for_family(ModelFamily::Qwen38);
-        for path in ["stub", ""] {
-            assert!(
-                qwen.validate_options(&WorkerConfig::for_model(path.into(), qwen))
-                    .is_err(),
-                "{path}"
-            );
-        }
+        assert!(
+            qwen.validate_options(&WorkerConfig::for_model("".into(), qwen))
+                .is_err()
+        );
     }
 
     #[test]
@@ -403,60 +377,53 @@ mod tests {
 
     #[test]
     fn selected_configuration_preserves_defaults_modes_and_rejections() {
-        for (path, policy) in [
+        let path = "/synthetic-qwen";
+        let policy = ModelPolicy::for_family(ModelFamily::Qwen38);
+        let config = WorkerConfig::for_model(path.into(), policy);
+        assert_eq!(config.model_path, Path::new(path));
+        assert_eq!(
             (
-                "/synthetic-qwen",
-                ModelPolicy::for_family(ModelFamily::Qwen38),
+                config.block_size,
+                config.tensor_parallel_size,
+                config.max_model_len,
+                config.max_num_batched_tokens,
+                config.max_num_seqs,
+                config.mamba_blocks,
             ),
-            ("stub", select_model(Path::new("stub")).unwrap()),
+            (784, 1, 262144, 32768, 4, Some(128))
+        );
+        assert_eq!(
+            (config.num_gpu_blocks, config.host_cache_bytes),
+            (None, None)
+        );
+        assert_eq!(
+            (
+                config.num_speculative_tokens,
+                config.speculative_mode.as_deref()
+            ),
+            (0, None)
+        );
+        assert!(policy.validate_options(&config).is_ok());
+        for (mode, drafts, expected_name, expected_count) in [
+            (None, 0, "none", 0),
+            (None, 4, "mtp", 4),
+            (Some("none"), 0, "none", 0),
+            (Some("mtp"), 0, "mtp", 4),
+            (Some("mtp"), 4, "mtp", 4),
         ] {
-            let config = WorkerConfig::for_model(path.into(), policy);
-            assert_eq!(config.model_path, Path::new(path));
+            let resolved = policy.resolve_speculation(mode, drafts).unwrap();
             assert_eq!(
-                (
-                    config.block_size,
-                    config.tensor_parallel_size,
-                    config.max_model_len,
-                    config.max_num_batched_tokens,
-                    config.max_num_seqs,
-                    config.mamba_blocks,
-                ),
-                (784, 1, 262144, 32768, 4, Some(128))
+                (resolved.name, resolved.num_tokens),
+                (expected_name, expected_count)
             );
-            assert_eq!(
-                (config.num_gpu_blocks, config.host_cache_bytes),
-                (None, None)
-            );
-            assert_eq!(
-                (
-                    config.num_speculative_tokens,
-                    config.speculative_mode.as_deref()
-                ),
-                (0, None)
-            );
-            assert!(policy.validate_options(&config).is_ok());
-            for (mode, drafts, expected_name, expected_count) in [
-                (None, 0, "none", 0),
-                (None, 4, "mtp", 4),
-                (Some("none"), 0, "none", 0),
-                (Some("mtp"), 0, "mtp", 4),
-                (Some("mtp"), 4, "mtp", 4),
-            ] {
-                let resolved = policy.resolve_speculation(mode, drafts).unwrap();
-                assert_eq!(
-                    (resolved.name, resolved.num_tokens),
-                    (expected_name, expected_count)
-                );
-            }
-            for (mode, drafts) in [(None, 1), (None, 5), (Some("none"), 4), (Some("mtp"), 1)] {
-                assert!(
-                    policy.resolve_speculation(mode, drafts).is_err(),
-                    "{mode:?}/{drafts}"
-                );
-            }
         }
-        let policy = select_model(Path::new("stub")).unwrap();
-        let config = WorkerConfig::for_model("stub".into(), policy);
+        for (mode, drafts) in [(None, 1), (None, 5), (Some("none"), 4), (Some("mtp"), 1)] {
+            assert!(
+                policy.resolve_speculation(mode, drafts).is_err(),
+                "{mode:?}/{drafts}"
+            );
+        }
+        let config = WorkerConfig::for_model(path.into(), policy);
         for invalid in [
             WorkerConfig {
                 block_size: 785,

@@ -27,6 +27,7 @@ from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 from . import deepseek_accounting as accounting
 from . import deepseek_accounting_floor as accounting_floor
 from . import deepseek_accounting_packed as accounting_packed
+from . import deepseek_accounting_roofline as accounting_roofline
 from .benchmark import ROOT, source_identity
 from .deepseek_accounting import (
     BindingError,
@@ -57,6 +58,7 @@ def reference_configuration(version=accounting.VERSION):
         accounting.VERSION,
         accounting_floor.VERSION,
         accounting_packed.VERSION,
+        accounting_roofline.VERSION,
     ):
         raise ValueError("unknown benchmark reference version")
     configuration = {
@@ -135,6 +137,28 @@ def reference_configuration(version=accounting.VERSION):
                 "conditional_partial_floor_seconds",
             ],
         )
+    if version == accounting_roofline.VERSION:
+        configuration.update(
+            rate_profile=accounting_roofline.rate_profile_digest(),
+            assumptions_sha256=accounting_roofline.assumptions_digest(),
+            reference_scope="fixed-algorithm resource roofline",
+            reference_conditions=list(accounting_roofline.ASSUMPTIONS.values()),
+            reference_zero_credit=[
+                (
+                    "MTP proposals, rejected rows, repeated prefill, replay, padding, "
+                    "state copies, metadata, launches, and scalar estimates."
+                ),
+                (
+                    "Unproved history reloads and embedding, attention wo_b, "
+                    "vocabulary-head, index, and Engram wire."
+                ),
+            ],
+            reference_diagnostics=[
+                "weight_union_lower_bytes",
+                "cache_payload_bytes",
+                "protocol_stages",
+            ],
+        )
     return configuration
 
 
@@ -145,21 +169,27 @@ def runtime_reference(trace, *, strategy, expected_binding, version=accounting.V
     binding = trace.get("binding") if isinstance(trace, dict) else None
     if not isinstance(binding, dict):
         raise BindingError("runtime reference requires a source binding")
-    if version in (accounting_floor.VERSION, accounting_packed.VERSION):
-        calculator = (
-            accounting_floor
-            if version == accounting_floor.VERSION
-            else accounting_packed
-        )
+    calculators = {
+        accounting_floor.VERSION: (
+            accounting_floor,
+            "conditional-partial-resource-floor",
+        ),
+        accounting_packed.VERSION: (
+            accounting_packed,
+            "fixed-protocol-project-estimate",
+        ),
+        accounting_roofline.VERSION: (
+            accounting_roofline,
+            "fixed-algorithm-resource-roofline",
+        ),
+    }
+    if version in calculators:
+        calculator, communication_model = calculators[version]
         reference = calculator.reference_trace(
             trace, strategy=strategy, expected_binding=expected_binding
         )
         metadata.update(
-            communication_model=(
-                "conditional-partial-resource-floor"
-                if version == accounting_floor.VERSION
-                else "fixed-protocol-project-estimate"
-            ),
+            communication_model=communication_model,
             profile_digest=None,
             communication_rule_version=None,
             dep4_communication_modeled=False,
@@ -313,15 +343,63 @@ def topology_identity(uuids):
     return [device_identity(uuid) for uuid in uuids]
 
 
-def effective_cache_configuration(arguments):
+def workload_cache_requirements(cases):
+    requirements = {}
+    for case in cases:
+        strategy = case["strategy"]
+        if strategy not in ("tp4", "tep4", "dep4"):
+            raise ValueError("unknown cache placement strategy")
+        requests = case["batch"]
+        total = case["input_tokens"] + case["output_tokens"]
+        if type(requests) is not int or requests < 1 or total < 1:
+            raise ValueError("cache workload needs positive requests and context")
+        local = (requests + 3) // 4 if strategy == "dep4" else requests
+        drafts = 5 if case["mode"] == "dspark5" else 0
+        token_pages = (total + drafts + 127) // 128 + 1
+        current = requirements.setdefault(
+            strategy,
+            {
+                "block_tokens": 128,
+                "placement": "request_owner" if strategy == "dep4" else "replicated",
+                "resident_requests": 0,
+                "maximum_total_tokens": 0,
+                "blocks": 1,
+                "mamba_blocks": 1,
+            },
+        )
+        current["resident_requests"] = max(current["resident_requests"], local)
+        current["maximum_total_tokens"] = max(current["maximum_total_tokens"], total)
+        current["blocks"] = max(current["blocks"], 1 + local * token_pages)
+        current["mamba_blocks"] = max(current["mamba_blocks"], 1 + local * (2 + drafts))
+    return requirements
+
+
+def effective_cache_configuration(arguments, strategy=None):
+    requirements = getattr(arguments, "cache_requirements", {})
+    selected = (
+        [requirements[strategy]]
+        if strategy in requirements
+        else list(requirements.values())
+    )
+    minimum_blocks = max((row["blocks"] for row in selected), default=2)
+    minimum_states = max((row["mamba_blocks"] for row in selected), default=2)
     blocks = arguments.blocks
     if blocks is None:
         value = os.environ.get("OH_MY_VLLM_NUM_GPU_BLOCKS")
-        blocks = 2048 if value is None else int(value)
-    return {
-        "blocks": blocks,
-        "mamba_blocks": arguments.mamba_blocks or 128,
-    }
+        blocks = max(2048, minimum_blocks) if value is None else int(value)
+    states = arguments.mamba_blocks
+    if states is None:
+        states = max(128, minimum_states)
+    for name, value, minimum, maximum in (
+        ("blocks", blocks, minimum_blocks, 2**32 - 3),
+        ("mamba_blocks", states, minimum_states, 65536),
+    ):
+        if type(value) is not int or not minimum <= value <= maximum:
+            raise ValueError(
+                f"{name}={value} cannot cover the selected resident workload; "
+                f"need {minimum}..{maximum}, including the null page and private state"
+            )
+    return {"blocks": blocks, "mamba_blocks": states}
 
 
 def effective_service_configuration(arguments):
@@ -405,6 +483,11 @@ def artifact_identity(arguments, tokenizer, uuids, *, workload):
             ),
             **cache_configuration,
             **service_configuration,
+            "rank_cache_requirements": getattr(arguments, "cache_requirements", {}),
+            "rank_cache_configuration": {
+                strategy: effective_cache_configuration(arguments, strategy)
+                for strategy in getattr(arguments, "cache_requirements", {})
+            },
             "native_sparse": os.environ.get("OH_MY_VLLM_DEEPSEEK_NATIVE_SPARSE", "1"),
             "execution_modes": {
                 strategy: execution_modes(strategy)
@@ -451,6 +534,7 @@ class Service:
         self.request_timeout_seconds = getattr(
             arguments, "request_timeout_seconds", DEFAULT_REQUEST_TIMEOUT_SECONDS
         )
+        cache_configuration = effective_cache_configuration(arguments, strategy)
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
@@ -479,10 +563,8 @@ class Service:
         ]
         if mode == "dspark5":
             command += ["--speculative-mode", "dspark5"]
-        if arguments.blocks is not None:
-            command += ["--num-gpu-blocks", str(arguments.blocks)]
-        if arguments.mamba_blocks is not None:
-            command += ["--mamba-blocks", str(arguments.mamba_blocks)]
+        command += ["--num-gpu-blocks", str(cache_configuration["blocks"])]
+        command += ["--mamba-blocks", str(cache_configuration["mamba_blocks"])]
         command += [
             "--socket",
             str(self.ipc),
@@ -551,6 +633,7 @@ class Service:
         version = getattr(self.arguments, "reference_version", accounting.VERSION)
         if identity.get("reference") != reference_configuration(version):
             raise BindingError("benchmark reference identity is missing or changed")
+        started = time.perf_counter()
         nonce = hashlib.sha256(f"{prompt_seed}:{case_id(case)}".encode()).hexdigest()[
             :32
         ]
@@ -562,7 +645,6 @@ class Service:
             )
             for index in range(case["batch"])
         ]
-        started = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=case["batch"]) as pool:
             responses = list(
                 pool.map(
@@ -685,10 +767,11 @@ def argument_parser():
             accounting.VERSION,
             accounting_floor.VERSION,
             accounting_packed.VERSION,
+            accounting_roofline.VERSION,
         ),
         default=accounting.VERSION,
         help=(
-            "HTTP accountant; v4 is a conditional partial resource floor "
+            "HTTP accountant; v6 is the fixed-algorithm resource roofline "
             "(default: v3.1)"
         ),
     )
@@ -722,11 +805,24 @@ def main():
         parser.error(str(error))
     if len(uuids) != 4:
         parser.error("DeepSeek benchmark requires four selected GPUs")
+    arguments.cache_requirements = workload_cache_requirements(HTTP_CASES)
+    if any(
+        row["maximum_total_tokens"] > arguments.cache_context
+        for row in arguments.cache_requirements.values()
+    ):
+        parser.error("cache context must cover every approved prompt and output")
+    try:
+        effective_cache_configuration(arguments)
+    except ValueError as error:
+        parser.error(str(error))
     arguments.artifacts.mkdir(parents=True, exist_ok=False)
+    (arguments.artifacts / "selection.json").write_text(
+        json.dumps({"case_ids": [case_id(case) for case in cases]}, indent=2) + "\n"
+    )
     tokenizer = Tokenization(arguments.model)
     workload = {
         "kind": "http",
-        "case_ids": [case_id(case) for case in cases],
+        "case_ids": [case_id(case) for case in HTTP_CASES],
         "prompt_seed": arguments.prompt_seed,
     }
     identity = artifact_identity(

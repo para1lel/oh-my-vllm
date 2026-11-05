@@ -8,7 +8,7 @@ Agents run applicable tests and [hooks](development.md#git-hooks) for the mainta
 ## Shared checks
 
 Rust checks service behavior, scheduling, logical state, and worker lifecycle.
-HTTP service tests use the explicit Python placeholder through the process boundary.
+HTTP service tests use fixed replies from a Python test fixture through the process boundary.
 Their timing is not inference performance.
 CPU checks cover model selection, readiness, constraints, evidence identities, accounting, and manifests.
 

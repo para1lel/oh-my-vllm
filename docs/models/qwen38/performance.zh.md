@@ -2,7 +2,6 @@
 
 使用一张 NVIDIA B200, 并遵守[模型契约](model.zh.md).
 使用完整 Rust 服务和 Python 推理 worker.
-占位输出不能作为推理证据.
 [GPU 执行规则](../../execution.zh.md)规定执行方式.
 
 ## 配置

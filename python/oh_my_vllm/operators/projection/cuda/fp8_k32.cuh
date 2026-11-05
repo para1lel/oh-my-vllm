@@ -23,6 +23,12 @@ void launch_tcgen_k32(const uint8_t *input, const uint8_t *weight, const uint8_t
                       const uint8_t *weight_scales, Output *output, int rows, int outputs,
                       int width, ScaleLayout weight_layout, cudaStream_t stream);
 
+template <class Output, class ScaleLayout>
+void launch_tcgen_narrow_k32(const uint8_t *input, const uint8_t *weight,
+                             const uint8_t *input_scales, const uint8_t *weight_scales,
+                             Output *output, int rows, int outputs, int width,
+                             ScaleLayout weight_layout, cudaStream_t stream);
+
 __device__ __forceinline__ float fp8_scale(uint8_t code) {
   if (code == 255)
     return __uint_as_float(0x7fc00000u);
@@ -264,7 +270,12 @@ void launch_fp8_k32(const uint8_t *input, const uint8_t *weight, const uint8_t *
   else if (rows == 1)
     fp8_decode_kernel<Output, ScaleLayout><<<outputs / 8, 32, 0, stream>>>(
         input, weight, input_scales, weight_scales, output, outputs, width, weight_layout);
-  else if (outputs <= 1024 && width >= 1024)
+  else if (rows >= 2048 && outputs == 512 && width == 5120 &&
+           reinterpret_cast<uintptr_t>(input) % 128 == 0 &&
+           reinterpret_cast<uintptr_t>(weight) % 128 == 0)
+    launch_tcgen_narrow_k32(input, weight, input_scales, weight_scales, output, rows, outputs,
+                            width, weight_layout, stream);
+  else if ((outputs <= 1024 || (rows < 32 && outputs < 4096)) && width >= 1024)
     fp8_k32_kernel<Output, ScaleLayout, 1><<<dim3(outputs / 8, (rows + 15) / 16), 128, 0, stream>>>(
         input, weight, input_scales, weight_scales, output, rows, outputs, width, weight_layout);
   else if (rows >= 128 && outputs > 1024 && outputs % 256 == 0 && width <= 6144 &&

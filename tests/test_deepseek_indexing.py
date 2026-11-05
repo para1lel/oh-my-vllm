@@ -315,9 +315,19 @@ class DeepSeekIndexing(unittest.TestCase):
                     seen.append((first, last, value.clone()))
                     yield first, last, value
 
-            def peer_sum(value):
+            def peer_sum(value, async_op=False):
                 reductions.append(tuple(value.shape))
-                value.add_(0.25)
+                done = False
+
+                def wait():
+                    nonlocal done
+                    if not done:
+                        value.add_(0.25)
+                        done = True
+
+                if async_op:
+                    return SimpleNamespace(wait=wait)
+                wait()
 
             with (
                 patch.object(model, "world_size", 4),
@@ -353,6 +363,135 @@ class DeepSeekIndexing(unittest.TestCase):
                 )
                 blocks = model.shared_attn.candidates.clone()
             return result, blocks, seen, reductions
+
+        if device == "cuda":
+            completed = []
+            submitted = []
+
+            def delayed_sum(value, async_op=False):
+                self.assertTrue(async_op)
+                ordinal = len(submitted)
+                submitted.append(value)
+
+                def wait():
+                    if ordinal not in completed:
+                        value.add_(0.25)
+                        completed.append(ordinal)
+
+                return SimpleNamespace(wait=wait)
+
+            with patch("torch.distributed.all_reduce", side_effect=delayed_sum):
+                chunks = score_chunks(
+                    query,
+                    keys,
+                    weights,
+                    work_bytes=row_bytes * 2 * query.size(0),
+                    rank_sum=True,
+                )
+                first, last, actual = next(chunks)
+                self.assertEqual((first, last), (0, 2))
+                expected = (
+                    (
+                        torch.einsum(
+                            "bshd,btd->bsht", query[:, :2].contiguous(), keys
+                        ).relu_()
+                        * weights[:, :2].unsqueeze(-1)
+                    )
+                    .sum(dim=2)
+                    .float()
+                    .add_(0.25)
+                    .bfloat16()
+                )
+                self.assertTrue(
+                    torch.equal(actual.view(torch.int16), expected.view(torch.int16))
+                )
+                self.assertEqual(completed, [0])
+                self.assertEqual(len(submitted), 2)
+                self.assertNotEqual(submitted[0].data_ptr(), submitted[1].data_ptr())
+                chunks.close()
+                self.assertEqual(completed, [0, 1])
+            unaligned = torch.empty(
+                weights.numel() + 1, dtype=weights.dtype, device=device
+            )[1:].view_as(weights)
+            unaligned.copy_(weights)
+            with (
+                patch(
+                    "oh_my_vllm.models.deepseek_v41.indexing._rank_score_chunks",
+                    side_effect=AssertionError(
+                        "unsupported storage must use existing math"
+                    ),
+                ),
+                patch("torch.distributed.all_reduce"),
+            ):
+                list(
+                    score_chunks(
+                        query,
+                        keys,
+                        unaligned,
+                        work_bytes=row_bytes * 2 * query.size(0),
+                        rank_sum=True,
+                    )
+                )
+            with patch(
+                "torch.distributed.all_reduce",
+                side_effect=lambda value: value.add_(0.25),
+            ):
+                odd_scores = torch.cat(
+                    [
+                        value
+                        for _, _, value in score_chunks(
+                            query,
+                            keys[:, :17],
+                            weights,
+                            work_bytes=row_bytes * 2 * query.size(0),
+                            rank_sum=True,
+                        )
+                    ],
+                    dim=1,
+                )
+            odd_expected = (
+                (
+                    torch.einsum("bshd,btd->bsht", query, keys[:, :17]).relu_()
+                    * weights.unsqueeze(-1)
+                )
+                .sum(dim=2)
+                .float()
+                .add_(0.25)
+                .bfloat16()
+            )
+            self.assertTrue(
+                torch.equal(
+                    odd_scores.view(torch.int16), odd_expected.view(torch.int16)
+                )
+            )
+            strided_weights = torch.ones(
+                (1, 3, heads + 1), dtype=weights.dtype, device=device
+            )[:, :, :heads]
+            with (
+                patch(
+                    "oh_my_vllm.models.deepseek_v41.indexing._rank_score_chunks",
+                    side_effect=AssertionError(
+                        "strided weights must keep existing math"
+                    ),
+                ),
+                patch("torch.distributed.all_reduce"),
+            ):
+                one_row_bytes = (
+                    max(heads * (dim + 8), 2 * heads * 8, (heads + 1) * 8) * 2 + 32
+                )
+                chunks = list(
+                    score_chunks(
+                        query[:1, :3],
+                        keys[:1, :8],
+                        strided_weights,
+                        work_bytes=one_row_bytes,
+                        rank_sum=True,
+                    )
+                )
+                self.assertEqual(
+                    [(first, last) for first, last, _ in chunks],
+                    [(0, 1), (1, 2), (2, 3)],
+                )
 
         for source in (False, True):
             for rows in (1, 3, 6):
@@ -422,6 +561,102 @@ class DeepSeekIndexing(unittest.TestCase):
         for widths in ((10,), (17, 3, 0), (-1, 3, 0)):
             with self.assertRaises(ValueError):
                 topk_indices(scores, 4, request_widths=widths)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_topk_default_keeps_torch_nan_behavior(self):
+        scores = torch.zeros((1, 1, 1024), dtype=torch.bfloat16, device="cuda")
+        scores[..., 0] = torch.nan
+        expected = scores.topk(512, sorted=False).indices.sort(-1).values
+        with patch(
+            "oh_my_vllm.models.deepseek_v41.kernel._transform_module",
+            side_effect=AssertionError(
+                "default top-k must preserve Torch NaN behavior"
+            ),
+        ):
+            actual = topk_indices(scores, 512)
+        self.assertTrue(torch.equal(actual, expected))
+        self.assertTrue(bool(((actual >= 0) & (actual < 1024)).all()))
+        self.assertTrue(bool((actual.diff(dim=-1) > 0).all()))
+        self.assertTrue(bool((actual == 0).any()))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_native_topk_model_keeps_early_valid_indices_and_sentinels_in_graph(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel, model
+
+        width, rows, offset = 1025, 6, 128
+        source = torch.ones((1, rows, width), dtype=torch.bfloat16, device="cuda")
+        query = source.new_zeros((1, rows, 1, 1))
+        keys = source.new_zeros((1, width, 1))
+        weights = source.new_zeros((1, rows, 1))
+        indexer = SimpleNamespace(
+            compress_ratio=2,
+            index_topk=512,
+            is_candidate_source=False,
+            uses_candidates=False,
+        )
+
+        def chunks(*args, **kwargs):
+            yield 0, rows, source.clone()
+
+        def run():
+            return model.Indexer._select_indices(
+                indexer, query, keys, weights, 0, offset
+            )[0]
+
+        expected = torch.full((1, rows, 512), -1, dtype=torch.int32, device="cuda")
+        for row in range(rows):
+            valid = (row + 1) // 2
+            expected[0, row, :valid] = torch.arange(valid, device="cuda") + offset
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        graph = torch.cuda.CUDAGraph()
+        try:
+            with (
+                patch.object(model, "score_chunks", side_effect=chunks),
+                patch.object(
+                    kernel, "_transform_module", wraps=kernel._transform_module
+                ) as native,
+            ):
+                with torch.cuda.stream(stream):
+                    self.assertTrue(torch.equal(run(), expected))
+                with torch.cuda.graph(graph, stream=stream):
+                    actual = run()
+                with torch.cuda.stream(stream):
+                    source.fill_(2)
+                    graph.replay()
+                    self.assertTrue(torch.equal(actual, expected))
+                self.assertEqual(native.call_count, 2)
+        finally:
+            stream.synchronize()
+            graph.reset()
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_topk_unsupported_layout_count_and_request_widths_keep_torch_behavior(self):
+        values = torch.randn((1, 2, 1024), device="cuda").bfloat16()
+        unaligned = torch.empty(values.numel() + 1, device="cuda", dtype=values.dtype)[
+            1:
+        ]
+        unaligned = unaligned.view_as(values).copy_(values)
+        with patch(
+            "oh_my_vllm.models.deepseek_v41.kernel._transform_module",
+            side_effect=AssertionError(
+                "unsupported inputs must keep the existing path"
+            ),
+        ):
+            for scores, count, widths in (
+                (values.cpu(), 512, None),
+                (values.float(), 512, None),
+                (values, 256, None),
+                (values[..., ::2], 512, None),
+                (unaligned, 512, None),
+                (values, 512, (513,)),
+            ):
+                actual = topk_indices(
+                    scores, count, request_widths=widths, finite_scores=True
+                )
+                expected = scores[..., : widths[0]] if widths else scores
+                expected = expected.topk(count, sorted=False).indices.sort(-1).values
+                self.assertTrue(torch.equal(actual, expected))
 
     def test_candidate_blocks_keep_request_width_at_tied_cutoffs(self):
         from oh_my_vllm.models.deepseek_v41.model import select_candidate_blocks

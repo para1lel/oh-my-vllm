@@ -5,7 +5,7 @@ The grouped FP4 path keeps the original operator interface, BF16 expert rounding
 
 ## Exact scale combination
 
-The [native scale update](../../../python/oh_my_vllm/operators/projection/cuda/fp8_k32.cuh#L32)<!-- source: __device__ __forceinline__ float fp8_scaled_add(float raw, uint8_t activation, uint8_t weight, --> can combine two scale exponents.
+The [native scale update](../../../python/oh_my_vllm/operators/projection/cuda/fp8_k32.cuh#L38)<!-- source: __device__ __forceinline__ float fp8_scaled_add(float raw, uint8_t activation, uint8_t weight, --> can combine two scale exponents.
 Each finite E4M3 product is a multiple of `2**-18`.
 A raw K32 dot stays a multiple of this value and has magnitude below `2**23`.
 For activation scale codes at most 232, its multiplication is exact, also for subnormal results.

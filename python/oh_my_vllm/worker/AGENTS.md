@@ -1,7 +1,6 @@
 # Shared worker mechanisms
 
 Keep ZMQ and msgpack transport in the bridge.
-Use the placeholder only when the model path is `stub`.
 A model load or computation failure must return an error.
 
 Use runtime packages and native CUDA modules. Do not import development tools.

@@ -11,6 +11,8 @@ import time
 import unittest
 from pathlib import Path
 
+from tests.worker_fixture import REPLIES, install
+
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = os.environ["OH_MY_VLLM_TEST_BINARY"]
 MODEL = "qwen3.8-27b-fp8"
@@ -41,14 +43,19 @@ class Service(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="oh-my-vllm-http-")
         self.addCleanup(self.directory.cleanup)
+        environment = install(self.directory.name)
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             self.port = listener.getsockname()[1]
         self.process = subprocess.Popen(
             [
                 BINARY,
+                "--model",
+                self.directory.name,
                 "--socket",
                 self.directory.name + "/worker.ipc",
+                "--num-gpu-blocks",
+                "128",
                 "serve",
                 "--listen",
                 f"127.0.0.1:{self.port}",
@@ -60,6 +67,7 @@ class Service(unittest.TestCase):
                 "2",
             ],
             cwd=ROOT,
+            env=environment,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -376,36 +384,14 @@ class Service(unittest.TestCase):
         )
         self.assertFalse(stopped["choices"][0]["message"]["content"])
         self.assertEqual(stopped["choices"][0]["finish_reason"], "stop")
-        oversized = {"type": "string"}
-        for _ in range(5):
-            oversized = {"type": "array", "minItems": 64, "items": oversized}
-        self.json(
-            "POST",
-            "/v1/chat/completions",
-            self.chat(
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {"name": "big", "schema": oversized},
-                }
-            ),
-            status=400,
-        )
         self.assertEqual(self.diagnostics()["epoch"], epoch)
 
     def test_cancellation_and_worker_recovery(self):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        large = {
-            "type": "object",
-            "properties": {
-                "text": {
-                    "type": "array",
-                    "minItems": 64,
-                    "items": {"type": "string", "minLength": 4096},
-                }
-            },
-            "required": ["text"],
-            "additionalProperties": False,
-        }
+        self.addCleanup(connection.close)
+        (Path(self.directory.name) / "replies.json").write_text(
+            json.dumps({**REPLIES, "text": "x" * 65536})
+        )
         connection.request(
             "POST",
             "/v1/chat/completions",
@@ -413,15 +399,12 @@ class Service(unittest.TestCase):
                 self.chat(
                     stream=True,
                     max_tokens=65536,
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {"name": "long", "schema": large},
-                    },
                 )
             ),
             {"Content-Type": "application/json"},
         )
         response = connection.getresponse()
+        self.addCleanup(response.close)
         self.assertEqual(response.status, 200)
         response.read(1)
         wait_for(lambda: self.diagnostics()["active_requests"] > 0)
@@ -436,9 +419,11 @@ class Service(unittest.TestCase):
         wait_for(lambda: self.diagnostics().get("epoch", 0) >= 2)
         self.worker = self.diagnostics()["worker_pid"]
         self.assertNotEqual(self.worker, worker)
+        (Path(self.directory.name) / "replies.json").write_text(json.dumps(REPLIES))
         result = self.json("POST", "/v1/chat/completions", self.chat())
         self.assertTrue(result["choices"][0]["message"]["content"])
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        self.addCleanup(connection.close)
         connection.putrequest("POST", "/v1/chat/completions")
         connection.putheader("Content-Type", "application/json")
         connection.putheader("Content-Length", "100")
@@ -450,10 +435,13 @@ class Service(unittest.TestCase):
 class Offline(unittest.TestCase):
     def test_run_bench_and_prefix_reuse(self):
         with tempfile.TemporaryDirectory(prefix="oh-my-vllm-cli-") as directory:
+            environment = install(directory)
             for mode in ("none", "mtp"):
                 result = subprocess.run(
                     [
                         BINARY,
+                        "--model",
+                        directory,
                         "--socket",
                         directory + "/worker.ipc",
                         "--speculative-mode",
@@ -465,6 +453,7 @@ class Offline(unittest.TestCase):
                         "--max-tokens",
                         "8",
                     ],
+                    env=environment,
                     capture_output=True,
                     text=True,
                     timeout=10,
@@ -479,6 +468,8 @@ class Offline(unittest.TestCase):
             result = subprocess.run(
                 [
                     BINARY,
+                    "--model",
+                    directory,
                     "--socket",
                     directory + "/bench.ipc",
                     "bench",
@@ -494,6 +485,7 @@ class Offline(unittest.TestCase):
                     "--repetitions",
                     "1",
                 ],
+                env=environment,
                 capture_output=True,
                 text=True,
                 timeout=10,

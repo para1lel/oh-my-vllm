@@ -2,7 +2,7 @@
 
 Use four B200 GPUs and the full Rust service.
 Select GPUs with the [GPU wrapper](../../distributed.md#gpu-leases).
-Performance measurements exclude GPUs with locked clocks.
+Do not use GPUs with locked clocks for performance measurements.
 Keep raw artifacts external to the repository.
 Set `TMPDIR` to a writable directory with a short path for Unix sockets.
 
@@ -31,6 +31,7 @@ Run the matrix:
 ```bash
 OH_MY_VLLM_GPU_COUNT=4 scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.deepseek_benchmark \
   --model "$MODEL_ROOT" \
+  --reference-version deepseek-http-roofline-v6 \
   --artifacts "$ARTIFACT_ROOT" \
   --csv docs/models/deepseek_v41/assets/http-latest.csv
 ```
@@ -42,7 +43,7 @@ Use `--request-timeout-seconds` for the HTTP client and service timeout.
 The default timeout is 7200 seconds.
 
 The timer includes submission, prompt preparation, queueing, model execution, and response parsing.
-It excludes model loading and initialization.
+It does not include model loading and initialization.
 The CSV identifies mode, strategy, batch, exact lengths, request count, and full HTTP seconds.
 It also records `effective_strategy`, `reference_seconds`, `reference_acceptance`, and `efficiency_percent`.
 
@@ -54,10 +55,14 @@ Structured CSV fields contain JSON.
 
 ## Select the reference
 
-The default is `deepseek-http-reference-v3.1`.
-Use `--reference-version deepseek-http-protocol-estimate-v5` for packed protocol estimates.
-Use `--reference-version deepseek-http-resource-floor-v4` for the conditional partial resource floor.
-The [reference contract](accounting.md) defines their formats, credit rules, limitations, and identities.
+The harness default stays the historical `deepseek-http-reference-v3.1`.
+Use `--reference-version deepseek-http-roofline-v6` for current efficiency acceptance.
+V6 is a resource lower bound with fixed target arithmetic, placement, wire formats, and maximum overlap.
+Its whole-HTTP quantities do not increase when the same accepted work is split into more calls.
+
+Use `--reference-version deepseek-http-protocol-estimate-v5` to examine the historical packed protocol estimate.
+Use `--reference-version deepseek-http-resource-floor-v4` for the conditional partial floor.
+The [reference contract](accounting.md) gives formats, necessity arguments, zero-credit items, and identities.
 
 `reference_case` supplies static scales only.
 HTTP results use `reference_trace` with the bound runtime trace.
@@ -66,7 +71,7 @@ An ideal draft-acceptance assumption is not measured efficiency.
 
 ## Check the long-output rows
 
-Full packed acceptance uses the packed protocol estimate.
+Current efficiency acceptance uses `deepseek-http-roofline-v6` and its fixed-algorithm resource roofline scope.
 The check uses all 19 approved 8192-output cases, one measurement identity, and at least 33% efficiency for each row.
 Run the check on completed result JSON files:
 
@@ -76,7 +81,12 @@ scripts/with-env.sh python -m development.serving.deepseek_acceptance "$ARTIFACT
 
 The check calculates the selected reference and efficiency again from each bound runtime trace.
 Missing, duplicate, failed, mixed-identity, static, or changed-reference records cannot pass.
-The conditional partial floor is ineligible for full packed acceptance.
+V3.1, v4, and v5 are ineligible for current efficiency acceptance.
+Their recalculated threshold diagnostics stay available without a target pass.
+
+Old calculator identities stay unchanged.
+Old records cannot silently acquire v6 qualification.
+Full protocol stage bytes are diagnostics and do not add serial seconds to the v6 floor.
 
 Exit status is 0 for a pass, 1 for invalid or failed rows, and 2 for an ineligible reference.
 A pass does not replace [numerical acceptance](evaluation.md), capacity checks, or the [AgentX workloads](agentx.md).

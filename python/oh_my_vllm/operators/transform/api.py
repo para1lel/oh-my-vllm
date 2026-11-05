@@ -80,6 +80,31 @@ values. Check status before state commit. Inputs, output, and status must
 not overlap. The operation uses FP32 multiplication and BF16 nearest-even
 rounding, without temporary storage or synchronization. Keep all buffers
 alive through execution or graph release. Map their storage before recording.
+
+weighted_heads(values, weights, output) uses contiguous BF16 values [rows,8,width]
+and weights [rows,8], with FP32 output [rows,width]. width is positive.
+All addresses have 16-byte alignment on one CUDA device.
+Inputs are finite and their BF16 products and sums must remain finite.
+Apply ReLU, then round each weighted product to BF16. Four FP32 accumulators
+sum heads (0,4), (1,5), (2,6), and (3,7). Add these accumulators in order.
+Round that sum to BF16 before storing its FP32 value. Output cannot overlap
+inputs. Empty rows are valid. The operation uses the caller's stream, with
+no temporary storage or synchronization. Retain buffers through completion or
+Graph release. Invalid metadata raises before launch.
+
+topk_bf16(scores, output, logical_width) selects 512 largest BF16 scores per
+row and returns ascending I64 indices. scores is contiguous [rows,physical_width],
+with physical_width = ceil(logical_width / 512) * 512, 512 <= logical_width <
+2**23, and 0 <= rows <= 32768. The complete physical allocation, including each
+row's padding, must be present in scores. Padding must be initialized; its values
+are ignored. Only columns below logical_width participate. Output is contiguous
+I64 [rows,512]. Both buffers are 16-byte aligned on one CUDA device and do not
+overlap, including physical padding. Logical scores must not contain NaNs.
+Infinity and negative infinity are valid. This is not a general torch.topk
+replacement. No tie subset is promised. The operation uses the caller's stream,
+allocates no device storage, and does not synchronize. Prepare the native module
+before recording. Keep both physical buffers through completion or Graph release.
+Metadata errors raise before launch.
 """
 
 from typing import NamedTuple
@@ -93,6 +118,8 @@ FUNCTIONS = (
     "engram_lookup_stage",
     "engram_lookup_decode",
     "gather_fp4",
+    "weighted_heads",
+    "topk_bf16",
 )
 
 

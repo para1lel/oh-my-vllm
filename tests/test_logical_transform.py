@@ -43,6 +43,167 @@ class LogicalTransformContracts(unittest.TestCase):
     def setUpClass(cls):
         cls.module = load("transform", FUNCTIONS)[0]
 
+    def test_weighted_heads_keeps_bfloat16_rounding_and_graph_stream(self):
+        stream = torch.cuda.Stream()
+        with torch.cuda.stream(stream):
+            for rows, width in (
+                (0, 8),
+                (1, 1),
+                (3, 7),
+                (3, 24),
+                (53, 1152),
+                (107, 128),
+                (7, 129),
+            ):
+                values = torch.randn((rows, 8, width), device="cuda").bfloat16()
+                weights = torch.randn((rows, 8), device="cuda").bfloat16()
+                output = torch.empty((rows, width), dtype=torch.float32, device="cuda")
+                self.module.weighted_heads(values, weights, output)
+                expected = (values.relu() * weights.unsqueeze(-1)).sum(dim=1).float()
+                assert_bytes(self, output, expected)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, stream=stream):
+                self.module.weighted_heads(values, weights, output)
+            weights.neg_()
+            graph.replay()
+            expected = (values.relu() * weights.unsqueeze(-1)).sum(dim=1).float()
+            assert_bytes(self, output, expected)
+        stream.synchronize()
+
+    def test_weighted_heads_rejects_metadata_and_aliases_before_writes(self):
+        values = torch.ones((3, 8, 16), dtype=torch.bfloat16, device="cuda")
+        weights = torch.ones((3, 8), dtype=torch.bfloat16, device="cuda")
+        output = torch.full((3, 16), -7, dtype=torch.float32, device="cuda")
+        misaligned = torch.ones((25,), dtype=weights.dtype, device="cuda")[1:].view(
+            3, 8
+        )
+        strided = torch.ones((3, 8, 32), dtype=values.dtype, device="cuda")[:, :, ::2]
+        invalid = (
+            (values.float(), weights, output),
+            (values[:, :4], weights, output),
+            (values[:, :, :15], weights, output[:, :15]),
+            (values, weights.cpu(), output),
+            (values, misaligned, output),
+            (strided, weights, output),
+            (values, weights, output.bfloat16()),
+            (values, weights, values.view(torch.float32).flatten()[:48].view(3, 16)),
+            (values, output.view(torch.bfloat16).flatten()[:24].view(3, 8), output),
+        )
+        for arguments in invalid:
+            with self.subTest(shapes=[tuple(value.shape) for value in arguments]):
+                before = [value.clone() for value in arguments]
+                with self.assertRaisesRegex(Exception, "Check failed"):
+                    self.module.weighted_heads(*arguments)
+                for actual, expected in zip(arguments, before, strict=True):
+                    assert_bytes(self, actual, expected)
+
+    def test_topk_bf16_physical_tail_and_graph_on_caller_stream(self):
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for rows, width in (
+                (3, 512),
+                (
+                    2 * torch.cuda.get_device_properties(0).multi_processor_count + 1,
+                    513,
+                ),
+                (3, 16401),
+            ):
+                physical = (width + 511) // 512 * 512
+                scores = torch.full(
+                    (rows, physical), torch.nan, dtype=torch.bfloat16, device="cuda"
+                )
+                scores[:, :width].normal_()
+                scores[0, :width] = -torch.inf
+                scores[1, 0] = torch.inf
+                output = torch.empty((rows, 512), dtype=torch.int64, device="cuda")
+                self.module.topk_bf16(scores, output, width)
+                graph = torch.cuda.CUDAGraph()
+                try:
+                    with torch.cuda.graph(graph, stream=stream):
+                        self.module.topk_bf16(scores, output, width)
+                    for replay in (False, True):
+                        if replay:
+                            scores[:, :width].neg_()
+                            graph.replay()
+                        self.assertTrue(bool(((output >= 0) & (output < width)).all()))
+                        self.assertTrue(bool((output.diff(dim=-1) > 0).all()))
+                        logical = scores[:, :width].cpu().float()
+                        expected = (
+                            logical.topk(512, sorted=False).values.sort(-1).values
+                        )
+                        actual = logical.gather(-1, output.cpu()).sort(-1).values
+                        self.assertTrue(torch.equal(actual, expected))
+                finally:
+                    stream.synchronize()
+                    graph.reset()
+        stream.synchronize()
+
+    def test_topk_bf16_accepts_16_byte_output_alignment_in_eager_and_graph(self):
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            for width in (512, 1025):
+                physical = (width + 511) // 512 * 512
+                scores = torch.zeros(
+                    (physical,), dtype=torch.bfloat16, device="cuda"
+                ).as_strided((1, physical), (1, 1))
+                self.assertTrue(scores.is_contiguous())
+                self.assertEqual(scores.stride(), (1, 1))
+                scores[:, :512] = 1
+                storage = torch.full((516,), -7, dtype=torch.int64, device="cuda")
+                output = storage[2:-2].view(1, 512)
+                self.assertEqual(output.data_ptr() % 32, 16)
+                self.module.topk_bf16(scores, output, width)
+                expected = torch.arange(512, dtype=torch.int64, device="cuda").view(
+                    1, 512
+                )
+                self.assertTrue(torch.equal(output, expected))
+                graph = torch.cuda.CUDAGraph()
+                try:
+                    with torch.cuda.graph(graph, stream=stream):
+                        self.module.topk_bf16(scores, output, width)
+                    scores.zero_()
+                    scores[:, width - 512 : width] = 2
+                    output.fill_(-7)
+                    graph.replay()
+                    expected.add_(width - 512)
+                    self.assertTrue(torch.equal(output, expected))
+                    self.assertTrue(bool((storage[:2] == -7).all()))
+                    self.assertTrue(bool((storage[-2:] == -7).all()))
+                finally:
+                    stream.synchronize()
+                    graph.reset()
+        stream.synchronize()
+
+    def test_topk_bf16_rejects_incomplete_physical_views_and_aliases(self):
+        width, physical = 16385, 16896
+        storage = torch.full(
+            (physical + 2048,), -7, dtype=torch.bfloat16, device="cuda"
+        )
+        scores = storage[:physical].view(1, physical)
+        output = torch.full((1, 512), -7, dtype=torch.int64, device="cuda")
+        alias = storage[16400 : 16400 + 2048].view(torch.int64).view(1, 512)
+        invalid = (
+            (scores[:, :width], output, width),
+            (scores[:, ::2], output, width),
+            (scores.float(), output, width),
+            (scores.cpu(), output, width),
+            (scores, output.int(), width),
+            (scores, output, 511),
+            (scores, output, physical + 1),
+            (scores, output, 2**23),
+            (scores, alias, width),
+            (storage[1 : physical + 1].view_as(scores), output, width),
+        )
+        for arguments in invalid:
+            with self.subTest(width=arguments[-1]):
+                with self.assertRaisesRegex(Exception, "Check failed"):
+                    self.module.topk_bf16(*arguments)
+                assert_bytes(self, storage, torch.full_like(storage, -7))
+                assert_bytes(self, output, torch.full_like(output, -7))
+        self.module.topk_bf16(scores[:0], output[:0], width)
+
     def test_grouped_rms_uses_logical_rows_without_changing_physical_rms(self):
         generator = torch.Generator(device="cuda").manual_seed(113)
         for width in (128, 512, 1024, 1280, 5120):

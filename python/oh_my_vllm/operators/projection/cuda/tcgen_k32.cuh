@@ -27,11 +27,18 @@ __device__ inline void tcgen_load32(uint32_t address, float (&values)[32]) {
     values[i] = __uint_as_float(words[i]);
 }
 
+__device__ __forceinline__ void tcgen_load16(uint32_t address, float (&values)[16]) {
+  auto &words = *reinterpret_cast<uint32_t (*)[16]>(values);
+  cute::SM100_TMEM_LOAD_32dp32b16x::copy(
+      address, words[0], words[1], words[2], words[3], words[4], words[5], words[6], words[7],
+      words[8], words[9], words[10], words[11], words[12], words[13], words[14], words[15]);
+}
+
 __device__ inline int tcgen_raw_address(int row, int column) {
   return row * 128 + (column ^ ((row & 7) * 16));
 }
 
-template <class Output, class ScaleLayout>
+template <class Output, class ScaleLayout, bool Compact = false>
 __global__ __launch_bounds__(768, 1) void tcgen_k32_kernel(
     const uint8_t *input_scales, const uint8_t *weight_scales, Output *output, int rows,
     int outputs, int width, ScaleLayout weight_layout,
@@ -94,7 +101,8 @@ __global__ __launch_bounds__(768, 1) void tcgen_k32_kernel(
   }
   __syncthreads();
   if (thread < 256) {
-    cutlass::arch::warpgroup_reg_dealloc<32>();
+    // The 256 producer and 512 consumer threads share the initial 768 * 80 registers.
+    cutlass::arch::warpgroup_reg_dealloc<Compact ? 48 : 32>();
     if (warp == 0) {
       for (int batch = 0; batch < batches; ++batch) {
         int slot = batch % tcgen_raw_stages, phase = (batch / tcgen_raw_stages) & 1;
@@ -172,7 +180,7 @@ __global__ __launch_bounds__(768, 1) void tcgen_k32_kernel(
       }
     }
   } else {
-    cutlass::arch::warpgroup_reg_alloc<104>();
+    cutlass::arch::warpgroup_reg_alloc<Compact ? 96 : 104>();
     float total[64] = {};
     int row = (thread - 256) % tcgen_rows, segment = (thread - 256) / tcgen_rows;
     uint32_t address = *tensor_memory + uint32_t(row / 32 * 32) * 65536u + segment * 64;
@@ -184,12 +192,26 @@ __global__ __launch_bounds__(768, 1) void tcgen_k32_kernel(
 #pragma unroll
       for (int part = 0; part < 2; ++part) {
         float sb = fp8_scale(scales_b[group * (tcgen_columns / 32) + segment * 2 + part]);
-        float values[32];
-        tcgen_load32(address + slot * tcgen_columns + part * 32, values);
-        cutlass::arch::fence_view_async_tmem_load();
+        if constexpr (Compact) {
 #pragma unroll
-        for (int i = 0; i < 32; ++i)
-          total[part * 32 + i] = __fmaf_rn(__fmul_rn(values[i], sa), sb, total[part * 32 + i]);
+          for (int chunk = 0; chunk < 2; ++chunk) {
+            float values[16];
+            tcgen_load16(address + slot * tcgen_columns + part * 32 + chunk * 16, values);
+            cutlass::arch::fence_view_async_tmem_load();
+#pragma unroll
+            for (int i = 0; i < 16; ++i) {
+              int column = part * 32 + chunk * 16 + i;
+              total[column] = __fmaf_rn(__fmul_rn(values[i], sa), sb, total[column]);
+            }
+          }
+        } else {
+          float values[32];
+          tcgen_load32(address + slot * tcgen_columns + part * 32, values);
+          cutlass::arch::fence_view_async_tmem_load();
+#pragma unroll
+          for (int i = 0; i < 32; ++i)
+            total[part * 32 + i] = __fmaf_rn(__fmul_rn(values[i], sa), sb, total[part * 32 + i]);
+        }
       }
       asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
       cutlass::arch::ClusterBarrier::arrive(tmem_empty + slot);
@@ -241,6 +263,9 @@ void launch_tcgen_k32(const uint8_t *input, const uint8_t *weight, const uint8_t
     check_cuda(cudaFuncSetAttribute(tcgen_k32_kernel<Output, ScaleLayout>,
                                     cudaFuncAttributeMaxDynamicSharedMemorySize,
                                     tcgen_shared_bytes));
+    check_cuda(cudaFuncSetAttribute(tcgen_k32_kernel<Output, ScaleLayout, true>,
+                                    cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                    tcgen_shared_bytes));
     configured.insert(device);
   }
   static thread_local std::map<TcgenMapKey, TcgenMaps> descriptors;
@@ -268,10 +293,17 @@ void launch_tcgen_k32(const uint8_t *input, const uint8_t *weight, const uint8_t
     found = descriptors.emplace(key, maps).first;
   }
   int shared_bytes = ((1024 + 196608 + 136 * (width / 32) + 127) / 128) * 128;
-  tcgen_k32_kernel<Output, ScaleLayout>
-      <<<dim3((rows + 127) / 128, (outputs + 255) / 256), 768, shared_bytes, stream>>>(
-          input_scales, weight_scales, output, rows, outputs, width, weight_layout,
-          found->second.input, found->second.weight);
+  dim3 grid((rows + 127) / 128, (outputs + 255) / 256);
+  if (outputs == 2304 && width == 5120)
+    tcgen_k32_kernel<Output, ScaleLayout, true><<<grid, 768, shared_bytes, stream>>>(
+        input_scales, weight_scales, output, rows, outputs, width, weight_layout,
+        found->second.input, found->second.weight);
+  else
+    tcgen_k32_kernel<Output, ScaleLayout><<<grid, 768, shared_bytes, stream>>>(
+        input_scales, weight_scales, output, rows, outputs, width, weight_layout,
+        found->second.input, found->second.weight);
 }
 
 } // namespace encoded_projection
+
+#include "tcgen_narrow_k32.cuh"

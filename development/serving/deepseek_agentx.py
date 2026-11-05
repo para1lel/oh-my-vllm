@@ -20,7 +20,9 @@ from .deepseek_benchmark import (
     SERVED_MODEL,
     Service,
     artifact_identity,
+    effective_cache_configuration,
     verify_artifact_identity,
+    workload_cache_requirements,
 )
 from .device import selected_uuids
 
@@ -89,6 +91,18 @@ def arguments():
             min(64, result.concurrency),
             result.max_num_seqs,
         )
+        result.cache_requirements = workload_cache_requirements(
+            [
+                {
+                    "strategy": result.strategy,
+                    "mode": "dspark5",
+                    "batch": result.max_num_seqs,
+                    "input_tokens": result.cache_context,
+                    "output_tokens": 0,
+                }
+            ]
+        )
+        effective_cache_configuration(result, result.strategy)
     except ValueError as error:
         parser.error(str(error))
     if result.csv.exists() or result.figure.exists():

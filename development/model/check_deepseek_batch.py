@@ -331,6 +331,39 @@ def execute_scheduled(worker, rows, step, reference, evicted):
     ]
 
 
+def execute_single_round(worker, rows, *, reference, batch_decode):
+    if reference:
+        return {item["request_id"]: worker._execute_row(item) for item in rows}
+    if batch_decode:
+        return worker._execute_decode_group(rows)
+    outputs = worker.execute(execute_message(rows, rpc_id=3000))["outputs"]
+    if len(outputs) != len(rows):
+        raise AssertionError("scheduled request count differs from the worker outputs")
+    return {item["request_id"]: item for item in outputs}
+
+
+def require_scheduled_requests(rows, outputs, targets):
+    expected = [item["request_id"] for item in rows]
+    returned = [item["request_id"] for item in outputs]
+    if (
+        len(expected) != len(set(expected))
+        or sorted(returned) != sorted(expected)
+        or set(targets) != set(expected)
+        or any(len(records) != 1 for records in targets.values())
+    ):
+        raise AssertionError(
+            "scheduled requests differ from outputs or target execution"
+        )
+
+
+def require_single_execution(execution, calls):
+    required = "graph" if execution == "graph" else "eager"
+    if not calls or any(call["execution"] != required for call in calls):
+        raise AssertionError(
+            f"requested {required} target execution differs from captured calls"
+        )
+
+
 def update_boundaries(calls, observed, crossings):
     for call in calls:
         if call["batch_size"] != len(call["requests"]):
@@ -360,7 +393,11 @@ def require_multiround_gates(
     require_verify_continuation=True,
     require_boundaries=False,
     require_batch=True,
+    scheduled_requests=None,
+    required_requests=None,
 ):
+    if required_requests is not None and scheduled_requests != required_requests:
+        raise AssertionError("candidate did not schedule the full request batch")
     if mode.startswith("dspark") and require_verify_continuation and not continued:
         raise AssertionError("verification did not consume the preceding proposal")
     if execution != "reference" and require_batch and max_batch <= 1:
@@ -408,10 +445,12 @@ def multiround(worker, args, torch, batch, prepare, make_row, rank):
                     shared_pair=mode == "dspark",
                 )
                 worker.decode_graph_enabled = execution.startswith("graph")
-                worker.batch_decode_enabled = execution != "reference"
+                worker.batch_decode_enabled = (
+                    args.batch_decode and execution != "reference"
+                )
                 previous_verify = set()
                 continued = graph_calls = fallback_calls = 0
-                graph_verifies = graph_reuses = max_batch = 0
+                graph_verifies = graph_reuses = max_batch = max_scheduled = 0
                 observed = {}
                 eviction_steps = 0
                 remapped = False
@@ -449,6 +488,8 @@ def multiround(worker, args, torch, batch, prepare, make_row, rank):
                         result = execute_scheduled(
                             worker, rows, step, execution == "reference", evicted
                         )
+                    require_scheduled_requests(rows, result, captured.targets)
+                    max_scheduled = max(max_scheduled, len(rows))
                     outputs = {item["request_id"]: item for item in result}
                     for key in keys:
                         request = worker.requests[key]
@@ -494,6 +535,9 @@ def multiround(worker, args, torch, batch, prepare, make_row, rank):
                         mode=mode,
                         execution=execution,
                         step=step,
+                        scheduled_requests=len(rows),
+                        executed_request_ids=sorted(captured.targets),
+                        batch_decode_enabled=worker.batch_decode_enabled,
                         differences=changed,
                         targets=captured.calls,
                         accepted=[item["num_accepted_draft_tokens"] for item in result],
@@ -524,7 +568,9 @@ def multiround(worker, args, torch, batch, prepare, make_row, rank):
                     crossings=crossings,
                     require_verify_continuation=args.require_verify_continuation,
                     require_boundaries=args.require_boundaries,
-                    require_batch=True,
+                    require_batch=args.batch_decode,
+                    scheduled_requests=max_scheduled,
+                    required_requests=args.batch,
                 )
                 if mode.startswith("dspark"):
                     if execution == "graph" and not graph_verifies:
@@ -560,7 +606,9 @@ def multiround(worker, args, torch, batch, prepare, make_row, rank):
                     remapped=remapped,
                     boundaries=crossings,
                     max_target_batch=max_batch,
-                    batch_required=execution != "reference",
+                    max_scheduled_requests=max_scheduled,
+                    batch_decode_enabled=worker.batch_decode_enabled,
+                    batch_required=args.batch_decode and execution != "reference",
                     same_signature=same_signature,
                     shared_pair=mode == "dspark",
                     diagnostic_only=not args.require_verify_continuation,
@@ -623,7 +671,13 @@ def rank_main(rank, devices, args, store):
         )
         from oh_my_vllm.models.deepseek_v41.trace import runtime_identity
 
-        identity = runtime_identity(rank)
+        identity = runtime_identity(
+            rank,
+            strategy=args.strategy,
+            batch_decode=args.batch_decode,
+            decode_graph=args.graph,
+            decode_graph_limit=worker.decode_graph_limit,
+        )
         identity.update(
             checkpoint=worker.checkpoint_identity,
             tokenizer=worker.tokenizer.identity,
@@ -709,8 +763,11 @@ def rank_main(rank, devices, args, store):
             if any(len(tokens) != 6 for tokens in chains.values()):
                 raise AssertionError("verification requires six greedy-chain tokens")
 
+        round_evidence = {}
+
         def run(mode, execution):
             outputs = prepare(mode != "ordinary")
+            worker.batch_decode_enabled = args.batch_decode and execution != "reference"
             before = cache_state(worker, torch)
             rows = []
             for index, key in enumerate(prompts):
@@ -741,8 +798,6 @@ def rank_main(rank, devices, args, store):
 
             def capture_batch(*values, **options):
                 result = original_batch(*values, **options)
-                if execution == "graph" and result.execution != "graph":
-                    raise AssertionError("batch silently used Eager")
                 captured.append(
                     (
                         result.logits.clone(),
@@ -754,12 +809,25 @@ def rank_main(rank, devices, args, store):
             worker._target = capture_target
             batch.target_decode_batch = capture_batch
             try:
-                if execution == "reference":
-                    outputs = {
-                        item["request_id"]: worker._execute_row(item) for item in rows
-                    }
-                else:
-                    outputs = worker._execute_decode_group(rows)
+                with TargetCapture(worker, torch, batch) as scheduled:
+                    outputs = execute_single_round(
+                        worker,
+                        rows,
+                        reference=execution == "reference",
+                        batch_decode=args.batch_decode,
+                    )
+                require_scheduled_requests(
+                    rows, list(outputs.values()), scheduled.targets
+                )
+                require_single_execution(execution, scheduled.calls)
+                round_evidence[execution] = dict(
+                    scheduled_requests=len(rows),
+                    executed_request_ids=sorted(scheduled.targets),
+                    batch_decode_enabled=worker.batch_decode_enabled,
+                    target_executions=sorted(
+                        {call["execution"] for call in scheduled.calls}
+                    ),
+                )
                 logits = torch.cat([item[0] for item in captured], dim=0)
                 hidden = (
                     torch.cat([item[1] for item in captured], dim=0)
@@ -836,6 +904,7 @@ def rank_main(rank, devices, args, store):
                     execution=execution,
                     differences=changed,
                     accepted=accepted,
+                    **round_evidence[execution],
                 )
                 reports.append(report)
                 (args.output / f"rank{rank}.json").write_text(
@@ -872,6 +941,12 @@ def argument_parser():
     )
     parser.add_argument("--rounds", type=int, default=8)
     parser.add_argument("--graph", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument(
+        "--batch-decode",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable target groups; disabling uses scheduled individual requests.",
+    )
     parser.add_argument(
         "--require-verify-continuation",
         action=argparse.BooleanOptionalAction,

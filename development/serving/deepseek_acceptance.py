@@ -6,24 +6,25 @@ import math
 from pathlib import Path
 
 from . import deepseek_accounting as source
-from . import deepseek_accounting_packed as packed
+from . import deepseek_accounting_roofline as roofline
 from .deepseek_benchmark import reference_configuration, runtime_reference
 from .deepseek_matrix import HTTP_CASES, case_id
 from .deepseek_runtime_trace import request_owners, response_manifest
+from .gpu import B200_PATTERN
 
 LONG_CASES = {
     case_id(case): case for case in HTTP_CASES if case["output_tokens"] == 8192
 }
 PENDING_QUALIFICATION = (
-    "v3.1 retains its old BF16 history model and is not the current packed reference.",
-    "v4 is a partial resource floor and cannot replace the full project reference.",
+    "v3.1 uses BF16 history and empirical collective latency.",
+    "v4 is a partial resource floor with no HBM or host credit.",
+    "v5 is a protocol estimate whose call-dependent reloads are not necessary work.",
+    "Full efficiency acceptance requires the fixed-algorithm v6 resource roofline.",
 )
 
 
 def qualified(version, scope):
-    return (
-        version == packed.VERSION and scope == "packed-aware project reference estimate"
-    )
+    return version == roofline.VERSION and scope == "fixed-algorithm resource roofline"
 
 
 def validate_measurement(result):
@@ -61,6 +62,18 @@ def validate_measurement(result):
     ):
         if not identity.get(key):
             raise ValueError(f"measurement identity lacks {key}")
+    topology = identity["topology"]
+    if version == roofline.VERSION and (
+        not isinstance(topology, list)
+        or len(topology) != 4
+        or any(
+            not isinstance(device, dict)
+            or not isinstance(device.get("name"), str)
+            or not B200_PATTERN.search(device["name"])
+            for device in topology
+        )
+    ):
+        raise ValueError("v6 requires four reviewed B200 GPU model identities")
     all_modes = identity["configuration"].get("execution_modes")
     modes = all_modes.get(case["strategy"]) if isinstance(all_modes, dict) else None
     if (
@@ -106,6 +119,7 @@ def validate_measurement(result):
         "case_id": identifier,
         "strategy": case["strategy"],
         "effective_strategy": case["strategy"],
+        "sampling": "greedy",
     }
     if any(binding.get(key) != value for key, value in expected.items()):
         raise ValueError("trace identity differs from the measured run")
@@ -183,7 +197,9 @@ def evaluate(results):
         "failed_threshold_cases": failed,
         "reference_threshold_met": complete and not failed,
         "threshold_percent": 33,
-        "reference_qualification": "project-reference" if eligible else "ineligible",
+        "reference_qualification": "fixed-algorithm-roofline"
+        if eligible
+        else "ineligible",
         "pending_qualification": [] if eligible else list(PENDING_QUALIFICATION),
         "target_passed": passed,
         "errors": errors,

@@ -1129,7 +1129,12 @@ class Indexer(torch.nn.Module):
                 )[..., :width]
                 index_score.masked_fill_(~keep, -torch.inf)
             topk = min(self.index_topk, width)
-            idxs = topk_indices(index_score, topk, request_widths=request_widths)
+            # Valid model execution requires finite QDQ reconstruction, weighted_heads
+            # products/sums, and FP32 rank reduction with finite final BF16 scores.
+            # Causal and candidate masks add only -inf after that score arithmetic.
+            idxs = topk_indices(
+                index_score, topk, request_widths=request_widths, finite_scores=True
+            )
             indices.append(torch.where(idxs < compress_lens, idxs + offset, -1).int())
             del index_score
         blocks = torch.cat(candidates, dim=1) if self.is_candidate_source else None
@@ -2903,12 +2908,13 @@ class Transformer(nn.Module):
         cache_slots: torch.Tensor | None = None,
         *,
         check_status: bool = True,
+        cache_slots_cpu=None,
     ):
         shared_attn.reset_query_state()
         reset_sparse_status()
         if cache_slots is None:
             cache_slots = torch.arange(input_ids.size(0), device=input_ids.device)
-        self._bind_state_exports(cache_slots)
+        self._bind_state_exports(cache_slots, cache_slots_cpu)
         h, main_x = self.mtp[0].forward_embed(main_hidden, input_ids)
         pre_mix = make_identity_pre_mix(h, self.hc_mult)
         for layer in self.mtp:
@@ -2925,13 +2931,15 @@ class Transformer(nn.Module):
         main_hidden: torch.Tensor,
         start_pos: int = 0,
         cache_slots: torch.Tensor | None = None,
+        *,
+        cache_slots_cpu=None,
     ):
         """Store target hidden states that the next DSpark proposal can attend to."""
         if not self.mtp:
             return
         if cache_slots is None:
             cache_slots = torch.arange(main_hidden.size(0), device=main_hidden.device)
-        self._bind_state_exports(cache_slots)
+        self._bind_state_exports(cache_slots, cache_slots_cpu)
         first = self.mtp[0]
         main_x = first.main_norm(first.main_proj(main_hidden))
         for layer in self.mtp:

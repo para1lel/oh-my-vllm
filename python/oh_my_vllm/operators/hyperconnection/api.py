@@ -21,6 +21,10 @@ head uses the single-row split-dot order. hc_chunked_project applies the
 measured split chunk to a two-dimensional HC input. Its workspace can be
 empty. An empty workspace selects the sequential reference order. Prepare HC
 workspaces before capture.
+bf16_linear_rows1 accepts contiguous BF16 (rows, 5120) input and (512, 5120)
+weights. It writes contiguous BF16 (rows, 512) output with separate storage.
+It uses the caller stream and the existing single-row cuBLAS handle and call
+for each row. Prepare the handle before capture. Rows must be in 0..32768.
 """
 
 from typing import NamedTuple
@@ -34,6 +38,7 @@ FUNCTIONS = (
     "hc_prepare_grouped",
     "fp32_project",
     "bf16_linear",
+    "bf16_linear_rows1",
     "markov_linear",
     "dot_linear",
     "hc_chunk",

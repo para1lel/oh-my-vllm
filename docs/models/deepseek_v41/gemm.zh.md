@@ -5,7 +5,7 @@ Grouped FP4 path 保留原始 operator interface, BF16 expert rounding 和完整
 
 ## 精确合并 scale
 
-[Native scale update](../../../python/oh_my_vllm/operators/projection/cuda/fp8_k32.cuh#L32)<!-- source: __device__ __forceinline__ float fp8_scaled_add(float raw, uint8_t activation, uint8_t weight, --> 可以合并两个 scale 的指数.
+[Native scale update](../../../python/oh_my_vllm/operators/projection/cuda/fp8_k32.cuh#L38)<!-- source: __device__ __forceinline__ float fp8_scaled_add(float raw, uint8_t activation, uint8_t weight, --> 可以合并两个 scale 的指数.
 每个有限 E4M3 乘积都是 `2**-18` 的整数倍.
 Raw K32 dot 仍是这个值的整数倍, 且绝对值小于 `2**23`.
 当 activation scale code 不大于 232 时, 该乘法是精确的, 对 subnormal 结果也成立.

@@ -1,152 +1,156 @@
 # DeepSeek 参考计量
 
-[HTTP 流程](performance.zh.md)选择参考并验证实测结果.
-各计算器具有独立身份:
-
-| 计算器 | 版本 | 源码 |
-|---|---|---|
-| 默认 HTTP 参考和 source trace | `deepseek-http-reference-v3.1` | [Trace 和 binding](../../../development/serving/deepseek_accounting.py), [资源数学](../../../development/serving/deepseek_accounting_math.py) |
-| Packed 协议估算 | `deepseek-http-protocol-estimate-v5` | [Packed 计算](../../../development/serving/deepseek_accounting_packed.py) |
-| 有条件部分资源下界 | `deepseek-http-resource-floor-v4` | [下界计算](../../../development/serving/deepseek_accounting_floor.py) |
-
-## 计入规则
-
-默认资源参考是对相同已接受输出及指定 TP4, TEP4 或 DEP4 策略的下界松弛.
-集合通信延迟是经验估算, 不是经过证明的物理下界.
+[HTTP 流程](performance.zh.md)选择计算器并验证实测结果.
 效率为 `reference seconds / full HTTP seconds`.
 
-每次 decode 调用为每个请求计入已接受 draft 加一个 target token.
-Proposal, 被拒行, padding, mask slot, 临时拷贝, HTTP, 排队和调度均为零计入.
-复制工作给每个 rank 计一份.
+| 计算器 | 版本 | 用途 |
+|---|---|---|
+| 默认参考和 source trace | `deepseek-http-reference-v3.1` | 历史估算和经身份校验的 target 计数 |
+| Packed 协议估算 | `deepseek-http-protocol-estimate-v5` | 历史协议估算, 不是延迟下界 |
+| 有条件部分下界 | `deepseek-http-resource-floor-v4` | 必要算术和有限的 MoE wire |
+| 固定算法 roofline | `deepseek-http-roofline-v6` | 当前 HTTP 效率参考 |
 
-## 速率与格式
+[Source validator](../../../development/serving/deepseek_accounting.py) 对四种计算器执行身份校验.
+[Roofline 计算器](../../../development/serving/deepseek_accounting_roofline.py)使用经过审查的[部分算术](../../../development/serving/deepseek_accounting_floor.py).
+[资源函数](../../../development/serving/deepseek_accounting_math.py)规定维度, 格式和峰值.
 
-| 资源 | 每个 rank 的速率 |
+## Roofline 范围
+
+V6 是固定 target 算法, 数值规则和四个 rank 放置方式下的有条件资源下界.
+它不是所有相同输出算法的最小值.
+这些条件允许最大重叠和有利的数据复用.
+它们禁止额外权重副本, 投影重算, wire 压缩及跨 token 的 wire 值复用.
+TP4 保持专家的输出通道分片.
+TEP4 保持专家 owner 和 tensor-parallel attention.
+DEP4 保持请求 owner, 并在专家 owner 上存放完整专家.
+
+每个请求计入 `input_tokens + output_tokens - 1` 个 target row 和 `output_tokens` 个 logit row.
+Proposal, 被拒行, padding, 拷贝, scheduler 成本和 MTP 工作均为零计入.
+复制矩阵在每个使用它的 rank 上计一份.
+专家算术使用收到的 assignment, 包括没有自有请求的 rank.
+
+| 资源 | 每个 rank 的峰值 |
 |---|---:|
 | HBM | 7.7 TB/s |
 | Dense FP8 tensor | 4.5 PFLOPS |
 | Dense BF16 tensor | 2.25 PFLOPS |
 | FP32 vector | 75 TFLOPS |
 | NVLink 5 | 每方向 900 GB/s |
-| PCIe 5.0 x16 host link | 每方向 63.02 GB/s |
+| PCIe 5.0 x16 | 每方向 63.02 GB/s |
 
-稠密投影使用 FP8.
-路由专家保留 FP4 存储并使用 FP8 dot product.
-FP4 每值使用半字节, 每个 K32 group 使用一个 scale.
-FP8 每值使用一字节, 每个 32 乘 32 block 使用一个 E8M0 scale.
-投影 group 计入输入, 输出和权重字节.
+FP4 专家存储使用 FP8 dot product.
+FP8 和 BF16 共享 tensor 资源.
+[有序 K32 算术](quantization.zh.md)至少需要额外 `FP8_FLOPs / 32` 个 FP32 FLOPs.
+`wo_a`, attention product 和 index score 使用 BF16.
+Router, HC projection, Engram gate, head 及 ratio 大于一的 compressor 使用 FP32.
+非线性标量估算为零计入.
 
-`wo_a`, sparse attention 和 index score 使用 BF16.
-Router, Hyper-Connections, Engram gate, output head 和 ratio 大于一的 compressor 使用 FP32.
-版本和速率摘要绑定格式, 速率, 放置, 复用和重叠规则.
+各 rank 的 tensor 秒数为 `FP8_FLOPs/4.5e15 + BF16_FLOPs/2.25e15`.
+其他资源均用资源量除以对应峰值.
+参考对所有 rank 和资源取最大值.
+TP4 和 TEP4 的 index query 工作允许使用分数化的四个 rank 资源池.
+池化的必要 wire 和 host 字节除以对应峰值的四倍.
+公式没有经验延迟, 按实测调用划分的串行和, 或 `S/2` 项.
 
-[有序 K32 算术](quantization.zh.md)为每个输出及 K32 group 至少增加一个 FP32 FMA:
+## HBM 和 host 的必要性
 
-```text
-scale_fp32_flops = 2 * rows * local_outputs * (local_K / 32)
-                 = projection_fp8_flops / 32
-```
+每个 rank 的保留额度为 `F = 1 GiB`, 其中 `1 GiB = 2^30 bytes`.
+它包含寄存器, 数据缓存, 共享内存和 tensor memory.
+它不包含 HBM, 位于 HBM 的 Torch 分配或主机内存.
 
-此计入适用于每个 rank 在 prefill 和 decode 中的 FP8 稠密投影和 FP4 路由投影.
-它允许精确的 scale 合并, 但不假定所有 scale pair 都允许合并.
-BF16 和 FP32 投影没有 K32 scale 计入.
+[NVIDIA 指南](https://docs.nvidia.com/cuda/blackwell-tuning-guide/index.html)给出 126 MB L2, 每个 SM 的 256 KiB 寄存器和 256 KiB 联合 L1/共享内存.
+[B200 布局](https://cvw.cac.cornell.edu/gpu-architecture/horizon-gpus-blackwell-b200/blackwell_chip)给出保守的 160 个 SM 物理布局.
+[SM 说明](https://cvw.cac.cornell.edu/gpu-architecture/horizon-gpus-blackwell-b200/b200_sm)给出每个 SM 的 256 KiB tensor memory.
+把 L2 按 126 MiB 计算时, 这些数据存储共为 246 MiB.
+1 GiB 额度还包含其余小型缓存和有利的保留.
 
-## 稀疏工作与放置
+令 `W_union` 为单个 rank 在整次 HTTP 中的必要权重并集.
+Assignment 计数提供专家并集的界限, 不假设每次调用使用新专家.
+令 `W_dense` 只包含每轮 target 都需要的矩阵, 包括 head.
+间歇使用的 compressor 和 index-key 矩阵不进入 `W_dense`.
 
-位置 `p` 有 `min(128,p+1)` 个 window pair.
-压缩层增加 `min(512,floor((p+1)/r))` 个 pair.
-Index source 2, 8, 14 和 20 对所有可达压缩位置评分.
-Source 24, 28, 32 和 36 每个 query 最多评分 16384 个 candidate.
-
-TP4 和 TEP4 在每个 index source 比较 head 分片与 query 分片.
-Head 分片每个 rank 使用八个 head 和 packed FP32 score all-reduce.
-Query 分片收集 BF16 query 和 head weight, 在各 query owner 计算全部 32 个 head, 并收集有效 top-512 INT32 位置.
-其 score FLOPs 和必要 key 字节在全局资源池中除以四.
-此分数化平衡不证明可实现的放置.
-
-Layer 20 之后从 query 转到 head 分片时, 收集 candidate block ID.
-后续 query 分片将这些 ID 保留在 query owner.
-计算器按资源, 通信和重叠成本比较放置组合.
-稠密和专家分片定义保持固定.
-
-Engram 比较两种方式: 分片 packed host read 加 BF16 all-reduce, 或每张 GPU 完整读取 packed host row.
-每个 packed row 为 264 字节.
-没有 token 或 hash 身份时, 每个活跃层和调用只计入 24 个不同列的 row.
-它允许请求和 token 之间完全复用.
-DEP4 使用完整本地 host read 和本地 index 评分.
-
-## 历史与权重
-
-每次 target 调用, 每个共享物理 source 和使用它的 rank, 历史只读一次.
-该 rank 上所有 query 和 head 复用该次读取.
-Window 每层不同.
-Compressed KV 和 index key 可以共享 source.
-
-首次使用计入完整必要历史读取.
-后续使用 `U` 个共享字节时, 计入 `max(0,U-128MiB)` 个 HBM 字节.
-此 cache allowance 允许有利的保留, 但不允许无限 L2 存储.
-放置比较计入必要子集的变化.
-
-对请求范围 `[s,e)`, 历史 window 并集有 `min(s,127)` 行.
-令 `n=floor(e/r)-floor(s/r)` 为新增压缩行数.
-历史选中 KV 至少有 `max(0,min(512,floor(e/r))-n)` 行.
-无上限 index source 读取 `floor(s/r)` 个历史 key.
-Candidate source 至少读取 `max(0,min(16384,floor(e/r))-n)` 个历史 key.
-
-默认计算为每个 KV row 计入 512 个 BF16 值, 为每个 index-key row 计入 128 个 BF16 值.
-同一调用内最大化选择复用, 不为 QK 和 PV 计第二次读取.
-当前投影计入新 cache write.
-新 index-key 投影使用各请求的位置和压缩边界.
-
-Prefill 跨 chunk 只计一次稠密权重.
-每层每个 rank 的累计最大 touched-expert 数提供保守的权重并集界限.
-一个 chunk 只计入该最大值的增量.
-Output head 在首个有 logits 的 chunk 计入, 且只在每个请求最后一行 prefill 计算.
-Decode 每次调用计入一次常驻稠密权重及 touched expert 权重.
-
-## 通信与重叠
-
-TP4 计入 embedding reduction, `wo_b` reduction, 路由 BF16 product gather, FP32 token-sum gather 和 output-head gather.
-TEP4 将路由 gather 换成 routed FP32 output reduction.
-DEP4 发送不同的 `(token,destination GPU)` BF16 row, 每个已 dispatch token 返回一个 FP32 本地和.
-本地 route 不使用 wire byte.
-每个 rank 的 wire pressure 为 `max(sent,received)`, 各方向有独立速率.
-专家工作使用收到的 assignment, 包括没有自有请求的 rank.
-
-对于串行 group, `S=sum_g max_rank(time(rank,g))`.
-每个 group 使用最大资源时间.
-FP8 和 BF16 时间在共享 tensor 资源上相加.
-至少有两个计入的 target row 时:
+Ordinary 模式每轮 target 最多产生一个新行, DSpark5 最多产生六个.
+单个请求至少需要 `N = 1 + ceil((output_tokens-1)/limit)` 轮, 包括 prompt 完成时的那一轮.
+该请求的下一轮依赖前一轮的结果.
+每轮都需要稠密矩阵; 从该时间区间之外保留下来的权重最多为 `F` 字节.
+每个 rank 使用最长的自有请求链:
 
 ```text
-R_fixed = max_rank,resource(sum(fixed_work) / rate)
-R_pool = max_resource((sum_rank(fixed_work) + sum(query_work)) / (4 * rate))
-R = max(R_fixed, R_pool)
-B2 = max(R, S / 2)
-call_seconds = min(S, B2)
+weight_read_bytes = max(0, W_union-F, N*max(0,W_dense-F))
 ```
 
-单个 target row 使用 `S`.
-平衡双 microbatch 松弛允许共享权重 tile 和分数化资源平衡.
-它不证明可实现的调度.
-资源总量还计入 collective 估算秒数.
+并集和依赖链可以描述同一批读取, 因此两者不能相加.
+空的 DEP4 owner 仍计入其收到的专家权重并集.
 
-每次 collective 使用 `max(latency_model_seconds,wire_bytes/900e9)`, 不再计第二次传输.
-空闲且未锁频的 NCCL profile 有 95 个已存中位数点.
-原始 SHA256 为 `c6b55ee5354c7ef6fb58606cca9268fcef90bc535935d4f07750029a81506e49`.
-查表使用每个 rank 的输入字节, 累计最大值, 线性插值和端点截断.
-All-gather wire byte 使用完整输出大小.
-DEP4 使用 BF16 all-to-all 代理, profile 输入为 `ceil(wire_bytes*4/3)`.
+[原生历史](cache.zh.md#当前存储)使用 288 字节 compressed KV, 68 字节 index key 和 1024 字节 BF16 window.
+四个物理 source 各计一次; 使用方不产生新的存储.
+对各请求, 令 `P` 为最终编码 KV 和 index 负载.
+初始为空的状态必须发布这些历史, 且不允许重算.
+最多 `F` 字节可以保持未写入, 因此每个请求的必要 cache write 为 `max(0,P-F)`.
+权重读取和 cache write 描述不同传输, 可以相加.
+没有必要性证明时, 重复历史读取, window write, workspace 解码和中间 activation 流量均为零计入.
 
-Profile digest 绑定原始摘要和存储表.
-中位数不能重建样本最小值或证明下界.
-DEP4 通信是建模值, 不是实测值.
-TEP4 回退不能提供 DEP4 证据.
+Engram 初始位于 host 存储.
+每个活跃层的 24 个不同列至少需要 24 个 packed row, 每行为 264 字节.
+参考允许所有 token 和请求完全复用这些 row.
+TP4/TEP4 将首次 host 传输池化; 各活跃 DEP4 owner 需要自己的本地 row.
+没有 token 和 hash 身份时, 重复 lookup 为零计入.
 
-## 运行时 trace 契约
+## 通信和依赖
 
-顶层对象包含 `binding`, `manifest` 和 `calls`.
-HTTP 响应完成后 manifest 才最终定稿.
+下界与完整协议诊断分开.
+在固定的完整 BF16 MoE 交付方式下, TP4/TEP4 每层至少需要合计 `3*rows*H*2` 个 wire 字节.
+TP4 还需要 `3*rows*K*I*2` 字节交付 activation product.
+其中 `H=5120`, `K=6`, `I=2304`.
+这些总量界限允许有利的 rank 平衡和最终 BF16 交付.
+它们不把完整 FP32 reduction 当作必要信息计入.
+Embedding, `wo_b`, head, index 和 Engram wire 的下界计入为零.
+贪心选择不需要完整 vocabulary gather.
+
+DEP4 使用直接 BF16 dispatch 和反向 FP32 本地和交付.
+令 `D[s,d]` 统计不同的已计入 `(source token,destination rank)` pair, 包括本地 pair.
+对 rank `r`, 排除 `s=d`:
+
+```text
+out_r = sum_d D[r,d]
+in_r  = sum_s D[s,r]
+sent_r     = H*(2*out_r + 4*in_r)
+received_r = H*(2*in_r  + 4*out_r)
+```
+
+先在整次 HTTP 工作负载中对每个方向分别求和, 再取资源最大值.
+不要把独立的 dispatch 和 combine 最大值相加作为串行下界.
+本地 route, metadata, count exchange, padding 和 trace reduction 均为零计入.
+
+协议诊断将各个有效 collective 放在对应的依赖位置:
+
+| Strategy | 有序依赖 |
+|---|---|
+| TP4/TEP4 | Embedding lookup, BF16 reduction, 第一层 |
+| TP4/TEP4 | Engram lookup, BF16 reduction, Engram projection, 该层 attention |
+| TP4/TEP4 | Index scoring, FP32 reduction, sparse attention |
+| TP4/TEP4 | `wo_b`, FP32 reduction, router |
+| TP4 | Expert up/gate, BF16 product gather, down, FP32 token-sum gather |
+| TEP4 | Expert up/gate, down, FP32 output reduction |
+| DEP4 | Router, BF16 dispatch, expert up/gate, down, 反向 FP32 combine |
+| TP4/TEP4 | Head projection, FP32 vocabulary gather, sampling |
+
+不同行可以重叠这些阶段.
+V6 不给全局串行阶段诊断增加额外下界秒数.
+总资源约束在最大重叠下仍为必要条件.
+
+对四个 rank, ring all-reduce 的 `N` 字节输入使各 rank 分别发送和接收 `1.5*N` 字节.
+Ring all-gather 的 `N` 字节完整输出使各 rank 分别发送和接收 `0.75*N` 字节.
+有四个 target row 时, TP4 product gather 在各 rank 每方向使用 82944 字节.
+其 FP32 token-sum gather 使用 61440 字节; TEP4 output reduction 使用 122880 字节.
+当 `D[0,1]=2` 且 `D[1,0]=1` 时, rank 0 的 dispatch 发送 20480 字节, 接收 10240 字节.
+其反向 combine 发送 20480 字节, 接收 40960 字节.
+这些协议字节是诊断值, 不额外增加下界计入.
+
+## Trace 和身份
+
+顶层 trace 包含 `binding`, `manifest` 和 `calls`.
+HTTP 响应使 manifest 最终定稿:
 
 ```text
 manifest = {mode: "ordinary" | "dspark5", requests: [
@@ -154,78 +158,41 @@ manifest = {mode: "ordinary" | "dspark5", requests: [
 ]}
 call = {rank, call, phase: "prefill" | "decode", request_rows: [
   {id, start, count, accepted, proposed, logit_rows}
-], expert_assignments: int32[L,4], dispatch_rows: int32[L,4],
-   touched_experts: int32[L]}
+], expert_assignments: int32[40,4], dispatch_rows: int32[40,4],
+   touched_experts: int32[40]}
 ```
 
-`L=40`.
-计数为整数.
-位置和序号从零开始.
-ID 为正数, `response_id` 以 `chatcmpl_` 开始, 以 `_<id>` 结束.
-Manifest 长度为各请求的 HTTP usage token 数.
-DEP4 `owner_rank` 保持固定.
+每次调用需要四个 rank record, 包括空 owner.
+请求范围连接后无缺口或重叠.
+Decode 计入 `count=accepted+1`; prefill 仅在 prompt 完成时计入一个 logit row.
+TP4/TEP4 重复请求和 assignment 计数; DEP4 只记录自有请求.
+每层的每个已计入行有六个 assignment, 按 `expert_id//96` 分桶.
+TP4 使用全部 bucket, TEP4 使用自己的 bucket, DEP4 使用跨 source rank 求和后的自己的 bucket.
+DEP4 在 Execute 之后合并专家存在性, 并记录不同的 dispatch pair.
+验证拒绝缺失 rank, 重复工作, 无效 route, 不完整层和错误的 HTTP 覆盖范围.
+混合 phase 发出 `accounting_error`; assembler 拒绝该 trace.
 
-每次 target 调用有四个 rank record, 包括没有自有请求的 rank.
-每个 prefill chunk 是独立调用.
-请求的 `start/count` 范围连接后无缺口或重叠.
-Decode 有 `count=accepted+1` 和 `logit_rows=count`.
-Prefill 的 draft 计数为零, 且仅在 prompt 完成时有一个 logit row.
+Binding 包含 source, native module, checkpoint, tokenizer, 四个 GPU UUID, 放置方式, sampling 和 manifest digest.
+Runtime identity 记录 batch 和 Graph 设置, 但不记录每步的 capture 或 Eager 回退.
+V6 独立绑定其版本, 峰值, 模型维度, 保留额度和假设摘要.
+验收检查从绑定的 trace 重新计算所选参考.
+身份或已存数值变化会导致验证失败.
 
-TP4/TEP4 在所有 rank 重复 request row 和 assignment matrix.
-DEP4 只记录自有 request row.
-Assignment 使用全局 bucket `d=expert_id//96`.
-每个 matrix row 的和为 `credited rows*6`.
-TP4 计算全部四列, TEP4 计算自己的列, DEP4 计算跨 source rank 求和后的自己的列.
+V6 资格检查要求测量 topology 中有四个 B200 型号名称.
+缺少名称或使用其他型号均不能通过.
+历史诊断不使用此硬件检查.
 
-`dispatch_rows[layer,d]` 统计不同的 source token/destination pair, 包含本地 pair.
-其他策略该值为零.
-Combine 在本地求和后反向使用这些 pair.
-`touched_experts[layer]` 只统计计入行使用的本地专家权重.
-DEP4 在 Execute 后使用一次 packed MAX 和计数读取合并专家存在性.
-空 rank 提供零 route, 并收到专家并集.
+## 历史估算
 
-Binding 包含 `version`, `rate_profile`, `manifest_sha256`, source, native module digest, config/index digest, tokenizer 和四个 GPU UUID.
-它还包含 strategy, effective strategy, owner plan, sampling, case ID 和 accepted/proposed 总量.
-Manifest digest 使用无 NaN 值的排序紧凑 JSON 的 SHA256.
+V3.1 保留 BF16 历史流量和经验 NCCL 中位数延迟.
+[Packed v5 计算器](../../../development/serving/deepseek_accounting_packed.py)保留每调用权重重载和双 microbatch 估算.
+这些身份和计算保持不变, 用于旧记录.
+V5 的协议阶段没有包含分片 Engram reduction.
+其位于层末的 Engram 放置方式也与 runtime 的层入口依赖不同.
+V6 诊断修正这些细节, 不增加下界计入.
 
-验证拒绝身份变化, 缺失 rank, 重复调用, 无效路由, 不完整层, 重复工作, 以及错误请求覆盖或输出计数.
-一次调用只有一个 phase.
-混合 phase 发出带 call ID 和原因的 `accounting_error`.
-推理继续但不产生部分计数, HTTP assembler 拒绝完整 trace.
-
-## Packed 估算
-
-Packed 计算器使用[物理缓存格式](cache.zh.md#当前存储).
-它区分共享物理历史和每个使用方的流量.
-Index workspace 解码按每个物理 source 和调用计一次.
-每个 index 使用方读取已解码 key, 每个 attention 使用方读取 packed KV.
-权重计入不假定未经证明的跨调用保留.
-Wire 时间只使用带宽, 不使用经验 NCCL profile.
-
-TP4 activation 交付在 expert up 计算之后, down 计算之前.
-DEP4 dispatch 在专家计算之前完成.
-反向 FP32 combine 在专家计算之后进行.
-每个方向独立计入.
-Route metadata 和 count exchange 仅作诊断, 不增加参考计入.
-
-估算保留资源和双 microbatch 松弛.
-串行协议秒数和有条件部分下界是独立诊断项.
-Cache 保留, padding, launch latency, overlap 和 MTP 工作不构成完整执行时间模型.
-此估算不是普适物理最小值.
-
-`source_trace_version` 和 `source_trace_rate_profile` 绑定默认 source trace.
-`accounting_version`, `rate_profile` 和 `assumptions_sha256` 绑定计算器.
-Runtime identity 还记录各 rank 的 batch-decode 和 Graph 设置, 包含 Graph 数量上限.
-这些设置不标识每步 capture 或 Eager 回退.
-
-## 有条件部分下界
-
-下界固定 target 算术, 数值次序, 格式, 参数放置和复制投影.
-其 MoE wire 计入假定固定 output shard, 完整 BF16 row 交付, 无额外权重副本, 无重算, 无未建模压缩或复用.
-
-HBM 和 host strict 计入为零.
-Embedding, `wo_b`, head, index, Engram 及 DEP4 dispatch/combine wire 的 strict 计入也为零.
-Proposal, 被拒工作, padding, 拷贝, scheduler 成本, 经验延迟和 `S/2` 的 strict 计入为零.
-非线性标量估算的 strict 计入也为零.
-Weight union 和 `direct_protocol_*` 流量仅作诊断.
-此部分下界既不证明完整执行时间, 也不证明常驻容量.
+将相同已接受工作拆成更多调用会增加 v5 秒数.
+估算标签和 33% 比值都不能使 v5 成为延迟下界.
+V4 对 HBM, host 和 DEP4 wire 为零计入, 仍是部分参考.
+[验收流程](performance.zh.md#检查长输出行)要求当前效率验收使用 v6.
+静态用例规模是估算, 不是 HTTP 证据, 也不是数值, 容量或 AgentX 验收.

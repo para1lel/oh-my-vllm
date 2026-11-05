@@ -2,7 +2,6 @@
 
 Use one NVIDIA B200 and the [model contract](model.md).
 Use the full Rust service and Python inference worker.
-Placeholder outputs do not supply inference evidence.
 The [GPU execution rules](../../execution.md) control execution.
 
 ## Configurations

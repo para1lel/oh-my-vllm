@@ -339,6 +339,66 @@ class DeepSeekPackedCUDA(_PackedHistoryFixture, unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "no state is committed"):
                         kernel.require_sparse_status()
 
+    def test_mixed_attention_graph_replays_packed_values_and_rejects_bad_scales(self):
+        with (
+            patch.object(kernel, "_SPARSE_STATUS", {}),
+            patch.object(kernel, "_SPARSE_NATIVE_DISABLED", False),
+            patch.object(kernel, "_SPARSE_NATIVE_FAILED", False),
+        ):
+            history = self.history(1, 256, 512, 16, torch.float8_e4m3fn)
+            source, slots, window, query, indices, sink = mixed_inputs(1, 5, 64, 129)
+            codes, scales = fp4_act_quant(source, 16, scale_dtype=torch.float8_e4m3fn)
+            history.write(slots, 0, codes, scales)
+            view = history.view(slots, 129)
+
+            def run():
+                return kernel._sparse_attn_native(query, sink, indices, window, view)
+
+            run()
+            kernel.require_sparse_status()
+            stream = torch.cuda.Stream()
+            stream.wait_stream(torch.cuda.current_stream())
+            graph = torch.cuda.CUDAGraph()
+            try:
+                with torch.cuda.stream(stream):
+                    run()
+                with torch.cuda.graph(graph, stream=stream):
+                    actual = run()
+                with torch.cuda.stream(stream):
+                    source.mul_(0.5)
+                    codes, scales = fp4_act_quant(
+                        source, 16, scale_dtype=torch.float8_e4m3fn
+                    )
+                    history.write(slots, 0, codes, scales)
+                    expected_values = source.clone()
+                    fp4_act_quant(
+                        expected_values,
+                        16,
+                        inplace=True,
+                        scale_dtype=torch.float8_e4m3fn,
+                    )
+                    expected = kernel._sparse_attn_native(
+                        query, sink, indices, window, expected_values
+                    )
+                    graph.replay()
+                stream.synchronize()
+                torch.testing.assert_close(
+                    actual.view(torch.int16), expected.view(torch.int16), atol=0, rtol=0
+                )
+                kernel.require_sparse_status()
+                with torch.cuda.stream(stream):
+                    history.page(2).scales[0, 0] = 127
+                    graph.replay()
+                stream.synchronize()
+                torch.testing.assert_close(
+                    actual, torch.zeros_like(actual), atol=0, rtol=0
+                )
+                with self.assertRaisesRegex(RuntimeError, "no state is committed"):
+                    kernel.require_sparse_status()
+            finally:
+                stream.synchronize()
+                graph.reset()
+
     def test_invalid_packed_scales_reject_fast_and_ordinary_attention(self):
         for failure, scale_code in MIXED_SCALE_FAILURES:
             history = self.history(1, 256, 512, 16, torch.float8_e4m3fn)

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use oh_my_vllm_kv_cache::{HybridCoordinator, group::RequestId, hash::BlockHash};
@@ -19,15 +20,31 @@ pub struct Owned<T> {
 
 pub struct Dep4Cache {
     pools: [Pool; 4],
+    residents: [BTreeSet<RequestId>; 4],
+    resident_limit: usize,
     pub(crate) owners: Arc<Mutex<RequestOwners>>,
 }
 
 impl Dep4Cache {
-    pub(crate) fn new(template: Pool, owners: Arc<Mutex<RequestOwners>>) -> Self {
+    pub(crate) fn new(
+        template: Pool,
+        owners: Arc<Mutex<RequestOwners>>,
+        max_num_seqs: usize,
+    ) -> Self {
+        assert!(max_num_seqs > 0, "DEP4 needs a positive resident capacity");
         let pools = std::array::from_fn(|_| template.empty_like());
-        let cache = Self { pools, owners };
+        let cache = Self {
+            pools,
+            residents: Default::default(),
+            resident_limit: max_num_seqs.div_ceil(4),
+            owners,
+        };
         cache.refresh();
         cache
+    }
+
+    fn can_reside(&self, rank: usize, id: RequestId) -> bool {
+        self.residents[rank].contains(&id) || self.residents[rank].len() < self.resident_limit
     }
 
     fn rank(&self, id: RequestId) -> usize {
@@ -82,6 +99,7 @@ impl CachePolicy for Dep4Cache {
         Self::new(
             self.pools[0].empty_like(),
             Arc::new(Mutex::new(RequestOwners::default())),
+            self.resident_limit * 4,
         )
     }
 
@@ -195,8 +213,14 @@ impl CachePolicy for Dep4Cache {
         if hit.length > 0 {
             assert_eq!(rank, hit.blocks.rank);
         }
+        if !self.can_reside(rank, request.id) {
+            return false;
+        }
         let result =
             self.pools[rank].allocate(request, Self::hit(hit), count, lookahead, has_running);
+        if result {
+            self.residents[rank].insert(request.id);
+        }
         self.refresh();
         result
     }
@@ -214,6 +238,7 @@ impl CachePolicy for Dep4Cache {
     fn free(&mut self, id: RequestId) {
         let rank = self.rank(id);
         self.pools[rank].free(id);
+        self.residents[rank].remove(&id);
         self.refresh();
     }
 
@@ -242,12 +267,15 @@ impl CachePolicy for Dep4Cache {
         lookahead: usize,
     ) -> Option<Self::Transfer> {
         let rank = self.request_rank(request);
-        if rank != source.rank {
+        if rank != source.rank || !self.can_reside(rank, request.id) {
             return None;
         }
         let result = self.pools[rank]
             .load_snapshot(request, &source.value, prefix, count, lookahead)
             .map(|value| Owned { rank, value });
+        if result.is_some() {
+            self.residents[rank].insert(request.id);
+        }
         self.refresh();
         result
     }
@@ -279,6 +307,7 @@ mod tests {
         let mut cache = Dep4Cache::new(
             Pool::new(4, 128, true, 0).with_mamba_capacity(8),
             owners.clone(),
+            4,
         );
         for id in 1..=4 {
             let mut request = Request::new(id, vec![id as u32; 384], 1, vec![]);
@@ -301,11 +330,70 @@ mod tests {
     }
 
     #[test]
+    fn resident_quota_keeps_prepared_requests_queued_and_bounds_snapshot_loads() {
+        let owners = Arc::new(Mutex::new(RequestOwners::default()));
+        let mut cache = Dep4Cache::new(
+            Pool::new(256, 128, true, 0).with_mamba_capacity(128),
+            owners.clone(),
+            64,
+        );
+        let config = SchedulerConfig {
+            max_num_seqs: 64,
+            max_num_batched_tokens: 4096,
+            enable_mtp: false,
+            mtp_draft_len: 0,
+        };
+        let mut requests = (1..=68)
+            .map(|id| {
+                let mut request = Request::new(id, vec![id as u32; 256], 4, vec![]);
+                owners.lock().unwrap().bind_cache(&mut request);
+                cache.initialize_hashes(&mut request);
+                assert!(cache.accepts(&request, &config, true));
+                request
+            })
+            .collect::<Vec<_>>();
+        for request in &requests[..64] {
+            let hit = cache.find_prefix(request);
+            assert!(cache.allocate(request, hit, 256, 0, false));
+        }
+        assert!(cache.residents.iter().all(|rows| rows.len() == 16));
+        assert_eq!(cache.empty_like().resident_limit, 16);
+        let queued = &requests[64];
+        assert_eq!(cache.request_rank(queued), 0);
+        let before = cache.resource_counts();
+        let hit = cache.find_prefix(queued);
+        assert!(!cache.allocate(queued, hit, 256, 0, true));
+        assert_eq!(cache.resource_counts(), before);
+        requests[0].num_computed_tokens = 256;
+        cache.commit_cache(&requests[0]);
+        let transfer = cache.store_request(1);
+        let snapshot = cache.finish_transfer(transfer);
+        cache.free(1);
+        let queued = &requests[64];
+        let hit = cache.find_prefix(queued);
+        assert!(cache.allocate(queued, hit, 256, 0, true));
+        assert!(
+            cache
+                .load_snapshot(&requests[0], &snapshot, false, 256, 0)
+                .is_none()
+        );
+        cache.free(queued.id);
+        assert!(
+            cache
+                .load_snapshot(&requests[0], &snapshot, false, 256, 0)
+                .is_some()
+        );
+        assert!(cache.residents.iter().all(|rows| rows.len() == 16));
+        assert_eq!(cache.rank(1), 0);
+    }
+
+    #[test]
     fn prefix_candidate_keeps_cache_rank_after_request_owner_release() {
         let owners = Arc::new(Mutex::new(RequestOwners::default()));
         let mut cache = Dep4Cache::new(
             Pool::new(8, 128, true, 0).with_mamba_capacity(8),
             owners.clone(),
+            4,
         );
         let mut request = Request::new(1, vec![7; 384], 1, vec![]);
         owners.lock().unwrap().bind_cache(&mut request);
@@ -342,6 +430,7 @@ mod tests {
         let cache = Dep4Cache::new(
             Pool::new(4, 128, true, 0).with_mamba_capacity(8),
             owners.clone(),
+            8,
         );
         let mut scheduler = Scheduler::new(
             SchedulerConfig {

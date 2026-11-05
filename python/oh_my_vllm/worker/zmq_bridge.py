@@ -14,10 +14,6 @@ def initialize(config):
 
 
 def create_worker(config):
-    if config["model_path"] == "stub":
-        from .placeholder import Worker
-
-        return Worker(config)
     from ..models.registry import create
 
     return create(config)

@@ -691,22 +691,41 @@ class Worker:
             logits = torch.cat(logit_chunks, dim=1)
         return output_ids, logits, main_hidden
 
-    def _proposal(self, token, main_hidden, start_pos, slot):
+    def _proposal(
+        self, token, main_hidden, start_pos, slot, *, input_ids=None, cache_slots=None
+    ):
         if not self.dspark or main_hidden is None:
             return []
-        input_ids = torch.tensor([[token]], device=self.device, dtype=torch.long)
+        if input_ids is None:
+            input_ids = torch.tensor([[token]], device=self.device, dtype=torch.long)
+        options = {}
+        if cache_slots is None:
+            cache_slots = torch.tensor([slot], device=self.device)
+        else:
+            options["cache_slots_cpu"] = (slot,)
         result = self.model.forward_spec(
             input_ids,
             main_hidden,
             start_pos=start_pos,
-            cache_slots=torch.tensor([slot], device=self.device),
+            cache_slots=cache_slots,
+            **options,
         )
         if result is None:
             return []
         output_ids, _, _ = result
         return output_ids[0, 1:].tolist()
 
-    def _next_proposals(self, request, tokens, main_hidden, accepted_end, slot):
+    def _next_proposals(
+        self,
+        request,
+        tokens,
+        main_hidden,
+        accepted_end,
+        slot,
+        *,
+        input_ids=None,
+        cache_slots=None,
+    ):
         remaining = max(0, request.limit - request.generated)
         if (
             not self.dspark
@@ -714,20 +733,34 @@ class Worker:
             or not tokens
             or remaining <= 1
             or main_hidden is None
+            or accepted_end + DS_PARK_DRAFT_TOKENS > self.runtime_max_context
         ):
             return []
-        return self._proposal(tokens[-1], main_hidden[:, -1:], accepted_end - 1, slot)[
-            : remaining - 1
-        ]
+        options = {}
+        if input_ids is not None:
+            options["input_ids"] = input_ids
+        if cache_slots is not None:
+            options["cache_slots"] = cache_slots
+        return self._proposal(
+            tokens[-1], main_hidden[:, -1:], accepted_end - 1, slot, **options
+        )[: remaining - 1]
 
-    def _seed_mtp(self, main_hidden, start_pos, slot, *, source_length=None):
+    def _seed_mtp(
+        self, main_hidden, start_pos, slot, *, source_length=None, cache_slots=None
+    ):
         if main_hidden is None:
             return False
+        options = {}
+        if cache_slots is None:
+            cache_slots = torch.tensor([slot], device=main_hidden.device)
+        else:
+            options["cache_slots_cpu"] = (slot,)
         return self._seed_mtp_batch(
             main_hidden,
             start_pos,
-            torch.tensor([slot], device=main_hidden.device),
+            cache_slots,
             source_length=source_length,
+            **options,
         )
 
     def _mtp_source_length(self, length):
@@ -759,6 +792,7 @@ class Worker:
         cache_slots,
         *,
         source_length=None,
+        cache_slots_cpu=None,
     ):
         if not self.dspark or main_hidden is None:
             return False
@@ -775,11 +809,15 @@ class Worker:
             hidden_start += hidden_length - window_size
             hidden_length = window_size
         chunk_size = max(1, MAX_NATIVE_ROWS // batch_size)
+        options = {}
+        if cache_slots_cpu is not None:
+            options["cache_slots_cpu"] = cache_slots_cpu
         for offset in range(0, hidden_length, chunk_size):
             self.model.forward_spec_seed(
                 main_hidden[:, offset : offset + chunk_size],
                 start_pos=hidden_start + offset,
                 cache_slots=cache_slots,
+                **options,
             )
         return True
 
@@ -1127,7 +1165,11 @@ class Worker:
                     min(window, start_pos) if length > 1 else window,
                 )
                 decode_groups.setdefault(key, []).append(row)
-            elif token_ids and end_pos == len(request.history):
+            elif (
+                token_ids
+                and start_pos < request.prompt_len
+                and end_pos == len(request.history)
+            ):
                 initial_prefill_groups.setdefault(
                     (start_pos, len(token_ids)),
                     [],
@@ -1214,7 +1256,6 @@ class Worker:
                     "type": "stats_result",
                     "rpc_id": message["rpc_id"],
                     "stats": {
-                        "placeholder": False,
                         "model": "deepseek_v41",
                         "rank": self.rank,
                         "requests": len(self.requests),

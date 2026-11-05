@@ -2,7 +2,6 @@
 
 每个受支持的模型族在自己的[模型目录](models)中维护实现和验收状态.
 只有已实现的适配器才能启动服务.
-显式 `stub` 后端提供服务测试模拟, 不提供模型推理.
 
 ## 职责
 
@@ -31,7 +30,6 @@
 [Python 注册表](../python/oh_my_vllm/models/registry.py)和 [Rust 选择器](../crates/zmq-worker/src/models/policy.rs)使用原始配置字节.
 Architecture 和 model type 选择适配器; 目录名和公开 HTTP 名称不参与选择.
 未知架构, 不支持的格式和能力不匹配在 GPU 导入或进程启动前导致启动错误.
-只有字面量路径 `stub` 选择占位实现.
 
 配置输入上限为 1 MiB.
 Python 拒绝重复 JSON 键和非对象配置值.

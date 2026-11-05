@@ -6,11 +6,14 @@ from unittest.mock import patch
 
 from oh_my_vllm.models.deepseek_v41.trace import execution_modes, runtime_identity
 
+from tests.test_deepseek_accounting_floor import routed_trace, split_decode
+
 from . import deepseek_acceptance as gate
 from . import deepseek_accounting as source
 from . import deepseek_accounting_floor as floor
 from . import deepseek_accounting_math as arithmetic
 from . import deepseek_accounting_packed as packed
+from . import deepseek_accounting_roofline as roofline
 from .deepseek_benchmark import reference_configuration, runtime_reference
 from .deepseek_runtime_trace import assemble_trace, response_manifest
 from .test_deepseek_benchmark import run_fixture, runtime_fixture
@@ -25,7 +28,7 @@ MODEL = replace(
 )
 
 
-def measured_rows(version=packed.VERSION):
+def measured_rows(version=roofline.VERSION):
     configuration = reference_configuration(version)
     modes = {
         strategy: {
@@ -44,7 +47,9 @@ def measured_rows(version=packed.VERSION):
         },
         "checkpoint": {"config": "config", "index": "index"},
         "tokenizer": {"tokenizer": "digest"},
-        "topology": [{"uuid": f"GPU-{rank}"} for rank in range(4)],
+        "topology": [
+            {"uuid": f"GPU-{rank}", "name": "NVIDIA B200"} for rank in range(4)
+        ],
         "harness_numeric_runtime": {"python": "test"},
         "configuration": {"execution_modes": modes},
         "reference": configuration,
@@ -64,6 +69,7 @@ def measured_rows(version=packed.VERSION):
             "case_id": identifier,
             "strategy": case["strategy"],
             "effective_strategy": case["strategy"],
+            "sampling": "greedy",
         }
         responses = [
             {
@@ -102,9 +108,11 @@ def measured_rows(version=packed.VERSION):
                 "seconds": 100,
                 "reference_seconds": 33,
                 "efficiency_percent": 33,
-                "reference_acceptance": "trace-project-estimate"
-                if version == packed.VERSION
-                else "trace-resource-floor",
+                "reference_acceptance": {
+                    packed.VERSION: "trace-project-estimate",
+                    floor.VERSION: "trace-resource-floor",
+                    roofline.VERSION: "trace-roofline",
+                }[version],
                 "responses": responses,
                 "trace": {
                     "binding": binding,
@@ -221,6 +229,160 @@ class PackedHistory(unittest.TestCase):
         )
 
 
+class WholeHttpRoofline(unittest.TestCase):
+    def test_call_splitting_does_not_increase_necessary_resources(self):
+        for strategy in ("tp4", "tep4", "dep4"):
+            with self.subTest(strategy=strategy):
+                trace = routed_trace(strategy, outputs=7)
+                split = split_decode(trace, strategy)
+                first = roofline.reference_trace(trace, strategy=strategy, model=MODEL)
+                second = roofline.reference_trace(split, strategy=strategy, model=MODEL)
+                self.assertEqual(first.seconds, second.seconds)
+                self.assertEqual(first.ranks, second.ranks)
+                self.assertEqual(first.protocol_stages, second.protocol_stages)
+                self.assertEqual(first.dependency_seconds, 0)
+                self.assertGreater(
+                    packed.reference_trace(
+                        split, strategy=strategy, model=MODEL
+                    ).seconds,
+                    packed.reference_trace(
+                        trace, strategy=strategy, model=MODEL
+                    ).seconds,
+                )
+
+    def test_weight_witnesses_take_maximum_and_native_payload_has_one_source(self):
+        case = dict(
+            mode="dspark5",
+            strategy="tp4",
+            batch=4,
+            input_tokens=400000,
+            output_tokens=8192,
+        )
+        trace = source.ideal_trace(case, model=MODEL)
+        result = roofline.reference_trace(trace, strategy="tp4", model=MODEL)
+        rank = result.ranks[0]
+        self.assertEqual(rank.mandatory_target_rounds, 1367)
+        self.assertEqual(
+            rank.weight_read_lower_bytes,
+            max(
+                0,
+                rank.weight_union_lower_bytes - (1 << 30),
+                1367 * max(0, rank.dense_weight_bytes - (1 << 30)),
+            ),
+        )
+        model = replace(
+            MODEL,
+            num_layers=2,
+            compress_ratios=(2, 2),
+            kv_source_layers=(0,),
+            index_source_layers=(0, 1),
+        )
+        payload, writes = roofline._cache_writes(
+            [{"input_tokens": 20000000, "output_tokens": 1}], model
+        )
+        self.assertEqual(payload, 10000000 * (288 + 68))
+        self.assertEqual(writes, payload - (1 << 30))
+
+    def test_communication_directions_order_and_empty_owner_match_literal_routes(self):
+        for strategy in ("tp4", "tep4", "dep4"):
+            trace = routed_trace(strategy, batch=3)
+            result = roofline.reference_trace(trace, strategy=strategy, model=MODEL)
+            stages = {row.name: row for row in result.protocol_stages}
+            rows = 3 * 21
+            if strategy == "tp4":
+                activation = stages["0.expert.activation_gather"]
+                self.assertEqual(activation.sent_bytes, (rows * 20736,) * 4)
+                self.assertEqual(
+                    (activation.after, activation.before),
+                    ("0.expert.up_gate", "0.expert.down"),
+                )
+                self.assertEqual(
+                    stages["0.expert.output_gather"].sent_bytes, (rows * 15360,) * 4
+                )
+            elif strategy == "tep4":
+                self.assertEqual(
+                    stages["0.expert.reduce"].sent_bytes, (rows * 30720,) * 4
+                )
+            else:
+                empty = result.ranks[3]
+                self.assertGreater(empty.fp8_flops, 0)
+                self.assertEqual(empty.mandatory_target_rounds, 0)
+                self.assertEqual(empty.host_h2d_bytes, 0)
+                dispatch, combine = stages["0.dispatch"], stages["0.combine"]
+                self.assertEqual(sum(dispatch.sent_bytes), sum(dispatch.received_bytes))
+                self.assertEqual(
+                    combine.sent_bytes,
+                    tuple(2 * value for value in dispatch.received_bytes),
+                )
+                self.assertEqual(
+                    combine.received_bytes,
+                    tuple(2 * value for value in dispatch.sent_bytes),
+                )
+                for rank, resource in enumerate(result.ranks):
+                    self.assertEqual(
+                        resource.wire_sent_bytes,
+                        dispatch.sent_bytes[rank] + combine.sent_bytes[rank],
+                    )
+                    self.assertEqual(
+                        resource.wire_received_bytes,
+                        dispatch.received_bytes[rank] + combine.received_bytes[rank],
+                    )
+        model = replace(MODEL, engram_layers=(0,))
+        trace = routed_trace("tep4", model=model)
+        result = roofline.reference_trace(trace, strategy="tep4", model=model)
+        stages = list(result.protocol_stages)
+        names = [stage.name for stage in stages]
+        self.assertLess(
+            names.index("0.engram.reduce"), names.index("0.attention.reduce")
+        )
+        self.assertEqual(result.pooled_host_h2d_bytes, 24 * 264)
+
+    def test_identity_and_measured_latency_cannot_change_without_detection(self):
+        trace = routed_trace("tp4")
+        first = roofline.reference_trace(trace, strategy="tp4", model=MODEL)
+        original = roofline.rate_profile_digest(MODEL)
+        with patch.object(roofline, "FAST_MEMORY_BYTES", 2 << 30):
+            self.assertNotEqual(roofline.rate_profile_digest(MODEL), original)
+        with patch.object(
+            arithmetic, "collective_latency_seconds", side_effect=AssertionError
+        ):
+            second = roofline.reference_trace(trace, strategy="tp4", model=MODEL)
+        self.assertEqual(first, second)
+        changed = copy.deepcopy(trace)
+        changed["binding"]["source"] = "changed"
+        with self.assertRaises(source.BindingError):
+            roofline.reference_trace(
+                changed, strategy="tp4", model=MODEL, expected_binding=trace["binding"]
+            )
+
+    def test_v6_runtime_binding_and_harness_use_the_same_calculator(self):
+        for strategy in ("tp4", "tep4", "dep4"):
+            with self.subTest(strategy=strategy):
+                case = dict(
+                    mode="dspark5",
+                    strategy=strategy,
+                    batch=1,
+                    input_tokens=20,
+                    output_tokens=4,
+                )
+                fixture = runtime_fixture(case, reference_version=roofline.VERSION)
+                harness, events, responses = fixture
+                trace = assemble_trace(events, responses, harness=harness, case=case)
+                result, csv = run_fixture(case, *fixture, version=roofline.VERSION)
+                self.assertEqual(result["status"], "completed")
+                reference = roofline.reference_trace(
+                    trace, strategy=strategy, expected_binding=trace["binding"]
+                )
+                self.assertEqual(result["reference_seconds"], reference.seconds)
+                self.assertEqual(result["reference_acceptance"], "trace-roofline")
+                self.assertEqual(result["accounting_version"], roofline.VERSION)
+                self.assertEqual(result["source_trace_version"], source.VERSION)
+                self.assertEqual(
+                    result["reference_scope"], "fixed-algorithm resource roofline"
+                )
+                self.assertEqual(csv["accounting_version"], roofline.VERSION)
+
+
 class LongHttpGate(unittest.TestCase):
     def assess(self, rows):
         acceptance = (
@@ -274,8 +436,8 @@ class LongHttpGate(unittest.TestCase):
                 self.assertFalse(report["target_passed"])
                 self.assertEqual(report["status"], "invalid")
 
-    def test_real_calculator_response_binding_rejects_the_reported_p1(self):
-        for strategy in ("tp4", "dep4"):
+    def test_real_calculator_binds_responses_and_reviewed_b200_hardware(self):
+        for strategy in ("tp4", "tep4", "dep4"):
             case = dict(
                 mode="dspark5",
                 strategy=strategy,
@@ -284,7 +446,7 @@ class LongHttpGate(unittest.TestCase):
                 output_tokens=64,
             )
             harness, events, responses = runtime_fixture(
-                case, reference_version=packed.VERSION
+                case, reference_version=roofline.VERSION
             )
             modes = {
                 name: {
@@ -299,6 +461,8 @@ class LongHttpGate(unittest.TestCase):
                 harness_numeric_runtime={"python": "cpu-fixture"},
                 configuration={"execution_modes": modes},
             )
+            for device in harness["topology"]:
+                device["name"] = "NVIDIA B200"
             for event_rows in events:
                 event_rows[0]["execution"]["runtime"]["execution_modes"] = modes[
                     strategy
@@ -308,7 +472,7 @@ class LongHttpGate(unittest.TestCase):
                 trace,
                 strategy=strategy,
                 expected_binding=trace["binding"],
-                version=packed.VERSION,
+                version=roofline.VERSION,
             )
             seconds = reference.seconds * 2
             measured = {
@@ -328,6 +492,19 @@ class LongHttpGate(unittest.TestCase):
                 "responses": responses,
             }
             gate.validate_measurement(measured)
+            for mutation in ("b300", "one_b300", "missing_name"):
+                broken = copy.deepcopy(measured)
+                devices = broken["measurement_identity"]["topology"]
+                for device in devices if mutation != "one_b300" else devices[:1]:
+                    if mutation == "missing_name":
+                        del device["name"]
+                    else:
+                        device["name"] = "NVIDIA B300"
+                with (
+                    self.subTest(strategy=strategy, mutation=mutation),
+                    self.assertRaisesRegex(ValueError, "four reviewed B200"),
+                ):
+                    gate.validate_measurement(broken)
             for mutation in ("missing", "empty", "usage", "id"):
                 broken = copy.deepcopy(measured)
                 if mutation == "missing":
@@ -373,9 +550,15 @@ class LongHttpGate(unittest.TestCase):
         for variant in variants:
             with self.subTest(size=len(variant)):
                 self.assertFalse(self.assess(variant)["target_passed"])
-        partial = self.assess(measured_rows(floor.VERSION))
-        self.assertEqual(partial["status"], "ineligible")
-        self.assertFalse(partial["target_passed"])
+        for version in (floor.VERSION, packed.VERSION):
+            historical = measured_rows(version)
+            for row in historical:
+                for device in row["measurement_identity"]["topology"]:
+                    del device["name"]
+            partial = self.assess(historical)
+            self.assertEqual(partial["status"], "ineligible")
+            self.assertTrue(partial["reference_threshold_met"])
+            self.assertFalse(partial["target_passed"])
 
     def test_qualification_cannot_be_supplied_by_a_result_label(self):
         rows = measured_rows()
@@ -383,6 +566,12 @@ class LongHttpGate(unittest.TestCase):
         self.assertFalse(self.assess(rows)["target_passed"])
         rows = measured_rows()
         del rows[0]["measurement_identity"]["configuration"]["execution_modes"]
+        self.assertFalse(self.assess(rows)["target_passed"])
+        rows = measured_rows()
+        rows[0]["rate_profile"] = "old-calculator-digest"
+        self.assertFalse(self.assess(rows)["target_passed"])
+        rows = measured_rows()
+        rows[0]["assumptions_sha256"] = "changed-assumptions"
         self.assertFalse(self.assess(rows)["target_passed"])
 
 

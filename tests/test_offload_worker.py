@@ -12,7 +12,6 @@ import numpy as np
 import torch
 from oh_my_vllm.models.qwen38.cache import Cache
 from oh_my_vllm.models.qwen38.inference import Worker
-from oh_my_vllm.worker.placeholder import Worker as StubWorker
 
 
 class Tensor:
@@ -459,54 +458,6 @@ class OffloadWorker(unittest.TestCase):
             self.assertEqual(host_budget(20000, 20000), 1000)
             self.assertEqual(host_budget(None, 200), 200)
             self.assertEqual(host_budget(0, 20000), 0)
-
-    def test_placeholder_cache_is_opt_in_and_preserves_request(self):
-        config = dict(
-            block_size=784,
-            tensor_parallel_size=1,
-            num_gpu_blocks=8,
-            mamba_blocks=8,
-            max_num_seqs=1,
-            max_num_batched_tokens=784,
-            num_speculative_tokens=4,
-        )
-        for limit in (None, 1 << 30):
-            with self.subTest(limit=limit):
-                worker = StubWorker({**config, "host_cache_bytes": limit})
-                self.assertEqual(worker.ready()["host_cache_bytes"], limit or 0)
-                worker.handle(
-                    dict(
-                        type="register",
-                        request_id=7,
-                        prompt_token_ids=[1, 2],
-                        max_tokens=8,
-                    )
-                )
-                request = worker.requests[7]
-                rng = request.rng.getstate()
-                result = exchange(worker, operation(1, "store"))["completed"][0]
-                if limit is None:
-                    self.assertEqual(result["status"], "capacity")
-                    continue
-                self.assertEqual(result["status"], "complete")
-                self.assertEqual(
-                    exchange(worker, operation(2, "load"))["completed"][0]["status"],
-                    "complete",
-                )
-                self.assertIs(worker.requests[7], request)
-                self.assertEqual(request.rng.getstate(), rng)
-                worker.handle(dict(type="abort", request_id=7))
-                self.assertEqual(
-                    exchange(worker, operation(3, "drop", fa=(), mamba=()))[
-                        "completed"
-                    ][0]["status"],
-                    "complete",
-                )
-                self.assertEqual(exchange(worker)["host_cache_bytes"], limit)
-                stats = worker.handle(dict(type="stats", rpc_id=98))["stats"]
-                self.assertEqual(stats["host_cache_capacity_bytes"], limit)
-                self.assertEqual(stats["host_cache_completed_transfers"], 2)
-                self.assertEqual(stats["host_cache_used_bytes"], 0)
 
     def test_media_cpu_torch_embedding_stays_host_and_reencodes(self):
         from oh_my_vllm.models.qwen38.media import MediaProcessor

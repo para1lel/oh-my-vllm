@@ -2,7 +2,6 @@
 
 Each supported family owns its implementation and acceptance status in its [model directory](models).
 Only implemented adapters can start a service.
-The explicit `stub` backend supplies service-test simulations, not model inference.
 
 ## Ownership
 
@@ -31,7 +30,6 @@ Keep interfaces compatible with beneficial fusion and prepared device metadata.
 The [Python registry](../python/oh_my_vllm/models/registry.py) and [Rust selector](../crates/zmq-worker/src/models/policy.rs) use original configuration bytes.
 Architecture and model type select the adapter. Directory names and public HTTP names do not.
 Unknown architectures, unsupported formats, and capability mismatches cause startup errors before GPU imports or process startup.
-Only the literal `stub` path selects the placeholder.
 
 Configuration input has a 1 MiB limit.
 Python rejects duplicate JSON keys and non-object configuration values.

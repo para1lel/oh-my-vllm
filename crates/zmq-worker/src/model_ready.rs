@@ -87,11 +87,7 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
         else {
             return false;
         };
-        let policy = if config.model_path.as_os_str() == "stub" {
-            ModelPolicy::for_family(ModelFamily::Stub)
-        } else {
-            ModelPolicy::for_family(ModelFamily::Qwen38)
-        };
+        let policy = ModelPolicy::for_family(ModelFamily::Qwen38);
         validate_ready(
             policy,
             config,
@@ -235,7 +231,7 @@ print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_b
             );
             assert!(matches!(
                 validate_ready(
-                    ModelPolicy::for_family(ModelFamily::Stub),
+                    ModelPolicy::for_family(ModelFamily::DeepSeekV41),
                     &config,
                     &descriptor,
                     logical_num_blocks,
@@ -361,10 +357,6 @@ print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_b
                     mamba_blocks: Some(1),
                     ..config.clone()
                 },
-                WorkerConfig {
-                    model_path: "stub".into(),
-                    ..config.clone()
-                },
             ] {
                 assert!(
                     !accepted(ready.clone(), &invalid_config),
@@ -384,86 +376,6 @@ print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_b
             changed["descriptor"]["checkpoint_sha256"] = json!("b".repeat(64));
             changed["descriptor"]["tokenizer_sha256"] = json!("c".repeat(64));
             assert!(accepted(changed, &config));
-        }
-    }
-
-    #[test]
-    fn python_stub_ready_is_bound_to_the_explicit_test_path_and_fixed_identities() {
-        let python =
-            std::env::var_os("OH_MY_VLLM_WORKER_PYTHON").unwrap_or_else(|| "python3".into());
-        let source = r#"
-import msgpack
-import sys
-from oh_my_vllm.models.stub import build_descriptor
-ready = dict(type="ready", descriptor=build_descriptor(1608, 128),
-             logical_num_blocks=1608, mamba_blocks=128)
-sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
-"#;
-        let output = Command::new(python)
-            .args(["-c", source])
-            .env("CUDA_VISIBLE_DEVICES", "")
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let ready: Value = rmp_serde::from_slice(&output.stdout).unwrap();
-        let mut config = configuration(0);
-        for path in ["/synthetic-qwen", "stub/", "stub/.", "./stub"] {
-            config.model_path = path.into();
-            assert!(
-                !accepted(ready.clone(), &config),
-                "accepted stub path {path}"
-            );
-        }
-        config.model_path = "stub".into();
-        for drafts in [0, 4] {
-            config.num_speculative_tokens = drafts;
-            assert!(accepted(ready.clone(), &config));
-            let descriptor = serde_json::from_value(ready["descriptor"].clone()).unwrap();
-            assert_eq!(
-                validate_ready(
-                    ModelPolicy::for_family(ModelFamily::Stub),
-                    &config,
-                    &descriptor,
-                    1608,
-                    128,
-                )
-                .unwrap(),
-                crate::models::ModelFamily::Stub
-            );
-            assert!(matches!(
-                validate_ready(
-                    ModelPolicy::for_family(ModelFamily::Qwen38),
-                    &config,
-                    &descriptor,
-                    1608,
-                    128,
-                ),
-                Err(Error::WorkerError(_))
-            ));
-            for (path, value) in [
-                ("/descriptor/config_sha256", json!("a".repeat(64))),
-                ("/descriptor/checkpoint_sha256", json!("b".repeat(64))),
-                ("/descriptor/tokenizer_sha256", json!("c".repeat(64))),
-                (
-                    "/descriptor/cache_schema/groups/0/storage/version",
-                    json!(2),
-                ),
-                (
-                    "/descriptor/cache_schema/groups/0/storage/id",
-                    json!("qwen38_paired_fa_kv_bf16"),
-                ),
-                ("/descriptor/cache_schema/groups/1/layers", json!([1])),
-                ("/descriptor/max_context_tokens", json!(4096)),
-                ("/descriptor/speculation", json!([])),
-            ] {
-                let mut changed = ready.clone();
-                *changed.pointer_mut(path).unwrap() = value;
-                assert!(!accepted(changed, &config), "accepted {path}");
-            }
         }
     }
 }

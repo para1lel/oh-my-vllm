@@ -8,10 +8,47 @@ import torch
 INDEX_SCORE_WORK_BYTES = 256 * 1024 * 1024
 
 
-def topk_indices(scores, count, *, request_widths=None):
+def topk_indices(scores, count, *, request_widths=None, finite_scores=False):
+    """Select ascending indices with Torch semantics by default, including NaNs.
+
+    finite_scores=True asserts finite producer arithmetic before -inf masks.
+    Only that explicit contract permits native CUDA BF16 count512 selection.
+    No fixed cutoff-tie subset is promised for the native path. Prepare it
+    with an Eager call before Graph recording; the graph pool retains captured
+    padding and output allocations at fixed addresses until graph release.
+    """
     if scores.ndim != 3 or type(count) is not int or not 0 <= count <= scores.size(-1):
         raise ValueError("index top-k requires [batch, query, width] and a valid count")
     if request_widths is None:
+        width = scores.size(-1)
+        if (
+            finite_scores is True
+            and scores.is_cuda
+            and scores.dtype == torch.bfloat16
+            and count == 512
+            and 512 <= width < 2**23
+            and scores.size(0) * scores.size(1) <= 32768
+            and scores.is_contiguous()
+            and scores.data_ptr() % 16 == 0
+        ):
+            from .kernel import _transform_module
+
+            physical = scores
+            if width % 512:
+                physical = torch.empty(
+                    (*scores.shape[:2], (width + 511) // 512 * 512),
+                    dtype=scores.dtype,
+                    device=scores.device,
+                )
+                physical[..., :width].copy_(scores)
+                physical[..., width:].fill_(-torch.inf)
+            output = torch.empty(
+                (*scores.shape[:2], 512), dtype=torch.int64, device=scores.device
+            )
+            _transform_module().topk_bf16(
+                physical.view(-1, physical.size(-1)), output.view(-1, 512), width
+            )
+            return output
         return scores.topk(count, dim=-1, sorted=False).indices.sort(dim=-1).values
     if len(request_widths) != scores.size(0) or any(
         type(width) is not int or not 0 <= width <= scores.size(-1)
@@ -38,6 +75,73 @@ def topk_indices(scores, count, *, request_widths=None):
     return indices
 
 
+def _rank_score_chunks(query, keys, weights, chunk_rows, work_bytes):
+    import torch.distributed as dist
+
+    from .kernel import _transform_module
+
+    batch, rows, heads, dim = query.shape
+    width = keys.size(1)
+    chunk_rows = min(chunk_rows, rows)
+    row_bytes = batch * (2 * heads * (dim + width + 1) + 8 * width)
+    pipeline = (
+        rows > chunk_rows
+        and row_bytes * chunk_rows <= work_bytes
+        and not torch.cuda.is_current_stream_capturing()
+    )
+    buffers = [
+        torch.empty(
+            batch * chunk_rows * width, dtype=torch.float32, device=query.device
+        )
+        for _ in range(2 if pipeline else 1)
+    ]
+    module = _transform_module()
+    stream = torch.cuda.current_stream(query.device)
+    pending = None
+    try:
+        for chunk, first in enumerate(range(0, rows, chunk_rows)):
+            last = min(first + chunk_rows, rows)
+            total = buffers[chunk % len(buffers)][
+                : batch * (last - first) * width
+            ].view(batch, last - first, width)
+            with torch.no_grad():
+                packed_query = query[:, first:last].contiguous()
+                per_head = torch.einsum("bshd,btd->bsht", packed_query, keys)
+                del packed_query
+                module.weighted_heads(
+                    per_head.view(-1, 8, width),
+                    weights[:, first:last].contiguous().view(-1, 8),
+                    total.view(-1, width),
+                )
+                del per_head
+                if not pipeline:
+                    dist.all_reduce(total)
+                    scores = total.to(query.dtype, copy=True)
+                else:
+                    work = dist.all_reduce(total, async_op=True)
+                    previous = pending
+                    pending = first, last, total, work
+                    if previous is None:
+                        continue
+                    begin, end, values, previous_work = previous
+                    previous_work.wait()
+                    scores = values.to(query.dtype, copy=True)
+            if pipeline:
+                yield begin, end, scores
+            else:
+                yield first, last, scores
+            del scores
+        if pending is not None:
+            first, last, values, work = pending
+            work.wait()
+            pending = None
+            yield first, last, values.to(query.dtype, copy=True)
+    finally:
+        if pending is not None:
+            with torch.cuda.stream(stream):
+                pending[3].wait()
+
+
 def score_chunks(
     query: torch.Tensor,
     keys: torch.Tensor,
@@ -59,7 +163,9 @@ def score_chunks(
     With head_partitions, each group rounds before local accumulation.
     Workspace terms use H/head_partitions and include the accumulator.
     A reusable accumulator adds B*T*accumulator_size bytes per row to every
-    phase. Returned scores do not share this accumulator's storage.
+    phase. CUDA BF16 eight-head rank sums fuse weighting and head reduction.
+    Two accumulators can overlap scoring and rank reduction within this budget.
+    Returned scores do not share the accumulator storage.
     Chunk ranges depend only on shapes, dtype size, and the positive integer
     budget. Empty S yields nothing; empty B or T yields one empty score chunk.
     """
@@ -129,6 +235,19 @@ def score_chunks(
             f"work_bytes={work_bytes} is too small; need at least {row_bytes} bytes "
             "for one query row"
         )
+    # Width one uses PyTorch's contiguous-head reduction order.
+    if (
+        rank_sum
+        and not local_sum
+        and query.is_cuda
+        and query.dtype == torch.bfloat16
+        and heads == 8
+        and length > 1
+        and weights.is_contiguous()
+        and weights.data_ptr() % 16 == 0
+    ):
+        yield from _rank_score_chunks(query, keys, weights, chunk_rows, int(work_bytes))
+        return
     if rank_sum:
         import torch.distributed as dist
     if rank_sum or local_sum:

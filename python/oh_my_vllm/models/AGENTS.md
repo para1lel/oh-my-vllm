@@ -5,7 +5,6 @@ The Qwen adapter is the current supported model adapter. Keep its rules in this 
 
 Use shared mechanisms for transport, constraints, repetition checks, metadata uploads, and execution rules.
 Each adapter supplies its tool grammar. Do not put model dimensions or token syntax in shared mechanisms.
-The explicit placeholder is a test backend, not a model fallback.
 
 Keep frozen numerical fixtures and acceptance limits unchanged.
 

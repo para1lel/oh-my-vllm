@@ -18,7 +18,6 @@ Physical state release also depends on device and transfer completion.
 The [bridge](../python/oh_my_vllm/worker/zmq_bridge.py) owns ZMQ DEALER and msgpack frames.
 The [registry](../python/oh_my_vllm/models/registry.py) selects a model adapter before GPU imports.
 Each adapter supplies computation, codecs, physical cache, and accepted-state selection through the [common contract](adapters.md).
-The explicit `stub` backend supplies service-test behavior only.
 
 Model weights follow the adapter's device and host placement plan.
 Temporary buffers can be reused across layers that execute in sequence.

@@ -72,12 +72,12 @@ curl http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/j
 ## 离线命令
 
 ```bash
-scripts/with-env.sh target/release/oh-my-vllm-zmq-worker run --tokens 1 2 3 --max-tokens 8
-scripts/with-env.sh target/release/oh-my-vllm-zmq-worker bench --input-len 785 --output-len 8 --warmup 0 --repetitions 1
+scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --model "$MODEL_ROOT" run --tokens 1 2 3 --max-tokens 8
+scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --model "$MODEL_ROOT" bench --input-len 785 --output-len 8 --warmup 0 --repetitions 1
 ```
 
 Run 和 Bench 使用固定输出长度.
-在子命令前增加 `--model "$MODEL_ROOT"` 可执行模型计算.
+必须通过 `--model` 或 `OH_MY_VLLM_MODEL` 提供模型路径.
 
 推测模式由所选适配器定义. 参见 [Qwen 模式](models/qwen38/README.zh.md).
 
@@ -100,11 +100,3 @@ Worker 对 target 和 proposal 分布应用 grammar mask.
 
 模型执行方式选择和 Graph 资源所有权遵循[执行规则](execution.zh.md).
 使用所选模型的[测量范围](testing.zh.md#模型验收)进行性能检查.
-
-## 占位实现
-
-使用 `--model stub` 可在无 GPU 时执行服务测试.
-占位实现提供随机文本, 工具调用样例和简单 JSON 样例.
-它不加载 checkpoint, 不执行模型计算.
-占位实现的计时不代表推理性能.
-模型初始化或执行出错时, 不会切换到占位实现.

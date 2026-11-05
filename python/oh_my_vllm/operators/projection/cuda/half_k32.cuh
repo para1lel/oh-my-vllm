@@ -59,7 +59,55 @@ __device__ __forceinline__ void half_mma(float (&raw)[4], const uint32_t (&a)[4]
                : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]));
 }
 
-template <class Output, class ScaleLayout, int Bits, bool Grouped>
+struct HalfFp4Prefetch {
+  uint32_t weights[8];
+  uint32_t scales[2];
+};
+
+template <class ScaleLayout>
+__device__ __forceinline__ void half_prefetch_fp4(HalfFp4Prefetch &next, const uint8_t *weight,
+                                                  const uint8_t *scales, int first_column,
+                                                  int outputs, int width, int weight_stride,
+                                                  int start, ScaleLayout layout) {
+  int columns = min(half_stage, width - start);
+#pragma unroll
+  for (int slot = 0; slot < 8; ++slot) {
+    int index = threadIdx.x * 8 + slot * 128 * 8;
+    int row = index / half_stage, column = index % half_stage;
+    uint32_t packed = 0;
+    if (first_column + row < outputs && column < columns) {
+      auto *address = weight + int64_t(first_column + row) * weight_stride + (start + column) / 2;
+      // Keep the immutable load before the current stage's MMA, rather than its next use.
+      asm volatile("ld.global.u32 %0, [%1];" : "=r"(packed) : "l"(address) : "memory");
+    }
+    next.weights[slot] = packed;
+  }
+#pragma unroll
+  for (int slot = 0; slot < 2; ++slot) {
+    int index = threadIdx.x + slot * 128;
+    int row = index / 4, group = index % 4;
+    uint32_t scale = 127;
+    if (first_column + row < outputs && group < columns / 32) {
+      auto *address = scales + layout(cute::make_coord(first_column + row, start + group * 32, 0));
+      asm volatile("ld.global.u8 %0, [%1];" : "=r"(scale) : "l"(address) : "memory");
+    }
+    next.scales[slot] = scale;
+  }
+}
+
+__device__ __forceinline__ void half_store_prefetched_fp4(const HalfFp4Prefetch &next,
+                                                          uint16_t *data) {
+#pragma unroll
+  for (int slot = 0; slot < 8; ++slot) {
+    int index = threadIdx.x * 8 + slot * 128 * 8;
+    int row = index / half_stage, column = index % half_stage;
+    uint32_t packed = next.weights[slot];
+    uint2 low = fp4_half_four(packed), high = fp4_half_four(packed >> 16);
+    half_store(data, row, column, make_uint4(low.x, low.y, high.x, high.y));
+  }
+}
+
+template <class Output, class ScaleLayout, int Bits, bool Grouped, bool Prefetch = false>
 __global__ void half_k32_kernel(const uint8_t *__restrict__ input, const uint8_t *weight,
                                 const uint8_t *__restrict__ input_scales,
                                 const uint8_t *weight_scales, Output *__restrict__ output,
@@ -102,6 +150,12 @@ __global__ void half_k32_kernel(const uint8_t *__restrict__ input, const uint8_t
     int first_column = (local_task % column_tiles) * half_columns;
     int valid_rows = min(half_rows, group_rows - first_row), width_groups = width / 32;
     float total[2][2][4] = {};
+    HalfFp4Prefetch prefetched;
+    if constexpr (Prefetch) {
+      static_assert(Grouped && Bits == 4 && std::is_same_v<Output, __nv_bfloat16>);
+      half_prefetch_fp4(prefetched, weight, weight_scales, first_column, outputs, width,
+                        weight_stride, 0, layout);
+    }
     for (int start = 0; start < width; start += half_stage) {
       int columns = min(half_stage, width - start), stage_groups = columns / 32;
       for (int index = threadIdx.x * 8; index < half_rows * half_stage; index += blockDim.x * 8) {
@@ -118,30 +172,33 @@ __global__ void half_k32_kernel(const uint8_t *__restrict__ input, const uint8_t
         converted.w = half_pair(packed >> 48);
         half_store(as, row, column, converted);
       }
-      for (int index = threadIdx.x * 8; index < half_columns * half_stage;
-           index += blockDim.x * 8) {
-        int row = index / half_stage, column = index % half_stage;
-        bool valid = first_column + row < outputs && column < columns;
-        uint4 converted;
-        if constexpr (Bits == 8) {
-          uint64_t packed =
-              valid ? *reinterpret_cast<const uint64_t *>(
-                          weight + int64_t(first_column + row) * weight_stride + start + column)
-                    : 0;
-          converted.x = half_pair(packed);
-          converted.y = half_pair(packed >> 16);
-          converted.z = half_pair(packed >> 32);
-          converted.w = half_pair(packed >> 48);
-        } else {
-          uint32_t packed =
-              valid
-                  ? *reinterpret_cast<const uint32_t *>(
-                        weight + int64_t(first_column + row) * weight_stride + (start + column) / 2)
-                  : 0;
-          uint2 low = fp4_half_four(packed), high = fp4_half_four(packed >> 16);
-          converted = make_uint4(low.x, low.y, high.x, high.y);
+      if constexpr (Prefetch) {
+        half_store_prefetched_fp4(prefetched, bs);
+      } else {
+        for (int index = threadIdx.x * 8; index < half_columns * half_stage;
+             index += blockDim.x * 8) {
+          int row = index / half_stage, column = index % half_stage;
+          bool valid = first_column + row < outputs && column < columns;
+          uint4 converted;
+          if constexpr (Bits == 8) {
+            uint64_t packed =
+                valid ? *reinterpret_cast<const uint64_t *>(
+                            weight + int64_t(first_column + row) * weight_stride + start + column)
+                      : 0;
+            converted.x = half_pair(packed);
+            converted.y = half_pair(packed >> 16);
+            converted.z = half_pair(packed >> 32);
+            converted.w = half_pair(packed >> 48);
+          } else {
+            uint32_t packed = valid ? *reinterpret_cast<const uint32_t *>(
+                                          weight + int64_t(first_column + row) * weight_stride +
+                                          (start + column) / 2)
+                                    : 0;
+            uint2 low = fp4_half_four(packed), high = fp4_half_four(packed >> 16);
+            converted = make_uint4(low.x, low.y, high.x, high.y);
+          }
+          half_store(bs, row, column, converted);
         }
-        half_store(bs, row, column, converted);
       }
       for (int index = threadIdx.x; index < half_rows * 4; index += blockDim.x) {
         int row = index / 4, group = index % 4;
@@ -150,14 +207,25 @@ __global__ void half_k32_kernel(const uint8_t *__restrict__ input, const uint8_t
                                        start / 32 + group]
                         : 127;
       }
-      for (int index = threadIdx.x; index < half_columns * 4; index += blockDim.x) {
-        int row = index / 4, group = index % 4;
-        sb[index] =
-            first_column + row < outputs && group < stage_groups
-                ? weight_scales[layout(cute::make_coord(first_column + row, start + group * 32, 0))]
-                : 127;
+      if constexpr (Prefetch) {
+#pragma unroll
+        for (int slot = 0; slot < 2; ++slot)
+          sb[threadIdx.x + slot * 128] = static_cast<uint8_t>(prefetched.scales[slot]);
+      } else {
+        for (int index = threadIdx.x; index < half_columns * 4; index += blockDim.x) {
+          int row = index / 4, group = index % 4;
+          sb[index] = first_column + row < outputs && group < stage_groups
+                          ? weight_scales[layout(
+                                cute::make_coord(first_column + row, start + group * 32, 0))]
+                          : 127;
+        }
       }
       __syncthreads();
+      if constexpr (Prefetch) {
+        if (start + half_stage < width)
+          half_prefetch_fp4(prefetched, weight, weight_scales, first_column, outputs, width,
+                            weight_stride, start + half_stage, layout);
+      }
       for (int group = 0; group < stage_groups; ++group) {
         float activation_scales[2][2], weight_scales_tile[2][2];
 #pragma unroll
@@ -225,6 +293,15 @@ void launch_half_k32(const uint8_t *input, const uint8_t *weight, const uint8_t 
   int bound = ((rows + 31) / 32 + (Grouped ? groups : 0)) * ((outputs + 63) / 64);
   constexpr int blocks_per_sm =
       Grouped && Bits == 4 && std::is_same_v<Output, __nv_bfloat16> ? 7 : 8;
+  if constexpr (Grouped && Bits == 4 && std::is_same_v<Output, __nv_bfloat16>) {
+    if (rows > 64 && rows <= 128 && outputs == 576 && width == 5120) {
+      half_k32_kernel<Output, ScaleLayout, Bits, Grouped, true>
+          <<<min(bound, 148 * blocks_per_sm), 128, 0, stream>>>(
+              input, weight, input_scales, weight_scales, output, weight_ptrs, scale_ptrs, offsets,
+              tiles, groups, rows, outputs, width, weight_stride, layout);
+      return;
+    }
+  }
   half_k32_kernel<Output, ScaleLayout, Bits, Grouped>
       <<<min(bound, 148 * blocks_per_sm), 128, 0, stream>>>(
           input, weight, input_scales, weight_scales, output, weight_ptrs, scale_ptrs, offsets,

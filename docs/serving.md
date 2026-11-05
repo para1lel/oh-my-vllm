@@ -72,12 +72,12 @@ curl http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/j
 ## Offline commands
 
 ```bash
-scripts/with-env.sh target/release/oh-my-vllm-zmq-worker run --tokens 1 2 3 --max-tokens 8
-scripts/with-env.sh target/release/oh-my-vllm-zmq-worker bench --input-len 785 --output-len 8 --warmup 0 --repetitions 1
+scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --model "$MODEL_ROOT" run --tokens 1 2 3 --max-tokens 8
+scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --model "$MODEL_ROOT" bench --input-len 785 --output-len 8 --warmup 0 --repetitions 1
 ```
 
 Run and Bench keep fixed output lengths.
-Add `--model "$MODEL_ROOT"` before the subcommand for model computation.
+Give the model path with `--model` or `OH_MY_VLLM_MODEL`.
 
 The selected adapter defines speculation modes. See the [Qwen modes](models/qwen38/README.md).
 
@@ -100,11 +100,3 @@ Only accepted tokens change the request grammar state.
 
 Use the [execution rules](execution.md) for model execution selection and Graph resource ownership.
 Use the selected model's [measurement scope](testing.md#model-acceptance) for performance checks.
-
-## Placeholder
-
-Use `--model stub` for service tests without a GPU.
-The placeholder supplies random text, sample tool calls, and simple JSON samples.
-It does not load the checkpoint or do model computation.
-Placeholder timing does not measure inference performance.
-A model initialization or execution error does not select the placeholder.

@@ -728,6 +728,59 @@ def _round_failure_peer(rank, store, sparse=False):
 
 
 class DeepSeekDep4(unittest.TestCase):
+    def test_driver_owner_selection_keeps_default_and_allows_four_owners(self):
+        from development.model.check_deepseek_dep4 import (
+            argument_parser,
+            request_owners,
+        )
+
+        parser = argument_parser()
+        values = [
+            "--model",
+            "/unused",
+            "--output",
+            "/unused-output",
+            "--mode",
+            "legacy",
+        ]
+        self.assertEqual(parser.parse_args(values).lengths, [600, 300, 17])
+        self.assertEqual(request_owners([600, 300, 17]), [0, 1, 2])
+        lengths = parser.parse_args(
+            [*values, "--lengths", "600", "300", "17", "33"]
+        ).lengths
+        self.assertEqual(request_owners(lengths), [0, 1, 2, 3])
+        self.assertEqual(request_owners([17]), [0])
+        for invalid in ([], [1, 2, 3, 4, 5]):
+            with (
+                self.subTest(lengths=invalid),
+                self.assertRaisesRegex(ValueError, "one and four"),
+            ):
+                request_owners(invalid)
+
+    def test_driver_rejects_invalid_owners_before_starting_ranks(self):
+        from development.model.check_deepseek_dep4 import main
+
+        values = [
+            "check",
+            "--model",
+            "/unused",
+            "--output",
+            "/unused-output",
+            "--mode",
+            "legacy",
+            "--lengths",
+        ]
+        for lengths in (("1", "2", "3", "4", "5"), ("0",), ("-1",)):
+            with (
+                self.subTest(lengths=lengths),
+                patch("sys.argv", [*values, *lengths]),
+                patch("development.model.check_deepseek_dep4.supervise") as start,
+                self.assertRaises(SystemExit) as error,
+            ):
+                main()
+            self.assertEqual(error.exception.code, 2)
+            start.assert_not_called()
+
     def _check_driver_failure(self, failure):
         import json
         import time

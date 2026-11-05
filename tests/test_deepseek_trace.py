@@ -338,30 +338,62 @@ class DeepSeekTrace(unittest.TestCase):
         self.assertEqual(replay["request_rows"], [])
         self.assertEqual(replay["expert_assignments"], [[0, 0, 0, 0]])
 
-    def test_default_aligned_decode_keeps_the_existing_prefill_group(self):
-        worker = _worker()
-        worker.batch_decode_enabled = False
-        worker.requests = {
-            key: SimpleNamespace(
-                prompt_len=3, history=[1, 2, 3, 4], cache_slot=key, state_position=3
-            )
-            for key in (1, 2)
-        }
-        worker._execute_prefill_group = Mock(return_value={1: "one", 2: "two"})
-        worker._execute_row = Mock(side_effect=AssertionError("unexpected row call"))
-        rows = [
-            dict(request_id=key, token_ids=[4], num_computed_tokens=3) for key in (1, 2)
-        ]
-        output = worker.execute(
+    def test_default_aligned_decode_keeps_separate_request_targets(self):
+        worker = _chain_worker(prompts=((10, 11, 12), (20, 21, 22)), limit=2)
+        worker.rank, worker.strategy = 0, "tp4"
+        worker.routing_trace_enabled = True
+        worker.execute(
             dict(
                 rpc_id=1,
-                scheduled=rows,
+                scheduled=[
+                    _chain_row(worker, request.history, key=key)
+                    for key, request in worker.requests.items()
+                ],
                 finished_request_ids=[],
                 preempted_request_ids=[],
             )
         )
-        self.assertEqual(output["outputs"], ["one", "two"])
-        worker._execute_prefill_group.assert_called_once_with(rows, final=True)
+        worker.trace.record.reset_mock()
+        rows = [
+            _chain_row(worker, [request.history[-1]], key=key)
+            for key, request in worker.requests.items()
+        ]
+        with (
+            patch.object(
+                worker,
+                "_execute_prefill_group",
+                side_effect=AssertionError("decode cannot use prefill arithmetic"),
+            ),
+            patch.object(worker, "_execute_row", wraps=worker._execute_row) as execute,
+        ):
+            output = worker.execute(
+                dict(
+                    rpc_id=2,
+                    scheduled=rows,
+                    finished_request_ids=[],
+                    preempted_request_ids=[],
+                )
+            )
+        self.assertEqual([row["request_id"] for row in output["outputs"]], [1, 2])
+        self.assertEqual(
+            [call.args for call in execute.call_args_list], [(row,) for row in rows]
+        )
+        records = [
+            call.kwargs
+            for call in worker.trace.record.call_args_list
+            if call.args == ("accounting_call",)
+        ]
+        self.assertEqual([record["phase"] for record in records], ["decode", "decode"])
+        self.assertEqual(
+            [record["expert_assignments"] for record in records], [[[6, 0, 0, 0]]] * 2
+        )
+        self.assertEqual(
+            [record["request_rows"] for record in records],
+            [
+                [dict(id=key, start=3, count=1, accepted=0, proposed=0, logit_rows=1)]
+                for key in (1, 2)
+            ],
+        )
 
     def test_explicit_dispatch_hook_receives_metadata_before_default_dep4_exchange(
         self,

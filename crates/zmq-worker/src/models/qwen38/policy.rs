@@ -110,10 +110,6 @@ pub(in crate::models) fn resolve_speculation(
 }
 
 pub(in crate::models) fn validate_options(config: &WorkerConfig) -> Result<()> {
-    require_options(
-        config.model_path.as_os_str() != "stub",
-        "selected Qwen policy requires a checkpoint path",
-    )?;
     validate_runtime_options(config)
 }
 
@@ -154,10 +150,6 @@ pub(in crate::models) fn validate_ready(
     logical_num_blocks: u32,
     mamba_blocks: u32,
 ) -> Result<()> {
-    require_ready(
-        config.model_path.as_os_str() != "stub",
-        "selected Qwen policy requires a checkpoint path",
-    )?;
     require_ready(
         descriptor.architecture == ARCHITECTURE
             && descriptor.model_type == MODEL_TYPE

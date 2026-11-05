@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fp8_k32.cuh"
+#include "grouped_prefill_k32.cuh"
 
 namespace encoded_projection {
 
@@ -11,6 +12,7 @@ __device__ __forceinline__ uint32_t fp4_to_fp8_four(uint16_t packed) {
   return values | signs;
 }
 
+template <int TileRows>
 __global__ void fp4_group_offsets(const int32_t *counts, int groups, const int32_t *compact_counts,
                                   int32_t *offsets, int32_t *tiles, int bound, int rows,
                                   int max_rows, int column_tiles, int32_t *status) {
@@ -28,7 +30,8 @@ __global__ void fp4_group_offsets(const int32_t *counts, int groups, const int32
     tiles[group] = tile_sum;
     int count = compact_counts[group];
     compact_sum += count;
-    tile_sum += (count > 0 && count <= max_rows ? (count + 31) / 32 : 0) * column_tiles;
+    tile_sum +=
+        (count > 0 && count <= max_rows ? (count + TileRows - 1) / TileRows : 0) * column_tiles;
   }
   valid = valid && compact_sum == sum && (status ? sum <= rows : sum == rows);
   if (status && !valid)
@@ -308,14 +311,26 @@ void launch_grouped_fp4_k32(const uint8_t *input, const uint8_t *input_scales,
       reinterpret_cast<int32_t *>(scratch + offsets_bytes + counts_bytes + 2 * pointers_bytes);
   fp4_group_compact<<<1, 128, 0, stream>>>(counts, weight_ptrs, weight_scale_ptrs, groups, bound,
                                            compact_counts, compact_weight_ptrs, compact_scale_ptrs);
-  fp4_group_offsets<<<1, 1, 0, stream>>>(counts, groups, compact_counts, offsets, tile_offsets,
-                                         bound, rows, max_rows, (outputs + 63) / 64, status);
+  bool prefill = rows >= 4096 && outputs == 2304 && width == 5120 &&
+                 reinterpret_cast<uintptr_t>(input) % 16 == 0;
+  if (prefill)
+    fp4_group_offsets<prefill_rows>
+        <<<1, 1, 0, stream>>>(counts, groups, compact_counts, offsets, tile_offsets, bound, rows,
+                              max_rows, (outputs + prefill_columns - 1) / prefill_columns, status);
+  else
+    fp4_group_offsets<32><<<1, 1, 0, stream>>>(counts, groups, compact_counts, offsets,
+                                               tile_offsets, bound, rows, max_rows,
+                                               (outputs + 63) / 64, status);
   if (!rows)
     return;
   if (rows <= 64)
     fp4_decode_rawdots<Output, ScaleLayout><<<dim3(outputs / 8, bound), 256, 0, stream>>>(
         input, input_scales, compact_weight_ptrs, compact_scale_ptrs, offsets, output, bound, rows,
         outputs, width, weight_stride, layout);
+  else if (prefill)
+    launch_grouped_prefill_k32(input, input_scales, compact_weight_ptrs, compact_scale_ptrs,
+                               offsets, tile_offsets, output, bound, rows, outputs, width,
+                               weight_stride, layout, stream);
   else
     launch_half_k32<Output, ScaleLayout, 4, true>(
         input, nullptr, input_scales, nullptr, output, compact_weight_ptrs, compact_scale_ptrs,

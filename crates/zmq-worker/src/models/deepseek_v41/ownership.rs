@@ -26,8 +26,8 @@ impl RequestOwners {
                     .filter(|&&owner| owner == rank as u32)
                     .count();
                 (
-                    self.available[rank].0.min(self.available[rank].1),
                     std::cmp::Reverse(count),
+                    self.available[rank].0.min(self.available[rank].1),
                     std::cmp::Reverse(rank),
                 )
             })
@@ -170,6 +170,34 @@ mod tests {
                 schedule: schedule.clone(),
             })
             .collect()
+    }
+
+    #[test]
+    fn prepared_owners_stay_balanced_when_private_state_pressure_differs() {
+        let mut owners = RequestOwners::default();
+        for id in 1..=63 {
+            owners.assign(id);
+        }
+        for (rank, free_state) in [31, 15, 15, 22].into_iter().enumerate() {
+            owners.set_available(rank, 50_000, free_state);
+        }
+        assert_eq!(owners.assign(64), 3);
+        for id in 65..=128 {
+            owners.assign(id);
+        }
+        for rank in 0..4 {
+            assert_eq!(
+                owners
+                    .owners
+                    .values()
+                    .filter(|&&value| value == rank)
+                    .count(),
+                32
+            );
+        }
+        assert_eq!(owners.assign(64), 3);
+        owners.abort(1, &[0, 1, 2, 3]).unwrap();
+        assert_eq!(owners.assign(129), 0);
     }
 
     #[test]

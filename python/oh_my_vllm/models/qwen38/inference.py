@@ -319,7 +319,6 @@ class Worker:
                     "type": "stats_result",
                     "rpc_id": message["rpc_id"],
                     "stats": {
-                        "placeholder": False,
                         "requests": len(self.requests),
                         "process_id": os.getpid(),
                         "gpu_free_bytes": self.device.module.free_bytes(),

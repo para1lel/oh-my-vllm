@@ -6,7 +6,6 @@ pub(crate) mod execution;
 pub(crate) mod output;
 mod policy;
 mod qwen38;
-mod stub;
 
 pub use policy::{ModelDefaults, ModelPolicy, SpeculativeMode, select_model};
 
@@ -14,5 +13,4 @@ pub use policy::{ModelDefaults, ModelPolicy, SpeculativeMode, select_model};
 pub(crate) enum ModelFamily {
     DeepSeekV41,
     Qwen38,
-    Stub,
 }

@@ -27,8 +27,6 @@ impl Parser {
                 !tools.is_empty(),
             )),
             ModelFamily::Qwen38 => Self::Qwen38(qwen38::output::Parser::new(thinking, tools)),
-            // The explicit test backend simulates the existing Qwen response protocol.
-            ModelFamily::Stub => Self::Qwen38(qwen38::output::Parser::new(thinking, tools)),
         }
     }
 

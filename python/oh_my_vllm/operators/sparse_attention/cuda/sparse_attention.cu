@@ -163,6 +163,24 @@ __global__ __launch_bounds__(256, 2) void attend_kernel(
           *reinterpret_cast<uint4 *>(kv + address(i / 512, i % 512, 512)) = values[part];
         }
       }
+    } else if constexpr (Bf16Window && !Bf16Compressed) {
+      for (int group = threadIdx.x; group < 64 * 32; group += blockDim.x) {
+        int slot = group / 32, channel = (group % 32) * 16;
+        int id = ids[slot];
+        uint4 values[2] = {};
+        if (id >= 0 && id < window_rows) {
+          const auto *source =
+              reinterpret_cast<const __nv_bfloat16 *>(window) + int64_t(id) * 512 + channel;
+          values[0] = *reinterpret_cast<const uint4 *>(source);
+          values[1] = *reinterpret_cast<const uint4 *>(source + 8);
+        } else if (id >= 0) {
+          read_compressed_group16(compressed, compressed_scales, id - window_rows, channel, values,
+                                  invalid);
+        }
+        invalid |= !finite_bf16_vector(values[0]) || !finite_bf16_vector(values[1]);
+        *reinterpret_cast<uint4 *>(kv + address(slot, channel, 512)) = values[0];
+        *reinterpret_cast<uint4 *>(kv + address(slot, channel + 8, 512)) = values[1];
+      }
     } else {
       for (int i = threadIdx.x; i < 64 * 512; i += blockDim.x) {
         int id = ids[i / 512], channel = i % 512;

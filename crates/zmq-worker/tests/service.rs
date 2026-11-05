@@ -4,11 +4,58 @@ use std::process::Command;
 use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
 use oh_my_vllm_zmq_worker::models::select_model;
 
+struct WorkerFixture(std::path::PathBuf);
+
+impl WorkerFixture {
+    fn new() -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let directory = std::env::temp_dir().join(format!(
+            "omv-worker-fixture-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(
+            directory.join("config.json"),
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/qwen38/config.json",
+            ))
+            .strip_suffix(b"\n")
+            .unwrap(),
+        )
+        .unwrap();
+        let launcher = directory.join("worker.sh");
+        std::fs::write(
+            &launcher,
+            "#!/bin/sh\nexec \"$OH_MY_VLLM_WORKER_PYTHON\" -m tests.worker_fixture \"$@\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o700)).unwrap();
+        Self(directory)
+    }
+
+    fn config(&self) -> WorkerConfig {
+        WorkerConfig {
+            python_executable: self.0.join("worker.sh"),
+            ..WorkerConfig::for_model(self.0.clone(), select_model(&self.0).unwrap())
+        }
+    }
+}
+
+impl Drop for WorkerFixture {
+    fn drop(&mut self) {
+        std::fs::remove_dir_all(&self.0).unwrap();
+    }
+}
+
 #[tokio::test]
-async fn request_swaps_with_the_python_placeholder_preserve_all_output() {
+async fn request_swaps_with_fixed_worker_replies_preserve_all_output() {
     use oh_my_vllm_kv_cache::HybridCoordinator;
     use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
 
+    let fixture = WorkerFixture::new();
     let config = WorkerConfig {
         socket_path: std::env::temp_dir().join(format!("omv-swap-{}.ipc", std::process::id())),
         num_gpu_blocks: Some(5),
@@ -17,7 +64,7 @@ async fn request_swaps_with_the_python_placeholder_preserve_all_output() {
         max_num_seqs: 2,
         max_num_batched_tokens: 4096,
         init_timeout: std::time::Duration::from_secs(3),
-        ..WorkerConfig::for_model("stub".into(), select_model(Path::new("stub")).unwrap())
+        ..fixture.config()
     };
     let mut client = WorkerClient::launch(config).await.unwrap();
     let mut scheduler = Scheduler::new(
@@ -71,7 +118,7 @@ async fn request_swaps_with_the_python_placeholder_preserve_all_output() {
 }
 
 #[test]
-fn service_contracts_with_the_python_placeholder() {
+fn service_contracts_with_fixed_worker_replies() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -108,14 +155,20 @@ async fn worker_shutdown_releases_its_socket_before_return() {
     let directory = std::env::temp_dir().join(name);
     std::fs::create_dir(&directory).unwrap();
     let socket = directory.join("worker.ipc");
+    let fixture = WorkerFixture::new();
     let config = WorkerConfig {
         socket_path: socket.clone(),
         init_timeout: std::time::Duration::from_secs(3),
-        ..WorkerConfig::for_model("stub".into(), select_model(Path::new("stub")).unwrap())
+        ..fixture.config()
     };
     for _ in 0..2 {
         let mut worker = WorkerClient::launch(config.clone()).await.unwrap();
-        assert_eq!(worker.query_stats().await.unwrap()["placeholder"], true);
+        assert!(
+            worker.query_stats().await.unwrap()["process_id"]
+                .as_u64()
+                .unwrap()
+                > 0
+        );
         worker.shutdown().await.unwrap();
         drop(worker);
         assert!(!socket.exists());

@@ -313,6 +313,27 @@ void bf16_linear(TensorView values, TensorView weight, TensorView output) {
   check_cuda(cudaGetLastError());
 }
 
+void bf16_linear_rows1(TensorView values, TensorView weight, TensorView output) {
+  TVM_FFI_ICHECK(values.ndim() == 2 && values.size(0) >= 0 && values.size(0) <= 32768);
+  int rows = values.size(0);
+  tensor_contract(values, values, kDLBfloat, 16, {rows, width});
+  tensor_contract(weight, values, kDLBfloat, 16, {512, width});
+  tensor_contract(output, values, kDLBfloat, 16, {rows, 512});
+  separate({values, weight, output});
+  if (!rows)
+    return;
+  tvm::ffi::CUDADeviceGuard guard(values.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, values.device().device_id));
+  auto *input = static_cast<const __nv_bfloat16 *>(values.data_ptr());
+  auto *result = static_cast<__nv_bfloat16 *>(output.data_ptr());
+  for (int row = 0; row < rows; ++row) {
+    hc_projection::bf16_multiply(values.device().device_id, input + int64_t(row) * width,
+                                 weight.data_ptr(), result + int64_t(row) * 512, 1, 512, width,
+                                 stream);
+    check_cuda(cudaGetLastError());
+  }
+}
+
 void hc_expand(TensorView residual, TensorView branch, TensorView post, TensorView comb,
                TensorView expanded) {
   int rows = rows_contract(residual);

@@ -18,6 +18,12 @@ class RankGroupFailure(RuntimeError):
     pass
 
 
+def request_owners(lengths):
+    if not 1 <= len(lengths) <= 4:
+        raise ValueError("lengths must select between one and four request owners")
+    return list(range(len(lengths)))
+
+
 def _write_json(path, value):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
@@ -49,6 +55,9 @@ def supervise(args, *, operation=None):
         source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         lengths=getattr(args, "lengths", None),
         context=getattr(args, "context", None),
+        owner_ranks=getattr(args, "owner_ranks", None),
+        execution="eager",
+        batch_decode_enabled=False,
         evidence="cross-path-consistency-not-frozen-reference",
     )
     _write_json(args.output / "run.json", manifest)
@@ -401,11 +410,12 @@ def run(args, proof):
                 )
                 print(json.dumps(dict(rank=rank, **record)), flush=True)
 
-            def reset():
+            def reset(row):
                 cache.reset()
                 for name, value in network.named_buffers():
                     value.copy_(initial[name])
                 candidate.shared_attn = candidate.SharedAttentionRuntime()
+                cache.activate_row(row, 0, end_pos=args.context)
 
             def target(ids, position, label=None, *, full=False):
                 result = network(ids, position, full_logits=full)
@@ -432,7 +442,7 @@ def run(args, proof):
                     fa_block_table=list(range(1, blocks + 1)),
                     mamba_block_table=list(range(1, blocks + 1)),
                 )
-                reset()
+                reset(row)
                 cache.begin_step(
                     row, 0, start_pos=0, end_pos=length + 2, minimum_end=length + 2
                 )
@@ -459,7 +469,7 @@ def run(args, proof):
                 restored = target(current, endpoint, prefix + ".restart")
                 torch.testing.assert_close(restored[1], continuous[1], rtol=0, atol=0)
                 if baseline_chains is None:
-                    reset()
+                    reset(row)
                     target(tokens[:, :125], 0)
                     result = target(tokens[:, 125:126], 125)
                     chain = [int(result[0].item())]
@@ -475,7 +485,7 @@ def run(args, proof):
                     ("accept5", chain),
                     ("reject0", [chain[0], (chain[1] + 1) % 129280, *chain[2:]]),
                 ):
-                    reset()
+                    reset(row)
                     _, _, hidden = target(tokens[:, :125], 0)
                     network.forward_spec(tokens[:, 125], hidden, 0)
                     _, _, hidden = target(tokens[:, 125:126], 125)
@@ -534,17 +544,51 @@ def run(args, proof):
                         prefix + "." + name + ".restored_probe",
                     )
 
+            owners = request_owners(args.lengths)
+            requests = (
+                owners if strategy == "TEP4" else ([rank] if rank in owners else [])
+            )
+
+            from oh_my_vllm.models.deepseek_v41.trace import runtime_identity
+
+            identity = runtime_identity(
+                rank, strategy=strategy.lower(), batch_decode=False, decode_graph=False
+            )
+            gpu_uuid = str(torch.cuda.get_device_properties(local_rank).uuid)
+            identity.update(
+                gpu_uuid=gpu_uuid if gpu_uuid.startswith("GPU-") else "GPU-" + gpu_uuid,
+                strategy=strategy.lower(),
+                mode=args.mode,
+                execution="eager",
+                batch_decode_enabled=False,
+                owner_ranks=args.owner_ranks,
+                scheduled_request_ids=[request + 1 for request in requests],
+                configuration=config,
+                checkpoint_index=loader.index_sha256,
+                tokenizer_sha256=hashlib.sha256(
+                    (args.model / "tokenizer.json").read_bytes()
+                ).hexdigest(),
+                checker_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                comparison_scope="same-source parallel-strategy equivalence",
+                frozen_reference_verified=False,
+            )
+            _write_json(args.output / f"identity-rank{rank}.json", identity)
+
+            completed_requests = []
+
             def work():
-                requests = (
-                    range(3) if strategy == "TEP4" else ([rank] if rank < 3 else [])
-                )
                 for request in requests:
                     workload(request)
+                    completed_requests.append(request + 1)
 
             if executor is None:
                 work()
             else:
                 executor.execute(work)
+            if completed_requests != identity["scheduled_request_ids"]:
+                raise AssertionError("scheduled requests differ from executed requests")
+            identity["executed_request_ids"] = completed_requests
+            _write_json(args.output / f"identity-rank{rank}.json", identity)
             save_file(arrays, str(args.output / f"endpoints-rank{rank}.safetensors"))
             gathered = [None] * 4
             dist.all_gather_object(
@@ -565,8 +609,8 @@ def run(args, proof):
                     json.dumps(merged_chains, indent=2) + "\n"
                 )
                 combined = {}
-                owners = [0] if strategy == "TEP4" else range(3)
-                for owner in owners:
+                output_ranks = [0] if strategy == "TEP4" else owners
+                for owner in output_ranks:
                     combined.update(
                         load_file(
                             str(args.output / f"endpoints-rank{owner}.safetensors")
@@ -594,7 +638,7 @@ def run(args, proof):
         dist.destroy_process_group()
 
 
-def main():
+def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -602,11 +646,21 @@ def main():
     parser.add_argument(
         "--mode", choices=("tep4", "legacy", "fixed", "shadow"), required=True
     )
-    parser.add_argument("--lengths", type=int, nargs=3, default=[600, 300, 17])
+    parser.add_argument("--lengths", type=int, nargs="+", default=[600, 300, 17])
     parser.add_argument("--context", type=int, default=1024)
     parser.add_argument("--prefill-only", action="store_true")
     parser.add_argument("--timeout-seconds", type=float, default=3600)
+    return parser
+
+
+def main():
+    parser = argument_parser()
     args = parser.parse_args()
+    try:
+        owners = request_owners(args.lengths)
+    except ValueError as error:
+        parser.error(str(error))
+    args.owner_ranks = [0] if args.mode == "tep4" else owners
     if min(args.lengths) < 1 or max(133, max(args.lengths) + 3) > args.context:
         parser.error(
             "context must cover the prompt, continuation, and verification endpoints"

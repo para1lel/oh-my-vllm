@@ -741,7 +741,9 @@ def bf16_linear(values, weight, *, logical_rows=0):
         return output.to(torch.bfloat16).reshape(*values.shape[:-1], outputs)
     module = _hyperconnection_module()
     output = torch.empty((rows, outputs), dtype=torch.bfloat16, device=values.device)
-    if logical_rows and logical_rows < rows:
+    if logical_rows == 1 and 1 < rows <= 32768 and width == 5120 and outputs == 512:
+        module.bf16_linear_rows1(values.reshape(rows, width), weight, output)
+    elif logical_rows and logical_rows < rows:
         steps = rows // logical_rows
         grouped = values.reshape(logical_rows, steps, width)
         out = output.view(logical_rows, steps, outputs)

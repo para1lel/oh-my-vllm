@@ -173,6 +173,7 @@ class _ChainModel(_PositionModel):
 def _worker():
     worker = Worker.__new__(Worker)
     worker.device = torch.device("cpu")
+    worker.runtime_max_context = 64
     worker.dspark = False
     worker.args = SimpleNamespace(window_size=384)
     worker.rank = 0
@@ -520,6 +521,96 @@ class DeepSeekSpeculation(unittest.TestCase):
         output = worker._execute_row(_chain_row(worker, [10]))
         self.assertEqual(output["new_draft_token_ids"], [])
         self.assertEqual(worker.model.proposals[0]["start"], 0)
+
+    def test_proposal_requires_the_complete_five_row_position_range(self):
+        from oh_my_vllm.models.deepseek_v41 import model
+
+        for context in (32, 33, 34):
+            with self.subTest(context=context):
+                attention = object.__new__(model.DSparkAttention)
+                torch.nn.Module.__init__(attention)
+                attention.compress_ratio = 0
+                attention.window_size = 4
+                attention.rope_head_dim = attention.head_dim = 4
+                attention.n_local_heads = attention.n_local_groups = 1
+                attention.o_lora_rank = 4
+                attention.softmax_scale = 0.5
+                attention.freqs_cis = torch.ones(context, 2, dtype=torch.complex64)
+                attention.window_kv_cache = torch.zeros(1, 4, 4)
+                attention.attn_sink = torch.zeros(1)
+                for name in ("wq_a", "q_norm", "wq_b", "kv_norm", "wkv", "wo_b"):
+                    setattr(attention, name, torch.nn.Identity())
+                attention.wo_a = torch.nn.Linear(4, 4, bias=False)
+                attention._store_main_kv = Mock()
+                worker = _worker()
+                worker.dspark = True
+                worker.runtime_max_context = context
+
+                def proposal(token, hidden, start, slot, *, attention=attention):
+                    attention(
+                        torch.zeros(1, 5, 4),
+                        start,
+                        torch.zeros(1, 1, 4),
+                        torch.tensor([slot]),
+                    )
+                    return [1, 2, 3, 4, 5]
+
+                worker._proposal = Mock(side_effect=proposal)
+                request = SimpleNamespace(limit=16, generated=14, finish=None)
+                with (
+                    patch.object(model, "act_quant"),
+                    patch.object(
+                        model,
+                        "sparse_attn",
+                        side_effect=lambda query, *_args, **_kwargs: torch.zeros_like(
+                            query
+                        ),
+                    ),
+                ):
+                    result = worker._next_proposals(
+                        request, [1], torch.zeros(1, 1, 4), 29, 0
+                    )
+                self.assertEqual(result, [1] if context == 34 else [])
+                self.assertEqual(worker._proposal.call_count, int(context == 34))
+
+    def test_no_draft_decode_does_not_enter_the_prefill_group(self):
+        for batched in (False, True):
+            with self.subTest(batched=batched):
+                worker = _worker()
+                worker.batch_decode_enabled = batched
+                worker.decode_cycle = 2
+                worker.requests = {
+                    key: SimpleNamespace(
+                        cache_slot=key - 1,
+                        state_position=31,
+                        prompt_len=16,
+                        history=[key] * 32,
+                    )
+                    for key in (1, 2)
+                }
+                rows = [
+                    dict(request_id=key, token_ids=[key], num_computed_tokens=31)
+                    for key in (1, 2)
+                ]
+                worker._execute_prefill_group = Mock(
+                    side_effect=AssertionError("decode was classified as prefill")
+                )
+                worker._execute_row = Mock(side_effect=lambda row: row)
+                worker._execute_decode_group = Mock(
+                    return_value={row["request_id"]: row for row in rows}
+                )
+                result = worker.execute(
+                    dict(
+                        rpc_id=1,
+                        scheduled=rows,
+                        finished_request_ids=[],
+                        preempted_request_ids=[],
+                    )
+                )
+                self.assertEqual(result["outputs"], rows)
+                self.assertEqual(worker._execute_decode_group.call_count, int(batched))
+                self.assertEqual(worker._execute_row.call_count, 0 if batched else 2)
+                worker._execute_prefill_group.assert_not_called()
 
     def test_first_request_failure_before_commit_keeps_pages_unpublished(self):
         for batched in (False, True):
