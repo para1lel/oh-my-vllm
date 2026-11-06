@@ -59,6 +59,60 @@ __device__ __forceinline__ uint64_t gdn_pair_half_sum(uint64_t value) {
   return value;
 }
 
+template <int ValueTile>
+__device__ __forceinline__ void
+gdn_value_pair_step(uint64_t (&state)[2][4], const unsigned char *storage, float *pool,
+                    __nv_bfloat16 *recurrent, int local_row, int row, int target, int head,
+                    int value_base, int warp, int half, int lane) {
+  float q[2][4], k[2][4];
+#pragma unroll
+  for (int group = 0; group < 2; ++group) {
+    int vector = local_row * 32 + lane % 16 + group * 16;
+    gdn_stage_load<GDNStageQ>(storage, vector, q[group]);
+    gdn_stage_load<GDNStageK>(storage + GDNPrefetchRows * GDNStageQueryBytes, vector, k[group]);
+  }
+  auto *coefficients = reinterpret_cast<const float2 *>(
+      storage + GDNPrefetchRows * (GDNStageQKBytes + ValueTile * 2));
+  float2 coefficient = coefficients[local_row];
+  uint64_t decay = gdn_pair_splat(coefficient.y), beta = gdn_pair_splat(coefficient.x);
+  uint64_t recalled[2] = {};
+#pragma unroll
+  for (int group = 0; group < 2; ++group)
+#pragma unroll
+    for (int key = 0; key < 4; ++key) {
+      state[group][key] = gdn_pair_mul(state[group][key], decay);
+      recalled[group] =
+          gdn_pair_fma(state[group][key], gdn_pair_splat(k[group][key]), recalled[group]);
+    }
+  uint64_t recall = gdn_pair_half_sum(gdn_pair_add(recalled[0], recalled[1]));
+  auto *values = reinterpret_cast<const uint32_t *>(storage + GDNPrefetchRows * GDNStageQKBytes);
+  uint32_t packed = values[local_row * (ValueTile / 2) + warp * 2 + half];
+  uint64_t input = gdn_pair_from_bf16x2(packed);
+  uint64_t delta = gdn_pair_mul(beta, gdn_pair_add(input, recall ^ 0x8000000080000000ull));
+  uint64_t sums[2] = {};
+#pragma unroll
+  for (int group = 0; group < 2; ++group)
+#pragma unroll
+    for (int key = 0; key < 4; ++key) {
+      state[group][key] = gdn_pair_fma(delta, gdn_pair_splat(k[group][key]), state[group][key]);
+      sums[group] = gdn_pair_fma(state[group][key], gdn_pair_splat(q[group][key]), sums[group]);
+    }
+  if (target >= 0) {
+#pragma unroll
+    for (int group = 0; group < 2; ++group)
+#pragma unroll
+      for (int key = 0; key < 4; ++key)
+#pragma unroll
+        for (int unit = 0; unit < 2; ++unit)
+          pool[((int64_t(target) * 48 + head) * 128 + value_base + unit) * 128 + (lane % 16) * 4 +
+               group * 64 + key] = __uint_as_float(gdn_pair_word(state[group][key], unit));
+  }
+  uint64_t sum = gdn_pair_half_sum(gdn_pair_add(sums[0], sums[1]));
+  if (lane % 16 == 0)
+    *reinterpret_cast<uint32_t *>(recurrent + (int64_t(row) * 48 + head) * 128 + value_base) =
+        gdn_pair_to_bf16x2(sum);
+}
+
 template <int ValueTile = 16, int Threads = 128>
 __global__ void __launch_bounds__(Threads, 1)
     gdn_value_pair_kernel(const __nv_bfloat16 *qkv, float *pool, const int *starts,
@@ -107,53 +161,8 @@ __global__ void __launch_bounds__(Threads, 1)
     if (checkpoint_mask & (1u << local_row))
       target = reinterpret_cast<const int *>(
           storage + GDNPrefetchRows * (GDNStageQKBytes + 8 + ValueTile * 2))[local_row];
-    float q[2][4], k[2][4];
-#pragma unroll
-    for (int group = 0; group < 2; ++group) {
-      int vector = local_row * 32 + lane % 16 + group * 16;
-      gdn_stage_load<GDNStageQ>(storage, vector, q[group]);
-      gdn_stage_load<GDNStageK>(storage + GDNPrefetchRows * GDNStageQueryBytes, vector, k[group]);
-    }
-    auto *coefficients = reinterpret_cast<const float2 *>(
-        storage + GDNPrefetchRows * (GDNStageQKBytes + ValueTile * 2));
-    float2 coefficient = coefficients[local_row];
-    uint64_t decay = gdn_pair_splat(coefficient.y), beta = gdn_pair_splat(coefficient.x);
-    uint64_t recalled[2] = {};
-#pragma unroll
-    for (int group = 0; group < 2; ++group)
-#pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        state[group][key] = gdn_pair_mul(state[group][key], decay);
-        recalled[group] =
-            gdn_pair_fma(state[group][key], gdn_pair_splat(k[group][key]), recalled[group]);
-      }
-    uint64_t recall = gdn_pair_half_sum(gdn_pair_add(recalled[0], recalled[1]));
-    auto *values = reinterpret_cast<const uint32_t *>(storage + GDNPrefetchRows * GDNStageQKBytes);
-    uint32_t packed = values[local_row * (ValueTile / 2) + warp * 2 + half];
-    uint64_t input = gdn_pair_from_bf16x2(packed);
-    uint64_t delta = gdn_pair_mul(beta, gdn_pair_add(input, recall ^ 0x8000000080000000ull));
-    uint64_t sums[2] = {};
-#pragma unroll
-    for (int group = 0; group < 2; ++group)
-#pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        state[group][key] = gdn_pair_fma(delta, gdn_pair_splat(k[group][key]), state[group][key]);
-        sums[group] = gdn_pair_fma(state[group][key], gdn_pair_splat(q[group][key]), sums[group]);
-      }
-    if (target >= 0) {
-#pragma unroll
-      for (int group = 0; group < 2; ++group)
-#pragma unroll
-        for (int key = 0; key < 4; ++key)
-#pragma unroll
-          for (int unit = 0; unit < 2; ++unit)
-            pool[((int64_t(target) * 48 + head) * 128 + value_base + unit) * 128 + (lane % 16) * 4 +
-                 group * 64 + key] = __uint_as_float(gdn_pair_word(state[group][key], unit));
-    }
-    uint64_t sum = gdn_pair_half_sum(gdn_pair_add(sums[0], sums[1]));
-    if (lane % 16 == 0)
-      *reinterpret_cast<uint32_t *>(recurrent + (int64_t(row) * 48 + head) * 128 + value_base) =
-          gdn_pair_to_bf16x2(sum);
+    gdn_value_pair_step<ValueTile>(state, storage, pool, recurrent, local_row, row, target, head,
+                                   value_base, warp, half, lane);
     if (local_row + 1 == GDNPrefetchRows && row + 1 < last) {
       asm volatile("cp.async.wait_group 0;" ::: "memory");
       __syncthreads();
@@ -177,6 +186,93 @@ __device__ __forceinline__ void gdn_pair_two_half_sum(uint64_t (&value)[2]) {
     value[0] = gdn_pair_add(value[0], gdn_pair_bits(low0, high0));
     value[1] = gdn_pair_add(value[1], gdn_pair_bits(low1, high1));
   }
+}
+
+__device__ __forceinline__ void gdn_value_two_pair_publish(const uint64_t (&state)[2][2][4],
+                                                           float *pool, int target, int head,
+                                                           int value_base, int lane) {
+  if (target >= 0) {
+#pragma unroll
+    for (int group = 0; group < 2; ++group)
+#pragma unroll
+      for (int key = 0; key < 4; ++key)
+#pragma unroll
+        for (int pair = 0; pair < 2; ++pair)
+#pragma unroll
+          for (int unit = 0; unit < 2; ++unit)
+            pool[((int64_t(target) * 48 + head) * 128 + value_base + pair * 2 + unit) * 128 +
+                 (lane % 16) * 4 + group * 64 + key] =
+                __uint_as_float(gdn_pair_word(state[pair][group][key], unit));
+  }
+}
+
+template <int ValueTile>
+__device__ __forceinline__ void
+gdn_value_two_pair_step(uint64_t (&state)[2][2][4], const unsigned char *storage, float *pool,
+                        __nv_bfloat16 *recurrent, int local_row, int row, int target, int head,
+                        int value_base, int warp, int half, int lane) {
+  float q[2][4], k[2][4];
+#pragma unroll
+  for (int group = 0; group < 2; ++group) {
+    int vector = local_row * 32 + lane % 16 + group * 16;
+    gdn_stage_load<GDNStageQ>(storage, vector, q[group]);
+    gdn_stage_load<GDNStageK>(storage + GDNPrefetchRows * GDNStageQueryBytes, vector, k[group]);
+  }
+  auto *coefficients = reinterpret_cast<const float2 *>(
+      storage + GDNPrefetchRows * (GDNStageQKBytes + ValueTile * 2));
+  float2 coefficient = coefficients[local_row];
+  uint64_t decay = gdn_pair_splat(coefficient.y), beta = gdn_pair_splat(coefficient.x);
+  uint64_t recalled[2][2] = {};
+#pragma unroll
+  for (int group = 0; group < 2; ++group)
+#pragma unroll
+    for (int key = 0; key < 4; ++key) {
+      uint64_t key_pair = gdn_pair_splat(k[group][key]);
+#pragma unroll
+      for (int pair = 0; pair < 2; ++pair) {
+        state[pair][group][key] = gdn_pair_mul(state[pair][group][key], decay);
+        recalled[pair][group] =
+            gdn_pair_fma(state[pair][group][key], key_pair, recalled[pair][group]);
+      }
+    }
+  uint64_t recall[2];
+#pragma unroll
+  for (int pair = 0; pair < 2; ++pair)
+    recall[pair] = gdn_pair_add(recalled[pair][0], recalled[pair][1]);
+  gdn_pair_two_half_sum(recall);
+  auto *values = reinterpret_cast<const uint2 *>(storage + GDNPrefetchRows * GDNStageQKBytes);
+  uint2 packed = values[local_row * (ValueTile / 4) + warp * 2 + half];
+  uint32_t packed_values[2] = {packed.x, packed.y};
+  uint64_t delta[2];
+#pragma unroll
+  for (int pair = 0; pair < 2; ++pair) {
+    uint64_t input = gdn_pair_from_bf16x2(packed_values[pair]);
+    delta[pair] = gdn_pair_mul(beta, gdn_pair_add(input, recall[pair] ^ 0x8000000080000000ull));
+  }
+  uint64_t sums[2][2] = {};
+#pragma unroll
+  for (int group = 0; group < 2; ++group)
+#pragma unroll
+    for (int key = 0; key < 4; ++key) {
+      uint64_t key_pair = gdn_pair_splat(k[group][key]);
+      uint64_t query_pair = gdn_pair_splat(q[group][key]);
+#pragma unroll
+      for (int pair = 0; pair < 2; ++pair) {
+        state[pair][group][key] = gdn_pair_fma(delta[pair], key_pair, state[pair][group][key]);
+        sums[pair][group] = gdn_pair_fma(state[pair][group][key], query_pair, sums[pair][group]);
+      }
+    }
+  gdn_value_two_pair_publish(state, pool, target, head, value_base, lane);
+  uint64_t sum[2];
+#pragma unroll
+  for (int pair = 0; pair < 2; ++pair)
+    sum[pair] = gdn_pair_add(sums[pair][0], sums[pair][1]);
+  gdn_pair_two_half_sum(sum);
+  if (lane % 16 == 0)
+#pragma unroll
+    for (int pair = 0; pair < 2; ++pair)
+      *reinterpret_cast<uint32_t *>(recurrent + (int64_t(row) * 48 + head) * 128 + value_base +
+                                    pair * 2) = gdn_pair_to_bf16x2(sum[pair]);
 }
 
 template <int ValueTile = 32, int Threads = 128>
@@ -230,80 +326,8 @@ __global__ void __launch_bounds__(Threads, 1)
     if (checkpoint_mask & (1u << local_row))
       target = reinterpret_cast<const int *>(
           storage + GDNPrefetchRows * (GDNStageQKBytes + 8 + ValueTile * 2))[local_row];
-    float q[2][4], k[2][4];
-#pragma unroll
-    for (int group = 0; group < 2; ++group) {
-      int vector = local_row * 32 + lane % 16 + group * 16;
-      gdn_stage_load<GDNStageQ>(storage, vector, q[group]);
-      gdn_stage_load<GDNStageK>(storage + GDNPrefetchRows * GDNStageQueryBytes, vector, k[group]);
-    }
-    auto *coefficients = reinterpret_cast<const float2 *>(
-        storage + GDNPrefetchRows * (GDNStageQKBytes + ValueTile * 2));
-    float2 coefficient = coefficients[local_row];
-    uint64_t decay = gdn_pair_splat(coefficient.y), beta = gdn_pair_splat(coefficient.x);
-    uint64_t recalled[2][2] = {};
-#pragma unroll
-    for (int group = 0; group < 2; ++group)
-#pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        uint64_t key_pair = gdn_pair_splat(k[group][key]);
-#pragma unroll
-        for (int pair = 0; pair < 2; ++pair) {
-          state[pair][group][key] = gdn_pair_mul(state[pair][group][key], decay);
-          recalled[pair][group] =
-              gdn_pair_fma(state[pair][group][key], key_pair, recalled[pair][group]);
-        }
-      }
-    uint64_t recall[2];
-#pragma unroll
-    for (int pair = 0; pair < 2; ++pair)
-      recall[pair] = gdn_pair_add(recalled[pair][0], recalled[pair][1]);
-    gdn_pair_two_half_sum(recall);
-    auto *values = reinterpret_cast<const uint2 *>(storage + GDNPrefetchRows * GDNStageQKBytes);
-    uint2 packed = values[local_row * (ValueTile / 4) + warp * 2 + half];
-    uint32_t packed_values[2] = {packed.x, packed.y};
-    uint64_t delta[2];
-#pragma unroll
-    for (int pair = 0; pair < 2; ++pair) {
-      uint64_t input = gdn_pair_from_bf16x2(packed_values[pair]);
-      delta[pair] = gdn_pair_mul(beta, gdn_pair_add(input, recall[pair] ^ 0x8000000080000000ull));
-    }
-    uint64_t sums[2][2] = {};
-#pragma unroll
-    for (int group = 0; group < 2; ++group)
-#pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        uint64_t key_pair = gdn_pair_splat(k[group][key]);
-        uint64_t query_pair = gdn_pair_splat(q[group][key]);
-#pragma unroll
-        for (int pair = 0; pair < 2; ++pair) {
-          state[pair][group][key] = gdn_pair_fma(delta[pair], key_pair, state[pair][group][key]);
-          sums[pair][group] = gdn_pair_fma(state[pair][group][key], query_pair, sums[pair][group]);
-        }
-      }
-    if (target >= 0) {
-#pragma unroll
-      for (int group = 0; group < 2; ++group)
-#pragma unroll
-        for (int key = 0; key < 4; ++key)
-#pragma unroll
-          for (int pair = 0; pair < 2; ++pair)
-#pragma unroll
-            for (int unit = 0; unit < 2; ++unit)
-              pool[((int64_t(target) * 48 + head) * 128 + value_base + pair * 2 + unit) * 128 +
-                   (lane % 16) * 4 + group * 64 + key] =
-                  __uint_as_float(gdn_pair_word(state[pair][group][key], unit));
-    }
-    uint64_t sum[2];
-#pragma unroll
-    for (int pair = 0; pair < 2; ++pair)
-      sum[pair] = gdn_pair_add(sums[pair][0], sums[pair][1]);
-    gdn_pair_two_half_sum(sum);
-    if (lane % 16 == 0)
-#pragma unroll
-      for (int pair = 0; pair < 2; ++pair)
-        *reinterpret_cast<uint32_t *>(recurrent + (int64_t(row) * 48 + head) * 128 + value_base +
-                                      pair * 2) = gdn_pair_to_bf16x2(sum[pair]);
+    gdn_value_two_pair_step<ValueTile>(state, storage, pool, recurrent, local_row, row, target,
+                                       head, value_base, warp, half, lane);
     if (local_row + 1 == GDNPrefetchRows && row + 1 < last) {
       asm volatile("cp.async.wait_group 0;" ::: "memory");
       __syncthreads();

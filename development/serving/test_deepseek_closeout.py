@@ -1,10 +1,7 @@
 import copy
 import unittest
 from dataclasses import replace
-from types import SimpleNamespace
 from unittest.mock import patch
-
-from oh_my_vllm.models.deepseek_v41.trace import execution_modes, runtime_identity
 
 from tests.test_deepseek_accounting_floor import routed_trace, split_decode
 
@@ -14,7 +11,7 @@ from . import deepseek_accounting_floor as floor
 from . import deepseek_accounting_math as arithmetic
 from . import deepseek_accounting_packed as packed
 from . import deepseek_accounting_roofline as roofline
-from .deepseek_benchmark import reference_configuration, runtime_reference
+from .deepseek_benchmark import reference_configuration
 from .deepseek_runtime_trace import assemble_trace, response_manifest
 from .test_deepseek_benchmark import run_fixture, runtime_fixture
 
@@ -28,13 +25,14 @@ MODEL = replace(
 )
 
 
-def measured_rows(version=roofline.VERSION):
+def _measurement_identity(version):
     configuration = reference_configuration(version)
     modes = {
         strategy: {
             "batch_decode": True,
             "decode_graph": strategy == "tp4",
             "decode_graph_limit": 32,
+            "proposal_graph": False,
         }
         for strategy in ("tp4", "tep4", "dep4")
     }
@@ -54,6 +52,11 @@ def measured_rows(version=roofline.VERSION):
         "configuration": {"execution_modes": modes},
         "reference": configuration,
     }
+    return configuration, modes, identity
+
+
+def measured_rows(version=roofline.VERSION):
+    configuration, modes, identity = _measurement_identity(version)
     rows = []
     for identifier, case in gate.LONG_CASES.items():
         binding = {
@@ -383,340 +386,35 @@ class WholeHttpRoofline(unittest.TestCase):
                 self.assertEqual(csv["accounting_version"], roofline.VERSION)
 
 
-class LongHttpGate(unittest.TestCase):
-    def assess(self, rows):
-        acceptance = (
-            rows[0]["reference_acceptance"] if rows else "trace-project-estimate"
-        )
-        with patch.object(
-            gate,
-            "runtime_reference",
-            return_value=(SimpleNamespace(seconds=33, acceptance=acceptance), {}),
-        ):
-            return gate.evaluate(rows)
-
-    def test_responses_are_required_and_bound_to_each_trace_request(self):
-        rows = measured_rows()
-        for mutation in (
-            "missing",
-            "empty",
-            "partial",
-            "wrong_prompt",
-            "wrong_completion",
-            "wrong_id",
-            "duplicate_id",
-            "cached",
-            "wrong_dep_owner",
-        ):
-            broken = copy.deepcopy(rows)
-            result = broken[0]
-            if mutation == "missing":
-                del result["responses"]
-            elif mutation == "empty":
-                result["responses"] = []
-            elif mutation == "partial":
-                result["responses"].pop()
-            elif mutation == "wrong_prompt":
-                result["responses"][0]["usage"]["prompt_tokens"] = 1
-            elif mutation == "wrong_completion":
-                result["responses"][0]["usage"]["completion_tokens"] = 1
-            elif mutation == "wrong_id":
-                result["responses"][0]["id"] = "chatcmpl_other_999999"
-            elif mutation == "duplicate_id":
-                result["responses"][0]["id"] = result["responses"][1]["id"]
-            elif mutation == "cached":
-                result["responses"][0]["usage"]["prompt_tokens_details"][
-                    "cached_tokens"
-                ] = 1
+def _reject_unreviewed_hardware(self, measured, strategy):
+    for mutation in ("b300", "one_b300", "missing_name"):
+        broken = copy.deepcopy(measured)
+        devices = broken["measurement_identity"]["topology"]
+        for device in devices if mutation != "one_b300" else devices[:1]:
+            if mutation == "missing_name":
+                del device["name"]
             else:
-                result = next(row for row in broken if row["strategy"] == "dep4")
-                result["trace"]["manifest"]["requests"][0]["owner_rank"] = 0
-            with self.subTest(mutation=mutation):
-                report = self.assess(broken)
-                self.assertFalse(report["target_passed"])
-                self.assertEqual(report["status"], "invalid")
-
-    def test_real_calculator_binds_responses_and_reviewed_b200_hardware(self):
-        for strategy in ("tp4", "tep4", "dep4"):
-            case = dict(
-                mode="dspark5",
-                strategy=strategy,
-                batch=4,
-                input_tokens=400000,
-                output_tokens=64,
-            )
-            harness, events, responses = runtime_fixture(
-                case, reference_version=roofline.VERSION
-            )
-            modes = {
-                name: {
-                    "batch_decode": True,
-                    "decode_graph": name == "tp4",
-                    "decode_graph_limit": 32,
-                }
-                for name in ("tp4", "tep4", "dep4")
-            }
-            harness.update(
-                binary="cpu-fixture-binary",
-                harness_numeric_runtime={"python": "cpu-fixture"},
-                configuration={"execution_modes": modes},
-            )
-            for device in harness["topology"]:
-                device["name"] = "NVIDIA B200"
-            for event_rows in events:
-                event_rows[0]["execution"]["runtime"]["execution_modes"] = modes[
-                    strategy
-                ].copy()
-            trace = assemble_trace(events, responses, harness=harness, case=case)
-            reference, metadata = runtime_reference(
-                trace,
-                strategy=strategy,
-                expected_binding=trace["binding"],
-                version=roofline.VERSION,
-            )
-            seconds = reference.seconds * 2
-            measured = {
-                **case,
-                **metadata,
-                "status": "completed",
-                "effective_strategy": strategy,
-                "request_count": case["batch"],
-                "measurement_identity": harness,
-                "seconds": seconds,
-                "reference_seconds": reference.seconds,
-                "reference_acceptance": reference.acceptance,
-                "efficiency_percent": source.efficiency_percent(
-                    reference.seconds, seconds
-                ),
-                "trace": trace,
-                "responses": responses,
-            }
-            gate.validate_measurement(measured)
-            for mutation in ("b300", "one_b300", "missing_name"):
-                broken = copy.deepcopy(measured)
-                devices = broken["measurement_identity"]["topology"]
-                for device in devices if mutation != "one_b300" else devices[:1]:
-                    if mutation == "missing_name":
-                        del device["name"]
-                    else:
-                        device["name"] = "NVIDIA B300"
-                with (
-                    self.subTest(strategy=strategy, mutation=mutation),
-                    self.assertRaisesRegex(ValueError, "four reviewed B200"),
-                ):
-                    gate.validate_measurement(broken)
-            for mutation in ("missing", "empty", "usage", "id"):
-                broken = copy.deepcopy(measured)
-                if mutation == "missing":
-                    del broken["responses"]
-                elif mutation == "empty":
-                    broken["responses"] = []
-                elif mutation == "usage":
-                    broken["responses"][0]["usage"]["completion_tokens"] = 1
-                else:
-                    broken["responses"][0]["id"] = "chatcmpl_other_999999"
-                with (
-                    self.subTest(strategy=strategy, mutation=mutation),
-                    self.assertRaises(ValueError),
-                ):
-                    gate.validate_measurement(broken)
-
-    def test_complete_exact_threshold_and_one_row_below(self):
-        rows = measured_rows()
-        report = self.assess(rows)
-        self.assertTrue(report["target_passed"])
-        self.assertEqual(report["observed_long_cases"], 19)
-        rows[0]["seconds"] = 101
-        rows[0]["efficiency_percent"] = 100 * 33 / 101
-        report = self.assess(rows)
-        self.assertFalse(report["target_passed"])
-        self.assertEqual(len(report["failed_threshold_cases"]), 1)
-
-    def test_missing_duplicate_failed_and_mixed_identity_cannot_pass(self):
-        rows = measured_rows()
-        variants = [rows[:-1], [*rows, rows[0]]]
-        failed = copy.deepcopy(rows)
-        failed[0]["status"] = "failed"
-        variants.append(failed)
-        mixed = copy.deepcopy(rows)
-        mixed[0]["measurement_identity"]["binary"] = "different"
-        variants.append(mixed)
-        wrong_modes = copy.deepcopy(rows)
-        wrong_modes[0]["trace"]["binding"]["runtime_modes"] = {
-            "batch_decode": False,
-            "decode_graph": False,
-        }
-        variants.append(wrong_modes)
-        for variant in variants:
-            with self.subTest(size=len(variant)):
-                self.assertFalse(self.assess(variant)["target_passed"])
-        for version in (floor.VERSION, packed.VERSION):
-            historical = measured_rows(version)
-            for row in historical:
-                for device in row["measurement_identity"]["topology"]:
-                    del device["name"]
-            partial = self.assess(historical)
-            self.assertEqual(partial["status"], "ineligible")
-            self.assertTrue(partial["reference_threshold_met"])
-            self.assertFalse(partial["target_passed"])
-
-    def test_qualification_cannot_be_supplied_by_a_result_label(self):
-        rows = measured_rows()
-        rows[0]["reference_scope"] = "complete physical roofline"
-        self.assertFalse(self.assess(rows)["target_passed"])
-        rows = measured_rows()
-        del rows[0]["measurement_identity"]["configuration"]["execution_modes"]
-        self.assertFalse(self.assess(rows)["target_passed"])
-        rows = measured_rows()
-        rows[0]["rate_profile"] = "old-calculator-digest"
-        self.assertFalse(self.assess(rows)["target_passed"])
-        rows = measured_rows()
-        rows[0]["assumptions_sha256"] = "changed-assumptions"
-        self.assertFalse(self.assess(rows)["target_passed"])
-
-
-class RuntimeModes(unittest.TestCase):
-    def test_launcher_defaults_case_and_graph_limits_match_runtime_settings(self):
+                device["name"] = "NVIDIA B300"
         with (
-            patch.dict("os.environ", {}, clear=True),
-            patch(
-                "oh_my_vllm.models.deepseek_v41.kernel.native_sparse_graph_enabled",
-                return_value=True,
-            ),
+            self.subTest(strategy=strategy, mutation=mutation),
+            self.assertRaisesRegex(ValueError, "four reviewed B200"),
         ):
-            self.assertEqual(
-                execution_modes(),
-                {
-                    "batch_decode": False,
-                    "decode_graph": False,
-                    "decode_graph_limit": 32,
-                },
-            )
-            for strategy in ("TP4", "TEP4", "DEP4"):
-                for limit in (0, 32):
-                    with patch.dict(
-                        "os.environ",
-                        {
-                            "OH_MY_VLLM_DEEPSEEK_STRATEGY": strategy,
-                            "OH_MY_VLLM_DEEPSEEK_BATCH_DECODE": "1",
-                            "OH_MY_VLLM_DEEPSEEK_DECODE_GRAPHS": str(limit),
-                        },
-                    ):
-                        self.assertEqual(
-                            execution_modes(),
-                            {
-                                "batch_decode": True,
-                                "decode_graph": strategy == "TP4",
-                                "decode_graph_limit": limit,
-                            },
-                        )
-            with (
-                patch.dict("os.environ", {"OH_MY_VLLM_DEEPSEEK_DECODE_GRAPHS": "-1"}),
-                self.assertRaises(ValueError),
-            ):
-                execution_modes()
-
-    def test_runtime_identity_uses_parsed_worker_flags_after_environment_changes(self):
+            gate.validate_measurement(broken)
+    for mutation in ("missing", "empty", "usage", "id"):
+        broken = copy.deepcopy(measured)
+        if mutation == "missing":
+            del broken["responses"]
+        elif mutation == "empty":
+            broken["responses"] = []
+        elif mutation == "usage":
+            broken["responses"][0]["usage"]["completion_tokens"] = 1
+        else:
+            broken["responses"][0]["id"] = "chatcmpl_other_999999"
         with (
-            patch.dict(
-                "os.environ",
-                {
-                    "OH_MY_VLLM_SOURCE_COMMIT": "cpu-fixture-commit",
-                    "OH_MY_VLLM_DEEPSEEK_STRATEGY": "tep4",
-                    "OH_MY_VLLM_DEEPSEEK_BATCH_DECODE": "0",
-                    "OH_MY_VLLM_DEEPSEEK_DECODE_GRAPH": "0",
-                    "OH_MY_VLLM_DEEPSEEK_DECODE_GRAPHS": "0",
-                },
-                clear=True,
-            ),
-            patch("oh_my_vllm.models.deepseek_v41.trace.NATIVE_MODULES", ()),
-            patch(
-                "oh_my_vllm.models.deepseek_v41.trace.source_identity",
-                return_value="cpu-fixture-source",
-            ),
-            patch(
-                "torch.cuda.get_device_properties",
-                return_value=SimpleNamespace(uuid="GPU-cpu-fixture"),
-            ),
-            patch(
-                "oh_my_vllm.models.deepseek_v41.kernel.native_sparse_graph_enabled",
-                side_effect=AssertionError("must use parsed Worker graph flag"),
-            ),
+            self.subTest(strategy=strategy, mutation=mutation),
+            self.assertRaises(ValueError),
         ):
-            identities = [
-                runtime_identity(
-                    2,
-                    strategy="tp4",
-                    batch_decode=True,
-                    decode_graph=True,
-                    decode_graph_limit=limit,
-                )
-                for limit in (0, 32)
-            ]
-        self.assertNotEqual(identities[0], identities[1])
-        for identity, limit in zip(identities, (0, 32), strict=True):
-            self.assertEqual(
-                identity["execution_modes"],
-                {
-                    "batch_decode": True,
-                    "decode_graph": True,
-                    "decode_graph_limit": limit,
-                },
-            )
-
-    def test_observed_modes_reach_trace_binding_and_changed_rank_is_rejected(self):
-        with (
-            patch.dict(
-                "os.environ",
-                {
-                    "OH_MY_VLLM_DEEPSEEK_BATCH_DECODE": "1",
-                    "OH_MY_VLLM_DEEPSEEK_DECODE_GRAPH": "1",
-                },
-            ),
-            patch(
-                "oh_my_vllm.models.deepseek_v41.kernel.native_sparse_graph_enabled",
-                return_value=True,
-            ),
-        ):
-            modes = {
-                strategy: execution_modes(strategy)
-                for strategy in ("tp4", "tep4", "dep4")
-            }
-        self.assertEqual(
-            modes["tp4"],
-            {"batch_decode": True, "decode_graph": True, "decode_graph_limit": 32},
-        )
-        self.assertEqual(
-            modes["tep4"],
-            {"batch_decode": True, "decode_graph": False, "decode_graph_limit": 32},
-        )
-        case = dict(
-            mode="dspark5", strategy="tp4", batch=1, input_tokens=20, output_tokens=4
-        )
-        harness, events, responses = runtime_fixture(
-            case, reference_version=packed.VERSION
-        )
-        harness["configuration"] = {"execution_modes": modes}
-        for rows in events:
-            rows[0]["execution"]["runtime"]["execution_modes"] = modes["tp4"].copy()
-        trace = assemble_trace(events, responses, harness=harness, case=case)
-        self.assertEqual(trace["binding"]["runtime_modes"], modes["tp4"])
-        result, _metadata = runtime_reference(
-            trace,
-            strategy="tp4",
-            expected_binding=trace["binding"],
-            version=packed.VERSION,
-        )
-        self.assertEqual(result.version, packed.VERSION)
-        events[2][0]["execution"]["runtime"]["execution_modes"]["batch_decode"] = False
-        with self.assertRaisesRegex(source.BindingError, "modes"):
-            assemble_trace(events, responses, harness=harness, case=case)
-        events[2][0]["execution"]["runtime"]["execution_modes"] = modes["tp4"].copy()
-        measured, _csv = run_fixture(
-            case, harness, events, responses, version=packed.VERSION
-        )
-        self.assertEqual(measured["status"], "completed")
-        self.assertEqual(measured["measurement_identity"], harness)
+            gate.validate_measurement(broken)
 
 
 if __name__ == "__main__":

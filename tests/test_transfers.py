@@ -22,28 +22,7 @@ class PinnedTransfers(unittest.TestCase):
     def test_pool_defers_growth_and_preserves_live_slices(self):
         from oh_my_vllm.operators.runtime.transfers import PinnedPool
 
-        allocations = {}
-        pin_calls = []
-        idle = [False]
-
-        def allocate(pointer, size, flags):
-            self.assertTrue(idle[0], "pinning overlapped active CUDA work")
-            pin_calls.append(size)
-            memory = ctypes.create_string_buffer(size)
-            address = ctypes.addressof(memory)
-            allocations[address] = memory
-            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = address
-            return 0
-
-        def release(pointer):
-            self.assertTrue(idle[0])
-            del allocations[pointer.value]
-            return 0
-
-        device = SimpleNamespace(
-            runtime=SimpleNamespace(cudaHostAlloc=allocate, cudaFreeHost=release),
-            checked=lambda status: self.assertEqual(status, 0),
-        )
+        allocations, pin_calls, idle, device = self._pinned_pool_device()
         pool = PinnedPool(device, 1024, lambda: idle[0])
         self.assertIsNone(pool.acquire(256))
         self.assertFalse(allocations)
@@ -144,6 +123,31 @@ class PinnedTransfers(unittest.TestCase):
             ):
                 Offload(device, None, {}, 1024)
         self.assertEqual(closed, [True, True])
+
+    def _pinned_pool_device(self):
+        allocations = {}
+        pin_calls = []
+        idle = [False]
+
+        def allocate(pointer, size, flags):
+            self.assertTrue(idle[0], "pinning overlapped active CUDA work")
+            pin_calls.append(size)
+            memory = ctypes.create_string_buffer(size)
+            address = ctypes.addressof(memory)
+            allocations[address] = memory
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = address
+            return 0
+
+        def release(pointer):
+            self.assertTrue(idle[0])
+            del allocations[pointer.value]
+            return 0
+
+        device = SimpleNamespace(
+            runtime=SimpleNamespace(cudaHostAlloc=allocate, cudaFreeHost=release),
+            checked=lambda status: self.assertEqual(status, 0),
+        )
+        return allocations, pin_calls, idle, device
 
 
 if __name__ == "__main__":

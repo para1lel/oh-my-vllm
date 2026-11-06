@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -224,3 +225,25 @@ class DeepSeekStateExports(unittest.TestCase):
         exports.bind((0,))
         with self.assertRaisesRegex(ValueError, "endpoint"):
             exports.window_state(0, 4, ring)
+
+
+class DeepSeekSparseStatus(unittest.TestCase):
+    def test_sparse_status_keeps_storage_across_inference_and_eager_calls(self):
+        from oh_my_vllm.models.deepseek_v41 import kernel
+
+        failed = torch.tensor(True, device="cpu")
+        with patch.object(kernel, "_SPARSE_STATUS", {}):
+            with torch.inference_mode():
+                status = kernel._sparse_status_accumulator(torch.device("cpu"))
+                status.logical_or_(failed)
+            address = status.untyped_storage().data_ptr()
+            for inference in (False, True, False):
+                with torch.inference_mode(inference):
+                    current = kernel._sparse_status_accumulator("cpu")
+                    self.assertIs(current, status)
+                    self.assertEqual(current.untyped_storage().data_ptr(), address)
+                    kernel.reset_sparse_status()
+                    self.assertFalse(current.item())
+                    kernel.require_sparse_status()
+                    current.logical_or_(failed)
+                    self.assertTrue(current.item())

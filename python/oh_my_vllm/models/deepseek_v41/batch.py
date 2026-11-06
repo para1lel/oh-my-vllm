@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 import torch
 
-from . import kernel, model
+from . import kernel
+from . import model_context as context
 from .decode import (
     DecodeBindings,
     DecodeGraph,
@@ -49,10 +50,10 @@ def require_batch_configuration(args):
                 f"batched CUDA target requires {name}={expected!r}; got {actual!r}"
             )
     if (
-        model.fp8_block_size != 32
-        or model.fp4_block_size != 32
-        or model.scale_fmt != "ue8m0"
-        or model.scale_dtype != torch.float8_e8m0fnu
+        context.fp8_block_size != 32
+        or context.fp4_block_size != 32
+        or context.scale_fmt != "ue8m0"
+        or context.scale_dtype != torch.float8_e8m0fnu
     ):
         raise ValueError("batched CUDA target requires UE8M0 K32 projection scales")
     if kernel._SPARSE_NATIVE_FAILED:
@@ -69,6 +70,110 @@ def target_decode_batch(
     valid_rows=None,
     dispatch_combine=None,
 ):
+    length, window = _validate_decode_batch(worker, tokens, positions, slots)
+    slots = tuple(slots)
+    bindings, binding_key = _batch_bindings(worker, slots, length)
+    bindings.bind_valid_rows(valid_rows)
+    bindings.bind(tokens, positions)
+    start_pos = max(positions)
+    context = context_token_bucket(start_pos + length)
+    worker.model.reserve_cache(list(slots), context)
+    stage = worker.decode_engram.get(binding_key)
+    if stage is None:
+        stage = EngramStage(worker.model, len(slots), length=length)
+        worker.decode_engram[binding_key] = stage
+    engram_values = stage.stage(bindings, start_pos)
+    tracing = worker.routing_trace_enabled
+    collect_hidden = worker.dspark
+    graph, enabled = _batch_graph(
+        worker,
+        bindings,
+        start_pos,
+        slots,
+        length,
+        context,
+        window,
+        engram_values,
+        plan,
+        dispatch_combine,
+    )
+    worker.target_call += 1
+    if graph is not None and enabled:
+        graph.replay()
+        call = target_call_id(worker, worker.target_call)
+        return _TargetResult(
+            graph.logits,
+            graph.main_hidden,
+            "graph",
+            graph.routing_trace,
+            bindings,
+            call,
+        )
+    return _eager_decode_batch(
+        worker,
+        bindings,
+        start_pos,
+        positions,
+        slots,
+        length,
+        collect_hidden,
+        tracing,
+        engram_values,
+        plan,
+        dispatch_combine,
+    )
+
+
+def _eager_decode_batch(
+    worker,
+    bindings,
+    start_pos,
+    positions,
+    slots,
+    length,
+    collect_hidden,
+    tracing,
+    engram_values,
+    plan,
+    dispatch_combine,
+):
+    routes = (
+        RoutingTrace(
+            len(worker.model.layers),
+            len(slots) * length,
+            rank=worker.rank,
+            strategy=worker.strategy,
+            device=worker.device,
+        )
+        if tracing
+        else None
+    )
+    position = (
+        None if all(value == start_pos for value in positions) else bindings.position
+    )
+    _, logits, hidden = worker.model(
+        bindings.token_ids,
+        start_pos=start_pos,
+        cache_slots=bindings.cache_slots,
+        position=position,
+        sample_output=False,
+        cache_slots_cpu=slots,
+        cache_positions_cpu=positions,
+        full_logits=length > 1,
+        logical_rows=1,
+        collect_main_hidden=collect_hidden,
+        engram_values=engram_values,
+        reserve_cache=False,
+        routing_trace=routes,
+        execution_plan=plan,
+        valid_rows=bindings.valid_rows,
+        dispatch_combine=dispatch_combine,
+    )
+    call = target_call_id(worker, worker.target_call)
+    return _TargetResult(logits, hidden, "eager", routes, bindings, call)
+
+
+def _validate_decode_batch(worker, tokens, positions, slots):
     if not tokens or len(tokens) != len(positions) or len(tokens) != len(slots):
         raise ValueError("decode batch needs matching requests, positions, and slots")
     length = len(tokens[0])
@@ -89,7 +194,11 @@ def target_decode_batch(
         raise ValueError(
             "decode requests need the same context bucket and compressor branch"
         )
-    slots = tuple(slots)
+
+    return length, window
+
+
+def _batch_bindings(worker, slots, length):
     binding_key = ("batch", slots, length)
     bindings = worker.decode_bindings.get(binding_key)
     if bindings is None:
@@ -112,16 +221,22 @@ def target_decode_batch(
             len(slots), slots, worker.device, length=length, varlen=True
         )
         worker.decode_bindings[binding_key] = bindings
-    bindings.bind_valid_rows(valid_rows)
-    bindings.bind(tokens, positions)
-    start_pos = max(positions)
-    context = context_token_bucket(start_pos + length)
-    worker.model.reserve_cache(list(slots), context)
-    stage = worker.decode_engram.get(binding_key)
-    if stage is None:
-        stage = EngramStage(worker.model, len(slots), length=length)
-        worker.decode_engram[binding_key] = stage
-    engram_values = stage.stage(bindings, start_pos)
+
+    return bindings, binding_key
+
+
+def _batch_graph(
+    worker,
+    bindings,
+    start_pos,
+    slots,
+    length,
+    context,
+    window,
+    engram_values,
+    plan,
+    dispatch_combine,
+):
     tracing = worker.routing_trace_enabled
     collect_hidden = worker.dspark
     key = (
@@ -172,52 +287,8 @@ def target_decode_batch(
         )
         capture_decode_graph(graph, worker.rank)
         worker.decode_graphs[key] = graph
-    worker.target_call += 1
-    if graph is not None and enabled:
-        graph.replay()
-        call = target_call_id(worker, worker.target_call)
-        return _TargetResult(
-            graph.logits,
-            graph.main_hidden,
-            "graph",
-            graph.routing_trace,
-            bindings,
-            call,
-        )
-    routes = (
-        RoutingTrace(
-            len(worker.model.layers),
-            len(slots) * length,
-            rank=worker.rank,
-            strategy=worker.strategy,
-            device=worker.device,
-        )
-        if tracing
-        else None
-    )
-    position = (
-        None if all(value == start_pos for value in positions) else bindings.position
-    )
-    _, logits, hidden = worker.model(
-        bindings.token_ids,
-        start_pos=start_pos,
-        cache_slots=bindings.cache_slots,
-        position=position,
-        sample_output=False,
-        cache_slots_cpu=slots,
-        cache_positions_cpu=positions,
-        full_logits=length > 1,
-        logical_rows=1,
-        collect_main_hidden=collect_hidden,
-        engram_values=engram_values,
-        reserve_cache=False,
-        routing_trace=routes,
-        execution_plan=plan,
-        valid_rows=bindings.valid_rows,
-        dispatch_combine=dispatch_combine,
-    )
-    call = target_call_id(worker, worker.target_call)
-    return _TargetResult(logits, hidden, "eager", routes, bindings, call)
+
+    return graph, enabled
 
 
 def execute_decode_group(
@@ -256,103 +327,115 @@ def execute_decode_group(
             and getattr(worker, "strategy", None) == "tp4"
             and result.bindings is not None
         )
-        outputs, credited, request_rows = {}, [], []
-        for index, (row, request, slot, token_ids, start_pos) in enumerate(prepared):
-            drafts = token_ids[1:]
-            if drafts:
-                verification = verify_greedy_drafts(drafts, predictions[index])
-                tokens, text = request.append(list(verification.token_ids))
-                accepted = min(
-                    verification.accepted_draft_tokens, max(0, len(tokens) - 1)
-                )
-            else:
-                tokens, text = request.append([int(predictions[index])])
-                accepted = 0
-            count = accepted + 1
-            accepted_end = start_pos + count
-            hidden = (
-                result.hidden[index : index + 1, :count]
-                if result.hidden is not None
-                else None
-            )
-            mtp_options = (
-                {"cache_slots": result.bindings.cache_slots[index : index + 1]}
-                if reuse_mtp_inputs
-                else {}
-            )
-            mtp_updated = worker._seed_mtp(
-                hidden, start_pos, slot, source_length=count, **mtp_options
-            )
-            if reuse_mtp_inputs:
-                # Acceptance can stop before the final target prediction.
-                mtp_options["input_ids"] = (
-                    prediction_ids[index].reshape(-1)[count - 1 : count].view(1, 1)
-                )
-            proposals = worker._next_proposals(
-                request, tokens, hidden, accepted_end, slot, **mtp_options
-            )
-            worker.cache.commit(
-                row["request_id"],
-                row,
-                slot,
-                start_pos=start_pos,
-                accepted_end=accepted_end,
-                include_mtp=mtp_updated,
-            )
-            if drafts:
-                worker.cache.restore(
-                    row["request_id"],
-                    slot,
-                    row,
-                    start_pos=accepted_end,
-                    use_prefix_state=False,
-                )
-            request.state_position = accepted_end
-            outputs[row["request_id"]] = worker._output(
-                request, row, tokens, text, accepted, proposals
-            )
-            credited.append(count)
-            request_rows.append(
-                dict(
-                    id=row["request_id"],
-                    start=start_pos,
-                    count=count,
-                    accepted=accepted,
-                    proposed=len(drafts),
-                    logit_rows=count,
-                )
-            )
-        worker._target_execution = result.execution
-        worker.trace.record(
-            "target",
-            rank=worker.rank,
-            verify=len(prepared[0][3]) > 1,
-            accepted=sum(item["accepted"] for item in request_rows),
-            proposed=sum(item["proposed"] for item in request_rows),
-            execution=result.execution,
-            requests=[
-                dict(
-                    id=row["request_id"],
-                    start=start,
-                    count=len(tokens),
-                    prompt=request.prompt_len,
-                )
-                for row, request, _slot, tokens, start in prepared
-            ],
+        outputs, credited, request_rows = _accept_decode_rows(
+            worker, prepared, result, prediction_ids, predictions, reuse_mtp_inputs
         )
-        if result.routes is not None:
-            mask = result.bindings.credit_rows(credited)
-            mask = mask & result.bindings.valid_rows
-            record_accounting_call(
-                worker,
-                call=result.call,
-                phase="decode",
-                request_rows=request_rows,
-                counters=result.routes.counters(mask),
-            )
+        _trace_decode_group(worker, prepared, result, credited, request_rows)
         return outputs
     except BaseException:
         for _row, request, _slot, _tokens, _start in prepared:
             worker._free_slot(request)
             request.state_position = 0
         raise
+
+
+def _accept_decode_rows(
+    worker, prepared, result, prediction_ids, predictions, reuse_mtp_inputs
+):
+    outputs, credited, request_rows = {}, [], []
+    for index, (row, request, slot, token_ids, start_pos) in enumerate(prepared):
+        drafts = token_ids[1:]
+        if drafts:
+            verification = verify_greedy_drafts(drafts, predictions[index])
+            tokens, text = request.append(list(verification.token_ids))
+            accepted = min(verification.accepted_draft_tokens, max(0, len(tokens) - 1))
+        else:
+            tokens, text = request.append([int(predictions[index])])
+            accepted = 0
+        count = accepted + 1
+        accepted_end = start_pos + count
+        hidden = (
+            result.hidden[index : index + 1, :count]
+            if result.hidden is not None
+            else None
+        )
+        mtp_options = (
+            {"cache_slots": result.bindings.cache_slots[index : index + 1]}
+            if reuse_mtp_inputs
+            else {}
+        )
+        mtp_updated = worker._seed_mtp(
+            hidden, start_pos, slot, source_length=count, **mtp_options
+        )
+        if reuse_mtp_inputs:
+            # Acceptance can stop before the final target prediction.
+            mtp_options["input_ids"] = (
+                prediction_ids[index].reshape(-1)[count - 1 : count].view(1, 1)
+            )
+        proposals = worker._next_proposals(
+            request, tokens, hidden, accepted_end, slot, **mtp_options
+        )
+        worker.cache.commit(
+            row["request_id"],
+            row,
+            slot,
+            start_pos=start_pos,
+            accepted_end=accepted_end,
+            include_mtp=mtp_updated,
+        )
+        if drafts:
+            worker.cache.restore(
+                row["request_id"],
+                slot,
+                row,
+                start_pos=accepted_end,
+                use_prefix_state=False,
+            )
+        request.state_position = accepted_end
+        outputs[row["request_id"]] = worker._output(
+            request, row, tokens, text, accepted, proposals
+        )
+        credited.append(count)
+        request_rows.append(
+            dict(
+                id=row["request_id"],
+                start=start_pos,
+                count=count,
+                accepted=accepted,
+                proposed=len(drafts),
+                logit_rows=count,
+            )
+        )
+
+    return outputs, credited, request_rows
+
+
+def _trace_decode_group(worker, prepared, result, credited, request_rows):
+    worker._target_execution = result.execution
+    worker.trace.record(
+        "target",
+        rank=worker.rank,
+        verify=len(prepared[0][3]) > 1,
+        accepted=sum(item["accepted"] for item in request_rows),
+        proposed=sum(item["proposed"] for item in request_rows),
+        execution=result.execution,
+        requests=[
+            dict(
+                id=row["request_id"],
+                start=start,
+                count=len(tokens),
+                prompt=request.prompt_len,
+            )
+            for row, request, _slot, tokens, start in prepared
+        ],
+    )
+    if result.routes is not None:
+        mask = result.bindings.credit_rows(credited)
+        mask = mask & result.bindings.valid_rows
+        record_accounting_call(
+            worker,
+            call=result.call,
+            phase="decode",
+            request_rows=request_rows,
+            counters=result.routes.counters(mask),
+        )

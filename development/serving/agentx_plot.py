@@ -3,6 +3,23 @@ import csv
 from pathlib import Path
 
 
+def _configure_plot(plt):
+    background, foreground = "#101720", "#e5edf5"
+    plt.rcParams.update(
+        {
+            "font.family": "DejaVu Sans",
+            "font.size": 11,
+            "text.color": foreground,
+            "axes.labelcolor": foreground,
+            "xtick.color": "#afbdcc",
+            "ytick.color": "#afbdcc",
+            "axes.edgecolor": "#354353",
+            "savefig.facecolor": background,
+        }
+    )
+    return background
+
+
 def plot(
     csv_path,
     figure_path,
@@ -20,19 +37,7 @@ def plot(
         rows = list(csv.DictReader(source))
     if not rows:
         raise ValueError("no requests to plot")
-    background, foreground = "#101720", "#e5edf5"
-    plt.rcParams.update(
-        {
-            "font.family": "DejaVu Sans",
-            "font.size": 11,
-            "text.color": foreground,
-            "axes.labelcolor": foreground,
-            "xtick.color": "#afbdcc",
-            "ytick.color": "#afbdcc",
-            "axes.edgecolor": "#354353",
-            "savefig.facecolor": background,
-        }
-    )
+    background = _configure_plot(plt)
     figure, axis = plt.subplots(figsize=(13, 7), layout="constrained")
     figure.patch.set_facecolor(background)
     axis.set_facecolor("#141e2a")

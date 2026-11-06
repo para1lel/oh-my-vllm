@@ -23,6 +23,31 @@ from .timing import accept, interval, measure
 from .validation import LIMITS_PATH, candidate_identity, load_limits
 
 
+def _measure_case(prepared, seconds, limits, case, accounting, timing, spec, resource):
+    if limits is not None:
+        approved = limits[case.id]
+        if (
+            approved["accounting"] != accounting
+            or approved["timing"] != timing
+            or approved["device"] != compatible_spec(spec)
+            or approved["input_sha256"] != prepared.input_identity
+            or approved["work"] != resource
+            or approved["lower_seconds"] != seconds
+        ):
+            raise ValueError(
+                "performance input, accounting, or device identity differs"
+            )
+        samples, result = accept(prepared, seconds, approved["max_ratio"])
+        decision = asdict(result)
+    else:
+        samples = measure(prepared)
+        median, low, high = interval(
+            [sample.gpu_seconds / seconds for sample in samples]
+        )
+        decision = dict(median=median, lower=low, upper=high, decision="calibration")
+    return samples, decision
+
+
 def session(model, report, *, calibration=False, selected=None):
     from oh_my_vllm.operators.runtime.device import Device
 
@@ -57,29 +82,9 @@ def session(model, report, *, calibration=False, selected=None):
         with prepare_performance(case, device, model) as prepared:
             seconds = lower_bound(case, spec)
             resource = asdict(work(case))
-            if limits is not None:
-                approved = limits[case.id]
-                if (
-                    approved["accounting"] != accounting
-                    or approved["timing"] != timing
-                    or approved["device"] != compatible_spec(spec)
-                    or approved["input_sha256"] != prepared.input_identity
-                    or approved["work"] != resource
-                    or approved["lower_seconds"] != seconds
-                ):
-                    raise ValueError(
-                        "performance input, accounting, or device identity differs"
-                    )
-                samples, result = accept(prepared, seconds, approved["max_ratio"])
-                decision = asdict(result)
-            else:
-                samples = measure(prepared)
-                median, low, high = interval(
-                    [sample.gpu_seconds / seconds for sample in samples]
-                )
-                decision = dict(
-                    median=median, lower=low, upper=high, decision="calibration"
-                )
+            samples, decision = _measure_case(
+                prepared, seconds, limits, case, accounting, timing, spec, resource
+            )
             after = snapshot(spec)
             prepared.weights.checkpoint.verify_identity()
             payload = dict(

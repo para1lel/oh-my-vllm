@@ -3,13 +3,20 @@ fail_fast: false
 repos:
   - repo: local
     hooks:
+      - id: code-size
+        name: code files <=500 and functions <=80 physical lines
+        entry: scripts/with-env.sh python scripts/check_code_size.py --all
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: cuda-format
-        name: clang-format and CUDA module size
-        description: Format owned CUDA modules and enforce the 800-line limit.
+        name: clang-format
+        description: Format owned C, C++, and CUDA sources.
         entry: scripts/with-env.sh python scripts/format_cuda.py
         language: system
         pass_filenames: false
-        files: (\.(cu|cuh|cpp|hpp|h)$|^python/oh_my_vllm/operators/.*\.py$|^\.clang-format$|^scripts/format_cuda\.py$|^\.pre-commit-config\.yaml$)
+        files: (\.(c|cc|cpp|cxx|h|hh|hpp|hxx|cu|cuh)$|^\.clang-format$|^scripts/(format_cuda|repo_files)\.py$|^\.pre-commit-config\.yaml$)
 
       - id: cargo-fmt
         name: cargo fmt
@@ -64,11 +71,11 @@ repos:
         types_or: [python, pyi]
 
       - id: kernel-contracts
-        name: model evidence, HTTP accounting, and worker contracts
-        entry: scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits tests.test_models tests.test_constraints development.serving.test_roofline development.serving.test_gpu development.serving.test_agentx tests.test_execution tests.test_transfers tests.test_offload_worker development.operators.test_contracts development.operators.test_collective_peer development.operators.test_performance tests.test_operator_plans tests.test_collective_plan tests.test_collectives
+        name: owned Python CPU tests (CUDA disabled)
+        entry: scripts/with-env.sh python scripts/check.py cpu --python-only
         language: system
         pass_filenames: false
-        files: ^(development/|python/oh_my_vllm/|tests/).*\.(py|cu|cuh)$|^development/operators/.*\.(json|npz)$|^development/model/reference\.npz$|^requirements/|^\.pre-commit-config\.yaml$
+        files: ^(development/|python/oh_my_vllm/|tests/|scripts/).*\.(py|cu|cuh)$|^development/operators/.*\.(json|npz)$|^development/model/reference\.npz$|^requirements/|^\.pre-commit-config\.yaml$
 
       - id: whitespace
         name: whitespace

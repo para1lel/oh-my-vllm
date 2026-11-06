@@ -5,6 +5,83 @@
 
 namespace down16dp {
 
+template <int FixedRows, int Capacity, class Element, class Tile, class Mma, class WeightFragment,
+          class InputFragment, class PartialFragment>
+__device__ __forceinline__ void down16dp_groups(
+    const __nv_fp8_e4m3 *activation, const float *activation_scale, const float *weight_scale,
+    Element *weight_storage, const Tile &input_tile, Mma &mma, WeightFragment &weight_fragment,
+    InputFragment &input_fragment, PartialFragment &partial_fragment, uint64_t *barriers,
+    const uint32_t *tensor_memory, const CUtensorMap &weight_map, float2 (&accumulated)[Capacity],
+    uint32_t fragment_address, int &barrier_phase, int rows, int inner, int first_column,
+    int scale_groups, int split_groups, int first_group, int thread, int warp, int lane) {
+  using namespace cute;
+  constexpr int Groups = Capacity;
+  for (int local_group = 0; local_group < split_groups; local_group += 4) {
+    int group = first_group + local_group;
+    int valid_groups = min(4, split_groups - local_group);
+    decode_projection_prefetch(weight_storage, barriers, weight_map, valid_groups, group,
+                               first_column, thread);
+    float scale_products[4][Groups] = {};
+#pragma unroll
+    for (int sub = 0; sub < 4; ++sub) {
+      bool valid = local_group + sub < split_groups;
+      float weight_factor =
+          valid ? weight_scale[int64_t(blockIdx.x / 2) * scale_groups + group + sub] : 0.f;
+#pragma unroll
+      for (int j = 0; j < Groups; ++j) {
+        int row = lane % 4 + 4 * j;
+        if (row < FixedRows && valid)
+          scale_products[sub][j] =
+              __fmul_rn(weight_factor, activation_scale[row * scale_groups + group + sub]);
+      }
+    }
+    for (int i = thread; i < rows * 32; i += 128) {
+      int row = i / 32, column = (i % 32) * 16;
+      unsigned destination =
+          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 32), 0, column / 32));
+      int bytes = local_group * 128 + column < split_groups * 128 ? 16 : 0;
+      const auto *source = activation + int64_t(row) * inner + (bytes ? group * 128 + column : 0);
+      asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(destination), "l"(source),
+                   "r"(bytes)
+                   : "memory");
+    }
+    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+    __syncthreads();
+    wait_barrier(barriers[1], barrier_phase);
+    cutlass::arch::fence_view_async_shared();
+    decode_projection_compute(mma, weight_fragment, input_fragment, partial_fragment, tensor_memory,
+                              barriers, valid_groups, warp);
+    wait_barrier(*barriers, barrier_phase);
+    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+    barrier_phase ^= 1;
+#pragma unroll
+    for (int sub = 0; sub < 4; ++sub) {
+      if (sub >= valid_groups)
+        continue;
+      uint32_t values[2 * Groups];
+      if constexpr (FixedRows == 4)
+        SM100_TMEM_LOAD_16dp128b1x::copy(fragment_address + sub * 8, values[0], values[1]);
+      else
+        SM100_TMEM_LOAD_16dp128b2x::copy(fragment_address + sub * 8, values[0], values[1],
+                                         values[2], values[3]);
+#pragma unroll
+      for (int j = 0; j < Groups; ++j) {
+        int row = lane % 4 + 4 * j;
+        if (row < FixedRows) {
+          float2 partial =
+              make_float2(__uint_as_float(values[2 * j]), __uint_as_float(values[2 * j + 1]));
+          float2 updated;
+          SM100_1x2x1_F32F32F32F32::fma(updated, scale_products[sub][j], partial, accumulated[j]);
+          accumulated[j] = updated;
+        }
+      }
+    }
+    cutlass::arch::fence_view_async_tmem_load();
+    asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
+    __syncthreads();
+  }
+}
+
 template <int FixedRows, bool Dependent = false>
 __global__ void kernel(const __nv_fp8_e4m3 *activation, const __nv_fp8_e4m3 *weight,
                        const float *activation_scale, const float *weight_scale, float *output,
@@ -57,93 +134,11 @@ __global__ void kernel(const __nv_fp8_e4m3 *activation, const __nv_fp8_e4m3 *wei
   int first_group = blockIdx.y * split_groups;
   if constexpr (Dependent)
     wait_for_producer();
-  for (int local_group = 0; local_group < split_groups; local_group += 4) {
-    int group = first_group + local_group;
-    int valid_groups = min(4, split_groups - local_group);
-    if (thread == 0) {
-      cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(barriers + 1,
-                                                                     valid_groups * 8192);
-#pragma unroll
-      for (int sub = 0; sub < 4; ++sub)
-        if (sub < valid_groups)
-          SM90_TMA_LOAD_2D::copy(&weight_map, barriers + 1,
-                                 uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST),
-                                 weight_storage + sub * 8192, (group + sub) * 128, first_column);
-    }
-    float scale_products[4][Groups] = {};
-#pragma unroll
-    for (int sub = 0; sub < 4; ++sub) {
-      bool valid = local_group + sub < split_groups;
-      float weight_factor =
-          valid ? weight_scale[int64_t(blockIdx.x / 2) * scale_groups + group + sub] : 0.f;
-#pragma unroll
-      for (int j = 0; j < Groups; ++j) {
-        int row = lane % 4 + 4 * j;
-        if (row < FixedRows && valid)
-          scale_products[sub][j] =
-              __fmul_rn(weight_factor, activation_scale[row * scale_groups + group + sub]);
-      }
-    }
-    for (int i = thread; i < rows * 32; i += 128) {
-      int row = i / 32, column = (i % 32) * 16;
-      unsigned destination =
-          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 32), 0, column / 32));
-      int bytes = local_group * 128 + column < split_groups * 128 ? 16 : 0;
-      const auto *source = activation + int64_t(row) * inner + (bytes ? group * 128 + column : 0);
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(destination), "l"(source),
-                   "r"(bytes)
-                   : "memory");
-    }
-    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
-    __syncthreads();
-    wait_barrier(barriers[1], barrier_phase);
-    cutlass::arch::fence_view_async_shared();
-    if (warp == 0) {
-      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
-#pragma unroll
-      for (int sub = 0; sub < 4; ++sub) {
-        if (sub >= valid_groups)
-          continue;
-        partial_fragment.data() = *tensor_memory + sub * 8;
-        mma.accumulate_ = UMMA::ScaleOut::Zero;
-#pragma unroll
-        for (int k = 0; k < 4; ++k) {
-          gemm(mma, weight_fragment(_, _, sub * 4 + k), input_fragment(_, _, sub * 4 + k),
-               partial_fragment);
-          mma.accumulate_ = UMMA::ScaleOut::One;
-        }
-      }
-      cutlass::arch::umma_arrive(barriers);
-    }
-    wait_barrier(*barriers, barrier_phase);
-    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
-    barrier_phase ^= 1;
-#pragma unroll
-    for (int sub = 0; sub < 4; ++sub) {
-      if (sub >= valid_groups)
-        continue;
-      uint32_t values[2 * Groups];
-      if constexpr (FixedRows == 4)
-        SM100_TMEM_LOAD_16dp128b1x::copy(fragment_address + sub * 8, values[0], values[1]);
-      else
-        SM100_TMEM_LOAD_16dp128b2x::copy(fragment_address + sub * 8, values[0], values[1],
-                                         values[2], values[3]);
-#pragma unroll
-      for (int j = 0; j < Groups; ++j) {
-        int row = lane % 4 + 4 * j;
-        if (row < FixedRows) {
-          float2 partial =
-              make_float2(__uint_as_float(values[2 * j]), __uint_as_float(values[2 * j + 1]));
-          float2 updated;
-          SM100_1x2x1_F32F32F32F32::fma(updated, scale_products[sub][j], partial, accumulated[j]);
-          accumulated[j] = updated;
-        }
-      }
-    }
-    cutlass::arch::fence_view_async_tmem_load();
-    asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
-    __syncthreads();
-  }
+  down16dp_groups<FixedRows, Groups>(
+      activation, activation_scale, weight_scale, weight_storage, input_tile, mma, weight_fragment,
+      input_fragment, partial_fragment, barriers, tensor_memory, weight_map, accumulated,
+      fragment_address, barrier_phase, rows, inner, first_column, scale_groups, split_groups,
+      first_group, thread, warp, lane);
 #pragma unroll
   for (int j = 0; j < Groups; ++j) {
     int row = lane % 4 + 4 * j;

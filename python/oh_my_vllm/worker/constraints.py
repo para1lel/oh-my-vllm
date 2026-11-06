@@ -16,36 +16,7 @@ def batch_masks(constraints, prefixes, *, packed=False):
     groups = {}
     for constraint, prefix in zip(constraints, prefixes, strict=True):
         groups.setdefault(constraint, []).append(tuple(prefix))
-    pending, fallback, rows = [], {}, 0
-    for constraint, paths in groups.items():
-        constraint.check()
-        if not constraint.native_batch:
-            for path in paths:
-                fallback[constraint, path] = constraint._prefix_mask(path)
-            continue
-        missing = [path for path in paths if path not in constraint.prefix_masks]
-        if not missing:
-            continue
-        longest = max(missing, key=len)
-        if any(token in constraint.tokenizer.eos_tokens for token in longest) or any(
-            longest[: len(path)] != path for path in missing
-        ):
-            for path in missing:
-                branch = constraint.fork()
-                branch.accept(path)
-                fallback[constraint, path] = branch.mask()
-            continue
-        skip = next(
-            index
-            for index in range(len(longest) + 1)
-            if longest[:index] not in constraint.prefix_masks
-        )
-        for index, token in enumerate(longest[:skip]):
-            mask = constraint.prefix_masks[longest[:index]]
-            if not (mask[token // 8] >> (token % 8)) & 1:
-                raise ValueError("token violates the output constraint")
-        pending.append((constraint, rows, longest, skip))
-        rows += len(longest) - skip + 1
+    pending, fallback, rows = _pending_prefix_masks(groups)
     buffer = np.zeros((rows, (width + 31) // 32), dtype=np.uint32)
     # The draft API leaves rows after termination unwritten.
     for constraint, start, path, skip in pending:
@@ -102,6 +73,41 @@ def batch_masks(constraints, prefixes, *, packed=False):
         )[:width]
         for constraint, prefix in zip(constraints, prefixes, strict=True)
     ]
+
+
+def _pending_prefix_masks(groups):
+    pending, fallback, rows = [], {}, 0
+    for constraint, paths in groups.items():
+        constraint.check()
+        if not constraint.native_batch:
+            for path in paths:
+                fallback[constraint, path] = constraint._prefix_mask(path)
+            continue
+        missing = [path for path in paths if path not in constraint.prefix_masks]
+        if not missing:
+            continue
+        longest = max(missing, key=len)
+        if any(token in constraint.tokenizer.eos_tokens for token in longest) or any(
+            longest[: len(path)] != path for path in missing
+        ):
+            for path in missing:
+                branch = constraint.fork()
+                branch.accept(path)
+                fallback[constraint, path] = branch.mask()
+            continue
+        skip = next(
+            index
+            for index in range(len(longest) + 1)
+            if longest[:index] not in constraint.prefix_masks
+        )
+        for index, token in enumerate(longest[:skip]):
+            mask = constraint.prefix_masks[longest[:index]]
+            if not (mask[token // 8] >> (token % 8)) & 1:
+                raise ValueError("token violates the output constraint")
+        pending.append((constraint, rows, longest, skip))
+        rows += len(longest) - skip + 1
+
+    return pending, fallback, rows
 
 
 def relocate_schema(value, name):

@@ -88,7 +88,7 @@ Decode, Graph, DEP4 和不受支持的专家绑定保留原有路径.
 
 官方 MoE 按专家 ID 递增顺序累加各本地专家的输出.
 每个专家输出先舍入到 BF16.
-[本地求和](../../../python/oh_my_vllm/models/deepseek_v41/kernel.py#L222)<!-- source: def ordered_expert_sum(values, sorted_routes, output, topk): --> 对每个 token 和路由槽使用一行投影输出.
+[本地求和](../../../python/oh_my_vllm/models/deepseek_v41/kernel_transform.py#L13)<!-- source: def ordered_expert_sum(values, sorted_routes, output, topk): --> 对每个 token 和路由槽使用一行投影输出.
 投影行按专家 ID 排序.
 CUDA kernel 对这些行索引排序, 然后按此顺序将其 BF16 值累加到 FP32.
 未使用的路由槽不提供数值.

@@ -5,6 +5,10 @@ Use the [development guide](docs/development.md) to install the tools and hooks.
 
 ## Code
 
+Keep each code file at most 500 physical lines.
+Keep each function at most 80 physical lines.
+The [size check](docs/development.md#code-size) uses syntax trees for function boundaries.
+
 Use names that show what each function and module does.
 Use a comment only for information that the code cannot give.
 

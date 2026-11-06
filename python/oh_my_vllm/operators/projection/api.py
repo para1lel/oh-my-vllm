@@ -11,11 +11,11 @@ The activation scale uses MUL. The weight scale uses FMA into the running
 sum. FP4 values convert accurately to FP8 before the raw dot. FP4 weight scales
 apply to each output row; FP8 weight scales apply to 32-row groups.
 Dense projection needs no device scratch. Grouped scratch holds device row and
-tile offsets, and the compacted nonempty groups. Persistent blocks visit
-independent 32-row by 64-column tiles. FP4 and FP8 values convert exactly to FP16
-with the native K32 reduction layout. At most 64 routed rows use parallel raw
-dots and ordered scale accumulation. The launch does not use a host expert row
-bound. Device counts must be within
+tile offsets, and the compacted nonempty groups.
+The `half_k32_kernel` blocks use tiles with 16 or 32 rows and 64 columns.
+FP4 and FP8 values convert accurately to FP16 with the native K32 reduction layout.
+At most 64 routed rows use parallel raw dots and ordered scale accumulation.
+The launch does not use a host expert row bound. Device counts must be within
 max_rows and sum to the input rows; otherwise, the output is NaN. Host metadata
 and storage overlap failures occur before launch. Grouped calls do not upload
 host descriptors.

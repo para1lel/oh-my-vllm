@@ -9,6 +9,17 @@ from unittest.mock import patch
 from oh_my_vllm.operators.fa import api as fa
 from oh_my_vllm.operators.fa.plan import make_plan
 from oh_my_vllm.operators.fa.workspace import prepare
+from oh_my_vllm.operators.ffn import api as ffn
+from oh_my_vllm.operators.ffn.plan import make_plan as ffn_plan
+from oh_my_vllm.operators.ffn.workspace import prepare as prepare_ffn
+from oh_my_vllm.operators.gdn import api as gdn
+from oh_my_vllm.operators.gdn.plan import make_plan as gdn_plan
+from oh_my_vllm.operators.gdn.workspace import prepare as prepare_gdn
+
+
+class Tensor:
+    def __init__(self, shape, dtype):
+        self.shape, self.dtype = shape, dtype
 
 
 class OperatorPlans(unittest.TestCase):
@@ -62,131 +73,14 @@ class OperatorPlans(unittest.TestCase):
                     vision_plan(rows=rows, grid=grid, frames=frames)
 
     def test_operator_workspace_keeps_outputs_and_graph_owners(self):
-        from oh_my_vllm.operators.ffn import api as ffn
-        from oh_my_vllm.operators.ffn.plan import make_plan as ffn_plan
-        from oh_my_vllm.operators.ffn.workspace import prepare as prepare_ffn
-        from oh_my_vllm.operators.gdn import api as gdn
-        from oh_my_vllm.operators.gdn.plan import make_plan as gdn_plan
-        from oh_my_vllm.operators.gdn.workspace import prepare as prepare_gdn
-
-        class Tensor:
-            def __init__(self, shape, dtype):
-                self.shape, self.dtype = shape, dtype
-
-        def start_capture(family, events, fail):
-            allocated = 0
-
-            def allocate(shape, dtype):
-                nonlocal allocated
-                allocated += 1
-                return Tensor(shape, dtype)
-
-            device = SimpleNamespace(empty=allocate, scratch=allocate)
-            arguments = ()
-            if family == "fa":
-                api, factory = fa, prepare
-                plan = make_plan(
-                    rows=4,
-                    batch=4,
-                    table_width=335,
-                    max_queries=1,
-                    max_context=784,
-                    min_context=784,
-                )
-                bindings = tuple(
-                    fa.Weights(*(object() for _ in range(7))) for _ in range(3)
-                )
-                arguments = (
-                    fa.BatchView(object(), object(), object()),
-                    fa.CacheView((object(),), object(), Tensor((4, 335), "int32")),
-                )
-            elif family == "gdn":
-                api, factory = gdn, prepare_gdn
-                schedule = gdn.Schedule(
-                    (0, 4), (0,), (-1,) * 4, (3,), (1,), (0,), 2, False
-                )
-                plan = gdn_plan(schedule)
-                bindings = tuple(
-                    gdn.Weights(*(object() for _ in range(10))) for _ in range(3)
-                )
-                arguments = (
-                    gdn.BatchView(object(), object(), object()),
-                    gdn.StateView(object(), object()),
-                )
-            else:
-                api, factory = ffn, prepare_ffn
-                plan = ffn_plan(rows=4)
-                bindings = tuple(
-                    ffn.Weights(*(object() for _ in range(5))) for _ in range(3)
-                )
-
-            launches = []
-
-            def launch(*args):
-                if fail:
-                    raise ValueError("record failed")
-                launches.append(args[2])
-
-            module = SimpleNamespace(**{family: launch})
-            with patch(
-                f"oh_my_vllm.operators.{family}.workspace.load",
-                return_value=(module, "source", "library"),
-            ):
-                workspace = factory(plan, device, bindings)
-            inputs = api.Inputs(object(), object())
-
-            def operation_for(binding):
-                return partial(api.run, binding, workspace, inputs, *arguments)
-
-            outputs = workspace.outputs
-            count = allocated
-            if not fail:
-                for weights in bindings:
-                    self.assertIs(operation_for(weights)(), outputs)
-                self.assertEqual(len(launches), 3)
-                self.assertEqual(allocated, count)
-            result = outputs.value
-            references = [weakref.ref(workspace), weakref.ref(result)]
-            references.extend(
-                weakref.ref(weight, lambda _: events.append(("weight-release",)))
-                for weight in bindings
-            )
-            operation = operation_for(bindings[0])
-            operation.graph_lease = workspace.graph_lease
-
-            @contextmanager
-            def graph(run):
-                with run.graph_lease():
-                    run()
-                    active = True
-
-                    def replay():
-                        if not active:
-                            raise RuntimeError("closed")
-
-                    try:
-                        yield replay
-                    finally:
-                        active = False
-                        events.append("graph-close")
-
-            device.graph = graph
-            recording = device.graph(operation)
-            if fail:
-                with self.assertRaisesRegex(ValueError, "record failed"):
-                    recording.__enter__()
-                return None, None, references
-            replay = recording.__enter__()
-            workspace.close()
-            with self.assertRaises(RuntimeError):
-                operation_for(bindings[0])()
-            return recording, replay, references
 
         for family in ("fa", "gdn", "ffn"):
             for fail in (False, True):
                 events = []
                 with self.subTest(family=family, fail=fail):
-                    recording, replay, references = start_capture(family, events, fail)
+                    recording, replay, references = self._start_capture(
+                        family, events, fail
+                    )
                     gc.collect()
                     if fail:
                         self.assertTrue(
@@ -206,3 +100,114 @@ class OperatorPlans(unittest.TestCase):
                     self.assertIn("graph-close", events)
                     with self.assertRaisesRegex(RuntimeError, "closed"):
                         replay()
+
+    def _capture_bindings(self, family):
+        arguments = ()
+        if family == "fa":
+            api, factory = fa, prepare
+            plan = make_plan(
+                rows=4,
+                batch=4,
+                table_width=335,
+                max_queries=1,
+                max_context=784,
+                min_context=784,
+            )
+            bindings = tuple(
+                fa.Weights(*(object() for _ in range(7))) for _ in range(3)
+            )
+            arguments = (
+                fa.BatchView(object(), object(), object()),
+                fa.CacheView((object(),), object(), Tensor((4, 335), "int32")),
+            )
+        elif family == "gdn":
+            api, factory = gdn, prepare_gdn
+            schedule = gdn.Schedule((0, 4), (0,), (-1,) * 4, (3,), (1,), (0,), 2, False)
+            plan = gdn_plan(schedule)
+            bindings = tuple(
+                gdn.Weights(*(object() for _ in range(10))) for _ in range(3)
+            )
+            arguments = (
+                gdn.BatchView(object(), object(), object()),
+                gdn.StateView(object(), object()),
+            )
+        else:
+            api, factory = ffn, prepare_ffn
+            plan = ffn_plan(rows=4)
+            bindings = tuple(
+                ffn.Weights(*(object() for _ in range(5))) for _ in range(3)
+            )
+        return arguments, api, factory, plan, bindings
+
+    def _start_capture(self, family, events, fail):
+        allocated = 0
+
+        def allocate(shape, dtype):
+            nonlocal allocated
+            allocated += 1
+            return Tensor(shape, dtype)
+
+        device = SimpleNamespace(empty=allocate, scratch=allocate)
+        arguments, api, factory, plan, bindings = self._capture_bindings(family)
+
+        launches = []
+
+        def launch(*args):
+            if fail:
+                raise ValueError("record failed")
+            launches.append(args[2])
+
+        module = SimpleNamespace(**{family: launch})
+        with patch(
+            f"oh_my_vllm.operators.{family}.workspace.load",
+            return_value=(module, "source", "library"),
+        ):
+            workspace = factory(plan, device, bindings)
+        inputs = api.Inputs(object(), object())
+
+        def operation_for(binding):
+            return partial(api.run, binding, workspace, inputs, *arguments)
+
+        outputs = workspace.outputs
+        count = allocated
+        if not fail:
+            for weights in bindings:
+                self.assertIs(operation_for(weights)(), outputs)
+            self.assertEqual(len(launches), 3)
+            self.assertEqual(allocated, count)
+        result = outputs.value
+        references = [weakref.ref(workspace), weakref.ref(result)]
+        references.extend(
+            weakref.ref(weight, lambda _: events.append(("weight-release",)))
+            for weight in bindings
+        )
+        operation = operation_for(bindings[0])
+        operation.graph_lease = workspace.graph_lease
+
+        @contextmanager
+        def graph(run):
+            with run.graph_lease():
+                run()
+                active = True
+
+                def replay():
+                    if not active:
+                        raise RuntimeError("closed")
+
+                try:
+                    yield replay
+                finally:
+                    active = False
+                    events.append("graph-close")
+
+        device.graph = graph
+        recording = device.graph(operation)
+        if fail:
+            with self.assertRaisesRegex(ValueError, "record failed"):
+                recording.__enter__()
+            return None, None, references
+        replay = recording.__enter__()
+        workspace.close()
+        with self.assertRaises(RuntimeError):
+            operation_for(bindings[0])()
+        return recording, replay, references

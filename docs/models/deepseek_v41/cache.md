@@ -51,6 +51,17 @@ DEP4 snapshots keep their owner rank after request release.
 All ranks complete execution before owner release.
 The shared [cache policy](../../cache-policy.md) controls logical ownership and transfer completion.
 
+## Proposal Graph ownership
+
+The [proposal Graph cache](../../../python/oh_my_vllm/models/deepseek_v41/target_execution.py#L285)<!-- source: graph = self.proposal_graphs.get(slot) --> has at most one proposal Graph per request slot.
+It closes a graph with invalid bindings before it creates another graph.
+
+A [completed host store](../../../python/oh_my_vllm/models/deepseek_v41/cache_transfer.py#L145)<!-- source: self._release_request_slot(operation.get("request_id")) --> releases the request slot through the worker callback.
+The worker's [`_free_slot`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L46)<!-- source: def _free_slot(self, request): --> closes the proposal Graph before it clears and releases the slot.
+[`Worker.close`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L243)<!-- source: def close(self): --> closes proposal Graphs before cache storage and weights.
+The [graph release procedure](../../../python/oh_my_vllm/models/deepseek_v41/proposal_graph.py#L179)<!-- source: def close(self): --> synchronizes the device and resets the graph before release of its owners and PageLease.
+The [execution guide](README.md#mtp-proposal-graph) gives the conditions and default setting.
+
 ## Official DeepInfer formats
 
 The upstream reference is DeepInfer revision `a679bb86ce36e883a98a97733492b686e5b9a08e` on NVIDIA SM100.

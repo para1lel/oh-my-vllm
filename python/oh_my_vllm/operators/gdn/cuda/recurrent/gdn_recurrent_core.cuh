@@ -156,6 +156,8 @@ __device__ inline float2 fast_gate_pair(float alog, float activation, float proj
   return cold_gate_pair(alog, activation, projected_b);
 }
 
+#include "gdn_recurrent_steps.cuh"
+
 template <int ValueTile, bool Precompute, bool ValidateMetadata, bool InterleavedInputs,
           int StaticQueries = 0, int StaticBatch = 0>
 __global__ void __launch_bounds__(128, 1)
@@ -182,13 +184,8 @@ __global__ void __launch_bounds__(128, 1)
   int first = StaticQueries ? sequence * StaticQueries : starts[sequence];
   int last = StaticQueries ? first + StaticQueries : starts[sequence + 1];
   int source = reads[sequence];
-  if constexpr (ValidateMetadata) {
-    require(starts[0] == 0 && starts[batch] == rows);
-    if constexpr (StaticQueries > 0)
-      require(starts[sequence] == first && starts[sequence + 1] == last);
-    require(first >= 0 && last >= first && last <= rows && last - first <= max_queries);
-    require(source >= 0 && source < slots);
-  }
+  validate_recurrent_input<ValidateMetadata, StaticQueries>(starts, sequence, first, last, source,
+                                                            rows, batch, slots, max_queries);
   if (first == last)
     return;
   int read0 = 0, read1 = 0;
@@ -219,136 +216,18 @@ __global__ void __launch_bounds__(128, 1)
       state[unit][element] = pair(low[element], high[element]);
   }
   __shared__ float operands[Precompute ? (StaticQueries ? StaticQueries : 5) : 1][264];
-  if constexpr (Precompute) {
-    int warp = threadIdx.x / 32, warp_lane = threadIdx.x % 32;
-    for (int token = warp; token < last - first; token += 4) {
-      int row = first + token;
-      float q[4], k[4];
-      int64_t offset = int64_t(row) * QKStride + head / 3 * 128 + warp_lane * 4;
-      load_four(query + offset, q);
-      load_four(key + offset, k);
-      float qs = 0.f, ks = 0.f;
-#pragma unroll
-      for (int i = 0; i < 4; ++i) {
-        qs += q[i] * q[i];
-        ks += k[i] * k[i];
-      }
-      float q_scale = 0.08838834764831844f * rsqrtf(warp_sum(qs) + 1e-6f);
-      float k_scale = rsqrtf(warp_sum(ks) + 1e-6f);
-#pragma unroll
-      for (int i = 0; i < 4; ++i) {
-        operands[token][warp_lane * 4 + i] = q[i] * q_scale;
-        operands[token][128 + warp_lane * 4 + i] = k[i] * k_scale;
-      }
-      if constexpr (StaticBatch > 0) {
-        float2 gates = fast_gate_pair(
-            a_log[head], __bfloat162float(a[int64_t(row) * GateStride + head]) + dt_bias[head],
-            __bfloat162float(b[int64_t(row) * GateStride + head]));
-        if (warp_lane == 0) {
-          operands[token][256] = gates.x;
-          operands[token][257] = gates.y;
-        }
-      } else {
-        if (warp_lane == 0) {
-          float2 gates = fast_gate_pair(
-              a_log[head], __bfloat162float(a[int64_t(row) * GateStride + head]) + dt_bias[head],
-              __bfloat162float(b[int64_t(row) * GateStride + head]));
-          operands[token][256] = gates.x;
-          operands[token][257] = gates.y;
-        }
-      }
-    }
-    __syncthreads();
-  }
+  prepare_recurrent_operands<Precompute, InterleavedInputs, StaticBatch>(
+      query, key, a, b, a_log, dt_bias, operands, first, last, head);
   for (int token = 0; token < (Precompute ? last - first : 1); ++token) {
     int row = first + token;
-    int target;
-    if constexpr (StaticBatch > 0) {
-      int token = row - first;
-      target = write0;
-      if constexpr (StaticQueries > 1)
-        target = token == 1 ? write1 : target;
-      if constexpr (StaticQueries > 2)
-        target = token == 2 ? write2 : target;
-      if constexpr (StaticQueries > 3)
-        target = token == 3 ? write3 : target;
-      if constexpr (StaticQueries > 4)
-        target = token == 4 ? write4 : target;
-    } else {
-      target = writes[row];
-    }
-    if constexpr (ValidateMetadata) {
-      require(target >= 0 && target < slots);
-      if constexpr (StaticBatch > 0) {
-        require(target != read0);
-        if constexpr (StaticBatch > 1)
-          require(target != read1);
-      } else {
-        for (int request = 0; request < batch; ++request)
-          require(target != reads[request]);
-      }
-    }
+    int target = recurrent_target<ValidateMetadata, StaticQueries, StaticBatch>(
+        reads, writes, row, first, slots, batch, read0, read1, write0, write1, write2, write3,
+        write4);
     float q[8], k[8], decay = 0.f, beta = 0.f;
-    if constexpr (Precompute) {
-#pragma unroll
-      for (int element = 0; element < 8; ++element) {
-        q[element] = operands[row - first][lane * 8 + element];
-        k[element] = operands[row - first][128 + lane * 8 + element];
-      }
-      decay = operands[row - first][256];
-      beta = operands[row - first][257];
-    } else {
-      int64_t offset = int64_t(row) * QKStride + head / 3 * 128 + lane * 8;
-      load_eight(query + offset, q);
-      load_eight(key + offset, k);
-      float q_square = 0.f, k_square = 0.f;
-#pragma unroll
-      for (int element = 0; element < 8; ++element) {
-        q_square += q[element] * q[element];
-        k_square += k[element] * k[element];
-      }
-      float q_scale = 0.08838834764831844f * rsqrtf(half_sum(q_square) + 1e-6f);
-      float k_scale = rsqrtf(half_sum(k_square) + 1e-6f);
-#pragma unroll
-      for (int element = 0; element < 8; ++element) {
-        q[element] *= q_scale;
-        k[element] *= k_scale;
-      }
-      float2 gates = fast_gate_pair(
-          a_log[head], __bfloat162float(a[int64_t(row) * GateStride + head]) + dt_bias[head],
-          __bfloat162float(b[int64_t(row) * GateStride + head]));
-      decay = gates.x;
-      beta = gates.y;
-    }
-    uint64_t decay_pair = pair(decay, decay), beta_pair = pair(beta, beta);
-#pragma unroll
-    for (int unit = 0; unit < Pairs; ++unit) {
-      uint64_t recalled = 0;
-#pragma unroll
-      for (int element = 0; element < 8; ++element) {
-        state[unit][element] = multiply(state[unit][element], decay_pair);
-        recalled = fma(state[unit][element], pair(k[element], k[element]), recalled);
-      }
-      recalled = half_sum(recalled);
-      uint32_t packed_value = *reinterpret_cast<const uint32_t *>(
-          value + int64_t(row) * ValueStride + head * 128 + value_base + unit * 2);
-      uint64_t delta =
-          multiply(beta_pair, add(from_bf16(packed_value), recalled ^ 0x8000000080000000ull));
-      uint64_t sum = 0;
-#pragma unroll
-      for (int element = 0; element < 8; ++element) {
-        state[unit][element] = fma(delta, pair(k[element], k[element]), state[unit][element]);
-        sum = fma(state[unit][element], pair(q[element], q[element]), sum);
-      }
-      int64_t destination =
-          ((int64_t(target) * 48 + head) * 128 + value_base + unit * 2) * 128 + lane * 8;
-      store_eight(pool + destination, state[unit], false);
-      store_eight(pool + destination + 128, state[unit], true);
-      sum = half_sum(sum);
-      if (lane == 0)
-        *reinterpret_cast<uint32_t *>(output + (int64_t(row) * 48 + head) * 128 + value_base +
-                                      unit * 2) = to_bf16(sum);
-    }
+    load_recurrent_operands<Precompute, InterleavedInputs>(
+        query, key, a, b, a_log, dt_bias, operands, q, k, decay, beta, row, first, head, lane);
+    recurrent_update<InterleavedInputs>(state, q, k, value, pool, output, decay, beta, row, target,
+                                        head, value_base, lane);
   }
 }
 

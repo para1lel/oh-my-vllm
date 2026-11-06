@@ -141,39 +141,7 @@ def build_descriptor(
             "deepseek_fp4",
             "deepseek_fp8_e4m3_block32_ue8m0",
         ],
-        "cache_schema": {
-            "schema_version": 1,
-            "groups": [
-                _group(
-                    "window",
-                    "sliding_window",
-                    "deepseek_v41_window_checkpoint_bf16",
-                    list(range(NUM_LAYERS)),
-                    cache_capacities["window"],
-                ),
-                _group(
-                    "compressed_kv",
-                    "compressed_kv",
-                    "deepseek_v41_compressed_kv_e2m1_g16_e4m3_paged",
-                    list(KV_SOURCE_LAYERS),
-                    cache_capacities["compressed_kv"],
-                ),
-                _group(
-                    "index_keys",
-                    "index_keys",
-                    "deepseek_v41_index_keys_e2m1_g32_ue8m0_paged",
-                    list(KV_SOURCE_LAYERS),
-                    cache_capacities["index_keys"],
-                ),
-                _group(
-                    "accepted_state",
-                    "model_checkpoint",
-                    "deepseek_v41_accepted_state_v2",
-                    list(range(NUM_LAYERS)),
-                    cache_capacities["accepted_state"],
-                ),
-            ],
-        },
+        "cache_schema": _cache_schema(cache_capacities),
         "parallel_plan": {
             "strategy": strategy,
             "world_size": 4,
@@ -193,3 +161,39 @@ def build_descriptor(
     }
     validate_descriptor(descriptor)
     return descriptor
+
+
+def _cache_schema(cache_capacities):
+    return {
+        "schema_version": 1,
+        "groups": [
+            _group(
+                "window",
+                "sliding_window",
+                "deepseek_v41_window_checkpoint_bf16",
+                list(range(NUM_LAYERS)),
+                cache_capacities["window"],
+            ),
+            _group(
+                "compressed_kv",
+                "compressed_kv",
+                "deepseek_v41_compressed_kv_e2m1_g16_e4m3_paged",
+                list(KV_SOURCE_LAYERS),
+                cache_capacities["compressed_kv"],
+            ),
+            _group(
+                "index_keys",
+                "index_keys",
+                "deepseek_v41_index_keys_e2m1_g32_ue8m0_paged",
+                list(KV_SOURCE_LAYERS),
+                cache_capacities["index_keys"],
+            ),
+            _group(
+                "accepted_state",
+                "model_checkpoint",
+                "deepseek_v41_accepted_state_v2",
+                list(range(NUM_LAYERS)),
+                cache_capacities["accepted_state"],
+            ),
+        ],
+    }

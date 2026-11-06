@@ -130,21 +130,7 @@ class Cache:
         for index, (row, request) in enumerate(zip(scheduled, requests, strict=True)):
             start = row["num_computed_tokens"]
             count = len(row["token_ids"])
-            restored = row.get("prefix_state_slot")
-            if restored is not None and (
-                request.state_position != start or request.state_slot is None
-            ):
-                if not start or not 0 < restored < self.mamba_blocks:
-                    raise ValueError("invalid prefix state slot")
-                read = restored
-            elif request.state_position == start and request.state_slot is not None:
-                read = request.state_slot
-            elif start:
-                read = row["mamba_block_table"][(start - 1) // 784]
-                if not read:
-                    raise ValueError("prefix has no GDN checkpoint")
-            else:
-                read = 0
+            read = self._read_slot(row, request, start)
             private = iter(self.private_slots(row["request_id"], read))
             reads.append(read)
             table = row["fa_block_table"]
@@ -165,25 +151,17 @@ class Cache:
                 slot = -1
                 checkpoint = (position + 1) % 784 == 0
                 if verify or checkpoint or offset + 1 == count:
-                    logical = (
-                        row["mamba_block_table"][(position + 1) // 784 - 1]
-                        if checkpoint
-                        else 0
+                    slot, scratch = self._checkpoint_slot(
+                        row,
+                        position,
+                        checkpoint,
+                        private,
+                        scratch,
+                        offset,
+                        count,
+                        verify,
+                        cached_endpoint,
                     )
-                    if (
-                        cached_endpoint is not None
-                        and position + 1 == cached_endpoint[0]
-                    ):
-                        logical = cached_endpoint[1]
-                        if not 0 < logical < self.mamba_blocks:
-                            raise ValueError("invalid prefix checkpoint slot")
-                    if logical:
-                        slot = logical
-                    elif offset + 1 == count or verify:
-                        slot = next(private)
-                    else:
-                        slot = scratch
-                        scratch += 1
                     if not verify:
                         checkpoints.append(len(tokens) - 1)
                         checkpoint_slots.append(slot)
@@ -217,6 +195,54 @@ class Cache:
             metadata,
             actual_writes,
         )
+
+    def _read_slot(self, row, request, start):
+        restored = row.get("prefix_state_slot")
+        if restored is not None and (
+            request.state_position != start or request.state_slot is None
+        ):
+            if not start or not 0 < restored < self.mamba_blocks:
+                raise ValueError("invalid prefix state slot")
+            read = restored
+        elif request.state_position == start and request.state_slot is not None:
+            read = request.state_slot
+        elif start:
+            read = row["mamba_block_table"][(start - 1) // 784]
+            if not read:
+                raise ValueError("prefix has no GDN checkpoint")
+        else:
+            read = 0
+
+        return read
+
+    def _checkpoint_slot(
+        self,
+        row,
+        position,
+        checkpoint,
+        private,
+        scratch,
+        offset,
+        count,
+        verify,
+        cached_endpoint,
+    ):
+        logical = (
+            row["mamba_block_table"][(position + 1) // 784 - 1] if checkpoint else 0
+        )
+        if cached_endpoint is not None and position + 1 == cached_endpoint[0]:
+            logical = cached_endpoint[1]
+            if not 0 < logical < self.mamba_blocks:
+                raise ValueError("invalid prefix checkpoint slot")
+        if logical:
+            slot = logical
+        elif offset + 1 == count or verify:
+            slot = next(private)
+        else:
+            slot = scratch
+            scratch += 1
+
+        return slot, scratch
 
     def commit(self, request, batch, index, accepted):
         first = batch.schedule.sequence_rows[index]

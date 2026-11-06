@@ -1,11 +1,10 @@
 """Enforce rustfmt's configured width even inside macros, strings and comments."""
 
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from scripts.repo_files import ROOT, owned_files
 
 
 def violations(path: Path, max_width: int, tab_spaces: int) -> list[str]:
@@ -18,33 +17,11 @@ def violations(path: Path, max_width: int, tab_spaces: int) -> list[str]:
 
 def main() -> int:
     config = tomllib.loads((ROOT / "rustfmt.toml").read_text())
-    paths = (
-        [Path(arg) for arg in sys.argv[1:]]
-        if len(sys.argv) > 1
-        else [
-            ROOT / name
-            for name in subprocess.check_output(
-                [
-                    "git",
-                    "ls-files",
-                    "--cached",
-                    "--others",
-                    "--exclude-standard",
-                    "-z",
-                    "--",
-                    "*.rs",
-                ],
-                cwd=ROOT,
-            )
-            .decode()
-            .split("\0")
-            if name
-            and not name.startswith("3rdparty/")
-            and (ROOT / name).is_file()
-            and not (ROOT / name).is_symlink()
-            and (ROOT / name).resolve().is_relative_to(ROOT)
-        ]
-    )
+    owned = {ROOT / path for path in owned_files() if path.suffix == ".rs"}
+    paths = sorted(owned)
+    if len(sys.argv) > 1:
+        requested = {Path(arg).absolute() for arg in sys.argv[1:]}
+        paths = sorted(owned & requested)
     errors = [
         error
         for path in paths

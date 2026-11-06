@@ -4,7 +4,8 @@ import subprocess
 from itertools import pairwise
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from scripts.repo_files import ROOT, owned_files
+
 DEFINITIONS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
@@ -65,21 +66,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--fix", action="store_true")
     options = parser.parse_args()
-    names = subprocess.check_output(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        cwd=ROOT,
-    )
-    files = sorted(
-        {
-            ROOT / name.decode()
-            for name in names.split(b"\0")
-            if name
-            and not name.startswith(b"3rdparty/")
-            and (ROOT / name.decode()).is_file()
-            and not (ROOT / name.decode()).is_symlink()
-            and (ROOT / name.decode()).resolve().is_relative_to(ROOT)
-        }
-    )
+    files = [ROOT / path for path in owned_files()]
     failed = False
     for path in files:
         if path.suffix == ".py":

@@ -63,7 +63,10 @@ def validate_config(config):
     if not _same(quantization, expected_quantization):
         raise ValueError("unsupported DeepSeek weight or activation format")
 
-    text = config.get("text_config")
+    _validate_text_config(config.get("text_config"))
+
+
+def _validate_text_config(text):
     expected_text = {
         "model_type": "deepseek_v41_text",
         "vocab_size": VOCABULARY_SIZE,

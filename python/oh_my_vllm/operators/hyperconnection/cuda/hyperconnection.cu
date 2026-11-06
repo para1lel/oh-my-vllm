@@ -1,6 +1,7 @@
 #include <cuda_bf16.h>
 #include "../../runtime/cuda/contracts.cuh"
 #include "hc_projection.cuh"
+#include "hc_gemv_prefill.cuh"
 
 namespace {
 
@@ -192,8 +193,13 @@ void fp32_project(TensorView values, TensorView weight, TensorView output,
   auto output_values = static_cast<float *>(output.data_ptr());
   int step_rows = logical_rows ? static_cast<int>(logical_rows) : rows;
   if (step_rows == 1) {
-    hc_projection::multiply_released_gemv(input, weight_values, output_values, rows, width, outputs,
-                                          stream);
+    if (outputs == 384 && rows >= 1024)
+      hc_projection::
+          gemv_prefill_kernel<<<dim3((outputs + 7) / 8, (rows + 1) / 2), dim3(32, 4), 0, stream>>>(
+              input, weight_values, output_values, rows, width, outputs);
+    else
+      hc_projection::multiply_released_gemv(input, weight_values, output_values, rows, width,
+                                            outputs, stream);
   } else {
     int chunk = hc_projection::project_chunk(step_rows, outputs, width);
     TVM_FFI_ICHECK(chunk > 0)

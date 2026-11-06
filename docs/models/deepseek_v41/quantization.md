@@ -131,7 +131,7 @@ The full logical row count selects the reduction layout.
 Apply the inverse RMS after the FP32 projection.
 
 The native projection writes the released FP32 reduction order.
-The HC single-row projection uses 32 interleaved split dots.
+The HC projection uses 32 interleaved split dots for a logical single-row step.
 Its caller-owned 32 MiB workspace holds the split partials and the chunk partials.
 A multi-row step selects its split chunk from a measured released table.
 The chunk stays constant across each row-count range.
@@ -149,6 +149,12 @@ An unmeasured shape or row count stops the call with an error.
 
 The router and compressor single-row projections use a 32-lane warp reduction.
 This workspace size is part of the numerical contract.
+
+The [split-dot path](../../../python/oh_my_vllm/operators/hyperconnection/cuda/hc_dot.cuh#L209)<!-- source: if (rows >= 1024) --> uses four warps when the physical row count is at least 1024.
+It keeps the 32 splits, FMA order, and addition tree.
+For a logical single-row step with 384 outputs and at least 1024 physical rows, the [router projection](../../../python/oh_my_vllm/operators/hyperconnection/cuda/hyperconnection.cu#L196)<!-- source: if (outputs == 384 && rows >= 1024) --> uses two-row, two-output groups.
+Each output keeps the 32-lane FMA and shuffle order.
+For odd physical row counts, the [last group](../../../python/oh_my_vllm/operators/hyperconnection/cuda/hc_gemv_prefill.cuh#L20)<!-- source: float second = row + 1 < rows ? second_input[k] : 0.f; --> has one physical row.
 
 The ratio-1 compressor uses a BF16 projection.
 Its multi-row calls use a cuBLAS handle with an SM count target of eight.
@@ -215,7 +221,14 @@ Dense projection does not use device scratch storage.
 
 Grouped projection uses device row offsets without host descriptor uploads.
 The operator compacts the nonempty groups in its device scratch.
-Persistent blocks use device offsets for 32-row by 64-column expert tiles.
+`half_k32_kernel` uses device offsets for tiles with 16 or 32 rows and 64 columns.
+The operator uses 16-row tiles when `64 < rows <= groups`.
+
+For grouped FP4 with BF16 output, the [launch limit](../../../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L328)<!-- source: constexpr int blocks_per_sm = --> is ten blocks for each SM for 16-row tiles.
+The 32-row tile limit stays seven blocks for each SM.
+For grouped FP4 with BF16 output, `N=576`, and `K=5120`, 32-row tiles use [weight and scale prefetch](../../../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L331)<!-- source: if (rows > 64 && (TileRows == half_rows || rows <= groups) && outputs == 576 && width == 5120) { --> when `rows > 64`.
+16-row tiles use the same prefetch when `64 < rows <= groups`.
+
 At most 64 routed rows use parallel raw dots with ordered scale accumulation.
 No host expert row bound controls the launch.
 

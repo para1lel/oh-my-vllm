@@ -82,6 +82,97 @@ __device__ inline void load_state_tile(Accumulator &value, const float *source, 
     }
 }
 
+__device__ __forceinline__ void register_project_state(RegisterCarryStorage &s,
+                                                       const Accumulator (&state)[8],
+                                                       Accumulator (&projection)[4], int buffer) {
+#pragma unroll
+  for (int token = 0; token < 4; ++token)
+    gdn_wy_register_mma::fill_fragment(projection[token], 0.f);
+#pragma unroll
+  for (int key = 0; key < 8; ++key) {
+    StateOperand a = state_operand(state[key]);
+#pragma unroll
+    for (int token = 0; token < 4; ++token) {
+      WeightOperand b;
+      gdn_wy_register_mma::load_matrix_sync(b, s.weights[buffer] + token * 16 * 136 + key * 16,
+                                            136);
+      gdn_wy_register_mma::mma_sync(projection[token], a, b, projection[token]);
+    }
+  }
+}
+
+__device__ __forceinline__ void register_compute_updates(RegisterCarryStorage &s,
+                                                         const Accumulator (&projection)[4],
+                                                         Accumulator (&updates)[8], int buffer,
+                                                         int warp, int lane) {
+#pragma unroll
+  for (int key = 0; key < 8; ++key)
+    gdn_wy_register_mma::fill_fragment(updates[key], 0.f);
+#pragma unroll
+  for (int token = 0; token < 4; ++token) {
+    Accumulator scaled;
+#pragma unroll
+    for (int half = 0; half < 2; ++half)
+#pragma unroll
+      for (int pair = 0; pair < 2; ++pair) {
+        int element = half * 4 + pair * 2;
+        int v = warp * 16 + lane / 4 + pair * 8;
+        int token_row = token * 16 + half * 8 + lane % 4 * 2;
+        float2 change = __fadd2_rn(
+            make_float2(float(s.updates[buffer][token_row * UStride + v]),
+                        float(s.updates[buffer][(token_row + 1) * UStride + v])),
+            make_float2(-projection[token].x[element], -projection[token].x[element + 1]));
+        s.updates[buffer][token_row * UStride + v] = __float2bfloat16_rn(change.x);
+        s.updates[buffer][(token_row + 1) * UStride + v] = __float2bfloat16_rn(change.y);
+        float2 result = __fmul2_rn(change, make_float2(s.prefix[buffer][64 + token_row],
+                                                       s.prefix[buffer][65 + token_row]));
+        scaled.x[element] = result.x;
+        scaled.x[element + 1] = result.y;
+      }
+    StateOperand change_operand = state_operand(scaled);
+#pragma unroll
+    for (int key = 0; key < 8; ++key) {
+      KeyOperand b;
+      gdn_wy_register_mma::load_matrix_sync(b, s.keys[buffer] + token * 16 * 136 + key * 16, 136);
+      gdn_wy_register_mma::mma_sync(updates[key], change_operand, b, updates[key]);
+    }
+  }
+}
+
+__device__ __forceinline__ void
+register_publish_state(RegisterCarryStorage &s, Accumulator (&state)[8],
+                       const Accumulator (&updates)[8], const int *metadata, float *pool, int chunk,
+                       int head, int value_base, int buffer, int count, int warp, int lane) {
+#pragma unroll
+  for (int key = 0; key < 8; ++key)
+#pragma unroll
+    for (int element = 0; element < 8; element += 2) {
+      float2 result;
+      cute::SM100_1x2x1_F32F32F32F32::fma(
+          result, s.prefix[buffer][count - 1],
+          make_float2(state[key].x[element], state[key].x[element + 1]),
+          make_float2(updates[key].x[element], updates[key].x[element + 1]));
+      state[key].x[element] = result.x;
+      state[key].x[element + 1] = result.y;
+    }
+  int target = metadata[chunk * 4 + 2];
+  if (target >= 0) {
+#pragma unroll
+    for (int key = 0; key < 8; ++key)
+#pragma unroll
+      for (int half = 0; half < 2; ++half)
+#pragma unroll
+        for (int pair = 0; pair < 2; ++pair) {
+          int index = half * 4 + pair * 2;
+          int row = value_base + warp * 16 + lane / 4 + pair * 8;
+          int col = key * 16 + half * 8 + lane % 4 * 2;
+          auto *destination = pool + ((int64_t(target) * 48 + head) * 128 + row) * 128 + col;
+          *reinterpret_cast<float2 *>(destination) =
+              make_float2(state[key].x[index], state[key].x[index + 1]);
+        }
+  }
+}
+
 template <bool EarlyPrefetch>
 __global__ __launch_bounds__(Threads, 2) void register_carry_kernel(
     const __nv_bfloat16 *qkv, const int *metadata, const int *reads, __nv_bfloat16 *transforms,
@@ -124,58 +215,14 @@ __global__ __launch_bounds__(Threads, 2) void register_carry_kernel(
                        1 - buffer);
     }
     Accumulator projection[4];
-#pragma unroll
-    for (int token = 0; token < 4; ++token)
-      gdn_wy_register_mma::fill_fragment(projection[token], 0.f);
-#pragma unroll
-    for (int key = 0; key < 8; ++key) {
-      StateOperand a = state_operand(state[key]);
-#pragma unroll
-      for (int token = 0; token < 4; ++token) {
-        WeightOperand b;
-        gdn_wy_register_mma::load_matrix_sync(b, s.weights[buffer] + token * 16 * 136 + key * 16,
-                                              136);
-        gdn_wy_register_mma::mma_sync(projection[token], a, b, projection[token]);
-      }
-    }
+    register_project_state(s, state, projection, buffer);
     if constexpr (!EarlyPrefetch) {
       if (local + 1 < chunks)
         prefetch_chunk(s, qkv, metadata, transforms, prefixes, chunk + 1, head, value_base,
                        1 - buffer);
     }
     Accumulator updates[8];
-#pragma unroll
-    for (int key = 0; key < 8; ++key)
-      gdn_wy_register_mma::fill_fragment(updates[key], 0.f);
-#pragma unroll
-    for (int token = 0; token < 4; ++token) {
-      Accumulator scaled;
-#pragma unroll
-      for (int half = 0; half < 2; ++half)
-#pragma unroll
-        for (int pair = 0; pair < 2; ++pair) {
-          int element = half * 4 + pair * 2;
-          int v = warp * 16 + lane / 4 + pair * 8;
-          int token_row = token * 16 + half * 8 + lane % 4 * 2;
-          float2 change = __fadd2_rn(
-              make_float2(float(s.updates[buffer][token_row * UStride + v]),
-                          float(s.updates[buffer][(token_row + 1) * UStride + v])),
-              make_float2(-projection[token].x[element], -projection[token].x[element + 1]));
-          s.updates[buffer][token_row * UStride + v] = __float2bfloat16_rn(change.x);
-          s.updates[buffer][(token_row + 1) * UStride + v] = __float2bfloat16_rn(change.y);
-          float2 result = __fmul2_rn(change, make_float2(s.prefix[buffer][64 + token_row],
-                                                         s.prefix[buffer][65 + token_row]));
-          scaled.x[element] = result.x;
-          scaled.x[element + 1] = result.y;
-        }
-      StateOperand change_operand = state_operand(scaled);
-#pragma unroll
-      for (int key = 0; key < 8; ++key) {
-        KeyOperand b;
-        gdn_wy_register_mma::load_matrix_sync(b, s.keys[buffer] + token * 16 * 136 + key * 16, 136);
-        gdn_wy_register_mma::mma_sync(updates[key], change_operand, b, updates[key]);
-      }
-    }
+    register_compute_updates(s, projection, updates, buffer, warp, lane);
     __syncthreads();
     for (int i = threadIdx.x; i < 64 * (Rows / 8); i += Threads) {
       int token = i / (Rows / 8), v = i % (Rows / 8) * 8;
@@ -183,34 +230,8 @@ __global__ __launch_bounds__(Threads, 2) void register_carry_kernel(
                                  value_base + v) =
           *reinterpret_cast<const uint4 *>(s.updates[buffer] + token * UStride + v);
     }
-#pragma unroll
-    for (int key = 0; key < 8; ++key)
-#pragma unroll
-      for (int element = 0; element < 8; element += 2) {
-        float2 result;
-        cute::SM100_1x2x1_F32F32F32F32::fma(
-            result, s.prefix[buffer][count - 1],
-            make_float2(state[key].x[element], state[key].x[element + 1]),
-            make_float2(updates[key].x[element], updates[key].x[element + 1]));
-        state[key].x[element] = result.x;
-        state[key].x[element + 1] = result.y;
-      }
-    int target = metadata[chunk * 4 + 2];
-    if (target >= 0) {
-#pragma unroll
-      for (int key = 0; key < 8; ++key)
-#pragma unroll
-        for (int half = 0; half < 2; ++half)
-#pragma unroll
-          for (int pair = 0; pair < 2; ++pair) {
-            int index = half * 4 + pair * 2;
-            int row = value_base + warp * 16 + lane / 4 + pair * 8;
-            int col = key * 16 + half * 8 + lane % 4 * 2;
-            auto *destination = pool + ((int64_t(target) * 48 + head) * 128 + row) * 128 + col;
-            *reinterpret_cast<float2 *>(destination) =
-                make_float2(state[key].x[index], state[key].x[index + 1]);
-          }
-    }
+    register_publish_state(s, state, updates, metadata, pool, chunk, head, value_base, buffer,
+                           count, warp, lane);
     __syncthreads();
   }
 }

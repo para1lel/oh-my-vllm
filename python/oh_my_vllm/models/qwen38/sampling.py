@@ -32,33 +32,7 @@ class SamplingInputs:
         self.random_view = self.random.numpy()
 
     def update(self, requests, prefixes, stream):
-        parameters = {}
-        for request in requests:
-            if id(request) not in parameters:
-                parameters[id(request)] = request.parameters()
-        if requests:
-            count = len(requests)
-            self.parameters_view[:count] = np.stack(
-                [parameters[id(request)] for request in requests]
-            )
-            self.history_needed = bool(
-                np.any(self.parameters_view[:count, 4:6] != 0)
-                or np.any(self.parameters_view[:count, 6] != 1)
-            )
-            self.compact = bool(
-                np.all(self.parameters_view[:count, 4] == 0)
-                and np.all(self.parameters_view[:count, 6] == 1)
-            )
-        else:
-            self.parameters_view[:] = 0
-            self.random_view[:] = 0
-            self.history_needed = False
-            self.compact = True
-        self.history = self.presence_history if self.compact else self.full_history
-        self.field = "proposal_offset" if stream == "proposal" else "random_offset"
-        history_view = (
-            self.presence_history_view if self.compact else self.full_history_view
-        )
+        history_view = self._update_parameters(requests, stream)
         self.mask_changed = False
         pending = []
         for index, (history, request, prefix) in enumerate(
@@ -69,21 +43,9 @@ class SamplingInputs:
                     history[:] = request.presence
                 else:
                     history[:] = request.counts
-            constraint = request.constraint
-            grammar_prefix = []
-            thinking, thinking_count = request.thinking, request.thinking_count
-            for token in prefix:
-                if self.history_needed:
-                    if self.compact:
-                        history[token // 8] |= 1 << (token % 8)
-                    else:
-                        history[1, token] += 1
-                if thinking:
-                    thinking_count += 1
-                    if token == request.tokenizer.think_end:
-                        thinking = False
-                else:
-                    grammar_prefix.append(token)
+            constraint, grammar_prefix, thinking, thinking_count = self._prefix_state(
+                history, request, prefix
+            )
             generated = request.generated + len(prefix)
             guard = request.options.get("sampling", {}).get("repetition_guard", True)
             tokenizer = request.tokenizer
@@ -129,6 +91,59 @@ class SamplingInputs:
             seed = request.seed ^ (0x9E3779B97F4A7C15 if stream == "proposal" else 0)
             self.random_view[index, 0] = seed
             self.random_view[index, 1] = getattr(request, self.field)
+        self._fill_masks(requests, pending)
+
+    def _update_parameters(self, requests, stream):
+        parameters = {}
+        for request in requests:
+            if id(request) not in parameters:
+                parameters[id(request)] = request.parameters()
+        if requests:
+            count = len(requests)
+            self.parameters_view[:count] = np.stack(
+                [parameters[id(request)] for request in requests]
+            )
+            self.history_needed = bool(
+                np.any(self.parameters_view[:count, 4:6] != 0)
+                or np.any(self.parameters_view[:count, 6] != 1)
+            )
+            self.compact = bool(
+                np.all(self.parameters_view[:count, 4] == 0)
+                and np.all(self.parameters_view[:count, 6] == 1)
+            )
+        else:
+            self.parameters_view[:] = 0
+            self.random_view[:] = 0
+            self.history_needed = False
+            self.compact = True
+        self.history = self.presence_history if self.compact else self.full_history
+        self.field = "proposal_offset" if stream == "proposal" else "random_offset"
+        history_view = (
+            self.presence_history_view if self.compact else self.full_history_view
+        )
+
+        return history_view
+
+    def _prefix_state(self, history, request, prefix):
+        constraint = request.constraint
+        grammar_prefix = []
+        thinking, thinking_count = request.thinking, request.thinking_count
+        for token in prefix:
+            if self.history_needed:
+                if self.compact:
+                    history[token // 8] |= 1 << (token % 8)
+                else:
+                    history[1, token] += 1
+            if thinking:
+                thinking_count += 1
+                if token == request.tokenizer.think_end:
+                    thinking = False
+            else:
+                grammar_prefix.append(token)
+
+        return constraint, grammar_prefix, thinking, thinking_count
+
+    def _fill_masks(self, requests, pending):
         packed_grammar = len({id(request) for request in requests}) >= 2
         constrained = [
             item for item in pending if not item[3] and item[2].matcher is not None

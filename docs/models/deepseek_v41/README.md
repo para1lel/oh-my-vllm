@@ -38,6 +38,20 @@ Expert dispatch sends BF16 rows and returns FP32 local sums.
 Ranks with no owned rows also participate in expert exchanges and completion.
 The [DEP4 executor](../../../python/oh_my_vllm/models/deepseek_v41/dep4.py) coordinates target and proposal calls.
 
+### MTP proposal Graph
+
+`OH_MY_VLLM_DEEPSEEK_MTP_GRAPH=1` selects the proposal Graph in the [execution settings](../../../python/oh_my_vllm/models/deepseek_v41/trace.py#L40)<!-- source: def execution_modes( -->.
+Its default is `0`.
+It operates only with TP4 target Graph execution enabled and a positive decode Graph limit.
+TEP4 and DEP4 do not use this proposal Graph.
+
+The [proposal path](../../../python/oh_my_vllm/models/deepseek_v41/target_execution.py#L276)<!-- source: def _proposal_graph_step(self, input_ids, main_hidden, start_pos, slot): --> uses one token row of shape `[1,1]` and one hidden-state row of shape `[1,1,15360]`.
+Proposal Graph execution is only for greedy proposals in the full-window branch.
+The [position limits](../../../python/oh_my_vllm/models/deepseek_v41/proposal_graph.py#L33)<!-- source: def bind(self, input_ids, main_hidden, position): --> are the same for capture and replay.
+The [seed path](../../../python/oh_my_vllm/models/deepseek_v41/target_batch.py#L194)<!-- source: def _seed_mtp_batch( --> uses Eager execution.
+Target decode Graphs and proposal Graphs are different graphs.
+The [cache guide](cache.md#proposal-graph-ownership) gives proposal Graph ownership and release order.
+
 ## GPU setup
 
 Use the [development setup](../../development.md#native-modules) and [GPU selection rules](../../distributed.md#gpu-leases).

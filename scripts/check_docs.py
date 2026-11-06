@@ -25,6 +25,7 @@ from scripts.documentation_contracts import (
     source_link_issues,
     update_source_links,
 )
+from scripts.repo_files import owned_files as repository_files
 
 ROOT = Path(__file__).resolve().parents[1]
 INLINE = re.compile(r"`([^`\n]+)`")
@@ -48,21 +49,7 @@ ALIASES = {"KV-cache": "KV cache", "prefilling": "prefill", "inferencing": "infe
 
 
 def owned_files(root):
-    output = subprocess.check_output(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        cwd=root,
-    )
-    return sorted(
-        {
-            Path(name.decode())
-            for name in output.split(b"\0")
-            if name
-            and not name.startswith(b"3rdparty/")
-            and (root / name.decode()).is_file()
-            and not (root / name.decode()).is_symlink()
-            and (root / name.decode()).resolve().is_relative_to(root.resolve())
-        }
-    )
+    return repository_files(root)
 
 
 def prose(text, keep_quotes=False):

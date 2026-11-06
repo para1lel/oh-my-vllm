@@ -3,6 +3,48 @@
 #include "fa_prefill.cuh"
 #include "fa_prefill_ring.cuh"
 
+inline int fa_attention_ring_launch(TensorView query, TensorView cache, TensorView tables,
+                                    TensorView lengths, TensorView sequence_rows,
+                                    TensorView partial, TensorView lse, int max_queries,
+                                    int first_token, cudaStream_t stream, __nv_bfloat16 *attended,
+                                    int batch, int rows, int blocks) {
+  const auto &maps = fa_ring_pipeline_tensor_maps(cache);
+  int tiles = (max_queries * 6 + 127) / 128;
+  auto launch = [&](auto mode, auto rounding) {
+    constexpr bool ExportBFloat16 = decltype(mode)::value;
+    constexpr bool RoundMax = decltype(rounding)::value;
+    static std::once_flag configured;
+    std::call_once(configured, [] {
+      check_cuda(cudaFuncSetAttribute(fa_ring_kernel<ExportBFloat16, RoundMax>,
+                                      cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                      FARingSharedBytes));
+    });
+    fa_ring_kernel<ExportBFloat16, RoundMax>
+        <<<dim3(batch * tiles, 4), 480, FARingSharedBytes, stream>>>(
+            static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+            static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
+            static_cast<const int32_t *>(tables.data_ptr()),
+            static_cast<const int32_t *>(lengths.data_ptr()),
+            static_cast<const int32_t *>(sequence_rows.data_ptr()),
+            static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
+            int(tables.size(1)), tiles, max_queries, rows, blocks, first_token, maps.key,
+            maps.value, fa_ring_pipeline_l2_bytes(query.device().device_id), maps.key16,
+            maps.value16, attended);
+  };
+  if (max_queries >= 1024) {
+    if (attended != nullptr)
+      launch(std::true_type{}, std::true_type{});
+    else
+      launch(std::false_type{}, std::true_type{});
+  } else if (attended != nullptr) {
+    launch(std::true_type{}, std::false_type{});
+  } else {
+    launch(std::false_type{}, std::false_type{});
+  }
+  check_cuda(cudaGetLastError());
+  return 1;
+}
+
 inline int fa_attention_core_launch(TensorView query, TensorView cache, TensorView tables,
                                     TensorView lengths, TensorView sequence_rows,
                                     TensorView partial, TensorView lse, int max_queries,
@@ -18,42 +60,9 @@ inline int fa_attention_core_launch(TensorView query, TensorView cache, TensorVi
   if (rows > 32) {
     splits = splits >= 4 && tables.size(1) >= 64 ? 4 : 1;
     if (max_queries >= 512) {
-      splits = 1;
-      const auto &maps = fa_ring_pipeline_tensor_maps(cache);
-      int tiles = (max_queries * 6 + 127) / 128;
-      auto launch = [&](auto mode, auto rounding) {
-        constexpr bool ExportBFloat16 = decltype(mode)::value;
-        constexpr bool RoundMax = decltype(rounding)::value;
-        static std::once_flag configured;
-        std::call_once(configured, [] {
-          check_cuda(cudaFuncSetAttribute(fa_ring_kernel<ExportBFloat16, RoundMax>,
-                                          cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                          FARingSharedBytes));
-        });
-        fa_ring_kernel<ExportBFloat16, RoundMax>
-            <<<dim3(batch * tiles, 4), 480, FARingSharedBytes, stream>>>(
-                static_cast<const __nv_bfloat16 *>(query.data_ptr()),
-                static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
-                static_cast<const int32_t *>(tables.data_ptr()),
-                static_cast<const int32_t *>(lengths.data_ptr()),
-                static_cast<const int32_t *>(sequence_rows.data_ptr()),
-                static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
-                int(tables.size(1)), tiles, max_queries, rows, blocks, first_token, maps.key,
-                maps.value, fa_ring_pipeline_l2_bytes(query.device().device_id), maps.key16,
-                maps.value16, attended);
-      };
-      if (max_queries >= 1024) {
-        if (attended != nullptr)
-          launch(std::true_type{}, std::true_type{});
-        else
-          launch(std::false_type{}, std::true_type{});
-      } else if (attended != nullptr) {
-        launch(std::true_type{}, std::false_type{});
-      } else {
-        launch(std::false_type{}, std::false_type{});
-      }
-      check_cuda(cudaGetLastError());
-      return 1;
+      return fa_attention_ring_launch(query, cache, tables, lengths, sequence_rows, partial, lse,
+                                      max_queries, first_token, stream, attended, batch, rows,
+                                      blocks);
     }
     const auto &maps = fa_prefill_pipeline_tensor_maps(cache);
     int tiles = (max_queries * 6 + 127) / 128;

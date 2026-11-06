@@ -1,137 +1,90 @@
-import ctypes
 import fcntl
-import importlib
 import json
 import os
 import select
 import signal
 import subprocess
 import sys
-import tempfile
 import unittest
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 from . import device
-
-ROOT = Path(__file__).resolve().parents[2]
-WRAPPER = ROOT / "scripts/with-gpu.sh"
-GPU_ENV = (
-    "CUDA_VISIBLE_DEVICES",
-    "OH_MY_VLLM_GPU_COUNT",
-    "OH_MY_VLLM_GPU_UUID",
-    "OH_MY_VLLM_GPU_UUIDS",
-    "OH_MY_VLLM_GPU_EXCLUDE_INDICES",
-    "OH_MY_VLLM_RUN_ID",
-)
+from .gpu_test_support import WRAPPER, FakeDriver, GpuEnvironment
 
 
-class DriverFunction:
-    def __init__(self, function):
-        self.function = function
+def _check_fifo_lock_release(self, middle, selected):
+    fifo = self.directory / f"oh-my-vllm-{middle}.lock"
+    fifo.unlink()
+    os.mkfifo(fifo)
+    probe = (
+        "import fcntl, os, sys\n"
+        "from pathlib import Path\n"
+        "from development.serving import gpu\n"
+        "gpu.LOCK_DIRECTORY = Path(sys.argv[1])\n"
+        "status = gpu.main([sys.executable, '-c', \"print('EXECUTED')\"])\n"
+        "for identity in os.environ['OH_MY_VLLM_GPU_UUIDS'].split(','):\n"
+        "    path = gpu.LOCK_DIRECTORY / f'oh-my-vllm-{identity}.lock'\n"
+        "    if not path.is_fifo():\n"
+        "        with path.open('a') as lock:\n"
+        "            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+        "print('partial locks released')\n"
+        "sys.exit(status)\n"
+    )
+    for with_reader in (False, True):
+        with self.subTest(fifo_reader=with_reader):
+            reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK) if with_reader else None
+            try:
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-c", probe, str(self.directory)],
+                        env=self.environment
+                        | {
+                            "OH_MY_VLLM_GPU_COUNT": "4",
+                            "OH_MY_VLLM_GPU_UUIDS": ",".join(selected),
+                        },
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                except subprocess.TimeoutExpired:
+                    self.fail("FIFO blocked instead of releasing partial locks")
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertNotIn("EXECUTED", result.stdout)
+                self.assertIn("partial locks released", result.stdout)
+            finally:
+                if reader is not None:
+                    os.close(reader)
 
-    def __call__(self, *arguments):
-        return self.function(*arguments)
+
+def _reject_masked_selections(self, requested):
+    for settings in (
+        {"CUDA_VISIBLE_DEVICES": requested[0], "OH_MY_VLLM_GPU_COUNT": "4"},
+        {"CUDA_VISIBLE_DEVICES": ",".join(requested), "OH_MY_VLLM_GPU_COUNT": "1"},
+        {
+            "CUDA_VISIBLE_DEVICES": ",".join(requested),
+            "OH_MY_VLLM_GPU_UUIDS": ",".join(requested[::-1]),
+        },
+        {
+            "CUDA_VISIBLE_DEVICES": requested[0],
+            "OH_MY_VLLM_GPU_UUID": requested[1],
+        },
+    ):
+        with (
+            self.subTest(settings=settings),
+            patch.dict(os.environ, settings, clear=True),
+            patch.object(
+                device.ctypes,
+                "CDLL",
+                side_effect=AssertionError("CUDA called for a masked selection"),
+            ),
+            self.assertRaises(ValueError),
+        ):
+            device.selected_uuids()
 
 
-class FakeDriver:
-    def __init__(self, identities, count=None, failure=None):
-        self.identities = identities
-        self.count = len(identities) if count is None else count
-        self.failure = failure
-        self.cuInit = DriverFunction(lambda flags: int(failure == "init"))
-        self.cuDeviceGetCount = DriverFunction(self.get_count)
-        self.cuDeviceGet = DriverFunction(self.get_device)
-        self.cuDeviceGetUuid_v2 = DriverFunction(self.get_uuid)
-
-    def get_count(self, output):
-        ctypes.cast(output, ctypes.POINTER(ctypes.c_int))[0] = self.count
-        return int(self.failure == "count")
-
-    def get_device(self, output, ordinal):
-        ctypes.cast(output, ctypes.POINTER(ctypes.c_int))[0] = ordinal + 10
-        return int(self.failure == "device")
-
-    def get_uuid(self, output, handle):
-        ordinal = handle - 10
-        ctypes.memmove(output, uuid.UUID(self.identities[ordinal][4:]).bytes, 16)
-        return int(self.failure == "uuid")
-
-
-class GpuGroups(unittest.TestCase):
-    def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name)
-        identities = sorted(f"GPU-{uuid.uuid4()}" for _ in range(6))
-        self.uuids = [identities[index] for index in (0, 3, 1, 2, 4, 5)]
-        self.addCleanup(self.remove_owned_locks)
-        self.inventory = [
-            [index, identity, "NVIDIA B200", 0, 0]
-            for index, identity in enumerate(self.uuids)
-        ]
-        self.fixture = self.directory / "inventory.json"
-        self.fake_smi = self.directory / "nvidia-smi"
-        self.fake_smi.write_text(
-            f"#!{sys.executable}\n"
-            "import json, os, sys\n"
-            "from pathlib import Path\n"
-            "data = json.loads(Path(os.environ['GPU_TEST_FIXTURE']).read_text())\n"
-            "query = sys.argv[1]\n"
-            "if query.startswith('--query-gpu='):\n"
-            "    keys = query.split('=', 1)[1].split(',')\n"
-            "    names = ['index', 'uuid', 'name', 'memory.used', 'utilization.gpu']\n"
-            "    if 'raw' in data:\n"
-            "        print(data['raw'])\n"
-            "    else:\n"
-            "        for row in data['inventory']:\n"
-            "            print(', '.join(str(row[names.index(k)]) for k in keys))\n"
-            "elif query == '--query-compute-apps=gpu_uuid':\n"
-            "    print(data.get('processes', ''), end='')\n"
-            "else:\n"
-            "    sys.exit(90)\n"
-        )
-        self.fake_smi.chmod(0o700)
-        self.write_inventory()
-        self.environment = {
-            key: value for key, value in os.environ.items() if key not in GPU_ENV
-        } | {
-            "PATH": f"{self.directory}:{os.environ['PATH']}",
-            "GPU_TEST_FIXTURE": str(self.fixture),
-            "OH_MY_VLLM_GPU_EXCLUDE_INDICES": "0",
-        }
-
-    def remove_owned_locks(self):
-        for identity in self.uuids:
-            for path in Path("/tmp").glob(f"oh-my-vllm-{identity}*.lock"):
-                path.unlink()
-
-    def write_inventory(self, **extra):
-        self.fixture.write_text(json.dumps({"inventory": self.inventory} | extra))
-
-    def module(self):
-        self.assertIsNotNone(
-            importlib.util.find_spec("development.serving.gpu"),
-            "the CPU-only group lease module is missing",
-        )
-        return importlib.import_module("development.serving.gpu")
-
-    def run_wrapper(self, settings=None, command=None, input=None):
-        return subprocess.run(
-            [str(WRAPPER), *(command or [sys.executable, "-c", "print('EXECUTED')"])],
-            env=self.environment | (settings or {}),
-            input=input,
-            capture_output=True,
-            text=True,
-            timeout=4,
-        )
-
-    def assert_unlocked(self, identities, directory):
-        for identity in identities:
-            with (directory / f"oh-my-vllm-{identity}.lock").open("a") as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
+class GpuGroups(GpuEnvironment):
     def test_one_and_four_selection_keep_rank_order_and_exclude_physical_zero(self):
         command = [
             sys.executable,
@@ -294,49 +247,7 @@ class GpuGroups(unittest.TestCase):
             ):
                 gpu.wait_for_group(settings)
             self.assert_unlocked(selected, self.directory)
-        fifo = self.directory / f"oh-my-vllm-{middle}.lock"
-        fifo.unlink()
-        os.mkfifo(fifo)
-        probe = (
-            "import fcntl, os, sys\n"
-            "from pathlib import Path\n"
-            "from development.serving import gpu\n"
-            "gpu.LOCK_DIRECTORY = Path(sys.argv[1])\n"
-            "status = gpu.main([sys.executable, '-c', \"print('EXECUTED')\"])\n"
-            "for identity in os.environ['OH_MY_VLLM_GPU_UUIDS'].split(','):\n"
-            "    path = gpu.LOCK_DIRECTORY / f'oh-my-vllm-{identity}.lock'\n"
-            "    if not path.is_fifo():\n"
-            "        with path.open('a') as lock:\n"
-            "            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
-            "print('partial locks released')\n"
-            "sys.exit(status)\n"
-        )
-        for with_reader in (False, True):
-            with self.subTest(fifo_reader=with_reader):
-                reader = (
-                    os.open(fifo, os.O_RDONLY | os.O_NONBLOCK) if with_reader else None
-                )
-                try:
-                    try:
-                        result = subprocess.run(
-                            [sys.executable, "-c", probe, str(self.directory)],
-                            env=self.environment
-                            | {
-                                "OH_MY_VLLM_GPU_COUNT": "4",
-                                "OH_MY_VLLM_GPU_UUIDS": ",".join(selected),
-                            },
-                            capture_output=True,
-                            text=True,
-                            timeout=2,
-                        )
-                    except subprocess.TimeoutExpired:
-                        self.fail("FIFO blocked instead of releasing partial locks")
-                    self.assertEqual(result.returncode, 2, result.stderr)
-                    self.assertNotIn("EXECUTED", result.stdout)
-                    self.assertIn("partial locks released", result.stdout)
-                finally:
-                    if reader is not None:
-                        os.close(reader)
+        _check_fifo_lock_release(self, middle, selected)
 
     def test_lock_order_is_separate_from_rank_order_and_busy_devices_are_skipped(self):
         gpu = self.module()
@@ -495,29 +406,7 @@ class GpuGroups(unittest.TestCase):
                 self.assertRaises(ValueError),
             ):
                 device.selected_uuids()
-        for settings in (
-            {"CUDA_VISIBLE_DEVICES": requested[0], "OH_MY_VLLM_GPU_COUNT": "4"},
-            {"CUDA_VISIBLE_DEVICES": ",".join(requested), "OH_MY_VLLM_GPU_COUNT": "1"},
-            {
-                "CUDA_VISIBLE_DEVICES": ",".join(requested),
-                "OH_MY_VLLM_GPU_UUIDS": ",".join(requested[::-1]),
-            },
-            {
-                "CUDA_VISIBLE_DEVICES": requested[0],
-                "OH_MY_VLLM_GPU_UUID": requested[1],
-            },
-        ):
-            with (
-                self.subTest(settings=settings),
-                patch.dict(os.environ, settings, clear=True),
-                patch.object(
-                    device.ctypes,
-                    "CDLL",
-                    side_effect=AssertionError("CUDA called for a masked selection"),
-                ),
-                self.assertRaises(ValueError),
-            ):
-                device.selected_uuids()
+        _reject_masked_selections(self, requested)
 
 
 if __name__ == "__main__":

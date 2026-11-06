@@ -1,13 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet};
+mod offline;
+
+use offline::run_scheduler;
 use std::path::PathBuf;
-use std::time::Instant;
 
 use anyhow::{Context, Result, ensure};
 use clap::{Args, Parser, Subcommand};
 use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
-use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
 use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
-use oh_my_vllm_zmq_worker::models::{ModelPolicy, ServiceCache, select_model};
+use oh_my_vllm_zmq_worker::models::{ModelPolicy, select_model};
 use tracing::{Instrument, info};
 use tracing_subscriber::EnvFilter;
 
@@ -221,40 +221,7 @@ async fn run() -> Result<()> {
     let model = select_model(&cli.model)?;
     let config = cli.worker_config(model)?;
     let speculative_tokens = config.num_speculative_tokens;
-    let run_prompts = if let Cmd::Run {
-        tokens,
-        prompt_file,
-        max_tokens,
-        ..
-    } = &cli.cmd
-    {
-        let prompts = if let Some(path) = prompt_file {
-            std::fs::read_to_string(path)?
-                .lines()
-                .map(|line| line.split_whitespace().map(str::parse::<u32>).collect())
-                .collect::<std::result::Result<Vec<Vec<u32>>, _>>()?
-        } else {
-            vec![tokens.clone()]
-        };
-        ensure!(
-            !prompts.is_empty()
-                && prompts.len() <= model.max_offline_batch_size()
-                && prompts.iter().all(|tokens| !tokens.is_empty())
-                && *max_tokens > 0,
-            "nonempty input and positive output required"
-        );
-        ensure!(
-            prompts
-                .iter()
-                .all(|tokens| tokens.len().saturating_add(*max_tokens)
-                    <= config.max_model_len as usize),
-            "request exceeds context limit"
-        );
-        validate_prompt_tokens(&prompts, model)?;
-        Some(prompts)
-    } else {
-        None
-    };
+    let run_prompts = cli.run_prompts(&config, model)?;
     let bench_prompts = if let Cmd::Bench(args) = &cli.cmd {
         Some(args.prompts(config.max_model_len as usize, model)?)
     } else {
@@ -303,349 +270,74 @@ async fn run() -> Result<()> {
     }
 }
 
-async fn run_scheduler<P: ServiceCache>(
-    cli: Cli,
-    mut client: WorkerClient,
-    kv: P,
-    run_prompts: Option<Vec<Vec<u32>>>,
-    bench_prompts: Option<Vec<Vec<u32>>>,
-) -> Result<()> {
-    kv.attach_client(&mut client);
-    let config = client.configuration();
-    let speculative_tokens = config.num_speculative_tokens;
-    let mode = config
-        .speculative_mode
-        .clone()
-        .expect("resolved speculative mode");
-    let sched_max_num_seqs = config.max_num_seqs as usize;
-    let sched_max_batched = config.max_num_batched_tokens as usize;
-    let mut scheduler = Scheduler::new(
-        SchedulerConfig {
-            max_num_seqs: sched_max_num_seqs,
-            max_num_batched_tokens: sched_max_batched,
-            enable_mtp: speculative_tokens > 0,
-            mtp_draft_len: speculative_tokens,
-        },
-        kv,
-    );
-    scheduler.enable_host_cache(client.host_cache_bytes);
-    if let Cmd::Serve(args) = cli.cmd {
-        return oh_my_vllm_zmq_worker::serving::serve(client, scheduler, args).await;
-    }
-    let mut next_id = 1;
-    match cli.cmd {
-        Cmd::Serve(_) => unreachable!(),
-        Cmd::Run {
-            tokens: _,
-            prompt_file: _,
-            arrival_interval,
+impl Cli {
+    fn run_prompts(
+        &self,
+        config: &WorkerConfig,
+        model: ModelPolicy,
+    ) -> Result<Option<Vec<Vec<u32>>>> {
+        if let Cmd::Run {
+            tokens,
+            prompt_file,
             max_tokens,
-            prefix_hit,
-        } => {
-            let prompts = run_prompts.expect("validated Run input");
-            if prefix_hit {
-                execute_batch(&mut client, &mut scheduler, &mut next_id, &prompts, 1, 0).await?;
-            }
-            let result = execute_batch(
-                &mut client,
-                &mut scheduler,
-                &mut next_id,
-                &prompts,
-                max_tokens,
-                arrival_interval,
-            )
-            .await?;
-            ensure!(
-                !prefix_hit || result.initial_prefix_hit_tokens > 0,
-                "prompt did not hit prefix cache"
-            );
-            println!(
-                "output token ids: {:?}",
-                result.outputs.values().next().unwrap()
-            );
-            println!(
-                "output batches: {:?}",
-                result.outputs.values().collect::<Vec<_>>()
-            );
-            println!(
-                concat!(
-                    "batch stats: {{\"steps\":{},\"prefix_hit_tokens\":{},",
-                    "\"initial_prefix_hit_tokens\":{},\"preemptions\":{},",
-                    "\"accepted_draft_tokens\":{}}}"
-                ),
-                result.steps,
-                result.prefix_hit_tokens,
-                result.initial_prefix_hit_tokens,
-                result.preemptions,
-                result.accepted_draft_tokens
-            );
-        }
-        Cmd::Bench(args) => {
-            let prompts = bench_prompts.expect("validated benchmark input");
-            for iteration in 0..args.warmup + args.repetitions {
-                info!(
-                    iteration,
-                    measured = iteration >= args.warmup,
-                    "BENCH_PHASE"
-                );
-                ensure!(
-                    scheduler.reset_prefix_cache(),
-                    "cache reset with live requests"
-                );
-                if args.prefix_hit {
-                    execute_batch(&mut client, &mut scheduler, &mut next_id, &prompts, 1, 0)
-                        .await?;
-                }
-                let result = execute_batch(
-                    &mut client,
-                    &mut scheduler,
-                    &mut next_id,
-                    &prompts,
-                    args.output_len,
-                    args.arrival_interval,
-                )
-                .await?;
-                {
-                    let count: usize = result.outputs.values().map(Vec::len).sum();
-                    println!(
-                        concat!(
-                            "{} {{\"speculative_mode\":\"{}\",",
-                            "\"batch_size\":{},\"input_len\":{},",
-                            "\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},",
-                            "\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},",
-                            "\"initial_prefix_hit_tokens\":{},\"preemptions\":{},",
-                            "\"proposed_draft_tokens\":{},\"verified_draft_tokens\":{},",
-                            "\"accepted_draft_tokens\":{},",
-                            "\"ttft_s\":{:?},\"request_phases\":{},",
-                            "\"cleanup_s\":{}}}"
-                        ),
-                        if iteration >= args.warmup {
-                            "BENCH_RESULT"
-                        } else {
-                            "WARMUP_RESULT"
-                        },
-                        mode,
-                        args.batch_size,
-                        args.input_len,
-                        args.output_len,
-                        count,
-                        result.elapsed,
-                        count as f64 / result.elapsed,
-                        result.steps,
-                        result.prefix_hit_tokens,
-                        result.initial_prefix_hit_tokens,
-                        result.preemptions,
-                        result.proposed_draft_tokens,
-                        result.verified_draft_tokens,
-                        result.accepted_draft_tokens,
-                        result.ttft_s,
-                        serde_json::to_string(&result.request_phases)?,
-                        result.cleanup_s
-                    );
-                }
-            }
-        }
-    }
-    client.shutdown().await?;
-    Ok(())
-}
-
-struct BatchResult {
-    outputs: BTreeMap<u64, Vec<u32>>,
-    elapsed: f64,
-    ttft_s: Vec<f64>,
-    request_phases: Vec<RequestPhases>,
-    cleanup_s: f64,
-    steps: usize,
-    prefix_hit_tokens: usize,
-    initial_prefix_hit_tokens: usize,
-    preemptions: usize,
-    proposed_draft_tokens: usize,
-    accepted_draft_tokens: usize,
-    verified_draft_tokens: usize,
-}
-
-#[derive(serde::Serialize)]
-struct RequestPhases {
-    request_id: u64,
-    submitted_s: f64,
-    first_token_s: f64,
-    last_token_s: f64,
-    first_step: usize,
-    last_step: usize,
-}
-
-async fn execute_batch<P: ServiceCache>(
-    client: &mut WorkerClient,
-    scheduler: &mut Scheduler<P>,
-    next_id: &mut u64,
-    prompts: &[Vec<u32>],
-    max_tokens: usize,
-    arrival_interval: usize,
-) -> Result<BatchResult> {
-    let started = Instant::now();
-    let mut outputs = BTreeMap::<u64, Vec<u32>>::new();
-    let mut first_tokens = BTreeMap::<u64, f64>::new();
-    let mut submitted = BTreeMap::<u64, f64>::new();
-    let mut last_tokens = BTreeMap::<u64, f64>::new();
-    let mut first_steps = BTreeMap::new();
-    let mut last_steps = BTreeMap::new();
-    let cleanup_s;
-    let mut pending = prompts.iter().peekable();
-    let mut steps: usize = 0;
-    let mut prefix_hit_tokens = 0;
-    let mut initial_prefix_hit_tokens = 0;
-    let mut awaiting_first_schedule = BTreeSet::new();
-    let mut preemptions = 0;
-    let mut proposed_draft_tokens = 0;
-    let mut accepted_draft_tokens = 0;
-    let mut verified_draft_tokens = 0;
-    let mut prompt_lengths = BTreeMap::new();
-    loop {
-        client.cache_step(scheduler).await?;
-        if let Some((id, message)) = scheduler.take_cache_failures().into_iter().next() {
-            anyhow::bail!("request {id}: {message}");
-        }
-        let idle = scheduler.num_running() + scheduler.num_waiting() == 0;
-        if arrival_interval == 0 || idle || steps.is_multiple_of(arrival_interval) {
-            for prompt in pending.by_ref() {
-                let id = *next_id;
-                *next_id += 1;
-                submitted.insert(
-                    id,
-                    if arrival_interval == 0 {
-                        0.0
-                    } else {
-                        started.elapsed().as_secs_f64()
-                    },
-                );
-                let mut request = Request::new(id, prompt.clone(), max_tokens, vec![]);
-                client.bind_request_cache(&mut request);
-                if !scheduler.add_request(request) {
-                    tracing::error!(id, "prompt rejected: exceeds pool capacity");
-                    continue;
-                }
-                client
-                    .register_request_with_limit(id, prompt.clone(), max_tokens)
-                    .await;
-                outputs.insert(id, vec![]);
-                prompt_lengths.insert(id, prompt.len());
-                awaiting_first_schedule.insert(id);
-                if arrival_interval > 0 {
-                    break;
-                }
-            }
-        }
-        let step = scheduler.schedule();
-        client.cache_step(scheduler).await?;
-        if let Some((id, message)) = scheduler.take_cache_failures().into_iter().next() {
-            anyhow::bail!("request {id}: {message}");
-        }
-        for request in &step.scheduled {
-            let known = prompt_lengths[&request.request_id] + outputs[&request.request_id].len();
-            verified_draft_tokens +=
-                (request.num_computed_tokens + request.token_ids.len()).saturating_sub(known);
-        }
-        prefix_hit_tokens += step.cache_hit_tokens;
-        if !awaiting_first_schedule.is_empty() {
-            for request in &step.scheduled {
-                if awaiting_first_schedule.remove(&request.request_id) {
-                    initial_prefix_hit_tokens += request.num_computed_tokens;
-                }
-            }
-        }
-        preemptions += step.preempted_request_ids.len();
-        if step.scheduled.is_empty() && !scheduler.cache_pending() && client.host_cache_bytes == 0 {
-            ensure!(
-                scheduler.num_running() + scheduler.num_waiting() == 0,
-                "scheduler stalled with unfinished requests"
-            );
-        }
-        let result = client
-            .execute_one_step(
-                &step.scheduled,
-                &step.finished_request_ids,
-                &step.preempted_request_ids,
-                step.num_batched_tokens,
-            )
-            .await?;
-        if !step.scheduled.is_empty() {
-            steps += 1;
-            for output in &result.outputs {
-                proposed_draft_tokens += output.new_draft_token_ids.len();
-                accepted_draft_tokens += output.num_accepted_draft_tokens;
-            }
-            let result = scheduler.update(result)?;
-            for output in result.outputs {
-                if !output.token_ids.is_empty() {
-                    let received = started.elapsed().as_secs_f64();
-                    first_tokens.entry(output.request_id).or_insert(received);
-                    first_steps.entry(output.request_id).or_insert(steps);
-                    last_tokens.insert(output.request_id, received);
-                    last_steps.insert(output.request_id, steps);
-                }
-                outputs
-                    .get_mut(&output.request_id)
-                    .context("unexpected request ID")?
-                    .extend(output.token_ids);
-            }
-        }
-        if step.scheduled.is_empty() && client.host_cache_bytes > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-        }
-        if scheduler.num_running() + scheduler.num_waiting() == 0
-            && pending.peek().is_none()
-            && !scheduler.cache_pending()
+            ..
+        } = &self.cmd
         {
-            let cleanup = scheduler.schedule();
-            let cleanup_started = Instant::now();
-            client
-                .execute_one_step(&[], &cleanup.finished_request_ids, &[], 0)
-                .await?;
-            cleanup_s = cleanup_started.elapsed().as_secs_f64();
-            break;
+            let prompts = if let Some(path) = prompt_file {
+                std::fs::read_to_string(path)?
+                    .lines()
+                    .map(|line| line.split_whitespace().map(str::parse::<u32>).collect())
+                    .collect::<std::result::Result<Vec<Vec<u32>>, _>>()?
+            } else {
+                vec![tokens.clone()]
+            };
+            ensure!(
+                !prompts.is_empty()
+                    && prompts.len() <= model.max_offline_batch_size()
+                    && prompts.iter().all(|tokens| !tokens.is_empty())
+                    && *max_tokens > 0,
+                "nonempty input and positive output required"
+            );
+            ensure!(
+                prompts
+                    .iter()
+                    .all(|tokens| tokens.len().saturating_add(*max_tokens)
+                        <= config.max_model_len as usize),
+                "request exceeds context limit"
+            );
+            validate_prompt_tokens(&prompts, model)?;
+            Ok(Some(prompts))
+        } else {
+            Ok(None)
         }
     }
-    ensure!(
-        outputs.len() == prompts.len() && outputs.values().all(|tokens| tokens.len() == max_tokens),
-        "incomplete output"
+}
+
+#[cfg(test)]
+fn check_benchmark_cli(model_path: &str, model: ModelPolicy) {
+    let benchmark = Cli::try_parse_from([
+        "omv",
+        "--model",
+        model_path,
+        "bench",
+        "--batch-size",
+        "2",
+        "--input-len",
+        "2",
+        "--output-len",
+        "2",
+    ])
+    .unwrap();
+    let Cmd::Bench(mut args) = benchmark.cmd else {
+        panic!("expected benchmark arguments");
+    };
+    assert_eq!(
+        args.prompts(262144, model).unwrap(),
+        vec![vec![1, 2], vec![998, 999]]
     );
-    let elapsed = started.elapsed().as_secs_f64();
-    info!(
-        steps,
-        elapsed, prefix_hit_tokens, initial_prefix_hit_tokens, preemptions, "batch_complete"
-    );
-    ensure!(
-        first_tokens.len() == outputs.len(),
-        "missing first-token timestamp"
-    );
-    Ok(BatchResult {
-        ttft_s: first_tokens
-            .iter()
-            .map(|(id, first)| first - submitted[id])
-            .collect(),
-        request_phases: first_tokens
-            .iter()
-            .map(|(id, first)| RequestPhases {
-                request_id: *id,
-                submitted_s: submitted[id],
-                first_token_s: *first,
-                last_token_s: last_tokens[id],
-                first_step: first_steps[id],
-                last_step: last_steps[id],
-            })
-            .collect(),
-        cleanup_s,
-        outputs,
-        elapsed,
-        steps,
-        prefix_hit_tokens,
-        initial_prefix_hit_tokens,
-        preemptions,
-        proposed_draft_tokens,
-        accepted_draft_tokens,
-        verified_draft_tokens,
-    })
+    assert!(args.parse_prompts("1 2\n3 248320", model).is_err());
+    args.batch_size = 33;
+    assert!(args.prompts(262144, model).is_err());
 }
 
 #[cfg(test)]
@@ -733,29 +425,7 @@ mod tests {
         );
         assert!(validate_prompt_tokens(&[vec![248319]], model).is_ok());
         assert!(validate_prompt_tokens(&[vec![248320]], model).is_err());
-        let benchmark = Cli::try_parse_from([
-            "omv",
-            "--model",
-            model_path,
-            "bench",
-            "--batch-size",
-            "2",
-            "--input-len",
-            "2",
-            "--output-len",
-            "2",
-        ])
-        .unwrap();
-        let Cmd::Bench(mut args) = benchmark.cmd else {
-            panic!("expected benchmark arguments");
-        };
-        assert_eq!(
-            args.prompts(262144, model).unwrap(),
-            vec![vec![1, 2], vec![998, 999]]
-        );
-        assert!(args.parse_prompts("1 2\n3 248320", model).is_err());
-        args.batch_size = 33;
-        assert!(args.prompts(262144, model).is_err());
+        check_benchmark_cli(model_path, model);
         std::fs::remove_dir_all(directory).unwrap();
     }
 }

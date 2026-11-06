@@ -19,6 +19,68 @@ from .fixtures import load_fixture
 from .weights import CaseWeights
 
 
+def _pipeline_requests(self, device, fixture, thinking, ending, mixed, stops, tables):
+    requests, scheduled, endpoints = [], [], {}
+    for row in range(2):
+        options = dict(
+            max_tokens=32,
+            effort="low" if thinking else "off",
+            thinking_token_budget=0 if thinking else -1,
+            ignore_eos=not ending,
+            format=dict(type="json_schema", schema={"const": None})
+            if ending
+            else dict(type="json_object"),
+            sampling=dict(
+                temperature=0 if ending or (mixed and row == 0) else 0.7 + row * 0.3,
+                top_k=20,
+                top_p=0.95,
+                frequency_penalty=0.25 * row,
+                presence_penalty=0.5,
+                repetition_penalty=1.0 if row == 0 else 1.1,
+                repetition_guard=True,
+                seed=42 + row,
+            ),
+        )
+        if stops and row in stops:
+            options["stop"] = [stops[row]]
+        request = Request(self.tokenizer, [int(fixture.inputs["tokens"][row])], options)
+        request.state_position = int(fixture.inputs["stage0.positions"][0, row])
+        request.proposal_offset = 17 + row
+        request.counts[:] = fixture.inputs["history"][row]
+        request.proposals = device.empty((4, 248320), "float32")
+        request.proposal_rows = tuple(
+            device.view(request.proposals, (1, 248320), stage * 248320)
+            for stage in range(4)
+        )
+        requests.append(request)
+        scheduled.append(dict(request_id=row + 1, fa_block_table=tables[row].tolist()))
+        endpoints[row] = (device.view(self.hidden, (1, 5120), row * 5120),)
+    return requests, scheduled, endpoints
+
+
+def _pipeline_result(requests, device, kv, records):
+    result = dict(
+        tokens=[request.drafts.copy() for request in requests],
+        offsets=[request.proposal_offset for request in requests],
+        presence=[request.presence.copy() for request in requests],
+        counts=[request.counts.copy() for request in requests],
+        kv=device.download(kv, np.uint16).numpy().copy(),
+        records=records.copy(),
+        distributions=[
+            device.download(
+                device.view(request.proposals, (len(request.drafts), 248320)),
+                np.float32,
+            )
+            .numpy()
+            .copy()
+            if request.drafts
+            else np.empty((0, 248320), np.float32)
+            for request in requests
+        ],
+    )
+    return result
+
+
 class DraftLookahead(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -53,47 +115,9 @@ class DraftLookahead(unittest.TestCase):
         kv = device.upload(fixture.state["kv"], "bfloat16")
         cache = SimpleNamespace(blocks=kv.shape[0], fa=((kv,),))
         tables = fixture.inputs["stage0.tables"].copy()
-        requests, scheduled, endpoints = [], [], {}
-        for row in range(2):
-            options = dict(
-                max_tokens=32,
-                effort="low" if thinking else "off",
-                thinking_token_budget=0 if thinking else -1,
-                ignore_eos=not ending,
-                format=dict(type="json_schema", schema={"const": None})
-                if ending
-                else dict(type="json_object"),
-                sampling=dict(
-                    temperature=0
-                    if ending or (mixed and row == 0)
-                    else 0.7 + row * 0.3,
-                    top_k=20,
-                    top_p=0.95,
-                    frequency_penalty=0.25 * row,
-                    presence_penalty=0.5,
-                    repetition_penalty=1.0 if row == 0 else 1.1,
-                    repetition_guard=True,
-                    seed=42 + row,
-                ),
-            )
-            if stops and row in stops:
-                options["stop"] = [stops[row]]
-            request = Request(
-                self.tokenizer, [int(fixture.inputs["tokens"][row])], options
-            )
-            request.state_position = int(fixture.inputs["stage0.positions"][0, row])
-            request.proposal_offset = 17 + row
-            request.counts[:] = fixture.inputs["history"][row]
-            request.proposals = device.empty((4, 248320), "float32")
-            request.proposal_rows = tuple(
-                device.view(request.proposals, (1, 248320), stage * 248320)
-                for stage in range(4)
-            )
-            requests.append(request)
-            scheduled.append(
-                dict(request_id=row + 1, fa_block_table=tables[row].tolist())
-            )
-            endpoints[row] = (device.view(self.hidden, (1, 5120), row * 5120),)
+        requests, scheduled, endpoints = _pipeline_requests(
+            self, device, fixture, thinking, ending, mixed, stops, tables
+        )
         batch = SimpleNamespace(
             requests=requests, scheduled=scheduled, metadata=(None, None, tables)
         )
@@ -143,25 +167,7 @@ class DraftLookahead(unittest.TestCase):
                         operation.propose(batch, endpoints, True)
             if pipeline:
                 self.assertIn(2, operation.pipelines)
-            result = dict(
-                tokens=[request.drafts.copy() for request in requests],
-                offsets=[request.proposal_offset for request in requests],
-                presence=[request.presence.copy() for request in requests],
-                counts=[request.counts.copy() for request in requests],
-                kv=device.download(kv, np.uint16).numpy().copy(),
-                records=records.copy(),
-                distributions=[
-                    device.download(
-                        device.view(request.proposals, (len(request.drafts), 248320)),
-                        np.float32,
-                    )
-                    .numpy()
-                    .copy()
-                    if request.drafts
-                    else np.empty((0, 248320), np.float32)
-                    for request in requests
-                ],
-            )
+            result = _pipeline_result(requests, device, kv, records)
         return result
 
     def inject_failure(self, resources, operation, fault):

@@ -51,6 +51,17 @@ DEP4 snapshot 在请求释放后保留 owner rank.
 所有 rank 完成执行后才释放 owner.
 共享[缓存策略](../../cache-policy.zh.md)控制逻辑所有权和传输完成.
 
+## Proposal Graph 所有权
+
+[Proposal Graph 缓存](../../../python/oh_my_vllm/models/deepseek_v41/target_execution.py#L285)<!-- source: graph = self.proposal_graphs.get(slot) -->中每个请求 slot 最多有一个 proposal Graph.
+它先关闭绑定已失效的图, 再创建另一个图.
+
+[完成的主机 store](../../../python/oh_my_vllm/models/deepseek_v41/cache_transfer.py#L145)<!-- source: self._release_request_slot(operation.get("request_id")) --> 通过 worker 回调释放请求 slot.
+Worker 的 [`_free_slot`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L46)<!-- source: def _free_slot(self, request): --> 先关闭 proposal Graph, 再清空和释放 slot.
+[`Worker.close`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L243)<!-- source: def close(self): --> 先关闭 proposal Graph, 再关闭缓存存储和权重.
+[图释放流程](../../../python/oh_my_vllm/models/deepseek_v41/proposal_graph.py#L179)<!-- source: def close(self): -->先同步设备并重置图, 再释放其 owner 和 PageLease.
+[执行指南](README.zh.md#mtp-proposal-graph)给出条件和默认设置.
+
 ## 官方 DeepInfer 格式
 
 上游参考为 NVIDIA SM100 上的 DeepInfer revision `a679bb86ce36e883a98a97733492b686e5b9a08e`.

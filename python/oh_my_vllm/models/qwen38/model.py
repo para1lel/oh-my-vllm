@@ -106,6 +106,9 @@ class Workspace:
         self.runs = 0
         self.media = self.media_rows = None
         self.calls, self.warmups = [], []
+        self._bind_layer_calls(device, weights, cache, metadata)
+
+    def _bind_layer_calls(self, device, weights, cache, metadata):
         value = ffn.Inputs(self.input, self.zero)
         recurrent = full = 0
         for index, layer in enumerate(weights.layers):

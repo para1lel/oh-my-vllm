@@ -147,53 +147,7 @@ async fn check(arguments: &Arguments, strategy: &str) -> Result<()> {
     })
     .await?;
     let started = Instant::now();
-    let run = async {
-        for step_id in 1..=3 {
-            let transaction = arena.reserve(
-                step_id,
-                10,
-                &[AllocationRequest {
-                    group: "state".into(),
-                    rank: 0,
-                    blocks: 3,
-                }],
-                &[],
-            )?;
-            let plan = StepPlan {
-                step_id,
-                collective_plan: communication(),
-                requests: vec![RequestWork {
-                    request_id: 10,
-                    transaction_id: transaction.key().transaction_id,
-                    owner_rank: 0,
-                    rows: 3,
-                    prefill: step_id == 1,
-                }],
-            };
-            let result = client.execute(plan, vec![transaction]).await;
-            if arguments.failure != "none" && step_id == 1 {
-                ensure!(result.is_err(), "failed collective returned storage");
-                let injected: serde_json::Value =
-                    serde_json::from_slice(&std::fs::read(directory.join("rank-2.json"))?)?;
-                ensure!(
-                    injected["injected_failure"] == arguments.failure,
-                    "step failed before the intended fault injection"
-                );
-                ensure!(
-                    arena.free_blocks("state", 0)? == 3,
-                    "storage remains leased"
-                );
-                return Ok(());
-            }
-            drop(result?);
-            ensure!(
-                arena.free_blocks("state", 0)? == 3,
-                "storage remains leased"
-            );
-        }
-        Ok::<_, anyhow::Error>(())
-    }
-    .await;
+    let run = run_steps(&mut client, &arena, arguments, &directory).await;
     if run.is_ok() && arguments.failure == "none" {
         client.shutdown(Duration::from_secs(90)).await?;
     } else {
@@ -230,4 +184,56 @@ async fn main() -> Result<()> {
         check(&arguments, strategy).await?;
     }
     Ok(())
+}
+
+async fn run_steps(
+    client: &mut GroupClient,
+    arena: &StateArena,
+    arguments: &Arguments,
+    directory: &std::path::Path,
+) -> Result<()> {
+    for step_id in 1..=3 {
+        let transaction = arena.reserve(
+            step_id,
+            10,
+            &[AllocationRequest {
+                group: "state".into(),
+                rank: 0,
+                blocks: 3,
+            }],
+            &[],
+        )?;
+        let plan = StepPlan {
+            step_id,
+            collective_plan: communication(),
+            requests: vec![RequestWork {
+                request_id: 10,
+                transaction_id: transaction.key().transaction_id,
+                owner_rank: 0,
+                rows: 3,
+                prefill: step_id == 1,
+            }],
+        };
+        let result = client.execute(plan, vec![transaction]).await;
+        if arguments.failure != "none" && step_id == 1 {
+            ensure!(result.is_err(), "failed collective returned storage");
+            let injected: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(directory.join("rank-2.json"))?)?;
+            ensure!(
+                injected["injected_failure"] == arguments.failure,
+                "step failed before the intended fault injection"
+            );
+            ensure!(
+                arena.free_blocks("state", 0)? == 3,
+                "storage remains leased"
+            );
+            return Ok(());
+        }
+        drop(result?);
+        ensure!(
+            arena.free_blocks("state", 0)? == 3,
+            "storage remains leased"
+        );
+    }
+    Ok::<_, anyhow::Error>(())
 }

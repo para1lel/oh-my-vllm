@@ -20,6 +20,10 @@ Only the listed adapters can start a model service. Unknown models cause startup
 
 ## Development
 
+Use the [development loop](docs/development.md#development-loop) to select repository checks.
+Use the [verification skill](.claude/skills/verify-oh-my-vllm/SKILL.md) to drive the Rust app and collect evidence.
+Its CPU fixture checks service and transport behavior. It does not prove GPU inference, numerical correctness, or performance.
+
 Use the [adapter contract](docs/adapters.md), [GPU execution rules](docs/execution.md), and [test scope](docs/testing.md).
-Model directories contain their mathematics, fixed numerical limits, measurement procedures, and latest complete results.
+Model directories contain their mathematics, fixed numerical limits, measurement procedures, and latest full results.
 The [handoff](docs/handoff.md) gives current work and next actions.

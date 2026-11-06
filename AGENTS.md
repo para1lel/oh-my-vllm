@@ -1,7 +1,7 @@
 # Project principles
 
 Build a common inference framework with model adapters.
-Keep the supported Qwen adapter independent from shared service code. Put model-specific rules in its [model directory](docs/models/qwen38).
+Isolate the supported Qwen adapter from shared service code. Put model-specific rules in its [model directory](docs/models/qwen38).
 Use Rust for the service, the scheduler, and the logical KV cache.
 
 Use Python for GPU computation. Use a ZMQ DEALER socket and msgpack for process communication.
@@ -15,8 +15,12 @@ Use the [GPU execution rules](docs/execution.md) for scheduling and resource own
 Keep the root guides short. Put local instructions in the related directory.
 Write all English documents in ASD-STE100. Supply a full Chinese translation for each English document.
 
-Use clear names and small functions. Add a comment only when the code cannot give the necessary information.
-Prefer complete, coherent feature changes over artificially small diffs. Keep tests focused on current behavior and failure paths.
+Keep each code file at most 500 physical lines. Keep each function at most 80 physical lines.
+
+Use clear names. Add a comment only when the code cannot give the necessary information.
+Complete each feature change before delivery. Keep tests focused on current behavior and failure paths.
+Use the [development loop](docs/development.md#development-loop) for repository checks.
+For app behavior, use the [verification skill](.claude/skills/verify-oh-my-vllm/SKILL.md).
 
 Do the applicable tests in the repository. Use the [reporting policy](docs/testing.md#reporting) for performance documents.
 Do not put unrelated test results in project files.

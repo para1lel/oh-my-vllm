@@ -1,3 +1,6 @@
+mod completion;
+mod prefix;
+
 use std::collections::{BTreeMap, VecDeque};
 
 use oh_my_vllm_kv_cache::hash::BlockHash;
@@ -5,7 +8,7 @@ use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Request, RequestStatus, Scheduler,
+    Request, Scheduler,
     policy::{CachePolicy, qwen::QwenTransferPlan},
 };
 
@@ -276,7 +279,7 @@ impl<P: CachePolicy> Scheduler<P> {
         true
     }
 
-    fn reserve_load(
+    pub(super) fn reserve_load(
         &mut self,
         request: &Request,
         source: &P::Snapshot,
@@ -329,121 +332,6 @@ impl<P: CachePolicy> Scheduler<P> {
         }
     }
 
-    pub(crate) fn remember_host_prefix(&mut self, request: &Request) {
-        if self.host.capacity == 0 {
-            return;
-        }
-        self.host.candidates.push_back(request.clone());
-        while self.host.candidates.len() > self.config.max_num_seqs.max(1) {
-            self.host.candidates.pop_front();
-        }
-    }
-
-    pub(crate) fn writeback_host_prefix(&mut self) -> bool {
-        if self.host.capacity == 0
-            || self
-                .host
-                .pending
-                .values()
-                .any(|p| p.kind != CacheKind::Drop)
-        {
-            return false;
-        }
-        while let Some(request) = self.host.candidates.pop_front() {
-            if self.retain_host_prefix(&request) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn retain_host_prefix(&mut self, request: &Request) -> bool {
-        if self.host.capacity == 0 {
-            return false;
-        }
-        let hit = self.kv.find_prefix(request);
-        let end = hit.length;
-        if end == 0 {
-            return false;
-        }
-        let hash = self.kv.prefix_hash(request, end);
-        if self.host.prefixes.iter().any(|p| {
-            p.prefix.salt == request.cache_salt && p.prefix.length == end && p.prefix.hash == hash
-        }) {
-            return false;
-        }
-        let transfer = self.kv.store_prefix(hit);
-        let snapshot = self.host.id();
-        self.host.submit(Pending {
-            kind: CacheKind::Store,
-            snapshot,
-            request: None,
-            transfer: Some(transfer),
-            source: None,
-            prefix: Some(Prefix {
-                length: end,
-                hash,
-                salt: request.cache_salt,
-            }),
-            cancelled: false,
-        });
-        true
-    }
-
-    pub(crate) fn begin_prefix_load(
-        &mut self,
-        request: &Request,
-        gpu_hit: usize,
-        budget: usize,
-    ) -> Option<bool> {
-        let best = self
-            .host
-            .prefixes
-            .iter()
-            .enumerate()
-            .filter(|(_, entry)| {
-                entry.prefix.salt == request.cache_salt
-                    && entry.prefix.length > gpu_hit
-                    && entry.prefix.length < request.token_ids.len()
-                    && self.kv.prefix_hash(request, entry.prefix.length) == entry.prefix.hash
-            })
-            .max_by_key(|(_, entry)| entry.prefix.length)
-            .map(|(i, _)| i);
-        let index = best?;
-        let mut request = request.clone();
-        request.num_computed_tokens = self.host.prefixes[index].prefix.length;
-        request.prefill_start = request.num_computed_tokens;
-        let source = self.host.prefixes[index].tables.clone();
-        let Some(transfer) = self.reserve_load(&request, &source, true, budget) else {
-            return Some(false);
-        };
-        let entry = self.host.prefixes.remove(index).expect("index checked");
-        self.host.submit(Pending {
-            kind: CacheKind::Load,
-            snapshot: entry.snapshot,
-            request: Some(request),
-            transfer: Some(transfer),
-            source: Some(entry.tables),
-            prefix: Some(entry.prefix),
-            cancelled: false,
-        });
-        Some(true)
-    }
-
-    pub(crate) fn clear_host_prefixes(&mut self) {
-        self.host.candidates.clear();
-        while let Some(entry) = self.host.prefixes.pop_front() {
-            self.host.drop_snapshot(entry.snapshot);
-        }
-    }
-
-    fn evict_host_prefix(&mut self) {
-        if let Some(entry) = self.host.prefixes.pop_front() {
-            self.host.drop_snapshot(entry.snapshot);
-            self.cache_progress();
-        }
-    }
-
     pub(crate) fn abort_host_request(&mut self, id: u64) -> bool {
         if let Some(job) = self
             .host
@@ -461,122 +349,5 @@ impl<P: CachePolicy> Scheduler<P> {
             return true;
         }
         false
-    }
-
-    pub fn complete_cache(&mut self, completions: &[CacheCompletion]) -> Result<(), CacheError> {
-        let mut seen = FxHashSet::default();
-        for result in completions {
-            if !seen.insert(result.transfer_id)
-                || !self.host.pending.contains_key(&result.transfer_id)
-            {
-                return Err(CacheError("unknown or duplicate transfer"));
-            }
-            if self.host.pending[&result.transfer_id].kind == CacheKind::Drop
-                && result.status != CacheStatus::Complete
-            {
-                return Err(CacheError("drop was not completed"));
-            }
-            if self.host.pending[&result.transfer_id].kind == CacheKind::Load
-                && result.status == CacheStatus::Capacity
-            {
-                return Err(CacheError("load reported a store capacity failure"));
-            }
-        }
-        for result in completions {
-            let job = self
-                .host
-                .pending
-                .remove(&result.transfer_id)
-                .expect("validated transfer");
-            self.finish_cache(job, result.status);
-        }
-        Ok(())
-    }
-
-    fn finish_cache(&mut self, mut job: Pending<P>, status: CacheStatus) {
-        if job.kind == CacheKind::Drop {
-            return;
-        }
-        let tables = self
-            .kv
-            .finish_transfer(job.transfer.take().expect("store or load owner"));
-        let complete = status == CacheStatus::Complete;
-        if job.kind == CacheKind::Store {
-            if let Some(request) = job.request {
-                if complete || job.cancelled {
-                    self.kv.free(request.id);
-                }
-                if job.cancelled {
-                    self.finished_ids.push(request.id);
-                    if complete {
-                        self.host.drop_snapshot(job.snapshot);
-                    }
-                } else if complete {
-                    self.host.requests.push_back(HostRequest {
-                        request,
-                        snapshot: job.snapshot,
-                        tables,
-                    });
-                } else {
-                    self.host.blocked.insert(request.id);
-                    if status == CacheStatus::Capacity {
-                        self.host.capacity_blocked.insert(request.id);
-                    } else {
-                        self.host.retry_at =
-                            Some(std::time::Instant::now() + std::time::Duration::from_millis(1));
-                    }
-                    self.running.push_back(request);
-                    if status == CacheStatus::Capacity {
-                        self.evict_host_prefix();
-                    }
-                }
-            } else {
-                if complete {
-                    self.host.prefixes.push_back(HostEntry {
-                        snapshot: job.snapshot,
-                        tables,
-                        prefix: job.prefix.expect("prefix store"),
-                    });
-                } else if status == CacheStatus::Capacity {
-                    self.evict_host_prefix();
-                }
-            }
-            return;
-        }
-        let mut request = job.request.take().expect("load request");
-        if complete && !job.cancelled {
-            if let Some(prefix) = &job.prefix {
-                request.num_computed_tokens = prefix.length;
-                request.prefill_start = prefix.length;
-                self.host.prefix_hits.insert(request.id, prefix.length);
-            }
-            request.status = RequestStatus::Running;
-            self.running.push_back(request);
-        } else {
-            self.kv.free(request.id);
-            if job.cancelled {
-                self.finished_ids.push(request.id);
-            } else if job.prefix.is_some() {
-                request.num_computed_tokens = 0;
-                request.prefill_start = 0;
-                request.status = RequestStatus::Waiting;
-                self.waiting.push_back(request);
-            } else {
-                self.host.requests.push_back(HostRequest {
-                    request,
-                    snapshot: job.snapshot,
-                    tables: job.source.take().expect("load source"),
-                });
-            }
-        }
-        if let Some(prefix) = job.prefix {
-            self.host.prefixes.push_back(HostEntry {
-                snapshot: job.snapshot,
-                tables: job.source.expect("prefix source"),
-                prefix,
-            });
-        } else if complete || job.cancelled {
-            self.host.drop_snapshot(job.snapshot);
-        }
     }
 }

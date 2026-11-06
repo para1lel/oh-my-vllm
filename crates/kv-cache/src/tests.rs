@@ -212,24 +212,7 @@ fn partial_prefixes_keep_private_continuations_and_transactional_ownership() {
         assert_eq!(kv.get_computed_blocks(&second).2, 0);
     }
 
-    let mut kv = HybridCoordinator::new(8, 784, true, 0).with_mamba_capacity(3);
-    let source = Req::new(1, 317);
-    kv.allocate_slots(&source, (vec![], vec![]), 0, 316, 0, false)
-        .unwrap();
-    kv.commit_cache(&source.clone().with_computed(316));
-    kv.free(1);
-    kv.allocate_slots(&Req::new(3, 1), (vec![], vec![]), 0, 1, 0, false)
-        .unwrap();
-    let request = Req::new(2, 317);
-    let (fa, mb, hit) = kv.get_computed_blocks(&request);
-    let before = kv.resource_counts();
-    assert_eq!(hit, 316);
-    assert!(
-        kv.allocate_slots(&request, (fa, mb), hit, 1, 0, false)
-            .is_none()
-    );
-    assert_eq!(kv.resource_counts(), before);
-    assert_eq!(kv.get_computed_blocks(&request).2, 316);
+    verify_partial_prefix_capacity_failure();
 }
 
 #[test]
@@ -401,6 +384,32 @@ fn restored_partial_checkpoint_keeps_read_lease_until_commit_or_cancel() {
         }
     }
 
+    verify_restored_checkpoint_capacity_failure();
+}
+
+fn verify_partial_prefix_capacity_failure() {
+    let mut kv = HybridCoordinator::new(8, 784, true, 0).with_mamba_capacity(3);
+    let source = Req::new(1, 317);
+    kv.allocate_slots(&source, (vec![], vec![]), 0, 316, 0, false)
+        .unwrap();
+    kv.commit_cache(&source.clone().with_computed(316));
+    kv.free(1);
+    kv.allocate_slots(&Req::new(3, 1), (vec![], vec![]), 0, 1, 0, false)
+        .unwrap();
+    let request = Req::new(2, 317);
+    let (fa, mb, hit) = kv.get_computed_blocks(&request);
+    let before = kv.resource_counts();
+    assert_eq!(hit, 316);
+    assert!(
+        kv.allocate_slots(&request, (fa, mb), hit, 1, 0, false)
+            .is_none()
+    );
+    assert_eq!(kv.resource_counts(), before);
+    assert_eq!(kv.get_computed_blocks(&request).2, 316);
+}
+
+fn verify_restored_checkpoint_capacity_failure() {
+    use crate::snapshot::BlockTables;
     let mut kv = HybridCoordinator::new(4, 784, true, 0).with_mamba_capacity(2);
     let tables = kv
         .reserve_tables(&BlockTables {

@@ -187,6 +187,28 @@ class Worker:
                     index: [int(token)]
                     for index, token in zip(final, tokens, strict=True)
                 }
+        outputs = self._commit_outputs(rows, requests, batch, chosen, verify)
+        if self.speculation is not None:
+            endpoints = self.speculation.context(batch, hidden, graph, chosen)
+            self.speculation.propose(batch, endpoints, graph)
+            for output, request in zip(outputs, requests, strict=True):
+                output["new_draft_token_ids"] = request.drafts.copy()
+        self.trace.record(
+            "commit",
+            requests=[
+                {
+                    "id": output["request_id"],
+                    "tokens": len(output["token_ids"]),
+                    "accepted": output["num_accepted_draft_tokens"],
+                    "proposed": len(output["new_draft_token_ids"]),
+                    "position": self.requests[output["request_id"]].state_position,
+                }
+                for output in outputs
+            ],
+        )
+        return outputs
+
+    def _commit_outputs(self, rows, requests, batch, chosen, verify):
         outputs = []
         for index, (row, request) in enumerate(zip(rows, requests, strict=True)):
             tokens, text = (
@@ -206,24 +228,7 @@ class Worker:
                     "reasoning_tokens": request.thinking_count,
                 }
             )
-        if self.speculation is not None:
-            endpoints = self.speculation.context(batch, hidden, graph, chosen)
-            self.speculation.propose(batch, endpoints, graph)
-            for output, request in zip(outputs, requests, strict=True):
-                output["new_draft_token_ids"] = request.drafts.copy()
-        self.trace.record(
-            "commit",
-            requests=[
-                {
-                    "id": output["request_id"],
-                    "tokens": len(output["token_ids"]),
-                    "accepted": output["num_accepted_draft_tokens"],
-                    "proposed": len(output["new_draft_token_ids"]),
-                    "position": self.requests[output["request_id"]].state_position,
-                }
-                for output in outputs
-            ],
-        )
+
         return outputs
 
     def execute(self, message):

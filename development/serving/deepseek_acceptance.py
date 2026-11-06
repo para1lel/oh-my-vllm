@@ -27,24 +27,7 @@ def qualified(version, scope):
     return version == roofline.VERSION and scope == "fixed-algorithm resource roofline"
 
 
-def validate_measurement(result):
-    if not isinstance(result, dict) or result.get("status") != "completed":
-        raise ValueError("HTTP result is absent, partial or failed")
-    identifier = case_id(result)
-    case = next((case for case in HTTP_CASES if case_id(case) == identifier), None)
-    if case is None or any(result.get(key) != value for key, value in case.items()):
-        raise ValueError("result is outside the approved matrix")
-    if (
-        result.get("request_count") != case["batch"]
-        or result.get("effective_strategy") != case["strategy"]
-    ):
-        raise ValueError("HTTP count or effective strategy differs")
-    seconds = result.get("seconds")
-    if type(seconds) not in (float, int) or not math.isfinite(seconds) or seconds <= 0:
-        raise ValueError("full HTTP seconds must be finite and positive")
-    identity = result.get("measurement_identity")
-    if not isinstance(identity, dict):
-        raise ValueError("result lacks its complete measurement identity")
+def _measurement_configuration(result, identity, case):
     version = result.get("accounting_version")
     configuration = reference_configuration(version)
     if identity.get("reference") != configuration:
@@ -78,12 +61,66 @@ def validate_measurement(result):
     modes = all_modes.get(case["strategy"]) if isinstance(all_modes, dict) else None
     if (
         not isinstance(modes, dict)
-        or set(modes) != {"batch_decode", "decode_graph", "decode_graph_limit"}
-        or any(type(modes[key]) is not bool for key in ("batch_decode", "decode_graph"))
+        or set(modes)
+        != {"batch_decode", "decode_graph", "decode_graph_limit", "proposal_graph"}
+        or any(
+            type(modes[key]) is not bool
+            for key in ("batch_decode", "decode_graph", "proposal_graph")
+        )
         or type(modes["decode_graph_limit"]) is not int
         or modes["decode_graph_limit"] < 0
     ):
         raise ValueError("measurement lacks actual batch/Graph modes")
+    return version, configuration, modes
+
+
+def _measurement_binding(trace, identity, modes, identifier, case):
+    binding = trace["binding"]
+    expected = {
+        "source": {"commit": identity["source_commit"], "digest": identity["source"]},
+        "native_modules": {
+            name: {"source": value["source_id"], "binary": value["binary_id"]}
+            for name, value in identity["native"].items()
+        },
+        "checkpoint_config": identity["checkpoint"]["config"],
+        "checkpoint_index": identity["checkpoint"]["index"],
+        "tokenizer": identity["tokenizer"],
+        "gpu_uuids": [device["uuid"] for device in identity["topology"]],
+        "runtime_modes": modes,
+        "case_id": identifier,
+        "strategy": case["strategy"],
+        "effective_strategy": case["strategy"],
+        "sampling": "greedy",
+    }
+    runtime_modes = binding.get("runtime_modes")
+    if (
+        not isinstance(runtime_modes, dict)
+        or type(runtime_modes.get("proposal_graph")) is not bool
+        or any(binding.get(key) != value for key, value in expected.items())
+    ):
+        raise ValueError("trace identity differs from the measured run")
+    return binding
+
+
+def validate_measurement(result):
+    if not isinstance(result, dict) or result.get("status") != "completed":
+        raise ValueError("HTTP result is absent, partial or failed")
+    identifier = case_id(result)
+    case = next((case for case in HTTP_CASES if case_id(case) == identifier), None)
+    if case is None or any(result.get(key) != value for key, value in case.items()):
+        raise ValueError("result is outside the approved matrix")
+    if (
+        result.get("request_count") != case["batch"]
+        or result.get("effective_strategy") != case["strategy"]
+    ):
+        raise ValueError("HTTP count or effective strategy differs")
+    seconds = result.get("seconds")
+    if type(seconds) not in (float, int) or not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("full HTTP seconds must be finite and positive")
+    identity = result.get("measurement_identity")
+    if not isinstance(identity, dict):
+        raise ValueError("result lacks its complete measurement identity")
+    version, configuration, modes = _measurement_configuration(result, identity, case)
     trace = result.get("trace")
     if not isinstance(trace, dict) or not isinstance(trace.get("binding"), dict):
         raise ValueError("result lacks its runtime trace")
@@ -104,25 +141,7 @@ def validate_measurement(result):
         not isinstance(row, dict) for row in responses
     ):
         raise ValueError("HTTP result lacks completed responses")
-    binding = trace["binding"]
-    expected = {
-        "source": {"commit": identity["source_commit"], "digest": identity["source"]},
-        "native_modules": {
-            name: {"source": value["source_id"], "binary": value["binary_id"]}
-            for name, value in identity["native"].items()
-        },
-        "checkpoint_config": identity["checkpoint"]["config"],
-        "checkpoint_index": identity["checkpoint"]["index"],
-        "tokenizer": identity["tokenizer"],
-        "gpu_uuids": [device["uuid"] for device in identity["topology"]],
-        "runtime_modes": modes,
-        "case_id": identifier,
-        "strategy": case["strategy"],
-        "effective_strategy": case["strategy"],
-        "sampling": "greedy",
-    }
-    if any(binding.get(key) != value for key, value in expected.items()):
-        raise ValueError("trace identity differs from the measured run")
+    binding = _measurement_binding(trace, identity, modes, identifier, case)
     for key, value in configuration.items():
         if result.get(key) != value:
             raise ValueError(f"result reference field differs: {key}")

@@ -55,6 +55,118 @@ __device__ __forceinline__ void prefill_copy_raw(uint8_t *destination, const uin
   asm volatile("cp.async.commit_group;" ::: "memory");
 }
 
+template <class ScaleLayout>
+__device__ __forceinline__ void
+prefill_load_scales(const uint8_t *input_scales, const uint8_t *weight_scales, uint8_t *sa,
+                    uint8_t *sb, int valid_rows, int row_offset, int first_row, int first_column,
+                    int width_groups, int outputs, int start, ScaleLayout layout) {
+  for (int index = threadIdx.x; index < prefill_rows * 4; index += blockDim.x) {
+    int row = index / 4, group = index % 4;
+    sa[index] = row < valid_rows
+                    ? input_scales[int64_t(row_offset + first_row + row) * width_groups +
+                                   start / 32 + group]
+                    : 127;
+  }
+  for (int index = threadIdx.x; index < prefill_columns * 4; index += blockDim.x) {
+    int row = index / 4, group = index % 4;
+    sb[index] =
+        first_column + row < outputs
+            ? weight_scales[layout(cute::make_coord(first_column + row, start + group * 32, 0))]
+            : 127;
+  }
+}
+
+__device__ __forceinline__ void prefill_convert_stage(const uint8_t *raw, uint16_t *as,
+                                                      uint16_t *bs, int slot) {
+  auto *loaded = raw + slot * prefill_raw_bytes;
+  for (int index = threadIdx.x * 8; index < prefill_rows * prefill_stage; index += blockDim.x * 8) {
+    int row = index / prefill_stage, column = index % prefill_stage;
+    uint64_t packed = *reinterpret_cast<const uint64_t *>(loaded + index);
+    uint4 converted = make_uint4(half_pair(packed), half_pair(packed >> 16),
+                                 half_pair(packed >> 32), half_pair(packed >> 48));
+    prefill_half_store(as, row, column, converted);
+  }
+  for (int index = threadIdx.x * 8; index < prefill_columns * prefill_stage;
+       index += blockDim.x * 8) {
+    int row = index / prefill_stage, column = index % prefill_stage;
+    uint32_t packed = *reinterpret_cast<const uint32_t *>(loaded + prefill_raw_a + index / 2);
+    uint2 low_values = fp4_half_four(packed), high_values = fp4_half_four(packed >> 16);
+    prefill_half_store(bs, row, column,
+                       make_uint4(low_values.x, low_values.y, high_values.x, high_values.y));
+  }
+}
+
+__device__ __forceinline__ void prefill_accumulate_stage(const uint16_t *as, const uint16_t *bs,
+                                                         const uint8_t *sa, const uint8_t *sb,
+                                                         float (&total)[4][2][4], int warp_row,
+                                                         int warp_column, int lane) {
+  for (int group = 0; group < 4; ++group) {
+    float activation_scales[4][2], weight_scales_tile[2][2];
+#pragma unroll
+    for (int tile = 0; tile < 4; ++tile)
+#pragma unroll
+      for (int part = 0; part < 2; ++part) {
+        int row = warp_row + tile * 16 + lane / 4 + 8 * part;
+        activation_scales[tile][part] = fp8_scale(sa[row * 4 + group]);
+      }
+#pragma unroll
+    for (int tile = 0; tile < 2; ++tile)
+#pragma unroll
+      for (int part = 0; part < 2; ++part) {
+        int column = warp_column * 16 + tile * 8 + (lane & 3) * 2 + part;
+        weight_scales_tile[tile][part] = fp8_scale(sb[column * 4 + group]);
+      }
+    float partial[4][2][4] = {};
+#pragma unroll
+    for (int half = 0; half < 2; ++half) {
+      uint32_t a[4][4], b[2][2];
+#pragma unroll
+      for (int tile = 0; tile < 4; ++tile)
+        half_load_a(a[tile], as, warp_row + tile * 16, group * 32 + half * 16, lane);
+#pragma unroll
+      for (int tile = 0; tile < 2; ++tile)
+        half_load_b(b[tile], bs, warp_column * 16 + tile * 8, group * 32 + half * 16, lane);
+#pragma unroll
+      for (int m = 0; m < 4; ++m)
+#pragma unroll
+        for (int n = 0; n < 2; ++n)
+          half_mma(partial[m][n], a[m], b[n]);
+    }
+#pragma unroll
+    for (int m = 0; m < 4; ++m)
+#pragma unroll
+      for (int n = 0; n < 2; ++n)
+#pragma unroll
+        for (int value = 0; value < 4; ++value)
+          total[m][n][value] =
+              __fmaf_rn(__fmul_rn(partial[m][n][value], activation_scales[m][value >> 1]),
+                        weight_scales_tile[n][value & 1], total[m][n][value]);
+  }
+}
+
+template <class Output>
+__device__ __forceinline__ void prefill_store_output(Output *output, const float (&total)[4][2][4],
+                                                     int first_row, int first_column,
+                                                     int row_offset, int group_rows, int outputs,
+                                                     int warp_row, int warp_column, int lane) {
+#pragma unroll
+  for (int m = 0; m < 4; ++m)
+#pragma unroll
+    for (int n = 0; n < 2; ++n)
+#pragma unroll
+      for (int value = 0; value < 4; ++value) {
+        int row = first_row + warp_row + m * 16 + lane / 4 + 8 * (value >> 1);
+        int column = first_column + warp_column * 16 + n * 8 + (lane & 3) * 2 + (value & 1);
+        if (row < group_rows && column < outputs) {
+          if constexpr (std::is_same_v<Output, float>)
+            output[int64_t(row_offset + row) * outputs + column] = total[m][n][value];
+          else
+            output[int64_t(row_offset + row) * outputs + column] =
+                __float2bfloat16_rn(total[m][n][value]);
+        }
+      }
+}
+
 template <class Output, class ScaleLayout>
 __global__ void
 grouped_prefill_k32_kernel(const uint8_t *__restrict__ input,
@@ -103,103 +215,20 @@ grouped_prefill_k32_kernel(const uint8_t *__restrict__ input,
         prefill_copy_raw(raw + (slot ^ 1) * prefill_raw_bytes, input, weight, row_offset, first_row,
                          first_column, valid_rows, outputs, width, weight_stride,
                          start + prefill_stage);
-      for (int index = threadIdx.x; index < prefill_rows * 4; index += blockDim.x) {
-        int row = index / 4, group = index % 4;
-        sa[index] = row < valid_rows
-                        ? input_scales[int64_t(row_offset + first_row + row) * width_groups +
-                                       start / 32 + group]
-                        : 127;
-      }
-      for (int index = threadIdx.x; index < prefill_columns * 4; index += blockDim.x) {
-        int row = index / 4, group = index % 4;
-        sb[index] =
-            first_column + row < outputs
-                ? weight_scales[layout(cute::make_coord(first_column + row, start + group * 32, 0))]
-                : 127;
-      }
+      prefill_load_scales(input_scales, weight_scales, sa, sb, valid_rows, row_offset, first_row,
+                          first_column, width_groups, outputs, start, layout);
       if (start + prefill_stage < width)
         asm volatile("cp.async.wait_group 1;" ::: "memory");
       else
         asm volatile("cp.async.wait_group 0;" ::: "memory");
       __syncthreads();
-      auto *loaded = raw + slot * prefill_raw_bytes;
-      for (int index = threadIdx.x * 8; index < prefill_rows * prefill_stage;
-           index += blockDim.x * 8) {
-        int row = index / prefill_stage, column = index % prefill_stage;
-        uint64_t packed = *reinterpret_cast<const uint64_t *>(loaded + index);
-        uint4 converted = make_uint4(half_pair(packed), half_pair(packed >> 16),
-                                     half_pair(packed >> 32), half_pair(packed >> 48));
-        prefill_half_store(as, row, column, converted);
-      }
-      for (int index = threadIdx.x * 8; index < prefill_columns * prefill_stage;
-           index += blockDim.x * 8) {
-        int row = index / prefill_stage, column = index % prefill_stage;
-        uint32_t packed = *reinterpret_cast<const uint32_t *>(loaded + prefill_raw_a + index / 2);
-        uint2 low_values = fp4_half_four(packed), high_values = fp4_half_four(packed >> 16);
-        prefill_half_store(bs, row, column,
-                           make_uint4(low_values.x, low_values.y, high_values.x, high_values.y));
-      }
+      prefill_convert_stage(raw, as, bs, slot);
       __syncthreads();
-      for (int group = 0; group < 4; ++group) {
-        float activation_scales[4][2], weight_scales_tile[2][2];
-#pragma unroll
-        for (int tile = 0; tile < 4; ++tile)
-#pragma unroll
-          for (int part = 0; part < 2; ++part) {
-            int row = warp_row + tile * 16 + lane / 4 + 8 * part;
-            activation_scales[tile][part] = fp8_scale(sa[row * 4 + group]);
-          }
-#pragma unroll
-        for (int tile = 0; tile < 2; ++tile)
-#pragma unroll
-          for (int part = 0; part < 2; ++part) {
-            int column = warp_column * 16 + tile * 8 + (lane & 3) * 2 + part;
-            weight_scales_tile[tile][part] = fp8_scale(sb[column * 4 + group]);
-          }
-        float partial[4][2][4] = {};
-#pragma unroll
-        for (int half = 0; half < 2; ++half) {
-          uint32_t a[4][4], b[2][2];
-#pragma unroll
-          for (int tile = 0; tile < 4; ++tile)
-            half_load_a(a[tile], as, warp_row + tile * 16, group * 32 + half * 16, lane);
-#pragma unroll
-          for (int tile = 0; tile < 2; ++tile)
-            half_load_b(b[tile], bs, warp_column * 16 + tile * 8, group * 32 + half * 16, lane);
-#pragma unroll
-          for (int m = 0; m < 4; ++m)
-#pragma unroll
-            for (int n = 0; n < 2; ++n)
-              half_mma(partial[m][n], a[m], b[n]);
-        }
-#pragma unroll
-        for (int m = 0; m < 4; ++m)
-#pragma unroll
-          for (int n = 0; n < 2; ++n)
-#pragma unroll
-            for (int value = 0; value < 4; ++value)
-              total[m][n][value] =
-                  __fmaf_rn(__fmul_rn(partial[m][n][value], activation_scales[m][value >> 1]),
-                            weight_scales_tile[n][value & 1], total[m][n][value]);
-      }
+      prefill_accumulate_stage(as, bs, sa, sb, total, warp_row, warp_column, lane);
       __syncthreads();
     }
-#pragma unroll
-    for (int m = 0; m < 4; ++m)
-#pragma unroll
-      for (int n = 0; n < 2; ++n)
-#pragma unroll
-        for (int value = 0; value < 4; ++value) {
-          int row = first_row + warp_row + m * 16 + lane / 4 + 8 * (value >> 1);
-          int column = first_column + warp_column * 16 + n * 8 + (lane & 3) * 2 + (value & 1);
-          if (row < group_rows && column < outputs) {
-            if constexpr (std::is_same_v<Output, float>)
-              output[int64_t(row_offset + row) * outputs + column] = total[m][n][value];
-            else
-              output[int64_t(row_offset + row) * outputs + column] =
-                  __float2bfloat16_rn(total[m][n][value]);
-          }
-        }
+    prefill_store_output(output, total, first_row, first_column, row_offset, group_rows, outputs,
+                         warp_row, warp_column, lane);
     __syncthreads();
   }
 }

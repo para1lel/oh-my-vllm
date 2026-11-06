@@ -13,6 +13,37 @@ struct LaunchState {
   bool configured[2] = {};
 };
 
+template <int Rows> inline void configure_context_kernels(LaunchState &state) {
+  constexpr int Capacity = Rows == 4 ? 8 : 16;
+  constexpr int Shared = 65536 + Capacity * 512 + 128;
+  constexpr int Which = Rows == 4 ? 0 : 1;
+  if (!state.configured[Which]) {
+    auto check = [&](auto kernel, int threads, int shared, int tmem_columns, size_t local_limit) {
+      if (shared) {
+        check_cuda(
+            cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shared));
+        check_cuda(
+            cudaFuncSetAttribute(kernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+      }
+      cudaFuncAttributes attributes{};
+      check_cuda(cudaFuncGetAttributes(&attributes, kernel));
+      TVM_FFI_ICHECK(attributes.maxThreadsPerBlock >= threads &&
+                     attributes.localSizeBytes <= local_limit);
+      int active = 0;
+      check_cuda(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&active, kernel, threads, shared));
+      TVM_FFI_ICHECK(active >= 1) << "MTP context kernel cannot reside";
+      if (tmem_columns)
+        TVM_FFI_ICHECK(active * tmem_columns <= 512) << "ordinary TMEM allocation cannot reside";
+    };
+    check(mtp_norm_kernel<1024>, 1024, 0, 0, 0);
+    check(fc_kernel<Capacity>, 128, Shared, 32, 0);
+    check(middle_kernel<Rows>, 640, 0, 0, 0);
+    check(kv_kernel<Rows>, 128, Shared, 4 * Capacity, 0);
+    check(heads_kernel, 32, 0, 0, 0);
+    state.configured[Which] = true;
+  }
+}
+
 template <int Rows>
 bool run(const Arguments &a, TensorView fc_weight, TensorView kv_weight, cudaStream_t stream) {
   constexpr int Capacity = Rows == 4 ? 8 : 16;
@@ -56,31 +87,7 @@ bool run(const Arguments &a, TensorView fc_weight, TensorView kv_weight, cudaStr
     found = states.emplace(key, state).first;
   }
   auto &state = found->second;
-  if (!state.configured[Which]) {
-    auto check = [&](auto kernel, int threads, int shared, int tmem_columns, size_t local_limit) {
-      if (shared) {
-        check_cuda(
-            cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, shared));
-        check_cuda(
-            cudaFuncSetAttribute(kernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
-      }
-      cudaFuncAttributes attributes{};
-      check_cuda(cudaFuncGetAttributes(&attributes, kernel));
-      TVM_FFI_ICHECK(attributes.maxThreadsPerBlock >= threads &&
-                     attributes.localSizeBytes <= local_limit);
-      int active = 0;
-      check_cuda(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&active, kernel, threads, shared));
-      TVM_FFI_ICHECK(active >= 1) << "MTP context kernel cannot reside";
-      if (tmem_columns)
-        TVM_FFI_ICHECK(active * tmem_columns <= 512) << "ordinary TMEM allocation cannot reside";
-    };
-    check(mtp_norm_kernel<1024>, 1024, 0, 0, 0);
-    check(fc_kernel<Capacity>, 128, Shared, 32, 0);
-    check(middle_kernel<Rows>, 640, 0, 0, 0);
-    check(kv_kernel<Rows>, 128, Shared, 4 * Capacity, 0);
-    check(heads_kernel, 32, 0, 0, 0);
-    state.configured[Which] = true;
-  }
+  configure_context_kernels<Rows>(state);
   mtp_norm_kernel<1024><<<dim3(Rows, 2), 1024, 0, stream>>>(
       a.hidden, a.tokens, a.embedding, a.norm_hidden, a.norm_embedding, a.hidden_rows,
       a.boundary_hidden, a.boundary_rows, a.media, a.media_rows, a.use_media, a.media_count,
@@ -102,6 +109,79 @@ bool run(const Arguments &a, TensorView fc_weight, TensorView kv_weight, cudaStr
 }
 
 } // namespace mtp_context_native
+
+inline mtp_context_native::Arguments bind_context_arguments(
+    TensorView hidden, TensorView tokens, TensorView embedding, TensorView norm_hidden,
+    TensorView norm_embedding, TensorView fc_weight, TensorView hidden_rows,
+    TensorView boundary_hidden, TensorView boundary_rows, TensorView media, TensorView media_rows,
+    bool use_media, TensorView fa_norm, TensorView kv_weight, TensorView kv_weight_scale,
+    TensorView k_norm, TensorView positions, TensorView cache, TensorView slots, TensorView tables,
+    TensorView sequence_rows, TensorView lengths, TensorView mtp_packed, TensorView fc_output,
+    TensorView zero, TensorView fc_partials, TensorView summed, TensorView quantized,
+    TensorView scales, TensorView kv_packed, TensorView kv_partials, TensorView endpoints,
+    TensorView endpoint_zero) {
+  int rows = tokens.size(0), batch = sequence_rows.size(0) - 1;
+  int hidden_count = hidden.size(0), boundaries = boundary_hidden.size(0);
+  using namespace mtp_context_native;
+  Arguments a{};
+  a.hidden = static_cast<const __nv_bfloat16 *>(hidden.data_ptr());
+  a.embedding = static_cast<const __nv_bfloat16 *>(embedding.data_ptr());
+  a.boundary_hidden = static_cast<const __nv_bfloat16 *>(boundary_hidden.data_ptr());
+  a.media = static_cast<const __nv_bfloat16 *>(media.data_ptr());
+  a.norm_hidden = static_cast<const float *>(norm_hidden.data_ptr());
+  a.norm_embedding = static_cast<const float *>(norm_embedding.data_ptr());
+  a.fa_norm = static_cast<const float *>(fa_norm.data_ptr());
+  a.weight_scale = static_cast<const float *>(kv_weight_scale.data_ptr());
+  a.k_norm = static_cast<const float *>(k_norm.data_ptr());
+  a.tokens = static_cast<const int64_t *>(tokens.data_ptr());
+  a.positions = static_cast<const int64_t *>(positions.data_ptr());
+  a.hidden_rows = static_cast<const int32_t *>(hidden_rows.data_ptr());
+  a.boundary_rows = static_cast<const int32_t *>(boundary_rows.data_ptr());
+  a.media_rows = static_cast<const int32_t *>(media_rows.data_ptr());
+  a.slots = static_cast<const int32_t *>(slots.data_ptr());
+  a.sequence_rows = static_cast<const int32_t *>(sequence_rows.data_ptr());
+  a.mtp_packed = static_cast<__nv_bfloat16 *>(mtp_packed.data_ptr());
+  a.fc_output = static_cast<__nv_bfloat16 *>(fc_output.data_ptr());
+  a.zero = static_cast<__nv_bfloat16 *>(zero.data_ptr());
+  a.summed = static_cast<__nv_bfloat16 *>(summed.data_ptr());
+  a.kv_packed = static_cast<__nv_bfloat16 *>(kv_packed.data_ptr());
+  a.cache = static_cast<__nv_bfloat16 *>(cache.data_ptr());
+  a.endpoints = static_cast<__nv_bfloat16 *>(endpoints.data_ptr());
+  a.endpoint_zero = static_cast<__nv_bfloat16 *>(endpoint_zero.data_ptr());
+  a.quantized = static_cast<__nv_fp8_e4m3 *>(quantized.data_ptr());
+  a.fc_partials = static_cast<float *>(fc_partials.data_ptr());
+  a.kv_partials = static_cast<float *>(kv_partials.data_ptr());
+  a.scales = static_cast<float *>(scales.data_ptr());
+  a.rows = rows;
+  a.batch = batch;
+  a.hidden_count = hidden_count;
+  a.boundaries = boundaries;
+  a.media_count = media.size(0);
+  a.cache_pages = cache.size(0);
+  a.use_media = use_media;
+  return a;
+}
+
+inline bool context_buffers_separate(std::initializer_list<TensorView> inputs,
+                                     std::initializer_list<TensorView> outputs) {
+  auto separate = [](TensorView a, TensorView b) {
+    auto x = reinterpret_cast<uintptr_t>(a.data_ptr());
+    auto y = reinterpret_cast<uintptr_t>(b.data_ptr());
+    return x + tvm::ffi::GetDataSize(a) <= y || y + tvm::ffi::GetDataSize(b) <= x;
+  };
+  int left = 0;
+  for (auto output : outputs) {
+    for (auto input : inputs)
+      if (!separate(output, input))
+        return false;
+    int right = 0;
+    for (auto other : outputs)
+      if (right++ > left && !separate(output, other))
+        return false;
+    ++left;
+  }
+  return true;
+}
 
 bool mtp_context(TensorView hidden, TensorView tokens, TensorView embedding, TensorView norm_hidden,
                  TensorView norm_embedding, TensorView fc_weight, TensorView hidden_rows,
@@ -160,59 +240,15 @@ bool mtp_context(TensorView hidden, TensorView tokens, TensorView embedding, Ten
                  positions,  slots,       tables,          sequence_rows,   lengths};
   auto outputs = {cache,     mtp_packed, fc_output, zero,        fc_partials, summed,
                   quantized, scales,     kv_packed, kv_partials, endpoints,   endpoint_zero};
-  auto separate = [](TensorView a, TensorView b) {
-    auto x = reinterpret_cast<uintptr_t>(a.data_ptr());
-    auto y = reinterpret_cast<uintptr_t>(b.data_ptr());
-    return x + tvm::ffi::GetDataSize(a) <= y || y + tvm::ffi::GetDataSize(b) <= x;
-  };
-  int left = 0;
-  for (auto output : outputs) {
-    for (auto input : inputs)
-      if (!separate(output, input))
-        return false;
-    int right = 0;
-    for (auto other : outputs)
-      if (right++ > left && !separate(output, other))
-        return false;
-    ++left;
-  }
+  if (!context_buffers_separate(inputs, outputs))
+    return false;
+  auto a = bind_context_arguments(hidden, tokens, embedding, norm_hidden, norm_embedding, fc_weight,
+                                  hidden_rows, boundary_hidden, boundary_rows, media, media_rows,
+                                  use_media, fa_norm, kv_weight, kv_weight_scale, k_norm, positions,
+                                  cache, slots, tables, sequence_rows, lengths, mtp_packed,
+                                  fc_output, zero, fc_partials, summed, quantized, scales,
+                                  kv_packed, kv_partials, endpoints, endpoint_zero);
   using namespace mtp_context_native;
-  Arguments a{};
-  a.hidden = static_cast<const __nv_bfloat16 *>(hidden.data_ptr());
-  a.embedding = static_cast<const __nv_bfloat16 *>(embedding.data_ptr());
-  a.boundary_hidden = static_cast<const __nv_bfloat16 *>(boundary_hidden.data_ptr());
-  a.media = static_cast<const __nv_bfloat16 *>(media.data_ptr());
-  a.norm_hidden = static_cast<const float *>(norm_hidden.data_ptr());
-  a.norm_embedding = static_cast<const float *>(norm_embedding.data_ptr());
-  a.fa_norm = static_cast<const float *>(fa_norm.data_ptr());
-  a.weight_scale = static_cast<const float *>(kv_weight_scale.data_ptr());
-  a.k_norm = static_cast<const float *>(k_norm.data_ptr());
-  a.tokens = static_cast<const int64_t *>(tokens.data_ptr());
-  a.positions = static_cast<const int64_t *>(positions.data_ptr());
-  a.hidden_rows = static_cast<const int32_t *>(hidden_rows.data_ptr());
-  a.boundary_rows = static_cast<const int32_t *>(boundary_rows.data_ptr());
-  a.media_rows = static_cast<const int32_t *>(media_rows.data_ptr());
-  a.slots = static_cast<const int32_t *>(slots.data_ptr());
-  a.sequence_rows = static_cast<const int32_t *>(sequence_rows.data_ptr());
-  a.mtp_packed = static_cast<__nv_bfloat16 *>(mtp_packed.data_ptr());
-  a.fc_output = static_cast<__nv_bfloat16 *>(fc_output.data_ptr());
-  a.zero = static_cast<__nv_bfloat16 *>(zero.data_ptr());
-  a.summed = static_cast<__nv_bfloat16 *>(summed.data_ptr());
-  a.kv_packed = static_cast<__nv_bfloat16 *>(kv_packed.data_ptr());
-  a.cache = static_cast<__nv_bfloat16 *>(cache.data_ptr());
-  a.endpoints = static_cast<__nv_bfloat16 *>(endpoints.data_ptr());
-  a.endpoint_zero = static_cast<__nv_bfloat16 *>(endpoint_zero.data_ptr());
-  a.quantized = static_cast<__nv_fp8_e4m3 *>(quantized.data_ptr());
-  a.fc_partials = static_cast<float *>(fc_partials.data_ptr());
-  a.kv_partials = static_cast<float *>(kv_partials.data_ptr());
-  a.scales = static_cast<float *>(scales.data_ptr());
-  a.rows = rows;
-  a.batch = batch;
-  a.hidden_count = hidden_count;
-  a.boundaries = boundaries;
-  a.media_count = media.size(0);
-  a.cache_pages = cache.size(0);
-  a.use_media = use_media;
   tvm::ffi::CUDADeviceGuard guard(hidden.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, hidden.device().device_id));
   if (rows == 4)

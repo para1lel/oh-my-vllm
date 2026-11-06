@@ -283,7 +283,7 @@ def receive(socket):
     return msgpack.unpackb(frames[0], raw=False)
 
 
-def run(args, socket):
+def _initialize_peer(args, socket):
     init = receive(socket)
     header = init["header"]
     if init["type"] != "init" or init["transport"] != "nccl":
@@ -328,6 +328,11 @@ def run(args, socket):
             "bootstrap_nonce": connect["bootstrap_nonce"],
         },
     )
+    return header, record, communicator, device, probe
+
+
+def run(args, socket):
+    header, record, communicator, device, probe = _initialize_peer(args, socket)
     while True:
         message = receive(socket)
         if message["type"] == "shutdown":

@@ -191,6 +191,27 @@ def sampling(data, case, rows, *, greedy=False):
         data.write("rng", range(rows))
 
 
+def _vision_inputs(data, rng, boundary, shape):
+    if boundary == "vision.input":
+        data.add(
+            "inputs",
+            "pixels",
+            rng.integers(
+                0,
+                256,
+                (1, shape["frames"], shape["height"] * 16, shape["width"] * 16, 3),
+                dtype=np.uint8,
+            ),
+        )
+    else:
+        data.add(
+            "inputs",
+            "hidden",
+            rng.normal(0, 0.5, (shape["rows"], 1152)),
+            "bfloat16",
+        )
+
+
 def make(case, weights):
     rng = np.random.default_rng(
         int.from_bytes(hashlib.sha256(case.id.encode()).digest()[:8])
@@ -262,24 +283,7 @@ def make(case, weights):
     elif boundary == "mtp.accept":
         acceptance(data, case)
     elif boundary.startswith("vision."):
-        if boundary == "vision.input":
-            data.add(
-                "inputs",
-                "pixels",
-                rng.integers(
-                    0,
-                    256,
-                    (1, shape["frames"], shape["height"] * 16, shape["width"] * 16, 3),
-                    dtype=np.uint8,
-                ),
-            )
-        else:
-            data.add(
-                "inputs",
-                "hidden",
-                rng.normal(0, 0.5, (shape["rows"], 1152)),
-                "bfloat16",
-            )
+        _vision_inputs(data, rng, boundary, shape)
     return data
 
 

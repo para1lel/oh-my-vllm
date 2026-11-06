@@ -10,6 +10,130 @@
 #include <map>
 #include <tuple>
 
+template <class Mma, class Gate, class Up, class Input, class Partial>
+__device__ __forceinline__ void
+paired_up_compute(Mma &mma, Gate &gate_fragment, Up &up_fragment, Input &input_fragment,
+                  Partial &partial, const uint32_t *tensor_memory, uint64_t *barriers, int warp) {
+  using namespace cute;
+  if (warp == 0) {
+    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+#pragma unroll
+    for (int sub = 0; sub < 2; ++sub)
+#pragma unroll
+      for (int side = 0; side < 2; ++side) {
+        partial.data() = *tensor_memory + (sub * 2 + side) * 16;
+        mma.accumulate_ = UMMA::ScaleOut::Zero;
+#pragma unroll
+        for (int k = 0; k < 4; ++k) {
+          if (side == 0)
+            gemm(mma, gate_fragment(_, _, sub * 4 + k), input_fragment(_, _, sub * 4 + k), partial);
+          else
+            gemm(mma, up_fragment(_, _, sub * 4 + k), input_fragment(_, _, sub * 4 + k), partial);
+          mma.accumulate_ = UMMA::ScaleOut::One;
+        }
+      }
+    cutlass::arch::umma_arrive(barriers);
+  }
+}
+
+template <int Rows, class Element, class InputLayout, class WeightLayout, class Mma,
+          class InputFragment, class Partial, class Prefetch>
+__device__ __forceinline__ void
+paired_up_groups(const __nv_fp8_e4m3 *input, const float *input_scale, const float *weight_scale,
+                 Element *weights, InputLayout &input_tile, Mma &mma, InputFragment &input_fragment,
+                 Partial &partial, uint64_t *barriers, const uint32_t *tensor_memory,
+                 Prefetch &prefetch, uint32_t address, float (&accumulated)[2][Rows], int thread,
+                 int warp) {
+  using namespace cute;
+  for (int group = 0; group < 40; group += 2) {
+    int tile = group / 2, slot = tile % 3;
+    if (group + 4 < 40)
+      prefetch(group + 4, (slot + 2) % 3);
+    auto gate_tile = make_tensor(make_smem_ptr(weights + slot * 65536), WeightLayout{});
+    auto up_tile = make_tensor(make_smem_ptr(weights + slot * 65536 + 32768), WeightLayout{});
+    auto gate_fragment = mma.get_slice(0).make_fragment_A(gate_tile);
+    auto up_fragment = mma.get_slice(0).make_fragment_A(up_tile);
+    float factors[2][2][Rows];
+#pragma unroll
+    for (int sub = 0; sub < 2; ++sub)
+#pragma unroll
+      for (int side = 0; side < 2; ++side)
+#pragma unroll
+        for (int row = 0; row < Rows; ++row)
+          factors[sub][side][row] = input_scale[row * 40 + group + sub] *
+                                    weight_scale[(int(blockIdx.x) + side * 136) * 40 + group + sub];
+    for (int index = thread; index < Rows * 16; index += 128) {
+      int row = index / 16, column = index % 16 * 16;
+      unsigned destination =
+          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 32), 0, column / 32));
+      const auto *source = input + int64_t(row) * 5120 + group * 128 + column;
+      asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(destination), "l"(source)
+                   : "memory");
+    }
+    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+    __syncthreads();
+    wait_barrier(barriers[1 + slot], (tile / 3) & 1);
+    cutlass::arch::fence_view_async_shared();
+    paired_up_compute(mma, gate_fragment, up_fragment, input_fragment, partial, tensor_memory,
+                      barriers, warp);
+    wait_barrier(*barriers, tile & 1);
+    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+#pragma unroll
+    for (int sub = 0; sub < 2; ++sub)
+#pragma unroll
+      for (int side = 0; side < 2; ++side) {
+        uint32_t values[16];
+        if constexpr (Rows == 1)
+          SM100_TMEM_LOAD_32dp32b1x::copy(address + (sub * 2 + side) * 16, values[0]);
+        else if constexpr (Rows == 4)
+          SM100_TMEM_LOAD_32dp32b4x::copy(address + (sub * 2 + side) * 16, values[0], values[1],
+                                          values[2], values[3]);
+        else
+          SM100_TMEM_LOAD_32dp32b8x::copy(address + (sub * 2 + side) * 16, values[0], values[1],
+                                          values[2], values[3], values[4], values[5], values[6],
+                                          values[7]);
+#pragma unroll
+        for (int row = 0; row < Rows; ++row)
+          accumulated[side][row] =
+              fmaf(__uint_as_float(values[row]), factors[sub][side][row], accumulated[side][row]);
+      }
+    cutlass::arch::fence_view_async_tmem_load();
+    asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
+    __syncthreads();
+  }
+}
+
+template <int Rows>
+__device__ __forceinline__ void
+paired_up_activate(const float (&accumulated)[2][Rows], __nv_bfloat16 *gate_up,
+                   __nv_fp8_e4m3 *product, float *product_scale, float (&maxima)[Rows][4],
+                   int first_column, int thread, int warp, int lane) {
+  float products[Rows];
+#pragma unroll
+  for (int row = 0; row < Rows; ++row) {
+    float gate = __bfloat162float(__float2bfloat16_rn(accumulated[0][row]));
+    float up = __bfloat162float(__float2bfloat16_rn(accumulated[1][row]));
+    gate_up[int64_t(row) * 34816 + first_column + thread] = __float2bfloat16_rn(gate);
+    gate_up[int64_t(row) * 34816 + 17408 + first_column + thread] = __float2bfloat16_rn(up);
+    float exponent = expf(-fabsf(gate));
+    float sigmoid = (gate >= 0.f ? 1.f : exponent) / (1.f + exponent);
+    products[row] = __bfloat162float(__float2bfloat16_rn(gate * sigmoid * up));
+    unsigned maximum = __reduce_max_sync(0xffffffffu, __float_as_uint(fabsf(products[row])));
+    if (lane == 0)
+      maxima[row][warp] = __uint_as_float(maximum);
+  }
+  __syncthreads();
+#pragma unroll
+  for (int row = 0; row < Rows; ++row) {
+    float maximum = lane < 4 ? maxima[row][lane] : 0.f;
+    maximum = __uint_as_float(__reduce_max_sync(0xffffffffu, __float_as_uint(maximum)));
+    float divisor = fmaxf(maximum, 1e-30f) / 448.f;
+    if (thread == 0)
+      product_scale[row * 136 + blockIdx.x] = divisor;
+    product[int64_t(row) * 17408 + first_column + thread] = __nv_fp8_e4m3(products[row] / divisor);
+  }
+}
+
 template <int Rows>
 __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_scale,
                                  const float *weight_scale, __nv_bfloat16 *gate_up,
@@ -70,105 +194,12 @@ __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_
   auto partial = partition_fragment_C(mma, Shape<_128, _16>{});
   uint32_t address = *tensor_memory + uint32_t(warp * 32) * 65536u;
   float accumulated[2][Rows] = {};
-  for (int group = 0; group < 40; group += 2) {
-    int tile = group / 2, slot = tile % 3;
-    if (group + 4 < 40)
-      prefetch(group + 4, (slot + 2) % 3);
-    auto gate_tile = make_tensor(make_smem_ptr(weights + slot * 65536), WeightLayout{});
-    auto up_tile = make_tensor(make_smem_ptr(weights + slot * 65536 + 32768), WeightLayout{});
-    auto gate_fragment = mma.get_slice(0).make_fragment_A(gate_tile);
-    auto up_fragment = mma.get_slice(0).make_fragment_A(up_tile);
-    float factors[2][2][Rows];
-#pragma unroll
-    for (int sub = 0; sub < 2; ++sub)
-#pragma unroll
-      for (int side = 0; side < 2; ++side)
-#pragma unroll
-        for (int row = 0; row < Rows; ++row)
-          factors[sub][side][row] = input_scale[row * 40 + group + sub] *
-                                    weight_scale[(int(blockIdx.x) + side * 136) * 40 + group + sub];
-    for (int index = thread; index < Rows * 16; index += 128) {
-      int row = index / 16, column = index % 16 * 16;
-      unsigned destination =
-          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 32), 0, column / 32));
-      const auto *source = input + int64_t(row) * 5120 + group * 128 + column;
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(destination), "l"(source)
-                   : "memory");
-    }
-    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
-    __syncthreads();
-    wait_barrier(barriers[1 + slot], (tile / 3) & 1);
-    cutlass::arch::fence_view_async_shared();
-    if (warp == 0) {
-      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
-#pragma unroll
-      for (int sub = 0; sub < 2; ++sub)
-#pragma unroll
-        for (int side = 0; side < 2; ++side) {
-          partial.data() = *tensor_memory + (sub * 2 + side) * 16;
-          mma.accumulate_ = UMMA::ScaleOut::Zero;
-#pragma unroll
-          for (int k = 0; k < 4; ++k) {
-            if (side == 0)
-              gemm(mma, gate_fragment(_, _, sub * 4 + k), input_fragment(_, _, sub * 4 + k),
-                   partial);
-            else
-              gemm(mma, up_fragment(_, _, sub * 4 + k), input_fragment(_, _, sub * 4 + k), partial);
-            mma.accumulate_ = UMMA::ScaleOut::One;
-          }
-        }
-      cutlass::arch::umma_arrive(barriers);
-    }
-    wait_barrier(*barriers, tile & 1);
-    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
-#pragma unroll
-    for (int sub = 0; sub < 2; ++sub)
-#pragma unroll
-      for (int side = 0; side < 2; ++side) {
-        uint32_t values[16];
-        if constexpr (Rows == 1)
-          SM100_TMEM_LOAD_32dp32b1x::copy(address + (sub * 2 + side) * 16, values[0]);
-        else if constexpr (Rows == 4)
-          SM100_TMEM_LOAD_32dp32b4x::copy(address + (sub * 2 + side) * 16, values[0], values[1],
-                                          values[2], values[3]);
-        else
-          SM100_TMEM_LOAD_32dp32b8x::copy(address + (sub * 2 + side) * 16, values[0], values[1],
-                                          values[2], values[3], values[4], values[5], values[6],
-                                          values[7]);
-#pragma unroll
-        for (int row = 0; row < Rows; ++row)
-          accumulated[side][row] =
-              fmaf(__uint_as_float(values[row]), factors[sub][side][row], accumulated[side][row]);
-      }
-    cutlass::arch::fence_view_async_tmem_load();
-    asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
-    __syncthreads();
-  }
-  float products[Rows];
+  paired_up_groups<Rows, Element, decltype(input_tile), WeightLayout>(
+      input, input_scale, weight_scale, weights, input_tile, mma, input_fragment, partial, barriers,
+      tensor_memory, prefetch, address, accumulated, thread, warp);
   __shared__ float maxima[Rows][4];
-#pragma unroll
-  for (int row = 0; row < Rows; ++row) {
-    float gate = __bfloat162float(__float2bfloat16_rn(accumulated[0][row]));
-    float up = __bfloat162float(__float2bfloat16_rn(accumulated[1][row]));
-    gate_up[int64_t(row) * 34816 + first_column + thread] = __float2bfloat16_rn(gate);
-    gate_up[int64_t(row) * 34816 + 17408 + first_column + thread] = __float2bfloat16_rn(up);
-    float exponent = expf(-fabsf(gate));
-    float sigmoid = (gate >= 0.f ? 1.f : exponent) / (1.f + exponent);
-    products[row] = __bfloat162float(__float2bfloat16_rn(gate * sigmoid * up));
-    unsigned maximum = __reduce_max_sync(0xffffffffu, __float_as_uint(fabsf(products[row])));
-    if (lane == 0)
-      maxima[row][warp] = __uint_as_float(maximum);
-  }
-  __syncthreads();
-#pragma unroll
-  for (int row = 0; row < Rows; ++row) {
-    float maximum = lane < 4 ? maxima[row][lane] : 0.f;
-    maximum = __uint_as_float(__reduce_max_sync(0xffffffffu, __float_as_uint(maximum)));
-    float divisor = fmaxf(maximum, 1e-30f) / 448.f;
-    if (thread == 0)
-      product_scale[row * 136 + blockIdx.x] = divisor;
-    product[int64_t(row) * 17408 + first_column + thread] = __nv_fp8_e4m3(products[row] / divisor);
-  }
+  paired_up_activate(accumulated, gate_up, product, product_scale, maxima, first_column, thread,
+                     warp, lane);
   __syncthreads();
   if (warp == 0)
     allocator.free(*tensor_memory, 64);

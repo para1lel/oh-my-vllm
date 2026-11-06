@@ -90,75 +90,7 @@ def _trace_peer(rank, directory):
                 proposed=0,
             )
 
-        @torch.inference_mode()
-        def run():
-            if rank >= 2:
-                return
-            legacy(0, 2)
-            routes = RoutingTrace(2, 6, rank=rank, strategy="dep4", device="cpu")
-            model(
-                torch.ones(1, 6, dtype=torch.long),
-                2,
-                cache_slots_cpu=(rank,),
-                routing_trace=routes,
-            )
-            call = target_call_id(worker, -1)
-            count = 6 if rank == 0 else 1
-            mask = torch.arange(6) < count
-            counters = routes.counters(mask)
-            mask.fill_(False)
-            routes.indices.fill_(383)
-            if rank == 0:
-                model.forward_spec(torch.ones(1, 4, dtype=torch.bfloat16), start_pos=1)
-                assert executor.call == 3 and call == 2
-            trace.record(
-                "accounting_call",
-                rank=rank,
-                call=call,
-                phase="decode",
-                request_rows=[
-                    dict(
-                        id=rank + 1,
-                        start=2,
-                        count=count,
-                        accepted=count - 1,
-                        proposed=5,
-                        logit_rows=count,
-                    )
-                ],
-                **counters,
-            )
-            if rank == 1:
-                legacy(3, 1)
-            else:
-                routes = RoutingTrace(2, 3, rank=rank, strategy="dep4", device="cpu")
-                model(
-                    torch.ones(1, 3, dtype=torch.long),
-                    8,
-                    cache_slots_cpu=(rank,),
-                    routing_trace=routes,
-                )
-                call = target_call_id(worker, -1)
-                counters = routes.counters(torch.tensor([True, True, False]))
-                model.forward_spec(torch.ones(1, 4, dtype=torch.bfloat16), start_pos=9)
-                assert executor.call == call == 4
-                trace.record(
-                    "accounting_call",
-                    rank=rank,
-                    call=call,
-                    phase="decode",
-                    request_rows=[
-                        dict(
-                            id=rank + 1,
-                            start=8,
-                            count=2,
-                            accepted=1,
-                            proposed=2,
-                            logit_rows=2,
-                        )
-                    ],
-                    **counters,
-                )
+        run = _trace_run(rank, legacy, model, worker, executor, trace)
 
         with (
             patch("torch.distributed.all_reduce", wraps=dist.all_reduce) as reduce,
@@ -185,9 +117,12 @@ class DeepSeekDep4Trace(unittest.TestCase):
         from oh_my_vllm.models.deepseek_v41.model import ModelArgs, MoE
 
         with (
-            patch("oh_my_vllm.models.deepseek_v41.model.world_size", 1),
-            patch("oh_my_vllm.models.deepseek_v41.model.expert_world_size", 4),
-            patch("oh_my_vllm.models.deepseek_v41.model.default_dtype", torch.bfloat16),
+            patch("oh_my_vllm.models.deepseek_v41.model_context.world_size", 1),
+            patch("oh_my_vllm.models.deepseek_v41.model_context.expert_world_size", 4),
+            patch(
+                "oh_my_vllm.models.deepseek_v41.model_context.default_dtype",
+                torch.bfloat16,
+            ),
         ):
             moe = MoE(
                 0,
@@ -269,30 +204,7 @@ class DeepSeekDep4Trace(unittest.TestCase):
         output = Mock()
         trace = Dep4Trace(worker, output)
 
-        def capture(call, start, length):
-            phase, _options, payload = trace.prepare(
-                (torch.ones(1, length, dtype=torch.long), start),
-                dict(cache_slots_cpu=(0,)),
-            )
-            trace.begin(call, phase)
-            ids = (
-                torch.tensor([[0, 1, 96, 97, 192, 288]], dtype=torch.int32)
-                .expand(length, -1)
-                .clone()
-            )
-            ids[1:] = torch.arange(378, 384, dtype=torch.int32)
-            for layer in range(2):
-                payload[1].record(layer, ids)
-            trace.capture(call, payload)
-
-        def finish(start, length, proposed=0):
-            trace.record(
-                "target",
-                requests=[dict(id=1, start=start, count=length, prompt=4)],
-                proposed=proposed,
-            )
-            with patch("torch.distributed.all_reduce"):
-                trace.flush()
+        capture, finish = self._trace_capture_functions(trace)
 
         capture(1, 0, 2)
         capture(2, 2, 2)
@@ -412,3 +324,105 @@ class DeepSeekDep4Trace(unittest.TestCase):
                     (torch.ones(len(slots), length, dtype=torch.long),),
                     dict(cache_slots_cpu=slots, cache_positions_cpu=positions),
                 )
+
+    def _trace_capture_functions(self, trace):
+        def capture(call, start, length):
+            phase, _options, payload = trace.prepare(
+                (torch.ones(1, length, dtype=torch.long), start),
+                dict(cache_slots_cpu=(0,)),
+            )
+            trace.begin(call, phase)
+            ids = (
+                torch.tensor([[0, 1, 96, 97, 192, 288]], dtype=torch.int32)
+                .expand(length, -1)
+                .clone()
+            )
+            ids[1:] = torch.arange(378, 384, dtype=torch.int32)
+            for layer in range(2):
+                payload[1].record(layer, ids)
+            trace.capture(call, payload)
+
+        def finish(start, length, proposed=0):
+            trace.record(
+                "target",
+                requests=[dict(id=1, start=start, count=length, prompt=4)],
+                proposed=proposed,
+            )
+            with patch("torch.distributed.all_reduce"):
+                trace.flush()
+
+        return capture, finish
+
+
+def _trace_run(rank, legacy, model, worker, executor, trace):
+    @torch.inference_mode()
+    def run():
+        if rank >= 2:
+            return
+        legacy(0, 2)
+        routes = RoutingTrace(2, 6, rank=rank, strategy="dep4", device="cpu")
+        model(
+            torch.ones(1, 6, dtype=torch.long),
+            2,
+            cache_slots_cpu=(rank,),
+            routing_trace=routes,
+        )
+        call = target_call_id(worker, -1)
+        count = 6 if rank == 0 else 1
+        mask = torch.arange(6) < count
+        counters = routes.counters(mask)
+        mask.fill_(False)
+        routes.indices.fill_(383)
+        if rank == 0:
+            model.forward_spec(torch.ones(1, 4, dtype=torch.bfloat16), start_pos=1)
+            assert executor.call == 3 and call == 2
+        trace.record(
+            "accounting_call",
+            rank=rank,
+            call=call,
+            phase="decode",
+            request_rows=[
+                dict(
+                    id=rank + 1,
+                    start=2,
+                    count=count,
+                    accepted=count - 1,
+                    proposed=5,
+                    logit_rows=count,
+                )
+            ],
+            **counters,
+        )
+        if rank == 1:
+            legacy(3, 1)
+        else:
+            routes = RoutingTrace(2, 3, rank=rank, strategy="dep4", device="cpu")
+            model(
+                torch.ones(1, 3, dtype=torch.long),
+                8,
+                cache_slots_cpu=(rank,),
+                routing_trace=routes,
+            )
+            call = target_call_id(worker, -1)
+            counters = routes.counters(torch.tensor([True, True, False]))
+            model.forward_spec(torch.ones(1, 4, dtype=torch.bfloat16), start_pos=9)
+            assert executor.call == call == 4
+            trace.record(
+                "accounting_call",
+                rank=rank,
+                call=call,
+                phase="decode",
+                request_rows=[
+                    dict(
+                        id=rank + 1,
+                        start=8,
+                        count=2,
+                        accepted=1,
+                        proposed=2,
+                        logit_rows=2,
+                    )
+                ],
+                **counters,
+            )
+
+    return run

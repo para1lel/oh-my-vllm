@@ -11,7 +11,7 @@ namespace encoded_projection {
 
 constexpr int fp8_tile_width = 512, fp8_tile_groups = fp8_tile_width / 32;
 
-template <class Output, class ScaleLayout, int Bits, bool Grouped>
+template <class Output, class ScaleLayout, int Bits, bool Grouped, int TileRows = 32>
 void launch_half_k32(const uint8_t *input, const uint8_t *weight, const uint8_t *input_scales,
                      const uint8_t *weight_scales, Output *output, const int64_t *weight_ptrs,
                      const int64_t *scale_ptrs, const int32_t *offsets, const int32_t *tiles,
@@ -57,6 +57,52 @@ __device__ __forceinline__ uint32_t fp8_shared_four(const uint8_t *values, int r
   return row < rows ? *reinterpret_cast<const uint32_t *>(values + fp8_address(row, column)) : 0;
 }
 
+template <int Warps, int RowTiles>
+__device__ __forceinline__ void
+fp8_accumulate_stage(const uint8_t *a_shared, const uint8_t *b_shared, const uint8_t *sa,
+                     const uint8_t *sb, float (&total)[RowTiles][4], int valid_rows,
+                     int stage_groups, int low_row, int first_k, int warp, int lane) {
+  using Mma = cute::SM89_16x8x32_F32E4M3E4M3F32_TN;
+  for (int group = 0; group < stage_groups; ++group) {
+    uint32_t first_a[4];
+    if constexpr (RowTiles == 1) {
+#pragma unroll
+      for (int reg = 0; reg < 4; ++reg)
+        first_a[reg] = fp8_shared_four(a_shared, low_row + 8 * (reg & 1), valid_rows,
+                                       group * 32 + first_k + 16 * (reg >> 1));
+    }
+    uint32_t b[2];
+#pragma unroll
+    for (int reg = 0; reg < 2; ++reg)
+      b[reg] = fp8_shared_four(b_shared, warp * 8 + (lane >> 2), Warps * 8,
+                               group * 32 + first_k + 16 * reg);
+#pragma unroll
+    for (int tile = 0; tile < RowTiles; ++tile) {
+      uint32_t a[4];
+#pragma unroll
+      for (int reg = 0; reg < 4; ++reg) {
+        if constexpr (RowTiles == 1)
+          a[reg] = first_a[reg];
+        else
+          a[reg] = fp8_shared_four(a_shared, tile * 16 + low_row + 8 * (reg & 1), valid_rows,
+                                   group * 32 + first_k + 16 * (reg >> 1));
+      }
+      float raw[4];
+      Mma::fma(raw[0], raw[1], raw[2], raw[3], a[0], a[1], a[2], a[3], b[0], b[1], 0.f, 0.f, 0.f,
+               0.f);
+      float weight_scale = fp8_scale(sb[warp * fp8_tile_groups + group]);
+#pragma unroll
+      for (int value = 0; value < 4; ++value) {
+        int row = tile * 16 + low_row + 8 * (value >> 1);
+        float input_scale = row < valid_rows ? fp8_scale(sa[row * fp8_tile_groups + group]) : 1.f;
+        // The released K32 dot starts at zero, followed by one MUL and one FMA.
+        total[tile][value] =
+            __fmaf_rn(__fmul_rn(raw[value], input_scale), weight_scale, total[tile][value]);
+      }
+    }
+  }
+}
+
 template <class Output, class ScaleLayout, int Warps, int RowTiles = 1>
 __global__ void
 fp8_k32_kernel(const uint8_t *__restrict__ input, const uint8_t *__restrict__ weight,
@@ -100,45 +146,8 @@ fp8_k32_kernel(const uint8_t *__restrict__ input, const uint8_t *__restrict__ we
     }
     __syncthreads();
     if (warp < Warps) {
-      for (int group = 0; group < stage_groups; ++group) {
-        uint32_t first_a[4];
-        if constexpr (RowTiles == 1) {
-#pragma unroll
-          for (int reg = 0; reg < 4; ++reg)
-            first_a[reg] = fp8_shared_four(a_shared, low_row + 8 * (reg & 1), valid_rows,
-                                           group * 32 + first_k + 16 * (reg >> 1));
-        }
-        uint32_t b[2];
-#pragma unroll
-        for (int reg = 0; reg < 2; ++reg)
-          b[reg] = fp8_shared_four(b_shared, warp * 8 + (lane >> 2), Warps * 8,
-                                   group * 32 + first_k + 16 * reg);
-#pragma unroll
-        for (int tile = 0; tile < RowTiles; ++tile) {
-          uint32_t a[4];
-#pragma unroll
-          for (int reg = 0; reg < 4; ++reg) {
-            if constexpr (RowTiles == 1)
-              a[reg] = first_a[reg];
-            else
-              a[reg] = fp8_shared_four(a_shared, tile * 16 + low_row + 8 * (reg & 1), valid_rows,
-                                       group * 32 + first_k + 16 * (reg >> 1));
-          }
-          float raw[4];
-          Mma::fma(raw[0], raw[1], raw[2], raw[3], a[0], a[1], a[2], a[3], b[0], b[1], 0.f, 0.f,
-                   0.f, 0.f);
-          float weight_scale = fp8_scale(sb[warp * fp8_tile_groups + group]);
-#pragma unroll
-          for (int value = 0; value < 4; ++value) {
-            int row = tile * 16 + low_row + 8 * (value >> 1);
-            float input_scale =
-                row < valid_rows ? fp8_scale(sa[row * fp8_tile_groups + group]) : 1.f;
-            // The released K32 dot starts at zero, followed by one MUL and one FMA.
-            total[tile][value] =
-                __fmaf_rn(__fmul_rn(raw[value], input_scale), weight_scale, total[tile][value]);
-          }
-        }
-      }
+      fp8_accumulate_stage<Warps, RowTiles>(a_shared, b_shared, sa, sb, total, valid_rows,
+                                            stage_groups, low_row, first_k, warp, lane);
     }
     __syncthreads();
   }

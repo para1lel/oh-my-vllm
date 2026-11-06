@@ -1,464 +1,66 @@
 import argparse
-import concurrent.futures
 import csv
-import hashlib
-import http.client
-import importlib.metadata
 import json
 import os
-import re
-import signal
-import socket
 import subprocess
-import sys
-import tempfile
-import time
-from dataclasses import asdict
 from pathlib import Path
 
-from oh_my_vllm.models.deepseek_v41.inference import (
-    DEFAULT_PREFILL_ROWS,
-    prefill_row_limit,
-)
 from oh_my_vllm.models.deepseek_v41.tokenizer import Tokenization
 from oh_my_vllm.models.deepseek_v41.trace import execution_modes
-from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
+from oh_my_vllm.operators.runtime.native import file_sha256
 
 from . import deepseek_accounting as accounting
 from . import deepseek_accounting_floor as accounting_floor
 from . import deepseek_accounting_packed as accounting_packed
 from . import deepseek_accounting_roofline as accounting_roofline
 from .benchmark import ROOT, source_identity
-from .deepseek_accounting import (
-    BindingError,
-    efficiency_percent,
-    reference_trace,
+from .deepseek_benchmark_config import (
+    effective_cache_configuration as effective_cache_configuration,
 )
+from .deepseek_benchmark_config import (
+    effective_service_configuration as effective_service_configuration,
+)
+from .deepseek_benchmark_config import service_config as service_config
+from .deepseek_benchmark_config import (
+    workload_cache_requirements as workload_cache_requirements,
+)
+from .deepseek_benchmark_identity import (
+    DEEPSEEK_NATIVE_MODULES as DEEPSEEK_NATIVE_MODULES,
+)
+from .deepseek_benchmark_identity import (
+    _checkpoint_shard_assignments as _checkpoint_shard_assignments,
+)
+from .deepseek_benchmark_identity import (
+    _checkpoint_shard_manifest as _checkpoint_shard_manifest,
+)
+from .deepseek_benchmark_identity import (
+    checkpoint_descriptor_identity as checkpoint_descriptor_identity,
+)
+from .deepseek_benchmark_identity import checkpoint_identity as checkpoint_identity
+from .deepseek_benchmark_identity import (
+    checkpoint_shard_identity as checkpoint_shard_identity,
+)
+from .deepseek_benchmark_identity import native_identity as native_identity
+from .deepseek_benchmark_identity import (
+    numeric_runtime_identity as numeric_runtime_identity,
+)
+from .deepseek_benchmark_identity import topology_identity as topology_identity
+from .deepseek_benchmark_reference import _configure_floor as _configure_floor
+from .deepseek_benchmark_reference import (
+    reference_configuration as reference_configuration,
+)
+from .deepseek_benchmark_reference import runtime_reference as runtime_reference
+from .deepseek_benchmark_service import (
+    DEFAULT_REQUEST_TIMEOUT_SECONDS as DEFAULT_REQUEST_TIMEOUT_SECONDS,
+)
+from .deepseek_benchmark_service import SERVED_MODEL as SERVED_MODEL
+from .deepseek_benchmark_service import SHUTDOWN_GRACE_SECONDS as SHUTDOWN_GRACE_SECONDS
+from .deepseek_benchmark_service import Service as Service
+from .deepseek_benchmark_service import exact_prompt as exact_prompt
+from .deepseek_benchmark_service import post as post
+from .deepseek_benchmark_service import request_body as request_body
 from .deepseek_matrix import HTTP_CASES, case_id
-from .deepseek_runtime_trace import assemble_trace, read_rank_events
-from .device import device_identity, selected_uuids
-
-DEEPSEEK_NATIVE_MODULES = (
-    "device",
-    "paged",
-    "activation",
-    "hyperconnection",
-    "projection",
-    "routing",
-    "sparse_attention",
-    "transform",
-)
-SHUTDOWN_GRACE_SECONDS = 35
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 7200
-SERVED_MODEL = "deepseek-v4.1-flash"
-
-
-def reference_configuration(version=accounting.VERSION):
-    if version not in (
-        accounting.VERSION,
-        accounting_floor.VERSION,
-        accounting_packed.VERSION,
-        accounting_roofline.VERSION,
-    ):
-        raise ValueError("unknown benchmark reference version")
-    configuration = {
-        "accounting_version": version,
-        "source_trace_version": accounting.VERSION,
-        "source_trace_rate_profile": accounting.rate_profile_digest(),
-        "rate_profile": accounting.rate_profile_digest(),
-        "assumptions_sha256": None,
-        "reference_scope": "version-bound reference estimate",
-        "reference_conditions": [],
-        "reference_zero_credit": [],
-        "reference_diagnostics": [],
-    }
-    if version == accounting_floor.VERSION:
-        configuration.update(
-            rate_profile=accounting_floor.rate_profile_digest(),
-            assumptions_sha256=accounting_floor.assumptions_digest(),
-            reference_scope="conditional partial resource floor",
-            reference_conditions=[
-                (
-                    "Released target matrix arithmetic, numerical order, formats, "
-                    "parameter placement, and replicated projections stay fixed."
-                ),
-                (
-                    "MoE output shards stay fixed, with no extra weight replication "
-                    "or projection recomputation."
-                ),
-                "Every credited MoE delivery uses complete BF16 rows.",
-                "There is no unmodeled value compression or cross-row value reuse.",
-                (
-                    "Quantized transfer, reuse, or resharding requires a new review "
-                    "and identity."
-                ),
-                (
-                    "This is not a complete roofline, capacity proof, or floor for "
-                    "every same-output algorithm."
-                ),
-                (
-                    "This selection does not establish frozen numerical, GPU, HTTP, "
-                    "or 33% acceptance."
-                ),
-            ],
-            reference_zero_credit=[
-                (
-                    "HBM and host strict credit is zero; retention and fresh-transfer "
-                    "proofs remain pending."
-                ),
-                "Embedding, attention wo_b, vocabulary-head, index, and Engram wire.",
-                "DEP4 dispatch and combine strict wire.",
-                (
-                    "MTP proposals, rejected rows, repeated prefill, replay, padding, "
-                    "state copies, and scheduler overhead."
-                ),
-                "Empirical collective latency, serial-chain estimates, and S/2.",
-                "Nonlinear normalization and Sinkhorn scalar estimates.",
-            ],
-            reference_diagnostics=[
-                "weight_union_lower_bytes",
-                "direct_protocol_sent_bytes",
-                "direct_protocol_received_bytes",
-            ],
-        )
-    if version == accounting_packed.VERSION:
-        configuration.update(
-            rate_profile=accounting_packed.rate_profile_digest(),
-            assumptions_sha256=accounting_packed.assumptions_digest(),
-            reference_scope="packed-aware project reference estimate",
-            reference_conditions=list(accounting_packed.ASSUMPTIONS.values()),
-            reference_zero_credit=[
-                "Protocol metadata and padding do not enter the project reference.",
-                "No universal physical minimum or full-model numerical claim.",
-            ],
-            reference_diagnostics=[
-                "protocol_serial_seconds",
-                "protocol_metadata_pressure_bytes",
-                "conditional_partial_floor_seconds",
-            ],
-        )
-    if version == accounting_roofline.VERSION:
-        configuration.update(
-            rate_profile=accounting_roofline.rate_profile_digest(),
-            assumptions_sha256=accounting_roofline.assumptions_digest(),
-            reference_scope="fixed-algorithm resource roofline",
-            reference_conditions=list(accounting_roofline.ASSUMPTIONS.values()),
-            reference_zero_credit=[
-                (
-                    "MTP proposals, rejected rows, repeated prefill, replay, padding, "
-                    "state copies, metadata, launches, and scalar estimates."
-                ),
-                (
-                    "Unproved history reloads and embedding, attention wo_b, "
-                    "vocabulary-head, index, and Engram wire."
-                ),
-            ],
-            reference_diagnostics=[
-                "weight_union_lower_bytes",
-                "cache_payload_bytes",
-                "protocol_stages",
-            ],
-        )
-    return configuration
-
-
-def runtime_reference(trace, *, strategy, expected_binding, version=accounting.VERSION):
-    metadata = reference_configuration(version)
-    if not isinstance(expected_binding, dict):
-        raise BindingError("runtime reference requires an expected source binding")
-    binding = trace.get("binding") if isinstance(trace, dict) else None
-    if not isinstance(binding, dict):
-        raise BindingError("runtime reference requires a source binding")
-    calculators = {
-        accounting_floor.VERSION: (
-            accounting_floor,
-            "conditional-partial-resource-floor",
-        ),
-        accounting_packed.VERSION: (
-            accounting_packed,
-            "fixed-protocol-project-estimate",
-        ),
-        accounting_roofline.VERSION: (
-            accounting_roofline,
-            "fixed-algorithm-resource-roofline",
-        ),
-    }
-    if version in calculators:
-        calculator, communication_model = calculators[version]
-        reference = calculator.reference_trace(
-            trace, strategy=strategy, expected_binding=expected_binding
-        )
-        metadata.update(
-            communication_model=communication_model,
-            profile_digest=None,
-            communication_rule_version=None,
-            dep4_communication_modeled=False,
-            dep4_communication_measured=False,
-            reference_resources=asdict(reference),
-        )
-    else:
-        reference = reference_trace(
-            trace, strategy=strategy, expected_binding=expected_binding
-        )
-        metadata.update(
-            communication_model=reference.communication_model,
-            profile_digest=reference.profile_digest,
-            communication_rule_version=reference.communication_rule_version,
-            dep4_communication_modeled=reference.communication_is_modeled,
-            dep4_communication_measured=reference.communication_is_measured,
-        )
-    if reference.version != version:
-        raise BindingError("reference result differs from the selected version")
-    metadata.update(
-        source_trace_version=trace["binding"]["version"],
-        source_trace_rate_profile=trace["binding"]["rate_profile"],
-    )
-    return reference, metadata
-
-
-def _checkpoint_shard_manifest(root):
-    index_path = Path(root) / "model.safetensors.index.json"
-    index = index_path.read_bytes()
-    names = set(json.loads(index)["weight_map"].values())
-    if not names or any(
-        re.fullmatch(r"model-\d{5}-of-\d{5}\.safetensors", name) is None
-        for name in names
-    ):
-        raise ValueError("checkpoint index must name local safetensors shards")
-    return hashlib.sha256(index).hexdigest(), sorted(names)
-
-
-def _checkpoint_shard_assignments(root, names, world_size):
-    loads = [0] * world_size
-    assignments = {}
-    sizes = {name: (Path(root) / name).stat().st_size for name in names}
-    for name in sorted(names, key=lambda value: (-sizes[value], value)):
-        rank = min(range(world_size), key=lambda value: (loads[value], value))
-        assignments[name] = rank
-        loads[rank] += sizes[name]
-    return assignments
-
-
-def checkpoint_shard_identity(root, *, rank, world_size):
-    if type(rank) is not int or type(world_size) is not int:
-        raise ValueError("checkpoint identity rank and world size must be integers")
-    if world_size < 1 or rank < 0 or rank >= world_size:
-        raise ValueError("checkpoint identity rank is outside its world")
-    root = Path(root)
-    _, names = _checkpoint_shard_manifest(root)
-    assignments = _checkpoint_shard_assignments(root, names, world_size)
-    return {
-        name: file_sha256(root / name) for name in names if assignments[name] == rank
-    }
-
-
-def checkpoint_identity(model):
-    model = Path(model)
-    index_digest, names = _checkpoint_shard_manifest(model)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        parts = list(
-            pool.map(
-                lambda rank: checkpoint_shard_identity(
-                    model,
-                    rank=rank,
-                    world_size=4,
-                ),
-                range(4),
-            )
-        )
-    result = {
-        "config": file_sha256(model / "config.json"),
-        "index": index_digest,
-    }
-    for part in parts:
-        if set(result) & set(part):
-            raise ValueError("checkpoint identity partitions overlap")
-        result.update(part)
-    if set(result) != {"config", "index", *names}:
-        raise ValueError("checkpoint identity partitions are incomplete")
-    return result
-
-
-def post(port, body, *, timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS):
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
-    try:
-        connection.request(
-            "POST",
-            "/v1/chat/completions",
-            json.dumps(body),
-            {"Content-Type": "application/json"},
-        )
-        response = connection.getresponse()
-        value = json.loads(response.read())
-        if response.status != 200:
-            raise RuntimeError(f"HTTP {response.status}: {value}")
-        return value
-    finally:
-        connection.close()
-
-
-def exact_prompt(tokenizer, length, identifier):
-    messages = [{"role": "user", "content": ""}]
-    copies = max(1, length // 2)
-    for _ in range(12):
-        messages[0]["content"] = (
-            f"Request {identifier}.\n"
-            + " x" * copies
-            + "\nContinue with a detailed account."
-        )
-        actual = len(tokenizer.prepare({"messages": messages, "effort": "off"}))
-        if actual == length:
-            return messages
-        copies += length - actual
-    raise ValueError(f"cannot construct the exact prompt length: {length}")
-
-
-def request_body(messages, output, seed):
-    return {
-        "model": SERVED_MODEL,
-        "messages": messages,
-        "max_tokens": output,
-        "min_tokens": output,
-        "ignore_eos": True,
-        "reasoning_effort": "off",
-        "seed": seed,
-        "temperature": 0,
-    }
-
-
-def native_identity():
-    directory = cache_directory()
-    result = {}
-    for name in DEEPSEEK_NATIVE_MODULES:
-        metadata = json.loads((directory / f"{name}.json").read_text())
-        if file_sha256(metadata["library"]) != metadata["binary_id"]:
-            raise RuntimeError(
-                f"native binary identity differs from its manifest: {name}"
-            )
-        result[name] = metadata
-    return result
-
-
-def topology_identity(uuids):
-    return [device_identity(uuid) for uuid in uuids]
-
-
-def workload_cache_requirements(cases):
-    requirements = {}
-    for case in cases:
-        strategy = case["strategy"]
-        if strategy not in ("tp4", "tep4", "dep4"):
-            raise ValueError("unknown cache placement strategy")
-        requests = case["batch"]
-        total = case["input_tokens"] + case["output_tokens"]
-        if type(requests) is not int or requests < 1 or total < 1:
-            raise ValueError("cache workload needs positive requests and context")
-        local = (requests + 3) // 4 if strategy == "dep4" else requests
-        drafts = 5 if case["mode"] == "dspark5" else 0
-        token_pages = (total + drafts + 127) // 128 + 1
-        current = requirements.setdefault(
-            strategy,
-            {
-                "block_tokens": 128,
-                "placement": "request_owner" if strategy == "dep4" else "replicated",
-                "resident_requests": 0,
-                "maximum_total_tokens": 0,
-                "blocks": 1,
-                "mamba_blocks": 1,
-            },
-        )
-        current["resident_requests"] = max(current["resident_requests"], local)
-        current["maximum_total_tokens"] = max(current["maximum_total_tokens"], total)
-        current["blocks"] = max(current["blocks"], 1 + local * token_pages)
-        current["mamba_blocks"] = max(current["mamba_blocks"], 1 + local * (2 + drafts))
-    return requirements
-
-
-def effective_cache_configuration(arguments, strategy=None):
-    requirements = getattr(arguments, "cache_requirements", {})
-    selected = (
-        [requirements[strategy]]
-        if strategy in requirements
-        else list(requirements.values())
-    )
-    minimum_blocks = max((row["blocks"] for row in selected), default=2)
-    minimum_states = max((row["mamba_blocks"] for row in selected), default=2)
-    blocks = arguments.blocks
-    if blocks is None:
-        value = os.environ.get("OH_MY_VLLM_NUM_GPU_BLOCKS")
-        blocks = max(2048, minimum_blocks) if value is None else int(value)
-    states = arguments.mamba_blocks
-    if states is None:
-        states = max(128, minimum_states)
-    for name, value, minimum, maximum in (
-        ("blocks", blocks, minimum_blocks, 2**32 - 3),
-        ("mamba_blocks", states, minimum_states, 65536),
-    ):
-        if type(value) is not int or not minimum <= value <= maximum:
-            raise ValueError(
-                f"{name}={value} cannot cover the selected resident workload; "
-                f"need {minimum}..{maximum}, including the null page and private state"
-            )
-    return {"blocks": blocks, "mamba_blocks": states}
-
-
-def effective_service_configuration(arguments):
-    return {
-        "max_num_batched_tokens": getattr(arguments, "max_num_batched_tokens", 32768),
-        "max_num_seqs": getattr(arguments, "max_num_seqs", 64),
-        "prefill_rows": prefill_row_limit(
-            os.environ.get("OH_MY_VLLM_DEEPSEEK_PREFILL_ROWS", DEFAULT_PREFILL_ROWS)
-        ),
-    }
-
-
-def numeric_runtime_identity():
-    import torch
-
-    return {
-        "python": list(sys.version_info[:3]),
-        "torch": str(torch.__version__),
-        "torch_source": torch.version.git_version,
-        "cuda": torch.version.cuda,
-        "nccl": (
-            list(torch.cuda.nccl.version())
-            if torch.distributed.is_nccl_available()
-            else None
-        ),
-        "tvm_ffi": importlib.metadata.version("apache-tvm-ffi"),
-        "float32_matmul_precision": torch.get_float32_matmul_precision(),
-        "fp16_reduced_precision_reduction": (
-            torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction
-        ),
-        "bf16_reduced_precision_reduction": (
-            torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction
-        ),
-        "cpu_threads": torch.get_num_threads(),
-        "environment": {
-            name: os.environ.get(name)
-            for name in (
-                "NCCL_ALGO",
-                "NCCL_PROTO",
-                "NCCL_COLLNET_ENABLE",
-                "NCCL_NVLS_ENABLE",
-                "NCCL_MIN_NCHANNELS",
-                "NCCL_MAX_NCHANNELS",
-                "NCCL_CUMEM_ENABLE",
-                "NCCL_CUMEM_HOST_ENABLE",
-                "TORCH_NCCL_ASYNC_ERROR_HANDLING",
-                "PYTORCH_CUDA_ALLOC_CONF",
-                "PYTORCH_ALLOC_CONF",
-            )
-        },
-    }
-
-
-def checkpoint_descriptor_identity(model):
-    model = Path(model)
-    return {
-        "config": file_sha256(model / "config.json"),
-        "index": file_sha256(model / "model.safetensors.index.json"),
-    }
+from .device import selected_uuids
 
 
 def artifact_identity(arguments, tokenizer, uuids, *, workload):
@@ -511,181 +113,6 @@ def verify_artifact_identity(arguments, tokenizer, uuids, expected, *, workload)
     )
     if actual != expected:
         raise RuntimeError("DeepSeek benchmark inputs changed during measurement")
-
-
-def service_config(arguments, mode, strategy):
-    drafts = 5 if mode == "dspark5" else 0
-    service_configuration = effective_service_configuration(arguments)
-    return {
-        "model_path": str(arguments.model),
-        "strategy": strategy,
-        "mode": mode,
-        "drafts": drafts,
-        "cache_context": arguments.cache_context,
-        **service_configuration,
-    }
-
-
-class Service:
-    def __init__(self, arguments, mode, strategy):
-        self.arguments = arguments
-        self.mode = mode
-        self.strategy = strategy
-        self.request_timeout_seconds = getattr(
-            arguments, "request_timeout_seconds", DEFAULT_REQUEST_TIMEOUT_SECONDS
-        )
-        cache_configuration = effective_cache_configuration(arguments, strategy)
-        with socket.socket() as probe:
-            probe.bind(("127.0.0.1", 0))
-            self.port = probe.getsockname()[1]
-        self.trace = arguments.artifacts / f"{mode}-{strategy}-execution.jsonl"
-        self.log = (arguments.artifacts / f"{mode}-{strategy}-service.log").open("x")
-        self._ipc_directory = tempfile.TemporaryDirectory(prefix="omv-deepseek-")
-        self.ipc = Path(self._ipc_directory.name) / "worker.ipc"
-        environment = dict(
-            os.environ,
-            OH_MY_VLLM_DEEPSEEK_STRATEGY=strategy,
-            OH_MY_VLLM_DEEPSEEK_CACHE_CONTEXT=str(arguments.cache_context),
-            OH_MY_VLLM_EXECUTION_TRACE=str(self.trace),
-        )
-        command = [
-            str(arguments.binary),
-            "--model",
-            str(arguments.model),
-            "--max-num-batched-tokens",
-            str(effective_service_configuration(arguments)["max_num_batched_tokens"]),
-            "--max-num-seqs",
-            str(effective_service_configuration(arguments)["max_num_seqs"]),
-            "--max-model-len",
-            "1048576",
-            "--num-speculative-tokens",
-            str(5 if mode == "dspark5" else 0),
-        ]
-        if mode == "dspark5":
-            command += ["--speculative-mode", "dspark5"]
-        command += ["--num-gpu-blocks", str(cache_configuration["blocks"])]
-        command += ["--mamba-blocks", str(cache_configuration["mamba_blocks"])]
-        command += [
-            "--socket",
-            str(self.ipc),
-            "serve",
-            "--listen",
-            f"127.0.0.1:{self.port}",
-            "--request-timeout-seconds",
-            str(self.request_timeout_seconds),
-            "--worker-step-timeout-seconds",
-            "600",
-            "--shutdown-grace-seconds",
-            str(SHUTDOWN_GRACE_SECONDS),
-        ]
-        try:
-            self.process = subprocess.Popen(
-                command,
-                env=environment,
-                cwd=ROOT,
-                stdout=self.log,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
-        except BaseException:
-            self.log.close()
-            self._ipc_directory.cleanup()
-            raise
-
-    def ready(self):
-        deadline = time.monotonic() + 1800
-        while time.monotonic() < deadline:
-            if self.process.poll() is not None:
-                raise RuntimeError(f"service exited: {self.mode}:{self.strategy}")
-            connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-            try:
-                connection.request("GET", "/diagnostics")
-                response = connection.getresponse()
-                if response.status == 200:
-                    return json.loads(response.read())
-            except OSError:
-                pass
-            finally:
-                connection.close()
-            time.sleep(1)
-        raise TimeoutError("DeepSeek service initialization")
-
-    def close(self):
-        if self.process.poll() is None:
-            os.killpg(self.process.pid, signal.SIGTERM)
-            try:
-                self.process.wait(timeout=SHUTDOWN_GRACE_SECONDS + 10)
-            except subprocess.TimeoutExpired:
-                os.killpg(self.process.pid, signal.SIGKILL)
-                self.process.wait()
-        self.log.close()
-        stale_socket = self.ipc.exists()
-        self._ipc_directory.cleanup()
-        if stale_socket:
-            raise RuntimeError("DeepSeek service did not remove its IPC socket")
-
-    def effective_strategy(self):
-        with self.trace.open() as source:
-            identity = json.loads(source.readline())
-        return identity["cache_memory"]["effective_strategy"]
-
-    def run(self, tokenizer, case, prompt_seed, *, identity):
-        version = getattr(self.arguments, "reference_version", accounting.VERSION)
-        if identity.get("reference") != reference_configuration(version):
-            raise BindingError("benchmark reference identity is missing or changed")
-        started = time.perf_counter()
-        nonce = hashlib.sha256(f"{prompt_seed}:{case_id(case)}".encode()).hexdigest()[
-            :32
-        ]
-        bodies = [
-            request_body(
-                exact_prompt(tokenizer, case["input_tokens"], f"{nonce}-{index}"),
-                case["output_tokens"],
-                index,
-            )
-            for index in range(case["batch"])
-        ]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=case["batch"]) as pool:
-            responses = list(
-                pool.map(
-                    lambda body: post(
-                        self.port,
-                        body,
-                        timeout=self.request_timeout_seconds,
-                    ),
-                    bodies,
-                )
-            )
-        seconds = time.perf_counter() - started
-        trace = assemble_trace(
-            read_rank_events(self.trace), responses, harness=identity, case=case
-        )
-        reference, metadata = runtime_reference(
-            trace,
-            strategy=case["strategy"],
-            expected_binding=trace["binding"],
-            version=version,
-        )
-        return {
-            **case,
-            "status": "completed",
-            "measurement_identity": identity,
-            "runtime_modes": trace["binding"].get("runtime_modes"),
-            "effective_strategy": trace["binding"]["effective_strategy"],
-            **metadata,
-            "seconds": seconds,
-            "request_count": len(responses),
-            "output_tokens_per_second": (
-                case["batch"] * case["output_tokens"] / seconds
-            ),
-            "reference_seconds": reference.seconds,
-            "reference_acceptance": reference.acceptance,
-            "efficiency_percent": efficiency_percent(reference.seconds, seconds),
-            "accepted": trace["binding"]["accepted"],
-            "proposed": trace["binding"]["proposed"],
-            "trace": trace,
-            "responses": responses,
-        }
 
 
 def selected_cases(values):
@@ -787,6 +214,63 @@ def argument_parser():
     return parser
 
 
+def _print_result(result):
+    print(
+        json.dumps(
+            {
+                key: result[key]
+                for key in (
+                    "mode",
+                    "strategy",
+                    "batch",
+                    "input_tokens",
+                    "output_tokens",
+                    "seconds",
+                    "accounting_version",
+                    "source_trace_version",
+                    "rate_profile",
+                    "assumptions_sha256",
+                    "reference_scope",
+                    "reference_seconds",
+                    "reference_acceptance",
+                    "efficiency_percent",
+                )
+            }
+        ),
+        flush=True,
+    )
+
+
+def _run_cases(arguments, cases, tokenizer, identity):
+    results = []
+    for strategy, mode in sorted({(case["strategy"], case["mode"]) for case in cases}):
+        selected = [
+            case
+            for case in cases
+            if case["strategy"] == strategy and case["mode"] == mode
+        ]
+        service = Service(arguments, mode, strategy)
+        try:
+            ready = service.ready()
+            (arguments.artifacts / f"{mode}-{strategy}-ready.json").write_text(
+                json.dumps(ready, indent=2) + "\n"
+            )
+            for case in selected:
+                print(json.dumps({"event": "start", **case}), flush=True)
+                result = service.run(
+                    tokenizer, case, arguments.prompt_seed, identity=identity
+                )
+                results.append(result)
+                name = case_id(case).replace(":", "-")
+                (arguments.artifacts / f"{name}.json").write_text(
+                    json.dumps(result, indent=2) + "\n"
+                )
+                _print_result(result)
+        finally:
+            service.close()
+    return results
+
+
 def main():
     parser = argument_parser()
     arguments = parser.parse_args()
@@ -835,55 +319,7 @@ def main():
         json.dumps(identity, indent=2) + "\n"
     )
     print(json.dumps({"event": "reference", **identity["reference"]}), flush=True)
-    results = []
-    for strategy, mode in sorted({(case["strategy"], case["mode"]) for case in cases}):
-        selected = [
-            case
-            for case in cases
-            if case["strategy"] == strategy and case["mode"] == mode
-        ]
-        service = Service(arguments, mode, strategy)
-        try:
-            ready = service.ready()
-            (arguments.artifacts / f"{mode}-{strategy}-ready.json").write_text(
-                json.dumps(ready, indent=2) + "\n"
-            )
-            for case in selected:
-                print(json.dumps({"event": "start", **case}), flush=True)
-                result = service.run(
-                    tokenizer, case, arguments.prompt_seed, identity=identity
-                )
-                results.append(result)
-                name = case_id(case).replace(":", "-")
-                (arguments.artifacts / f"{name}.json").write_text(
-                    json.dumps(result, indent=2) + "\n"
-                )
-                print(
-                    json.dumps(
-                        {
-                            key: result[key]
-                            for key in (
-                                "mode",
-                                "strategy",
-                                "batch",
-                                "input_tokens",
-                                "output_tokens",
-                                "seconds",
-                                "accounting_version",
-                                "source_trace_version",
-                                "rate_profile",
-                                "assumptions_sha256",
-                                "reference_scope",
-                                "reference_seconds",
-                                "reference_acceptance",
-                                "efficiency_percent",
-                            )
-                        }
-                    ),
-                    flush=True,
-                )
-        finally:
-            service.close()
+    results = _run_cases(arguments, cases, tokenizer, identity)
     verify_artifact_identity(
         arguments,
         tokenizer,

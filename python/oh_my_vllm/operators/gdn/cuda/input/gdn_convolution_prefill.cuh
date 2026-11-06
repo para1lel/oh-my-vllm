@@ -1,6 +1,29 @@
 #pragma once
 #include "../recurrent/gdn_kernels.cuh"
 
+__device__ __forceinline__ void gdn_convolution_load_history(float (&history)[3][4],
+                                                             const __nv_bfloat16 *projection,
+                                                             const __nv_bfloat16 *pool, int begin,
+                                                             int first, int source, int channel) {
+#pragma unroll
+  for (int tap = 0; tap < 3; ++tap) {
+    int position = begin + tap - 3;
+    if (position >= first) {
+      uint2 packed =
+          *reinterpret_cast<const uint2 *>(projection + int64_t(position) * 16384 + channel);
+#pragma unroll
+      for (int column = 0; column < 4; ++column)
+        history[tap][column] =
+            __bfloat162float(reinterpret_cast<const __nv_bfloat16 *>(&packed)[column]);
+    } else {
+#pragma unroll
+      for (int column = 0; column < 4; ++column)
+        history[tap][column] = __bfloat162float(
+            pool[(int64_t(source) * 10240 + channel + column) * 3 + position - first + 3]);
+    }
+  }
+}
+
 template <int Rows>
 __global__ void gdn_convolution_tiled_kernel(
     const __nv_bfloat16 *__restrict__ projection, const __nv_bfloat16 *__restrict__ weight,
@@ -28,23 +51,7 @@ __global__ void gdn_convolution_tiled_kernel(
       weights[column][tap] = __bfloat162float(
           reinterpret_cast<const __nv_bfloat16 *>(packed_weights)[column * 4 + tap]);
   float history[3][4];
-#pragma unroll
-  for (int tap = 0; tap < 3; ++tap) {
-    int position = begin + tap - 3;
-    if (position >= first) {
-      uint2 packed =
-          *reinterpret_cast<const uint2 *>(projection + int64_t(position) * 16384 + channel);
-#pragma unroll
-      for (int column = 0; column < 4; ++column)
-        history[tap][column] =
-            __bfloat162float(reinterpret_cast<const __nv_bfloat16 *>(&packed)[column]);
-    } else {
-#pragma unroll
-      for (int column = 0; column < 4; ++column)
-        history[tap][column] = __bfloat162float(
-            pool[(int64_t(source) * 10240 + channel + column) * 3 + position - first + 3]);
-    }
-  }
+  gdn_convolution_load_history(history, projection, pool, begin, first, source, channel);
 #pragma unroll 1
   for (int local = 0; local < Rows && begin + local < last; ++local) {
     int row = begin + local, target = writes[row];

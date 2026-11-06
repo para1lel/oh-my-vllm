@@ -19,6 +19,47 @@ __device__ __forceinline__ float fa_bf16(float value) {
   return __bfloat162float(__float2bfloat16_rn(value));
 }
 
+template <class Element, class WeightLayout, class InputTile, class Mma, class InputFragment,
+          class Partial, class Prefetch>
+__device__ __forceinline__ void
+fc_projection_tiles(const __nv_bfloat16 *input, Element *weights, InputTile &input_tile, Mma &mma,
+                    InputFragment &input_fragment, Partial &partial, uint64_t *barriers,
+                    Prefetch &prefetch, int rows, int thread, int warp) {
+  using namespace cute;
+  for (int tile = 0; tile < 10; ++tile) {
+    int slot = tile & 1;
+    auto weight_tile = make_tensor(make_smem_ptr(weights + slot * 16384), WeightLayout{});
+    auto weight_fragment = mma.get_slice(0).make_fragment_A(weight_tile);
+    for (int index = thread; index < rows * 32; index += 128) {
+      int row = index / 32, column = index % 32 * 8;
+      unsigned destination =
+          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 16), 0, column / 16));
+      const auto *source =
+          input + int64_t(row) * 10240 + int(blockIdx.y) * 2560 + tile * 256 + column;
+      asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(destination), "l"(source)
+                   : "memory");
+    }
+    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+    __syncthreads();
+    wait_barrier(barriers[1 + slot], (tile / 2) & 1);
+    cutlass::arch::fence_view_async_shared();
+    if (warp == 0) {
+      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+#pragma unroll
+      for (int k = 0; k < 16; ++k) {
+        gemm(mma, weight_fragment(_, _, k), input_fragment(_, _, k), partial);
+        mma.accumulate_ = UMMA::ScaleOut::One;
+      }
+      cutlass::arch::umma_arrive(barriers);
+    }
+    wait_barrier(*barriers, tile & 1);
+    // All warps must pass the old barrier phase before the slot is reused.
+    __syncthreads();
+    if (tile + 2 < 10)
+      prefetch(tile + 2, slot);
+  }
+}
+
 template <int Capacity>
 __global__ __launch_bounds__(128,
                              1) void fc_kernel(const __nv_bfloat16 *input, float *output, int rows,
@@ -71,38 +112,8 @@ __global__ __launch_bounds__(128,
   auto partial = partition_fragment_C(mma, Shape<_64, Int<Capacity>>{});
   partial.data() = *tensor_memory;
   mma.accumulate_ = UMMA::ScaleOut::Zero;
-  for (int tile = 0; tile < 10; ++tile) {
-    int slot = tile & 1;
-    auto weight_tile = make_tensor(make_smem_ptr(weights + slot * 16384), WeightLayout{});
-    auto weight_fragment = mma.get_slice(0).make_fragment_A(weight_tile);
-    for (int index = thread; index < rows * 32; index += 128) {
-      int row = index / 32, column = index % 32 * 8;
-      unsigned destination =
-          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 16), 0, column / 16));
-      const auto *source =
-          input + int64_t(row) * 10240 + int(blockIdx.y) * 2560 + tile * 256 + column;
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(destination), "l"(source)
-                   : "memory");
-    }
-    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
-    __syncthreads();
-    wait_barrier(barriers[1 + slot], (tile / 2) & 1);
-    cutlass::arch::fence_view_async_shared();
-    if (warp == 0) {
-      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
-#pragma unroll
-      for (int k = 0; k < 16; ++k) {
-        gemm(mma, weight_fragment(_, _, k), input_fragment(_, _, k), partial);
-        mma.accumulate_ = UMMA::ScaleOut::One;
-      }
-      cutlass::arch::umma_arrive(barriers);
-    }
-    wait_barrier(*barriers, tile & 1);
-    // All warps must pass the old barrier phase before the slot is reused.
-    __syncthreads();
-    if (tile + 2 < 10)
-      prefetch(tile + 2, slot);
-  }
+  fc_projection_tiles<Element, WeightLayout>(input, weights, input_tile, mma, input_fragment,
+                                             partial, barriers, prefetch, rows, thread, warp);
   asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
   uint32_t address = *tensor_memory + uint32_t(warp * 32) * 65536u;
 #pragma unroll
@@ -202,66 +213,15 @@ __global__ __launch_bounds__(640, 1) void middle_kernel(const __grid_constant__ 
             .__x;
 }
 
-template <int Rows>
-__global__ __launch_bounds__(128,
-                             1) void kv_kernel(const __nv_fp8_e4m3 *input, const float *input_scale,
-                                               const float *weight_scale, float *output,
-                                               const __grid_constant__ CUtensorMap weight_map_four,
-                                               const __grid_constant__ CUtensorMap weight_map_one) {
-  static_assert(Rows == 4 || Rows == 16);
-  constexpr int Capacity = Rows == 4 ? 8 : 16;
-  constexpr int TmemColumns = 4 * Capacity;
+template <int Rows, int Capacity, class Element, class WeightLayout, class InputTile, class Mma,
+          class InputFragment, class Partial>
+__device__ __forceinline__ void
+kv_projection_tiles(const __nv_fp8_e4m3 *input, const float *input_scale, const float *weight_scale,
+                    Element *weights, InputTile &input_tile, Mma &mma,
+                    InputFragment &input_fragment, Partial &partial, uint64_t *barriers,
+                    const uint32_t *tensor_memory, uint32_t address, float (&accumulated)[Rows],
+                    int split, int thread, int warp) {
   using namespace cute;
-  using Element = cutlass::float_e4m3_t;
-  using MMA = decltype(make_tiled_mma(SM100_MMA_F8F6F4_SS<Element, Element, float, 64, Capacity,
-                                                          UMMA::Major::K, UMMA::Major::K>{}));
-  using WeightLayout = decltype(UMMA::tile_to_mma_shape(
-      UMMA::Layout_K_SW128_Atom<Element>{}, partition_shape_A(MMA{}, Shape<_64, _512>{})));
-  using InputLayout =
-      decltype(UMMA::tile_to_mma_shape(UMMA::Layout_K_SW128_Atom<Element>{},
-                                       partition_shape_B(MMA{}, Shape<Int<Capacity>, _512>{})));
-  static_assert(cosize_v<WeightLayout> == 32768 && cosize_v<InputLayout> == Capacity * 512);
-  extern __shared__ __align__(128) unsigned char kv_split_storage[];
-  auto *weights = reinterpret_cast<Element *>(kv_split_storage);
-  auto *inputs = weights + 2 * 32768;
-  auto *barriers = reinterpret_cast<uint64_t *>(inputs + Capacity * 512);
-  auto *tensor_memory = reinterpret_cast<uint32_t *>(barriers + 3);
-  auto input_tile = make_tensor(make_smem_ptr(inputs), InputLayout{});
-  int thread = threadIdx.x, warp = thread / 32;
-  int first_column = blockIdx.x * 64, split = blockIdx.y;
-  TMEM::Allocator1Sm allocator;
-  if (warp == 0) {
-    allocator.allocate(TmemColumns, tensor_memory);
-    allocator.release_allocation_lock();
-  }
-  if (thread == 0) {
-    for (int index = 0; index < 3; ++index)
-      initialize_barrier(barriers[index], 1);
-    cutlass::arch::fence_barrier_init();
-  }
-  for (int index = thread; index < Capacity * 32; index += 128) {
-    int row = index / 32, column = index % 32 * 16;
-    *reinterpret_cast<uint4 *>(&input_tile(make_coord(row, column % 32), 0, column / 32)) =
-        make_uint4(0, 0, 0, 0);
-  }
-  __syncthreads();
-  auto prefetch = [&](int tile) {
-    int groups = tile == 0 ? 4 : 1;
-    if (thread == 0) {
-      cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(barriers + 1 + tile,
-                                                                     groups * 8192);
-      SM90_TMA_LOAD_3D::copy(tile == 0 ? &weight_map_four : &weight_map_one, barriers + 1 + tile,
-                             uint64_t(cute::TMA::CacheHintSm90::EVICT_NORMAL),
-                             weights + tile * 32768, 0, first_column, split * 5 + tile * 4);
-    }
-  };
-  prefetch(0);
-  prefetch(1);
-  MMA mma;
-  auto input_fragment = mma.get_slice(0).make_fragment_B(input_tile);
-  auto partial = partition_fragment_C(mma, Shape<_64, Int<Capacity>>{});
-  uint32_t address = *tensor_memory + uint32_t(warp * 32) * 65536u;
-  float accumulated[Rows] = {};
   for (int tile = 0; tile < 2; ++tile) {
     int group = split * 5 + tile * 4, groups = tile == 0 ? 4 : 1;
     auto weight_tile = make_tensor(make_smem_ptr(weights + tile * 32768), WeightLayout{});
@@ -328,6 +288,71 @@ __global__ __launch_bounds__(128,
     asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
     __syncthreads();
   }
+}
+
+template <int Rows>
+__global__ __launch_bounds__(128,
+                             1) void kv_kernel(const __nv_fp8_e4m3 *input, const float *input_scale,
+                                               const float *weight_scale, float *output,
+                                               const __grid_constant__ CUtensorMap weight_map_four,
+                                               const __grid_constant__ CUtensorMap weight_map_one) {
+  static_assert(Rows == 4 || Rows == 16);
+  constexpr int Capacity = Rows == 4 ? 8 : 16;
+  constexpr int TmemColumns = 4 * Capacity;
+  using namespace cute;
+  using Element = cutlass::float_e4m3_t;
+  using MMA = decltype(make_tiled_mma(SM100_MMA_F8F6F4_SS<Element, Element, float, 64, Capacity,
+                                                          UMMA::Major::K, UMMA::Major::K>{}));
+  using WeightLayout = decltype(UMMA::tile_to_mma_shape(
+      UMMA::Layout_K_SW128_Atom<Element>{}, partition_shape_A(MMA{}, Shape<_64, _512>{})));
+  using InputLayout =
+      decltype(UMMA::tile_to_mma_shape(UMMA::Layout_K_SW128_Atom<Element>{},
+                                       partition_shape_B(MMA{}, Shape<Int<Capacity>, _512>{})));
+  static_assert(cosize_v<WeightLayout> == 32768 && cosize_v<InputLayout> == Capacity * 512);
+  extern __shared__ __align__(128) unsigned char kv_split_storage[];
+  auto *weights = reinterpret_cast<Element *>(kv_split_storage);
+  auto *inputs = weights + 2 * 32768;
+  auto *barriers = reinterpret_cast<uint64_t *>(inputs + Capacity * 512);
+  auto *tensor_memory = reinterpret_cast<uint32_t *>(barriers + 3);
+  auto input_tile = make_tensor(make_smem_ptr(inputs), InputLayout{});
+  int thread = threadIdx.x, warp = thread / 32;
+  int first_column = blockIdx.x * 64, split = blockIdx.y;
+  TMEM::Allocator1Sm allocator;
+  if (warp == 0) {
+    allocator.allocate(TmemColumns, tensor_memory);
+    allocator.release_allocation_lock();
+  }
+  if (thread == 0) {
+    for (int index = 0; index < 3; ++index)
+      initialize_barrier(barriers[index], 1);
+    cutlass::arch::fence_barrier_init();
+  }
+  for (int index = thread; index < Capacity * 32; index += 128) {
+    int row = index / 32, column = index % 32 * 16;
+    *reinterpret_cast<uint4 *>(&input_tile(make_coord(row, column % 32), 0, column / 32)) =
+        make_uint4(0, 0, 0, 0);
+  }
+  __syncthreads();
+  auto prefetch = [&](int tile) {
+    int groups = tile == 0 ? 4 : 1;
+    if (thread == 0) {
+      cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(barriers + 1 + tile,
+                                                                     groups * 8192);
+      SM90_TMA_LOAD_3D::copy(tile == 0 ? &weight_map_four : &weight_map_one, barriers + 1 + tile,
+                             uint64_t(cute::TMA::CacheHintSm90::EVICT_NORMAL),
+                             weights + tile * 32768, 0, first_column, split * 5 + tile * 4);
+    }
+  };
+  prefetch(0);
+  prefetch(1);
+  MMA mma;
+  auto input_fragment = mma.get_slice(0).make_fragment_B(input_tile);
+  auto partial = partition_fragment_C(mma, Shape<_64, Int<Capacity>>{});
+  uint32_t address = *tensor_memory + uint32_t(warp * 32) * 65536u;
+  float accumulated[Rows] = {};
+  kv_projection_tiles<Rows, Capacity, Element, WeightLayout>(
+      input, input_scale, weight_scale, weights, input_tile, mma, input_fragment, partial, barriers,
+      tensor_memory, address, accumulated, split, thread, warp);
 #pragma unroll
   for (int row = 0; row < Rows; ++row)
     if ((thread & 31) < 16)

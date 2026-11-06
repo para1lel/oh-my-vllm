@@ -123,35 +123,9 @@ def build_descriptor(
         raise ValueError("Qwen supports ordinary decode or four-draft MTP only")
     fa_capacity_blocks = _capacity(fa_capacity_blocks, 0xFFFFFFFF, "FA capacity")
     gdn_capacity_blocks = _capacity(gdn_capacity_blocks, 65536, "GDN capacity")
-    checkpoint_sha = identity_digest(checkpoint_identity, domain="checkpoint")
-    tokenizer_sha = identity_digest(tokenizer_identity, domain="tokenizer")
-    if (
-        checkpoint_identity.get("config") != MODEL["config_sha256"]
-        or "index" not in checkpoint_identity
-        or len(checkpoint_identity) < 3
-        or any(
-            name not in ("config", "index")
-            and (not name.endswith(".safetensors") or name == ".safetensors")
-            for name in checkpoint_identity
-        )
-    ):
-        raise ValueError(
-            "checkpoint identity needs verified config, index, and loaded shards"
-        )
-    if tokenizer_identity.keys() != TOKENIZER_ASSETS:
-        raise ValueError("tokenizer identity must contain the exact loaded assets")
-    fa_layers = [
-        index
-        for index, kind in enumerate(text["layer_types"])
-        if kind == "full_attention"
-    ]
-    gdn_layers = [
-        index
-        for index, kind in enumerate(text["layer_types"])
-        if kind == "linear_attention"
-    ]
-    if num_speculative_tokens:
-        fa_layers.append(MODEL["layers"])
+    checkpoint_sha, tokenizer_sha = _descriptor_identities(
+        checkpoint_identity, tokenizer_identity
+    )
     descriptor = {
         "schema_version": 1,
         "architecture": SPEC.architecture,
@@ -163,25 +137,9 @@ def build_descriptor(
         "max_context_tokens": MODEL["context_tokens"],
         "capabilities": sorted(SPEC.capabilities),
         "weight_formats": ["bf16", "f32", "qwen_fp8_e4m3_block128x128_fp32_scales"],
-        "cache_schema": {
-            "schema_version": 1,
-            "groups": [
-                _group(
-                    "fa",
-                    "full_attention",
-                    "qwen38_paired_fa_kv_bf16",
-                    fa_layers,
-                    fa_capacity_blocks,
-                ),
-                _group(
-                    "gdn",
-                    "recurrent",
-                    "qwen38_paired_gdn_f32_conv_bf16_hidden_bf16",
-                    gdn_layers,
-                    gdn_capacity_blocks,
-                ),
-            ],
-        },
+        "cache_schema": _cache_schema(
+            text, num_speculative_tokens, fa_capacity_blocks, gdn_capacity_blocks
+        ),
         "parallel_plan": {
             "strategy": "tp1",
             "world_size": 1,
@@ -199,3 +157,62 @@ def build_descriptor(
     }
     validate_descriptor(descriptor)
     return descriptor
+
+
+def _descriptor_identities(checkpoint_identity, tokenizer_identity):
+    checkpoint_sha = identity_digest(checkpoint_identity, domain="checkpoint")
+    tokenizer_sha = identity_digest(tokenizer_identity, domain="tokenizer")
+    if (
+        checkpoint_identity.get("config") != MODEL["config_sha256"]
+        or "index" not in checkpoint_identity
+        or len(checkpoint_identity) < 3
+        or any(
+            name not in ("config", "index")
+            and (not name.endswith(".safetensors") or name == ".safetensors")
+            for name in checkpoint_identity
+        )
+    ):
+        raise ValueError(
+            "checkpoint identity needs verified config, index, and loaded shards"
+        )
+    if tokenizer_identity.keys() != TOKENIZER_ASSETS:
+        raise ValueError("tokenizer identity must contain the exact loaded assets")
+
+    return checkpoint_sha, tokenizer_sha
+
+
+def _cache_schema(
+    text, num_speculative_tokens, fa_capacity_blocks, gdn_capacity_blocks
+):
+    fa_layers = [
+        index
+        for index, kind in enumerate(text["layer_types"])
+        if kind == "full_attention"
+    ]
+    gdn_layers = [
+        index
+        for index, kind in enumerate(text["layer_types"])
+        if kind == "linear_attention"
+    ]
+    if num_speculative_tokens:
+        fa_layers.append(MODEL["layers"])
+
+    return {
+        "schema_version": 1,
+        "groups": [
+            _group(
+                "fa",
+                "full_attention",
+                "qwen38_paired_fa_kv_bf16",
+                fa_layers,
+                fa_capacity_blocks,
+            ),
+            _group(
+                "gdn",
+                "recurrent",
+                "qwen38_paired_gdn_f32_conv_bf16_hidden_bf16",
+                gdn_layers,
+                gdn_capacity_blocks,
+            ),
+        ],
+    }

@@ -2,45 +2,49 @@ import json
 import signal
 import tempfile
 import unittest
-from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from . import benchmark
-from .accounting import RATES, linear, reference_seconds
-from .benchmark import (
-    CONFIGURATIONS,
-    efficiency,
-    select_configurations,
-)
-from .kernels import (
-    draft_groups,
-    ffn_groups,
-    gdn_groups,
-    group,
-    normalization,
-    pass_groups,
-    reference,
-    resources,
-    sample_groups,
-    serial_seconds,
-    wy_groups,
-)
+from .benchmark import CONFIGURATIONS, efficiency, select_configurations
 from .roofline import lower_bound
-from .trace import canonical_passes
+from .roofline_test_support import _invoke_benchmark as _invoke_benchmark
+from .roofline_test_support import _run_http_fixture as _run_http_fixture
+from .roofline_test_support import _verification_trace as _verification_trace
+from .roofline_test_support import (
+    _verify_checkpoint_identity as _verify_checkpoint_identity,
+)
+from .roofline_test_support import (
+    _verify_tokenizer_identity as _verify_tokenizer_identity,
+)
+from .roofline_test_support import _write_benchmark_inputs as _write_benchmark_inputs
+from .roofline_test_support import prefill_trace as prefill_trace
+from .roofline_test_support import request_manifest as request_manifest
+from .roofline_test_support import tokenizer_fixture as tokenizer_fixture
 
 
-def tokenizer_fixture(root):
-    from tokenizers import Tokenizer, decoders, models, pre_tokenizers
-
-    codec = Tokenizer(models.BPE({"x": 0, "[EOS]": 1, "</think>": 2}, []))
-    codec.add_special_tokens(["[EOS]", "</think>"])
-    codec.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-    codec.decoder = decoders.ByteLevel()
-    (root / "tokenizer.json").write_text(codec.to_str())
-    (root / "generation_config.json").write_text('{"eos_token_id":1}')
-    (root / "chat_template.jinja").write_text('{{ messages[0]["content"] }}')
+def _assert_benchmark_results(self, root, calls, services):
+    measured = [case for case in calls if case[2] != 1024]
+    self.assertEqual(measured[:24], CONFIGURATIONS)
+    self.assertEqual(measured[24:], CONFIGURATIONS[:2])
+    for mode, batch, length, output in CONFIGURATIONS:
+        result = json.loads(
+            (root / "complete" / f"{mode}-{batch}-{length}-{output}.json").read_text()
+        )
+        self.assertEqual(result["output_tokens"], output)
+    self.assertEqual(
+        json.loads((root / "complete/summary.json").read_text()),
+        dict(configurations=24),
+    )
+    self.assertEqual(
+        json.loads((root / "partial/summary.json").read_text()),
+        dict(configurations=2),
+    )
+    for instance in services:
+        instance.ready.assert_called_once()
+        instance.close.assert_called_once()
+        self.assertEqual(instance.verify_identity.call_count, 2)
 
 
 class BenchmarkMeasurements(unittest.TestCase):
@@ -117,96 +121,23 @@ class BenchmarkMeasurements(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            binary = root / "service"
-            binary.write_bytes(b"CPU mock")
-            vendor_files = {}
-            for name in ("vision",):
-                image, header = root / f"{name}-vendor.so", root / f"{name}-vendor.h"
-                image.write_bytes(b"CPU vendor image mock")
-                header.write_bytes(b"CPU vendor header mock")
-                vendor_files[name] = (image, header)
-            shard = root / "model-00001-of-00001.safetensors"
-            shard.write_bytes(b"CPU weights mock")
-            (root / "config.json").write_text("{}")
-            for name in (
-                "tokenizer.json",
-                "generation_config.json",
-                "chat_template.jinja",
-            ):
-                (root / name).write_text("CPU tokenizer asset mock")
-            (root / "model.safetensors.index.json").write_text(
-                json.dumps({"weight_map": {"weight": shard.name}})
-            )
-            for name in benchmark.NATIVE_MODULES:
-                library = root / f"{name}.so"
-                library.write_bytes(f"CPU {name} mock".encode())
-                metadata = dict(
-                    library=str(library), binary_id=benchmark.file_sha256(library)
-                )
-                if name in vendor_files:
-                    image, header = vendor_files[name]
-                    metadata["vision_vendor"] = dict(
-                        images=[
-                            dict(path=str(image), sha256=benchmark.file_sha256(image))
-                        ],
-                        headers={str(header): benchmark.file_sha256(header)},
-                    )
-                (root / f"{name}.json").write_text(json.dumps(metadata))
+            binary, vendor_files, shard = _write_benchmark_inputs(root)
 
-            def invoke(artifacts, *extra):
-                arguments = [
-                    "benchmark",
-                    "--model",
-                    str(root),
-                    "--artifacts",
-                    str(artifacts),
-                    "--binary",
-                    str(binary),
-                    *extra,
-                ]
-                with (
-                    patch.object(benchmark, "selected_uuid", return_value="GPU-test"),
-                    patch.object(
-                        benchmark,
-                        "device_identity",
-                        return_value={"name": "NVIDIA B200"},
-                    ),
-                    patch.object(benchmark, "Service", side_effect=service),
-                    patch.object(benchmark, "Tokenization"),
-                    patch.object(benchmark, "source_identity", return_value="source"),
-                    patch.object(benchmark, "cache_directory", return_value=root),
-                    patch.object(
-                        benchmark.subprocess, "check_output", return_value="CPU mock"
-                    ),
-                    patch("builtins.print"),
-                    patch("sys.argv", arguments),
-                ):
-                    return benchmark.main()
-
-            self.assertEqual(invoke(root / "complete"), 0)
-            self.assertEqual(invoke(root / "partial", "--case", "ordinary:1:32768"), 0)
-            measured = [case for case in calls if case[2] != 1024]
-            self.assertEqual(measured[:24], CONFIGURATIONS)
-            self.assertEqual(measured[24:], CONFIGURATIONS[:2])
-            for mode, batch, length, output in CONFIGURATIONS:
-                result = json.loads(
-                    (
-                        root / "complete" / f"{mode}-{batch}-{length}-{output}.json"
-                    ).read_text()
-                )
-                self.assertEqual(result["output_tokens"], output)
             self.assertEqual(
-                json.loads((root / "complete/summary.json").read_text()),
-                dict(configurations=24),
+                _invoke_benchmark(root, binary, service, root / "complete"), 0
             )
             self.assertEqual(
-                json.loads((root / "partial/summary.json").read_text()),
-                dict(configurations=2),
+                _invoke_benchmark(
+                    root,
+                    binary,
+                    service,
+                    root / "partial",
+                    "--case",
+                    "ordinary:1:32768",
+                ),
+                0,
             )
-            for instance in services:
-                instance.ready.assert_called_once()
-                instance.close.assert_called_once()
-                self.assertEqual(instance.verify_identity.call_count, 2)
+            _assert_benchmark_results(self, root, calls, services)
             for label, target in (
                 ("binary", binary),
                 ("native", root / "ffn.so"),
@@ -220,7 +151,7 @@ class BenchmarkMeasurements(unittest.TestCase):
                 original = target.read_bytes()
                 mutation = target
                 with self.subTest(artifact=label), self.assertRaises(RuntimeError):
-                    invoke(root / f"changed-{label}")
+                    _invoke_benchmark(root, binary, service, root / f"changed-{label}")
                 target.write_bytes(original)
                 mutation = None
                 self.assertFalse((root / f"changed-{label}/summary.json").exists())
@@ -265,42 +196,7 @@ class BenchmarkMeasurements(unittest.TestCase):
             )
             service.trace = Path(directory) / "trace.jsonl"
 
-            def run(batch=1):
-                service.trace.write_text(json.dumps(events[0]) + "\n")
-
-                def respond(port, body):
-                    self.assertEqual(body["tool_choice"], "auto")
-                    self.assertTrue(body["tools"])
-                    self.assertIn(body["seed"], range(batch))
-                    for name in (
-                        "temperature",
-                        "top_k",
-                        "top_p",
-                        "presence_penalty",
-                        "repetition_guard",
-                    ):
-                        self.assertNotIn(name, body)
-                    with service.trace.open("a") as trace:
-                        trace.write("\n".join(map(json.dumps, events[1:])) + "\n")
-                    return response
-
-                with (
-                    patch.object(benchmark, "prompt", return_value=[]),
-                    patch.object(benchmark, "post", side_effect=respond),
-                    patch.object(
-                        benchmark.time, "perf_counter", side_effect=(100.0, 102.0)
-                    ),
-                ):
-                    return service.run(
-                        SimpleNamespace(
-                            generation=dict(temperature=1.0, top_k=20, top_p=0.95)
-                        ),
-                        batch,
-                        16,
-                        1,
-                    )
-
-            result = run()
+            result = _run_http_fixture(self, service, events, response)
             self.assertEqual(result["seconds"], 2.0)
             self.assertEqual(
                 result["lower_bound"], lower_bound(events, result["manifest"])
@@ -316,369 +212,20 @@ class BenchmarkMeasurements(unittest.TestCase):
                 result["efficiency"], result["lower_bound"]["seconds"] / 2.0
             )
             with self.assertRaisesRegex(ValueError, "distinct request IDs"):
-                run(batch=2)
+                _run_http_fixture(self, service, events, response, batch=2)
             events[0]["config"]["num_speculative_tokens"] = 4
             with self.assertRaisesRegex(ValueError, "service mode"):
-                run()
+                _run_http_fixture(self, service, events, response)
             events[0]["config"]["num_speculative_tokens"] = 0
             events[1]["requests"][0]["prompt"] = 17
             with self.assertRaisesRegex(ValueError, "prompt length"):
-                run()
+                _run_http_fixture(self, service, events, response)
             events[1]["requests"][0]["prompt"] = 16
             response["usage"]["completion_tokens"] = 2
             with self.assertRaisesRegex(ValueError, "token count"):
-                run()
-            checkpoint = {
-                "config": "config",
-                "index": "index",
-                "weights.safetensors": "weights",
-            }
-            identity = events[0]
-            identity["checkpoint"] = dict(checkpoint)
-            identity["config"]["model_path"] = "/model"
-            expected = dict(num_speculative_tokens=0, model_path="/model")
-            benchmark.verify_trace_identity(events, checkpoint, expected)
-            for name in checkpoint:
-                identity["checkpoint"][name] = "changed"
-                with (
-                    self.subTest(checkpoint=name),
-                    self.assertRaisesRegex(ValueError, "checkpoint"),
-                ):
-                    benchmark.verify_trace_identity(events, checkpoint, expected)
-                identity["checkpoint"][name] = checkpoint[name]
-            identity["checkpoint"] = {"config": "config", "index": "index"}
-            with self.assertRaisesRegex(ValueError, "checkpoint"):
-                benchmark.verify_trace_identity(events, checkpoint, expected)
-            identity["checkpoint"] = dict(checkpoint)
-            identity["config"]["model_path"] = "/other"
-            with self.assertRaisesRegex(ValueError, "configuration"):
-                benchmark.verify_trace_identity(events, checkpoint, expected)
-            identity["config"]["model_path"] = "/model"
-            with self.assertRaisesRegex(ValueError, "exactly one identity"):
-                benchmark.verify_trace_identity(
-                    [identity, *events], checkpoint, expected
-                )
+                _run_http_fixture(self, service, events, response)
+            checkpoint, identity, expected = _verify_checkpoint_identity(self, events)
 
-            root = Path(directory)
-            tokenizer_fixture(root)
-            tokenizer = benchmark.tokenizer_identity(root)
-            loaded = benchmark.Tokenization(root)
-            loaded.verify_identity(tokenizer)
-            for actual in (None, dict(tokenizer, **{"chat_template.jinja": "changed"})):
-                if actual is None:
-                    identity.pop("tokenizer", None)
-                else:
-                    identity["tokenizer"] = actual
-                with (
-                    self.subTest(tokenizer=actual),
-                    self.assertRaisesRegex(ValueError, "loaded tokenizer assets"),
-                ):
-                    benchmark.verify_trace_identity(
-                        events, checkpoint, expected, tokenizer
-                    )
-            identity["tokenizer"] = loaded.identity
-            benchmark.verify_trace_identity(events, checkpoint, expected, tokenizer)
-            template = root / "chat_template.jinja"
-            original = template.read_bytes()
-            template.write_bytes(original + b"x")
-            changed = benchmark.Tokenization(root)
-            request = {"messages": [{"role": "user", "content": "x"}], "effort": "off"}
-            self.assertNotEqual(loaded.prepare(request), changed.prepare(request))
-            template.write_bytes(original)
-            self.assertEqual(benchmark.tokenizer_identity(root), tokenizer)
-            identity["tokenizer"] = changed.identity
-            with self.assertRaisesRegex(ValueError, "loaded tokenizer assets"):
-                benchmark.verify_trace_identity(events, checkpoint, expected, tokenizer)
-
-
-def request_manifest(ids=(1,), length=16, output=1, mode="ordinary"):
-    return dict(
-        mode=mode,
-        requests=[
-            dict(
-                ordinal=index,
-                id=key,
-                response_id=f"chatcmpl_744872_6ad586dc_{key}",
-                input_tokens=length,
-                output_tokens=output,
+            _verify_tokenizer_identity(
+                self, directory, events, identity, checkpoint, expected
             )
-            for index, key in enumerate(ids)
-        ],
-    )
-
-
-def prefill_trace(ids=(1,), length=16, chunk=16):
-    events = [dict(operation="identity", config=dict(num_speculative_tokens=0))]
-    for key in ids:
-        for start in range(0, length, chunk):
-            count = min(chunk, length - start)
-            events.extend(
-                [
-                    dict(
-                        operation="target",
-                        verify=False,
-                        requests=[
-                            dict(id=key, start=start, count=count, prompt=length)
-                        ],
-                    ),
-                    dict(
-                        operation="commit",
-                        requests=[
-                            dict(
-                                id=key,
-                                tokens=int(start + count == length),
-                                accepted=0,
-                                proposed=0,
-                                position=start + count,
-                            )
-                        ],
-                    ),
-                ]
-            )
-    return events
-
-
-class Roofline(unittest.TestCase):
-    def test_accounting_rejects_inflation_and_unbound_or_fabricated_work(self):
-        manifest = request_manifest((9, 2), length=32768)
-        complete = prefill_trace((9, 2), length=32768, chunk=32768)
-        expected = lower_bound(complete, manifest)
-        for order, chunk in (((2, 9), 4096), ((9, 2), 784), ((2, 9), 32768)):
-            events = prefill_trace(order, length=32768, chunk=chunk)
-            for event in events:
-                event.update(tiles=100000, padded_rows=65536, copied_state_bytes=10**12)
-            with self.subTest(order=order, chunk=chunk):
-                self.assertEqual(lower_bound(events, manifest), expected)
-        passes = canonical_passes(complete, manifest)
-        self.assertEqual(
-            [[row["count"] for row in item["requests"]] for item in passes],
-            [[16464, 15680], [16304, 16464], [624]],
-        )
-        self.assertEqual([row["id"] for row in passes[0]["requests"]], [9, 2])
-        for mutate in (
-            lambda value: value["requests"].append(value["requests"][0]),
-            lambda value: value["requests"].pop(),
-            lambda value: value["requests"][0].update(
-                id=100, response_id="chatcmpl_100"
-            ),
-            lambda value: value["requests"][0].update(response_id="chatcmpl_100"),
-            lambda value: value["requests"][0].update(output_tokens=2),
-            lambda value: value["requests"][0].update(input_tokens=32767),
-            lambda value: value.update(mode="mtp4"),
-        ):
-            changed = deepcopy(manifest)
-            mutate(changed)
-            with self.subTest(mutate=mutate), self.assertRaises(ValueError):
-                lower_bound(complete, changed)
-        for events in (
-            complete[1:],
-            [complete[0], *complete],
-            complete[:-1],
-            [*complete, dict(operation="unknown")],
-        ):
-            with self.subTest(events=events[-1]), self.assertRaises(ValueError):
-                lower_bound(events, manifest)
-        mtp = [
-            dict(operation="identity", config=dict(num_speculative_tokens=4)),
-            dict(
-                operation="target",
-                verify=False,
-                requests=[dict(id=1, start=0, count=4, prompt=4)],
-            ),
-            dict(operation="context", requests=[dict(id=1, start=1, count=4)]),
-            dict(operation="draft", stage=0, requests=[dict(id=1, position=4)]),
-            dict(operation="draft", stage=1, requests=[dict(id=1, position=5)]),
-            dict(
-                operation="commit",
-                requests=[dict(id=1, tokens=1, accepted=0, proposed=2, position=4)],
-            ),
-            dict(
-                operation="target",
-                verify=True,
-                requests=[dict(id=1, start=4, count=3, prompt=4)],
-            ),
-            dict(operation="context", requests=[dict(id=1, start=5, count=2)]),
-            dict(
-                operation="commit",
-                requests=[dict(id=1, tokens=3, accepted=2, proposed=0, position=7)],
-            ),
-        ]
-        manifest = request_manifest(length=4, output=4, mode="mtp4")
-        result = lower_bound(mtp, manifest)
-        self.assertEqual(
-            result["acceptance"][1], dict(tokens=4, accepted=2, proposed=2)
-        )
-        self.assertEqual(
-            [
-                row["context_count"]
-                for item in canonical_passes(mtp, manifest)
-                for row in item["requests"]
-            ],
-            [4, 2],
-        )
-        for index, field, value in (
-            (5, "proposed", 4),
-            (6, "count", 5),
-            (8, "position", 6),
-            (8, "accepted", 3),
-            (3, "position", 3),
-        ):
-            changed = deepcopy(mtp)
-            changed[index]["requests"][0][field] = value
-            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
-                lower_bound(changed, manifest)
-        with self.assertRaises(ValueError):
-            lower_bound([*mtp[:2], *mtp[3:5], mtp[2], *mtp[5:]], manifest)
-
-    def test_reference_resources_follow_kernel_dependencies(self):
-        self.assertEqual(resources(sample_groups(1))["fp32_flops"], 25602)
-        self.assertEqual(resources(draft_groups([(4, 1)], 0))["fp32_flops"], 147286)
-        for stage in range(1, 4):
-            heads = next(
-                item
-                for item in draft_groups([(4 + stage, 1)], stage)
-                if item.name == "fa.heads"
-            )
-            self.assertEqual(heads.work["hbm_bytes"], 4 * 512)
-        logical = dict(
-            mtp=True,
-            verify=False,
-            requests=[
-                dict(
-                    start=0,
-                    count=32768,
-                    end=32768,
-                    tokens=1,
-                    context_count=32768,
-                    proposed=0,
-                )
-            ],
-        )
-        final_norm = next(
-            item for item in pass_groups(logical) if item.name == "output.norm"
-        )
-        self.assertEqual(final_norm.work["fp32_flops"], 32768 * (5 * 5120 + 2))
-        self.assertEqual(final_norm.work["hbm_bytes"], 4 * 5120)
-        logical["mtp"] = False
-        ordinary_norm = next(
-            item for item in pass_groups(logical) if item.name == "output.norm"
-        )
-        self.assertEqual(ordinary_norm.work["fp32_flops"], 5 * 5120 + 2)
-        initial = wy_groups([(0, 128)], 0)
-        continued = wy_groups([(784, 128)], 0)
-        self.assertEqual(initial[0].work, continued[0].work)
-        for index in (1, 2):
-            self.assertEqual(
-                continued[index].work["bf16_flops"] - initial[index].work["bf16_flops"],
-                2 * 48 * 128 * 128 * 64,
-            )
-        work = dict(
-            hbm_bytes=7.7e12,
-            fp8_flops=4.5e15,
-            bf16_flops=2.25e15,
-            tf32_flops=1.1e15,
-            fp32_flops=75e12,
-            fp64_flops=37e12,
-        )
-        self.assertEqual(reference_seconds(work), 3)
-        for value in (-1, float("nan"), float("inf")):
-            with self.subTest(value=value), self.assertRaises(ValueError):
-                reference_seconds(dict(work, fp8_flops=value))
-        events = prefill_trace(length=32768, chunk=4096)
-        manifest = request_manifest(length=32768)
-        passes = canonical_passes(events, manifest)
-        bound = lower_bound(events, manifest)
-        self.assertEqual(bound["seconds"], reference(passes)["seconds"])
-        self.assertGreater(bound["seconds"], reference_seconds(bound["work"]))
-        # A complete prompt fits the budget without a checkpoint-aligned split.
-        self.assertEqual([item["requests"][0]["count"] for item in passes], [32768])
-        small = canonical_passes(prefill_trace(length=16), request_manifest())
-        self.assertEqual(
-            reference(small)["work"]["fp8_flops"],
-            2
-            * 16
-            * (
-                48 * (16384 * 5120 + 5120 * 6144)
-                + 16 * (14336 * 5120 + 5120 * 6144)
-                + 64 * (34816 * 5120 + 5120 * 17408)
-            ),
-        )
-
-    def test_serial_groups_cache_budget_and_precision_dispatch(self):
-        for rows in (64, 65, 624, 784, 1024, 1025):
-            with self.subTest(ffn_rows=rows):
-                serial = [
-                    group("norm", normalization(rows)),
-                    group(
-                        "upper",
-                        linear(rows, 34816, 5120, fp8=True),
-                        dict(fp32_flops=rows * 2 * 17408),
-                    ),
-                    group("down", linear(rows, 5120, 17408, fp8=True)),
-                ]
-                selected = ffn_groups(rows)
-                self.assertEqual(resources(selected), resources(serial))
-                if 65 <= rows <= 1024:
-                    self.assertEqual(
-                        [item.name for item in selected], ["ffn.prefill-pdl"]
-                    )
-                    self.assertEqual(
-                        serial_seconds(selected), reference_seconds(resources(serial))
-                    )
-                    self.assertLess(serial_seconds(selected), serial_seconds(serial))
-                else:
-                    self.assertEqual(
-                        [item.name for item in selected],
-                        ["ffn.norm", "ffn.upper", "ffn.activation", "ffn.down"]
-                        if rows == 64
-                        else ["ffn.norm", "ffn.upper", "ffn.down"],
-                    )
-        memory = group("memory", {"hbm_bytes": 8 * RATES["hbm_bytes"]})
-        compute = group("compute", {"fp8_flops": 6 * RATES["fp8_flops"]})
-        self.assertEqual(serial_seconds([memory, compute]), 14)
-        self.assertEqual(reference_seconds(resources([memory, compute])), 8)
-        cached = [
-            group(
-                "first",
-                {
-                    "hbm_bytes": 10 * RATES["hbm_bytes"],
-                    "fp8_flops": 3 * RATES["fp8_flops"],
-                },
-            ),
-            group(
-                "second",
-                {
-                    "hbm_bytes": 4 * RATES["hbm_bytes"],
-                    "bf16_flops": 6 * RATES["bf16_flops"],
-                },
-            ),
-        ]
-        self.assertEqual(serial_seconds(cached, cache_bytes=5 * RATES["hbm_bytes"]), 11)
-        self.assertEqual(
-            serial_seconds(cached, cache_bytes=100 * RATES["hbm_bytes"]), 9
-        )
-        for value in (-1, float("nan"), float("inf")):
-            with self.subTest(cache=value), self.assertRaises(ValueError):
-                serial_seconds(cached, cache_bytes=value)
-        small = gdn_groups([(0, 128)], False)
-        large = gdn_groups([(0, 129)], False)
-        self.assertIn("gdn.recurrent", [item.name for item in small])
-        self.assertNotIn("gdn.recurrent", [item.name for item in large])
-        self.assertIn("gdn.wy.prepare", [item.name for item in large])
-        scalar = next(
-            item
-            for item in gdn_groups([(0, 2)], False)
-            if item.name == "gdn.convolution"
-        )
-        self.assertEqual(scalar.work["bf16_flops"], 0)
-        self.assertEqual(scalar.work["fp32_flops"], 2 * (7 * 10240 + 2 * 96 * 5120))
-        matrix = next(
-            item for item in gdn_groups([(1, 1)], True) if item.name == "gdn.ba"
-        )
-        self.assertEqual(matrix.work["bf16_flops"], 2 * 96 * 5120)
-        self.assertEqual(matrix.work["fp32_flops"], 0)
-        prepare, carry, output = wy_groups([(783, 1)], 1234)
-        self.assertEqual(prepare.work["bf16_flops"], 28672)
-        self.assertEqual(prepare.work["fp32_flops"], 6288)
-        self.assertEqual(carry.work["hbm_bytes"], 1234)
-        self.assertEqual(output.work["fp32_flops"], 12336)

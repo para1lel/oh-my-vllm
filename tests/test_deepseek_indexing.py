@@ -1,36 +1,29 @@
 import unittest
-import weakref
-from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
+from oh_my_vllm.models.deepseek_v41 import (
+    kernel_native,
+    model_attention,
+    model_context,
+    model_indexer,
+)
 from oh_my_vllm.models.deepseek_v41.indexing import (
-    INDEX_SCORE_WORK_BYTES,
-    score_chunks,
     topk_indices,
 )
 
-
-def manual_scores(query, keys, weights):
-    batch, rows, heads, _ = query.shape
-    expected = torch.empty((batch, rows, keys.size(1)), dtype=query.dtype)
-    for b in range(batch):
-        for s in range(rows):
-            for t in range(keys.size(1)):
-                products = []
-                for h in range(heads):
-                    dot = sum(
-                        float(q) * float(k)
-                        for q, k in zip(query[b, s, h], keys[b, t], strict=True)
-                    )
-                    rounded = torch.tensor(max(dot, 0), dtype=query.dtype)
-                    products.append(float(rounded * weights[b, s, h]))
-                expected[b, s, t] = sum(products)
-    return expected
+from tests.deepseek_indexing_fixtures import DeepSeekIndexingFixture
+from tests.deepseek_indexing_fixtures import manual_scores as manual_scores
+from tests.deepseek_indexing_scores import (
+    DeepSeekIndexingScores as DeepSeekIndexingScores,
+)
+from tests.deepseek_indexing_validation import (
+    DeepSeekIndexingValidation as DeepSeekIndexingValidation,
+)
 
 
-class DeepSeekIndexing(unittest.TestCase):
+class DeepSeekIndexing(DeepSeekIndexingFixture, unittest.TestCase):
     def test_request_math_scope_keeps_cpu_and_request_owned_dep4_layouts(self):
         from oh_my_vllm.models.deepseek_v41 import model
 
@@ -43,7 +36,7 @@ class DeepSeekIndexing(unittest.TestCase):
         ):
             with (
                 self.subTest(cuda=cuda, size=size, logical=logical),
-                patch.object(model, "world_size", size),
+                patch.object(model_context, "world_size", size),
             ):
                 self.assertEqual(
                     model.separate_request_math(SimpleNamespace(is_cuda=cuda), logical),
@@ -137,6 +130,248 @@ class DeepSeekIndexing(unittest.TestCase):
     def test_projection_call_sites_and_graph_replay_keep_request_shapes(self):
         from oh_my_vllm.models.deepseek_v41 import model
 
+        indexer, attention, slots, x, qr, latent, attn_input = (
+            self._projection_shape_fixture(model)
+        )
+        projected, key_shapes, head_shapes, output_shapes = [], [], [], []
+
+        def window(values, *args, **kwargs):
+            return values.new_zeros((values.size(0), 1, 512)), torch.zeros(
+                (*values.shape[:2], 1), dtype=torch.int32, device="cuda"
+            )
+
+        def observed_einsum(equation, values, weight):
+            if equation == "bsgd,grd->bsgr":
+                output_shapes.append(tuple(values.shape))
+            return original_einsum(equation, values, weight)
+
+        run = self._projection_run(
+            projected, indexer, x, qr, latent, slots, attention, attn_input
+        )
+
+        original_einsum = torch.einsum
+        with (
+            torch.inference_mode(),
+            patch.object(model_context, "world_size", 4),
+            patch.object(model_indexer, "apply_rotary_emb"),
+            patch.object(model_attention, "apply_rotary_emb"),
+            patch.object(
+                model_indexer, "fp4_act_quant", wraps=model_indexer.fp4_act_quant
+            ),
+            patch.object(
+                model_attention,
+                "sparse_attn",
+                side_effect=lambda query, *args, **kwargs: query.clone(),
+            ),
+            patch.object(attention, "_window_kv", side_effect=window),
+            patch("torch.distributed.all_reduce"),
+            patch("torch.einsum", side_effect=observed_einsum),
+        ):
+            handles = [
+                indexer.wk.register_forward_pre_hook(
+                    lambda layer, inputs: key_shapes.append(tuple(inputs[0].shape))
+                ),
+                indexer.weights_proj.register_forward_pre_hook(
+                    lambda layer, inputs: head_shapes.append(tuple(inputs[0].shape))
+                ),
+                indexer.wk.register_forward_hook(
+                    lambda layer, inputs, output: projected.append(output.clone())
+                ),
+                indexer.weights_proj.register_forward_hook(
+                    lambda layer, inputs, output: projected.append(output.clone())
+                ),
+            ]
+            try:
+                self._check_projection_graph_replay(
+                    run,
+                    key_shapes,
+                    head_shapes,
+                    output_shapes,
+                    x,
+                    qr,
+                    latent,
+                    attn_input,
+                )
+            finally:
+                for handle in handles:
+                    handle.remove()
+                model_context.shared_attn.reset_query_state()
+
+    def test_request_score_chunks_and_collectives_keep_independent_shapes(self):
+        self._check_request_score_chunks("cpu", heads=4, dim=4, width=17)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_request_score_shapes_match_at_different_batch_sizes_and_chunk_rows(self):
+        self._check_request_score_chunks("cuda")
+
+    def test_topk_keeps_request_width_for_ties_and_short_or_empty_sources(self):
+        scores = torch.full((3, 1, 16), -torch.inf)
+        scores[0, 0, :10] = torch.tensor([0, 0, -1, 2, 0, -1, 0, -1, -1, -1])
+        scores[1, 0, :3] = torch.tensor([2, 1, 0])
+        widths = (10, 3, 0)
+        actual = topk_indices(scores, 4, request_widths=widths)
+        for request, width in enumerate(widths):
+            expected = (
+                scores[request, :, :width]
+                .topk(min(4, width), sorted=False)
+                .indices.sort(-1)
+                .values
+            )
+            self.assertTrue(torch.equal(actual[request, :, : min(4, width)], expected))
+            self.assertTrue(bool((actual[request, :, min(4, width) :] == 16).all()))
+        for widths in ((10,), (17, 3, 0), (-1, 3, 0)):
+            with self.assertRaises(ValueError):
+                topk_indices(scores, 4, request_widths=widths)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_topk_default_keeps_torch_nan_behavior(self):
+        scores = torch.zeros((1, 1, 1024), dtype=torch.bfloat16, device="cuda")
+        scores[..., 0] = torch.nan
+        expected = scores.topk(512, sorted=False).indices.sort(-1).values
+        with patch(
+            "oh_my_vllm.models.deepseek_v41.kernel_native._transform_module",
+            side_effect=AssertionError(
+                "default top-k must preserve Torch NaN behavior"
+            ),
+        ):
+            actual = topk_indices(scores, 512)
+        self.assertTrue(torch.equal(actual, expected))
+        self.assertTrue(bool(((actual >= 0) & (actual < 1024)).all()))
+        self.assertTrue(bool((actual.diff(dim=-1) > 0).all()))
+        self.assertTrue(bool((actual == 0).any()))
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_native_topk_model_keeps_early_valid_indices_and_sentinels_in_graph(self):
+        from oh_my_vllm.models.deepseek_v41 import model
+
+        width, rows, offset = 1025, 6, 128
+        source = torch.ones((1, rows, width), dtype=torch.bfloat16, device="cuda")
+        query = source.new_zeros((1, rows, 1, 1))
+        keys = source.new_zeros((1, width, 1))
+        weights = source.new_zeros((1, rows, 1))
+        indexer = SimpleNamespace(
+            compress_ratio=2,
+            index_topk=512,
+            is_candidate_source=False,
+            uses_candidates=False,
+        )
+
+        def chunks(*args, **kwargs):
+            yield 0, rows, source.clone()
+
+        def run():
+            return model.Indexer._select_indices(
+                indexer, query, keys, weights, 0, offset
+            )[0]
+
+        expected = torch.full((1, rows, 512), -1, dtype=torch.int32, device="cuda")
+        for row in range(rows):
+            valid = (row + 1) // 2
+            expected[0, row, :valid] = torch.arange(valid, device="cuda") + offset
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        graph = torch.cuda.CUDAGraph()
+        try:
+            with (
+                patch.object(model_indexer, "score_chunks", side_effect=chunks),
+                patch.object(
+                    kernel_native,
+                    "_transform_module",
+                    wraps=kernel_native._transform_module,
+                ) as native,
+            ):
+                with torch.cuda.stream(stream):
+                    self.assertTrue(torch.equal(run(), expected))
+                with torch.cuda.graph(graph, stream=stream):
+                    actual = run()
+                with torch.cuda.stream(stream):
+                    source.fill_(2)
+                    graph.replay()
+                    self.assertTrue(torch.equal(actual, expected))
+                self.assertEqual(native.call_count, 2)
+        finally:
+            stream.synchronize()
+            graph.reset()
+
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
+    def test_topk_unsupported_layout_count_and_request_widths_keep_torch_behavior(self):
+        values = torch.randn((1, 2, 1024), device="cuda").bfloat16()
+        unaligned = torch.empty(values.numel() + 1, device="cuda", dtype=values.dtype)[
+            1:
+        ]
+        unaligned = unaligned.view_as(values).copy_(values)
+        with patch(
+            "oh_my_vllm.models.deepseek_v41.kernel_native._transform_module",
+            side_effect=AssertionError(
+                "unsupported inputs must keep the existing path"
+            ),
+        ):
+            for scores, count, widths in (
+                (values.cpu(), 512, None),
+                (values.float(), 512, None),
+                (values, 256, None),
+                (values[..., ::2], 512, None),
+                (unaligned, 512, None),
+                (values, 512, (513,)),
+            ):
+                actual = topk_indices(
+                    scores, count, request_widths=widths, finite_scores=True
+                )
+                expected = scores[..., : widths[0]] if widths else scores
+                expected = expected.topk(count, sorted=False).indices.sort(-1).values
+                self.assertTrue(torch.equal(actual, expected))
+
+    def test_candidate_blocks_keep_request_width_at_tied_cutoffs(self):
+        from oh_my_vllm.models.deepseek_v41.model import select_candidate_blocks
+
+        scores = torch.zeros(2, 1, 16)
+        scores[0, :, 10:] = -torch.inf
+        limits = torch.tensor([10, 16]).view(2, 1, 1)
+        actual = select_candidate_blocks(scores, limits, 4, 1, request_widths=(10, 16))
+        for request, width in enumerate((10, 16)):
+            expected = select_candidate_blocks(
+                scores[request : request + 1, :, :width], width, 4, 1
+            )
+            self.assertTrue(
+                torch.equal(actual[request : request + 1, :, :width], expected)
+            )
+            self.assertFalse(bool(actual[request, :, width:].any()))
+
+    def _check_projection_graph_replay(
+        self, run, key_shapes, head_shapes, output_shapes, x, qr, latent, attn_input
+    ):
+        run(slice(None), 1)
+        self.assertEqual(key_shapes, [(1, 3, 512)] * 4)
+        self.assertEqual(head_shapes, [(1, 6, 5120)] * 4)
+        self.assertEqual(output_shapes, [(1, 6, 2, 4096)] * 4)
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            run(slice(None), 1)
+        torch.cuda.current_stream().wait_stream(stream)
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph, stream=stream):
+            actual = run(slice(None), 1)
+        for _ in range(2):
+            for values in (x, qr, latent, attn_input):
+                values.normal_()
+            independent = [run(slice(index, index + 1), 0) for index in range(4)]
+            graph.replay()
+            expected = (
+                [item[0] for item in independent]
+                + [item[1] for item in independent]
+                + [torch.cat([item[2] for item in independent])]
+            )
+            self.assertEqual(len(actual), len(expected))
+            for left, right in zip(actual, expected, strict=True):
+                self.assertTrue(
+                    torch.equal(
+                        left.contiguous().view(torch.uint8),
+                        right.contiguous().view(torch.uint8),
+                    )
+                )
+
+    def _projection_shape_fixture(self, model):
         class Copy(torch.nn.Module):
             def forward(self, values, **kwargs):
                 return values.clone()
@@ -179,18 +414,11 @@ class DeepSeekIndexing(unittest.TestCase):
         qr = torch.randn(4, 6, 1024, dtype=torch.bfloat16, device="cuda")
         latent = torch.randn(4, 3, 512, dtype=torch.bfloat16, device="cuda")
         attn_input = torch.randn(4, 6, 8192, dtype=torch.bfloat16, device="cuda")
-        projected, key_shapes, head_shapes, output_shapes = [], [], [], []
+        return indexer, attention, slots, x, qr, latent, attn_input
 
-        def window(values, *args, **kwargs):
-            return values.new_zeros((values.size(0), 1, 512)), torch.zeros(
-                (*values.shape[:2], 1), dtype=torch.int32, device="cuda"
-            )
-
-        def observed_einsum(equation, values, weight):
-            if equation == "bsgd,grd->bsgr":
-                output_shapes.append(tuple(values.shape))
-            return original_einsum(equation, values, weight)
-
+    def _projection_run(
+        self, projected, indexer, x, qr, latent, slots, attention, attn_input
+    ):
         def run(selected, logical):
             projected.clear()
             indexer(
@@ -210,793 +438,7 @@ class DeepSeekIndexing(unittest.TestCase):
             )
             return (*projected, result)
 
-        original_einsum = torch.einsum
-        with (
-            torch.inference_mode(),
-            patch.object(model, "world_size", 4),
-            patch.object(model, "apply_rotary_emb"),
-            patch.object(model, "fp4_act_quant", wraps=model.fp4_act_quant),
-            patch.object(
-                model,
-                "sparse_attn",
-                side_effect=lambda query, *args, **kwargs: query.clone(),
-            ),
-            patch.object(attention, "_window_kv", side_effect=window),
-            patch("torch.distributed.all_reduce"),
-            patch("torch.einsum", side_effect=observed_einsum),
-        ):
-            handles = [
-                indexer.wk.register_forward_pre_hook(
-                    lambda layer, inputs: key_shapes.append(tuple(inputs[0].shape))
-                ),
-                indexer.weights_proj.register_forward_pre_hook(
-                    lambda layer, inputs: head_shapes.append(tuple(inputs[0].shape))
-                ),
-                indexer.wk.register_forward_hook(
-                    lambda layer, inputs, output: projected.append(output.clone())
-                ),
-                indexer.weights_proj.register_forward_hook(
-                    lambda layer, inputs, output: projected.append(output.clone())
-                ),
-            ]
-            try:
-                run(slice(None), 1)
-                self.assertEqual(key_shapes, [(1, 3, 512)] * 4)
-                self.assertEqual(head_shapes, [(1, 6, 5120)] * 4)
-                self.assertEqual(output_shapes, [(1, 6, 2, 4096)] * 4)
-                stream = torch.cuda.Stream()
-                stream.wait_stream(torch.cuda.current_stream())
-                with torch.cuda.stream(stream):
-                    run(slice(None), 1)
-                torch.cuda.current_stream().wait_stream(stream)
-                graph = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(graph, stream=stream):
-                    actual = run(slice(None), 1)
-                for _ in range(2):
-                    for values in (x, qr, latent, attn_input):
-                        values.normal_()
-                    independent = [
-                        run(slice(index, index + 1), 0) for index in range(4)
-                    ]
-                    graph.replay()
-                    expected = (
-                        [item[0] for item in independent]
-                        + [item[1] for item in independent]
-                        + [torch.cat([item[2] for item in independent])]
-                    )
-                    self.assertEqual(len(actual), len(expected))
-                    for left, right in zip(actual, expected, strict=True):
-                        self.assertTrue(
-                            torch.equal(
-                                left.contiguous().view(torch.uint8),
-                                right.contiguous().view(torch.uint8),
-                            )
-                        )
-            finally:
-                for handle in handles:
-                    handle.remove()
-                model.shared_attn.reset_query_state()
-
-    def _check_request_score_chunks(self, device, *, heads=8, dim=128, width=1152):
-        from oh_my_vllm.models.deepseek_v41 import model
-
-        torch.manual_seed(0)
-        query = torch.randn(4, 6, heads, dim, dtype=torch.bfloat16, device=device)
-        keys = torch.randn(4, width, dim, dtype=torch.bfloat16, device=device)
-        weights = torch.randn(4, 6, heads, dtype=torch.bfloat16, device=device)
-        indexer = model.Indexer.__new__(model.Indexer)
-        torch.nn.Module.__init__(indexer)
-        indexer.freqs_cis = torch.empty(1, device=device)
-        indexer.owns_k = False
-        indexer.compress_ratio = 2
-        indexer.n_heads = indexer.n_local_heads = heads
-        indexer.index_head_dim, indexer.rope_head_dim = dim, 0
-        indexer.softmax_scale = heads**0.5
-        indexer.index_topk, indexer.candidate_topk_blocks = 4, 2
-        indexer.candidate_block_size = 4
-        indexer.wq_b = indexer.weights_proj = torch.nn.Identity()
-        row_bytes = (
-            max(heads * (dim + width), 2 * heads * width, (heads + 1) * width) * 2
-            + width * 4
-        )
-
-        def run(selection, rows, candidate_source, *, separate):
-            seen, reductions = [], []
-            indexer.is_candidate_source = candidate_source
-            indexer.uses_candidates = not candidate_source
-            candidate_mask = torch.ones(
-                (len(selection), 6, (width + 3) // 4), dtype=torch.bool, device=device
-            )
-            candidate_mask[:, :, ::2] = False
-
-            def observed_chunks(*args, **kwargs):
-                self.assertEqual(args[0].size(0), 1)
-                for first, last, value in score_chunks(*args, **kwargs):
-                    seen.append((first, last, value.clone()))
-                    yield first, last, value
-
-            def peer_sum(value, async_op=False):
-                reductions.append(tuple(value.shape))
-                done = False
-
-                def wait():
-                    nonlocal done
-                    if not done:
-                        value.add_(0.25)
-                        done = True
-
-                if async_op:
-                    return SimpleNamespace(wait=wait)
-                wait()
-
-            with (
-                patch.object(model, "world_size", 4),
-                patch.object(
-                    model,
-                    "separate_request_math",
-                    side_effect=lambda values, logical_rows: logical_rows == 1,
-                )
-                if device == "cpu"
-                else nullcontext(),
-                patch.object(model, "INDEX_SCORE_WORK_BYTES", row_bytes * rows),
-                patch.object(model, "score_chunks", side_effect=observed_chunks),
-                patch.object(model, "apply_rotary_emb"),
-                patch.object(model, "position_rows"),
-                patch.object(model, "fp4_act_quant"),
-                patch.object(model.shared_attn, "index_k", keys[selection]),
-                patch.object(model.shared_attn, "candidates", candidate_mask),
-                patch("torch.distributed.all_reduce", side_effect=peer_sum),
-            ):
-                result = indexer(
-                    weights[selection],
-                    query[selection].flatten(2),
-                    None,
-                    width * 2 - 6,
-                    128,
-                    position=torch.full(
-                        (len(selection), 1),
-                        width * 2 - 6,
-                        dtype=torch.int64,
-                        device=device,
-                    ),
-                    logical_rows=1 if separate else 0,
-                )
-                blocks = model.shared_attn.candidates.clone()
-            return result, blocks, seen, reductions
-
-        if device == "cuda":
-            completed = []
-            submitted = []
-
-            def delayed_sum(value, async_op=False):
-                self.assertTrue(async_op)
-                ordinal = len(submitted)
-                submitted.append(value)
-
-                def wait():
-                    if ordinal not in completed:
-                        value.add_(0.25)
-                        completed.append(ordinal)
-
-                return SimpleNamespace(wait=wait)
-
-            with patch("torch.distributed.all_reduce", side_effect=delayed_sum):
-                chunks = score_chunks(
-                    query,
-                    keys,
-                    weights,
-                    work_bytes=row_bytes * 2 * query.size(0),
-                    rank_sum=True,
-                )
-                first, last, actual = next(chunks)
-                self.assertEqual((first, last), (0, 2))
-                expected = (
-                    (
-                        torch.einsum(
-                            "bshd,btd->bsht", query[:, :2].contiguous(), keys
-                        ).relu_()
-                        * weights[:, :2].unsqueeze(-1)
-                    )
-                    .sum(dim=2)
-                    .float()
-                    .add_(0.25)
-                    .bfloat16()
-                )
-                self.assertTrue(
-                    torch.equal(actual.view(torch.int16), expected.view(torch.int16))
-                )
-                self.assertEqual(completed, [0])
-                self.assertEqual(len(submitted), 2)
-                self.assertNotEqual(submitted[0].data_ptr(), submitted[1].data_ptr())
-                chunks.close()
-                self.assertEqual(completed, [0, 1])
-            unaligned = torch.empty(
-                weights.numel() + 1, dtype=weights.dtype, device=device
-            )[1:].view_as(weights)
-            unaligned.copy_(weights)
-            with (
-                patch(
-                    "oh_my_vllm.models.deepseek_v41.indexing._rank_score_chunks",
-                    side_effect=AssertionError(
-                        "unsupported storage must use existing math"
-                    ),
-                ),
-                patch("torch.distributed.all_reduce"),
-            ):
-                list(
-                    score_chunks(
-                        query,
-                        keys,
-                        unaligned,
-                        work_bytes=row_bytes * 2 * query.size(0),
-                        rank_sum=True,
-                    )
-                )
-            with patch(
-                "torch.distributed.all_reduce",
-                side_effect=lambda value: value.add_(0.25),
-            ):
-                odd_scores = torch.cat(
-                    [
-                        value
-                        for _, _, value in score_chunks(
-                            query,
-                            keys[:, :17],
-                            weights,
-                            work_bytes=row_bytes * 2 * query.size(0),
-                            rank_sum=True,
-                        )
-                    ],
-                    dim=1,
-                )
-            odd_expected = (
-                (
-                    torch.einsum("bshd,btd->bsht", query, keys[:, :17]).relu_()
-                    * weights.unsqueeze(-1)
-                )
-                .sum(dim=2)
-                .float()
-                .add_(0.25)
-                .bfloat16()
-            )
-            self.assertTrue(
-                torch.equal(
-                    odd_scores.view(torch.int16), odd_expected.view(torch.int16)
-                )
-            )
-            strided_weights = torch.ones(
-                (1, 3, heads + 1), dtype=weights.dtype, device=device
-            )[:, :, :heads]
-            with (
-                patch(
-                    "oh_my_vllm.models.deepseek_v41.indexing._rank_score_chunks",
-                    side_effect=AssertionError(
-                        "strided weights must keep existing math"
-                    ),
-                ),
-                patch("torch.distributed.all_reduce"),
-            ):
-                one_row_bytes = (
-                    max(heads * (dim + 8), 2 * heads * 8, (heads + 1) * 8) * 2 + 32
-                )
-                chunks = list(
-                    score_chunks(
-                        query[:1, :3],
-                        keys[:1, :8],
-                        strided_weights,
-                        work_bytes=one_row_bytes,
-                        rank_sum=True,
-                    )
-                )
-                self.assertEqual(
-                    [(first, last) for first, last, _ in chunks],
-                    [(0, 1), (1, 2), (2, 3)],
-                )
-
-        for source in (False, True):
-            for rows in (1, 3, 6):
-                independent = [
-                    run([index], rows, source, separate=False) for index in range(4)
-                ]
-                for batch in (1, 4, 16, 64):
-                    with self.subTest(
-                        device=device, batch=batch, rows=rows, source=source
-                    ):
-                        selection = [index % 4 for index in range(batch)]
-                        result, blocks, seen, reductions = run(
-                            selection, rows, source, separate=True
-                        )
-                        expected = [independent[index] for index in selection]
-                        self.assertTrue(
-                            torch.equal(
-                                result, torch.cat([item[0] for item in expected])
-                            )
-                        )
-                        self.assertTrue(
-                            torch.equal(
-                                blocks, torch.cat([item[1] for item in expected])
-                            )
-                        )
-                        expected_seen = [
-                            entry for item in expected for entry in item[2]
-                        ]
-                        self.assertEqual(
-                            [(first, last) for first, last, _ in seen],
-                            [(first, last) for first, last, _ in expected_seen],
-                        )
-                        self.assertEqual(
-                            reductions,
-                            [entry for item in expected for entry in item[3]],
-                        )
-                        for actual, reference in zip(seen, expected_seen, strict=True):
-                            self.assertTrue(
-                                torch.equal(
-                                    actual[2].view(torch.uint8),
-                                    reference[2].view(torch.uint8),
-                                )
-                            )
-
-    def test_request_score_chunks_and_collectives_keep_independent_shapes(self):
-        self._check_request_score_chunks("cpu", heads=4, dim=4, width=17)
-
-    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_request_score_shapes_match_at_different_batch_sizes_and_chunk_rows(self):
-        self._check_request_score_chunks("cuda")
-
-    def test_topk_keeps_request_width_for_ties_and_short_or_empty_sources(self):
-        scores = torch.full((3, 1, 16), -torch.inf)
-        scores[0, 0, :10] = torch.tensor([0, 0, -1, 2, 0, -1, 0, -1, -1, -1])
-        scores[1, 0, :3] = torch.tensor([2, 1, 0])
-        widths = (10, 3, 0)
-        actual = topk_indices(scores, 4, request_widths=widths)
-        for request, width in enumerate(widths):
-            expected = (
-                scores[request, :, :width]
-                .topk(min(4, width), sorted=False)
-                .indices.sort(-1)
-                .values
-            )
-            self.assertTrue(torch.equal(actual[request, :, : min(4, width)], expected))
-            self.assertTrue(bool((actual[request, :, min(4, width) :] == 16).all()))
-        for widths in ((10,), (17, 3, 0), (-1, 3, 0)):
-            with self.assertRaises(ValueError):
-                topk_indices(scores, 4, request_widths=widths)
-
-    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_topk_default_keeps_torch_nan_behavior(self):
-        scores = torch.zeros((1, 1, 1024), dtype=torch.bfloat16, device="cuda")
-        scores[..., 0] = torch.nan
-        expected = scores.topk(512, sorted=False).indices.sort(-1).values
-        with patch(
-            "oh_my_vllm.models.deepseek_v41.kernel._transform_module",
-            side_effect=AssertionError(
-                "default top-k must preserve Torch NaN behavior"
-            ),
-        ):
-            actual = topk_indices(scores, 512)
-        self.assertTrue(torch.equal(actual, expected))
-        self.assertTrue(bool(((actual >= 0) & (actual < 1024)).all()))
-        self.assertTrue(bool((actual.diff(dim=-1) > 0).all()))
-        self.assertTrue(bool((actual == 0).any()))
-
-    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_native_topk_model_keeps_early_valid_indices_and_sentinels_in_graph(self):
-        from oh_my_vllm.models.deepseek_v41 import kernel, model
-
-        width, rows, offset = 1025, 6, 128
-        source = torch.ones((1, rows, width), dtype=torch.bfloat16, device="cuda")
-        query = source.new_zeros((1, rows, 1, 1))
-        keys = source.new_zeros((1, width, 1))
-        weights = source.new_zeros((1, rows, 1))
-        indexer = SimpleNamespace(
-            compress_ratio=2,
-            index_topk=512,
-            is_candidate_source=False,
-            uses_candidates=False,
-        )
-
-        def chunks(*args, **kwargs):
-            yield 0, rows, source.clone()
-
-        def run():
-            return model.Indexer._select_indices(
-                indexer, query, keys, weights, 0, offset
-            )[0]
-
-        expected = torch.full((1, rows, 512), -1, dtype=torch.int32, device="cuda")
-        for row in range(rows):
-            valid = (row + 1) // 2
-            expected[0, row, :valid] = torch.arange(valid, device="cuda") + offset
-        stream = torch.cuda.Stream()
-        stream.wait_stream(torch.cuda.current_stream())
-        graph = torch.cuda.CUDAGraph()
-        try:
-            with (
-                patch.object(model, "score_chunks", side_effect=chunks),
-                patch.object(
-                    kernel, "_transform_module", wraps=kernel._transform_module
-                ) as native,
-            ):
-                with torch.cuda.stream(stream):
-                    self.assertTrue(torch.equal(run(), expected))
-                with torch.cuda.graph(graph, stream=stream):
-                    actual = run()
-                with torch.cuda.stream(stream):
-                    source.fill_(2)
-                    graph.replay()
-                    self.assertTrue(torch.equal(actual, expected))
-                self.assertEqual(native.call_count, 2)
-        finally:
-            stream.synchronize()
-            graph.reset()
-
-    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-    def test_topk_unsupported_layout_count_and_request_widths_keep_torch_behavior(self):
-        values = torch.randn((1, 2, 1024), device="cuda").bfloat16()
-        unaligned = torch.empty(values.numel() + 1, device="cuda", dtype=values.dtype)[
-            1:
-        ]
-        unaligned = unaligned.view_as(values).copy_(values)
-        with patch(
-            "oh_my_vllm.models.deepseek_v41.kernel._transform_module",
-            side_effect=AssertionError(
-                "unsupported inputs must keep the existing path"
-            ),
-        ):
-            for scores, count, widths in (
-                (values.cpu(), 512, None),
-                (values.float(), 512, None),
-                (values, 256, None),
-                (values[..., ::2], 512, None),
-                (unaligned, 512, None),
-                (values, 512, (513,)),
-            ):
-                actual = topk_indices(
-                    scores, count, request_widths=widths, finite_scores=True
-                )
-                expected = scores[..., : widths[0]] if widths else scores
-                expected = expected.topk(count, sorted=False).indices.sort(-1).values
-                self.assertTrue(torch.equal(actual, expected))
-
-    def test_candidate_blocks_keep_request_width_at_tied_cutoffs(self):
-        from oh_my_vllm.models.deepseek_v41.model import select_candidate_blocks
-
-        scores = torch.zeros(2, 1, 16)
-        scores[0, :, 10:] = -torch.inf
-        limits = torch.tensor([10, 16]).view(2, 1, 1)
-        actual = select_candidate_blocks(scores, limits, 4, 1, request_widths=(10, 16))
-        for request, width in enumerate((10, 16)):
-            expected = select_candidate_blocks(
-                scores[request : request + 1, :, :width], width, 4, 1
-            )
-            self.assertTrue(
-                torch.equal(actual[request : request + 1, :, :width], expected)
-            )
-            self.assertFalse(bool(actual[request, :, width:].any()))
-
-    def test_owner_scores_keep_mp4_head_rounding(self):
-        query = torch.ones((1, 3, 32, 1), dtype=torch.bfloat16)
-        keys = torch.ones((1, 7, 1), dtype=query.dtype)
-        weights = torch.zeros((1, 3, 32), dtype=query.dtype)
-        weights[:, :, 0] = 1
-        weights[:, :, 1] = 2**-8
-        weights[:, :, 8] = 2**-8
-        full = torch.cat(
-            [value for _, _, value in score_chunks(query, keys, weights)], dim=1
-        )
-        partials = [
-            torch.cat([value for _, _, value in score_chunks(q, keys, w)], dim=1)
-            for q, w in zip(query.chunk(4, dim=2), weights.chunk(4, dim=2), strict=True)
-        ]
-        expected = sum(partial.float() for partial in partials).to(query.dtype)
-        self.assertTrue(torch.equal(full, torch.full_like(full, 1 + 2**-7)))
-        self.assertTrue(torch.equal(expected, torch.ones_like(expected)))
-        for work_bytes in (308, 616, INDEX_SCORE_WORK_BYTES):
-            with self.subTest(work_bytes=work_bytes):
-                with patch("torch.distributed.all_reduce") as collective:
-                    actual = torch.cat(
-                        [
-                            value
-                            for _, _, value in score_chunks(
-                                query,
-                                keys,
-                                weights,
-                                work_bytes=work_bytes,
-                                head_partitions=4,
-                            )
-                        ],
-                        dim=1,
-                    )
-                self.assertTrue(torch.equal(actual, expected))
-                collective.assert_not_called()
-
-    def test_rank_sum_rounds_once_and_budgets_the_fp32_accumulator(self):
-        from torch.utils._python_dispatch import TorchDispatchMode
-
-        query = torch.ones((1, 3, 1, 1), dtype=torch.bfloat16)
-        keys = torch.ones((1, 7, 1), dtype=query.dtype)
-        weights = torch.ones((1, 3, 1), dtype=query.dtype)
-
-        def peer_sum(value):
-            value.add_(256)
-            value.add_(-256)
-            value.add_(0.25)
-
-        scores = []
-        case = self
-
-        class ScoreLifetime(TorchDispatchMode):
-            def __torch_dispatch__(self, function, types, args=(), kwargs=None):
-                kwargs = kwargs or {}
-                if (
-                    function == torch.ops.aten._to_copy.default
-                    and args[0].dtype == torch.float32
-                    and kwargs.get("dtype") == torch.bfloat16
-                ):
-                    case.assertIsNone(scores[-1]())
-                output = function(*args, **kwargs)
-                if function == torch.ops.aten.sum.dim_IntList:
-                    scores.append(weakref.ref(output))
-                return output
-
-        with (
-            ScoreLifetime(),
-            patch("torch.distributed.all_reduce", side_effect=peer_sum),
-        ):
-            chunks = list(
-                score_chunks(query, keys, weights, work_bytes=112, rank_sum=True)
-            )
-        self.assertEqual([(first, last) for first, last, _ in chunks], [(0, 2), (2, 3)])
-        actual = torch.cat([value for _, _, value in chunks], dim=1)
-        torch.testing.assert_close(
-            actual, torch.full_like(actual, 1.25), rtol=0, atol=0
-        )
-        self.assertEqual(actual.dtype, torch.bfloat16)
-
-        def double_peer_sum(value):
-            value.add_(0.25 + 2**-40)
-
-        with patch("torch.distributed.all_reduce", side_effect=double_peer_sum):
-            values = list(
-                score_chunks(
-                    query.double(),
-                    keys.double(),
-                    weights.double(),
-                    work_bytes=448,
-                    rank_sum=True,
-                )
-            )
-        actual = torch.cat([value for _, _, value in values], dim=1)
-        torch.testing.assert_close(
-            actual, torch.full_like(actual, 1.25 + 2**-40), rtol=0, atol=0
-        )
-
-    def test_rank_sum_reuses_storage_while_collectives_retain_inputs(self):
-        query = torch.arange(1, 4, dtype=torch.float32).reshape(1, 3, 1, 1)
-        keys = torch.ones((1, 7, 1))
-        weights = torch.ones((1, 3, 1))
-        retained = []
-
-        def peer_sum(value):
-            retained.append(value)
-            value.add_(0.25)
-
-        with patch("torch.distributed.all_reduce", side_effect=peer_sum):
-            chunks = list(
-                score_chunks(query, keys, weights, work_bytes=112, rank_sum=True)
-            )
-        expected = torch.tensor([1.25, 2.25, 3.25]).reshape(1, 3, 1).expand(1, 3, 7)
-        actual = torch.cat([value for _, _, value in chunks], dim=1)
-        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-        self.assertGreater(len(retained), 1)
-        self.assertEqual(
-            len({value.untyped_storage().data_ptr() for value in retained}), 1
-        )
-
-    def test_autocast_keeps_reference_product_dtype_and_rounding(self):
-        generator = torch.Generator().manual_seed(18)
-        query = torch.randn((1, 2, 3, 4), generator=generator)
-        keys = torch.randn((1, 5, 4), generator=generator)
-        weights = torch.randn((1, 2, 3), generator=generator)
-        with torch.autocast("cpu", dtype=torch.bfloat16):
-            expected = (
-                torch.einsum("bshd,btd->bsht", query, keys).relu_()
-                * weights.unsqueeze(-1)
-            ).sum(dim=2)
-            actual = next(score_chunks(query, keys, weights))[2]
-        self.assertEqual(actual.dtype, expected.dtype)
-        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-
-    def test_score_order_and_rounding_match_manual_reference(self):
-        generator = torch.Generator().manual_seed(123)
-        for dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
-            with self.subTest(dtype=dtype):
-                query = torch.randn((2, 5, 3, 4), generator=generator, dtype=dtype)
-                keys = torch.randn((2, 7, 4), generator=generator, dtype=dtype)
-                weights = torch.randn((2, 5, 3), generator=generator, dtype=dtype)
-                original = [tensor.clone() for tensor in (query, keys, weights)]
-                expected = manual_scores(query, keys, weights)
-                row_bytes = 2 * 42 * query.element_size()
-                for rows in (1, 2, 5, 20):
-                    chunks = list(
-                        score_chunks(query, keys, weights, work_bytes=rows * row_bytes)
-                    )
-                    self.assertEqual(
-                        [(first, last) for first, last, _ in chunks],
-                        [(first, min(first + rows, 5)) for first in range(0, 5, rows)],
-                    )
-                    actual = torch.cat([scores for _, _, scores in chunks], dim=1)
-                    self.assertEqual(actual.dtype, dtype)
-                    torch.testing.assert_close(actual, expected)
-                for actual, before in zip(
-                    (query, keys, weights), original, strict=True
-                ):
-                    torch.testing.assert_close(actual, before, rtol=0, atol=0)
-
-    def test_bfloat16_matches_untiled_model_operations_exactly(self):
-        generator = torch.Generator().manual_seed(33)
-        query = torch.randn((2, 7, 16, 8), generator=generator).bfloat16()
-        keys = torch.randn((2, 13, 8), generator=generator).bfloat16()
-        weights = torch.randn((2, 7, 16), generator=generator).bfloat16()
-        expected = (
-            torch.einsum("bshd,btd->bsht", query, keys).relu_() * weights.unsqueeze(-1)
-        ).sum(dim=2)
-        row_bytes = 2 * 416 * 2
-        for rows in (1, 3, 7):
-            actual = torch.cat(
-                [
-                    scores
-                    for _, _, scores in score_chunks(
-                        query, keys, weights, work_bytes=rows * row_bytes
-                    )
-                ],
-                dim=1,
-            )
-            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-
-    def test_each_real_einsum_fits_with_its_reduction(self):
-        query = torch.ones((4, 11, 16, 3), dtype=torch.bfloat16)
-        keys = torch.ones((4, 17, 3), dtype=query.dtype)
-        weights = torch.ones((4, 11, 16), dtype=query.dtype)
-        row_bytes = 4 * 544 * 2
-        budget = 3 * row_bytes + row_bytes - 1
-        original_einsum = torch.einsum
-        ranges = []
-
-        def checked_einsum(equation, q, k):
-            result = original_einsum(equation, q, k)
-            reduction_bytes = q.size(0) * q.size(1) * k.size(1) * q.element_size()
-            per_head_bytes = result.numel() * result.element_size()
-            self.assertLessEqual(
-                max(
-                    per_head_bytes + q.numel() * q.element_size(),
-                    2 * per_head_bytes,
-                    per_head_bytes + reduction_bytes,
-                ),
-                budget,
-            )
-            ranges.append(q.size(1))
-            return result
-
-        with patch("torch.einsum", side_effect=checked_einsum):
-            chunks = list(score_chunks(query, keys, weights, work_bytes=budget))
-        self.assertEqual(ranges, [3, 3, 3, 2])
-        for _, _, scores in chunks:
-            torch.testing.assert_close(scores, torch.full_like(scores, 48))
-
-    def test_one_million_context_row_fits_default_budget_without_allocation(self):
-        query = torch.empty((4, 2, 16, 128), device="meta", dtype=torch.bfloat16)
-        keys = torch.empty((4, 1048576, 128), device="meta", dtype=query.dtype)
-        weights = torch.empty((4, 2, 16), device="meta", dtype=query.dtype)
-        chunks = list(score_chunks(query, keys, weights))
-        self.assertEqual([(first, last) for first, last, _ in chunks], [(0, 1), (1, 2)])
-        self.assertLessEqual(4 * 2 * 16 * 1048576 * 2, INDEX_SCORE_WORK_BYTES)
-
-    def test_empty_rows_keys_and_batch(self):
-        for batch, rows, length in ((2, 0, 7), (2, 5, 0), (0, 5, 7)):
-            with self.subTest(shape=(batch, rows, length)):
-                chunks = list(
-                    score_chunks(
-                        torch.empty((batch, rows, 3, 4)),
-                        torch.empty((batch, length, 4)),
-                        torch.empty((batch, rows, 3)),
-                        work_bytes=1,
-                    )
-                )
-                if rows == 0:
-                    self.assertEqual(chunks, [])
-                else:
-                    self.assertEqual(len(chunks), 1)
-                    first, last, scores = chunks[0]
-                    self.assertEqual((first, last), (0, rows))
-                    self.assertEqual(scores.shape, (batch, rows, length))
-
-    def test_noncontiguous_inputs(self):
-        query = torch.arange(120, dtype=torch.float32).reshape(2, 5, 3, 4) / 8
-        keys = torch.arange(56, dtype=torch.float32).reshape(2, 7, 4) / 16
-        weights = torch.arange(30, dtype=torch.float32).reshape(2, 5, 3) / 4
-        query = query.transpose(1, 2).contiguous().transpose(1, 2)
-        keys = keys.transpose(1, 2).contiguous().transpose(1, 2)
-        weights = weights.transpose(1, 2).contiguous().transpose(1, 2)
-        actual = torch.cat(
-            [scores for _, _, scores in score_chunks(query, keys, weights)], dim=1
-        )
-        torch.testing.assert_close(actual, manual_scores(query, keys, weights))
-
-    def test_rejects_noninteger_and_nonpositive_budgets(self):
-        args = (torch.ones(1, 2, 3, 4), torch.ones(1, 5, 4), torch.ones(1, 2, 3))
-        for budget in (True, False, 1.5, "256", None, torch.tensor(256)):
-            with self.subTest(budget=budget), self.assertRaises(TypeError):
-                list(score_chunks(*args, work_bytes=budget))
-        for budget in (0, -1):
-            with self.subTest(budget=budget), self.assertRaises(ValueError):
-                list(score_chunks(*args, work_bytes=budget))
-
-    def test_rejects_budget_below_one_row_with_required_bytes(self):
-        args = (torch.ones(1, 2, 3, 4), torch.ones(1, 5, 4), torch.ones(1, 2, 3))
-        with self.assertRaisesRegex(ValueError, "120.*(row|bytes)"):
-            list(score_chunks(*args, work_bytes=119))
-        self.assertEqual(len(list(score_chunks(*args, work_bytes=120))), 2)
-
-    def test_rejects_autocast_that_mixes_half_dtypes(self):
-        for dtype, autocast_dtype in (
-            (torch.float16, torch.bfloat16),
-            (torch.bfloat16, torch.float16),
-        ):
-            with (
-                self.subTest(dtype=dtype),
-                torch.autocast("cpu", dtype=autocast_dtype),
-                self.assertRaisesRegex(ValueError, "autocast"),
-            ):
-                list(
-                    score_chunks(
-                        torch.ones((1, 2, 3, 4), dtype=dtype),
-                        torch.ones((1, 5, 4), dtype=dtype),
-                        torch.ones((1, 2, 3), dtype=dtype),
-                    )
-                )
-
-    def test_rejects_invalid_shapes(self):
-        shapes = (
-            ((2, 3, 4), (2, 5, 4), (2, 3, 1)),
-            ((2, 3, 1, 4), (2, 5, 4, 1), (2, 3, 1)),
-            ((2, 3, 1, 4), (2, 5, 4), (2, 3)),
-            ((2, 3, 1, 4), (1, 5, 4), (2, 3, 1)),
-            ((2, 3, 1, 4), (2, 5, 3), (2, 3, 1)),
-            ((2, 3, 1, 4), (2, 5, 4), (2, 1, 1)),
-            ((2, 3, 1, 4), (2, 5, 4), (2, 3, 2)),
-            ((2, 3, 0, 4), (2, 5, 4), (2, 3, 0)),
-            ((2, 3, 1, 0), (2, 5, 0), (2, 3, 1)),
-        )
-        for query, keys, weights in shapes:
-            with (
-                self.subTest(shapes=(query, keys, weights)),
-                self.assertRaises(ValueError),
-            ):
-                list(
-                    score_chunks(
-                        torch.empty(query), torch.empty(keys), torch.empty(weights)
-                    )
-                )
-
-    def test_rejects_invalid_dtypes_devices_and_nontensors(self):
-        args = [torch.ones(1, 2, 3, 4), torch.ones(1, 5, 4), torch.ones(1, 2, 3)]
-        for index in range(3):
-            for dtype in (torch.int64, torch.bool, torch.complex64, torch.float64):
-                invalid = args.copy()
-                invalid[index] = invalid[index].to(dtype)
-                with (
-                    self.subTest(index=index, dtype=dtype),
-                    self.assertRaises(TypeError),
-                ):
-                    list(score_chunks(*invalid))
-            invalid = args.copy()
-            invalid[index] = invalid[index].to("meta")
-            with self.assertRaises(ValueError):
-                list(score_chunks(*invalid))
-            invalid[index] = None
-            with self.assertRaises(TypeError):
-                list(score_chunks(*invalid))
+        return run
 
 
 if __name__ == "__main__":

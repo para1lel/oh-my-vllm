@@ -56,6 +56,41 @@ def fixture_files(root, case):
     return replace(case, fixture_sha256=hashlib.sha256(path.read_bytes()).hexdigest())
 
 
+def _assert_sampling_limits(self, budget, compare):
+    case = next(c for c in load_cases() if c.id == "output.sample.numerics.batch")
+    expected = {
+        "probabilities": np.tile([0.5, 0.5, 0.0, 0.0], (4, 1)),
+        "tokens": np.zeros(4, dtype=np.int64),
+        "selected_probability": np.full(4, 0.5),
+    }
+    fixture = Fixture(
+        {"case": case.definition()},
+        {"mask": np.full((4, 1), 3, np.uint8)},
+        {},
+        expected,
+    )
+    limits = {
+        "case_sha256": case.identity,
+        "probability": {"total_variation": 0.01, "softmax_logit_envelope": False},
+        "fields": {
+            name: {"kind": "exact"} if name == "tokens" else {"kind": "float", **budget}
+            for name in expected
+        },
+    }
+    self.assertTrue(compare(expected, fixture, limits).passed)
+    for field, column, value in (
+        ("probabilities", 2, 1e-6),
+        ("probabilities", 0, 0.5001),
+        ("selected_probability", None, 0.5001),
+    ):
+        actual = {name: array.copy() for name, array in expected.items()}
+        if column is None:
+            actual[field][0] = value
+        else:
+            actual[field][0, column] = value
+        self.assertFalse(compare(actual, fixture, limits).passed)
+
+
 class Contracts(unittest.TestCase):
     def test_numerics_rejects_wrong_state_and_missing_limits(self):
         from .numerics import compare, float_metrics
@@ -110,40 +145,7 @@ class Contracts(unittest.TestCase):
             compare(expected, fixture, {**limits, "fields": {}})
         with self.assertRaisesRegex(ValueError, "identity"):
             compare(expected, fixture, {**limits, "case_sha256": "0" * 64})
-        case = next(c for c in load_cases() if c.id == "output.sample.numerics.batch")
-        expected = {
-            "probabilities": np.tile([0.5, 0.5, 0.0, 0.0], (4, 1)),
-            "tokens": np.zeros(4, dtype=np.int64),
-            "selected_probability": np.full(4, 0.5),
-        }
-        fixture = Fixture(
-            {"case": case.definition()},
-            {"mask": np.full((4, 1), 3, np.uint8)},
-            {},
-            expected,
-        )
-        limits = {
-            "case_sha256": case.identity,
-            "probability": {"total_variation": 0.01, "softmax_logit_envelope": False},
-            "fields": {
-                name: {"kind": "exact"}
-                if name == "tokens"
-                else {"kind": "float", **budget}
-                for name in expected
-            },
-        }
-        self.assertTrue(compare(expected, fixture, limits).passed)
-        for field, column, value in (
-            ("probabilities", 2, 1e-6),
-            ("probabilities", 0, 0.5001),
-            ("selected_probability", None, 0.5001),
-        ):
-            actual = {name: array.copy() for name, array in expected.items()}
-            if column is None:
-                actual[field][0] = value
-            else:
-                actual[field][0, column] = value
-            self.assertFalse(compare(actual, fixture, limits).passed)
+        _assert_sampling_limits(self, budget, compare)
         case = next(c for c in load_cases() if c.id == "mtp.chain.numerics.batch-2")
         reference = np.full((4, 2, 2), 1e6)
         reference[0] = 1

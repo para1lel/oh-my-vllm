@@ -88,9 +88,13 @@ def validate_identities(events, harness, case):
         modes = harness.get("configuration", {}).get("execution_modes")
         if modes is not None:
             expected_modes = modes.get(case["strategy"])
+            actual_modes = runtime.get("execution_modes")
             if (
                 not isinstance(expected_modes, dict)
-                or runtime.get("execution_modes") != expected_modes
+                or type(expected_modes.get("proposal_graph")) is not bool
+                or not isinstance(actual_modes, dict)
+                or type(actual_modes.get("proposal_graph")) is not bool
+                or actual_modes != expected_modes
             ):
                 raise BindingError(
                     "rank batch/Graph execution modes differ from harness"

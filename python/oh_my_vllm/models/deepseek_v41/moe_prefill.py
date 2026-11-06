@@ -5,7 +5,7 @@ import os
 import torch
 import torch.distributed as dist
 
-from . import kernel
+from . import kernel_native as native
 
 COLLECTIVE_ROWS = 1024
 
@@ -61,7 +61,7 @@ class PrefillWorkspace:
         small = COLLECTIVE_ROWS * moe.n_activated_experts
         max_width = max(moe.dim, width)
         groups = len(prepared.gate)
-        projection = kernel._projection_module()
+        projection = native._projection_module()
         scratch_bytes = max(
             projection.grouped_workspace_size(capacity, groups, capacity, n, k)
             for n, k in ((inter, moe.dim), (outputs, width))
@@ -122,14 +122,14 @@ class PrefillWorkspace:
         rows, width = values.shape
         encoded = self.buffers["encoded"][: rows * width].view(rows, width)
         scales = self.buffers["scales"][: rows * (width // 32)].view(rows, width // 32)
-        kernel._transform_module().quantize(
+        native._transform_module().quantize(
             values, encoded, scales, 8, 32, 1, True, False
         )
         return encoded, scales
 
     def _project(self, values, counts, pointers, output, *, quantized=None):
         encoded, scales = self._quantize(values) if quantized is None else quantized
-        kernel._projection_module().grouped_project(
+        native._projection_module().grouped_project(
             encoded,
             scales,
             *pointers[:2],
@@ -145,7 +145,7 @@ class PrefillWorkspace:
         route_rows.view(-1).scatter_(
             0, routes, self.buffers["row_ids"][: values.size(0)]
         )
-        kernel._routing_module().expert_sum(values, route_rows, output)
+        native._routing_module().expert_sum(values, route_rows, output)
 
     def _gather_product(self, product, positions):
         count = positions.numel()
@@ -208,22 +208,17 @@ class PrefillWorkspace:
         )
         local_values = values[first : first + count]
         if count:
-            quantized = self._quantize(local_values)
-            self._project(
-                local_values, local_counts, pointers[0], gate, quantized=quantized
-            )
-            self._project(
-                local_values, local_counts, pointers[1], up, quantized=quantized
-            )
-            local_weights = buffers["local_weights"][:count]
-            local_weights.copy_(sorted_weights[first : first + count])
-            kernel._activation_module().swiglu(
+            self._project_gate_up(
+                moe,
+                local_values,
+                local_counts,
+                pointers,
                 gate,
                 up,
-                local_weights,
                 product,
-                int(moe.experts[moe.experts_start_idx].swiglu_limit),
-                True,
+                sorted_weights,
+                first,
+                count,
             )
         output = buffers["output"][:rows]
         if not moe.tensor_parallel:
@@ -241,6 +236,16 @@ class PrefillWorkspace:
                 y[start:end].add_(shared_output[start:end])
                 output[start:end].copy_(y[start:end])
             return output
+        return self._tensor_parallel_sum(
+            moe, product, indices, counts, order, pointers, output, shared_output
+        )
+
+    def _tensor_parallel_sum(
+        self, moe, product, indices, counts, order, pointers, output, shared_output
+    ):
+        buffers = self.buffers
+        rows, topk = indices.shape
+        capacity = rows * topk
         inverse = buffers["inverse"][:capacity]
         inverse.scatter_(0, order, buffers["route_ids"][:capacity])
         for start in range(0, rows, COLLECTIVE_ROWS):
@@ -266,3 +271,33 @@ class PrefillWorkspace:
             full_sum.add_(shared_output[start:end])
             output[start:end].copy_(full_sum)
         return output
+
+    def _project_gate_up(
+        self,
+        moe,
+        local_values,
+        local_counts,
+        pointers,
+        gate,
+        up,
+        product,
+        sorted_weights,
+        first,
+        count,
+    ):
+        buffers = self.buffers
+        quantized = self._quantize(local_values)
+        self._project(
+            local_values, local_counts, pointers[0], gate, quantized=quantized
+        )
+        self._project(local_values, local_counts, pointers[1], up, quantized=quantized)
+        local_weights = buffers["local_weights"][:count]
+        local_weights.copy_(sorted_weights[first : first + count])
+        native._activation_module().swiglu(
+            gate,
+            up,
+            local_weights,
+            product,
+            int(moe.experts[moe.experts_start_idx].swiglu_limit),
+            True,
+        )

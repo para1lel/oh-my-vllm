@@ -161,6 +161,140 @@ struct EpilogueRunner {
   using BlockRadixSortTempStorageT =
       cute::conditional_t<Config::sorted_value, typename BlockRadixSortT::TempStorage, char>;
 
+  template <bool IS_SHORTCUT>
+  static __device__ __forceinline__ void
+  store_shortcut_output(const TopkSelectArgs &args, uint32_t end_vocab_idx,
+                        int32_t output_idx_offset, ValueT oob_fill_value, ValueT *input_values,
+                        OutIdxT *result_indices, ValueT *result_values) {
+    // Saves indices 0...end_vocab_idx (plus `output_idx_offset`) followed by
+    // (args.topk-end_vocab_idx) `args.idx_oob_fill_value` into `result_indices`
+    constexpr uint32_t NUM_OUTPUT_IDXS_PER_STORE = NUM_BYTES_PER_GMEM_STORE / sizeof(OutIdxT);
+#pragma unroll 2
+    for (uint32_t i = threadIdx.x * NUM_OUTPUT_IDXS_PER_STORE; i < args.topk;
+         i += NUM_THREADS * NUM_OUTPUT_IDXS_PER_STORE) {
+      OutIdxT out[NUM_OUTPUT_IDXS_PER_STORE];
+      CUTE_UNROLL
+      for (uint32_t j = 0; j < NUM_OUTPUT_IDXS_PER_STORE; ++j)
+        out[j] =
+            i + j < end_vocab_idx ? (OutIdxT)(i + j) + output_idx_offset : args.idx_oob_fill_value;
+      STORE_TO_GMEM(result_indices + i, out);
+    }
+
+    // Save values into `result_values`, if `RETURN_VALUE` is `True`
+    if constexpr (Config::return_value) {
+#pragma unroll 2
+      for (uint32_t i = threadIdx.x * NUM_VALUES_PER_LOAD_STORE; i < args.topk;
+           i += NUM_THREADS * NUM_VALUES_PER_LOAD_STORE) {
+        ValueT values[NUM_VALUES_PER_LOAD_STORE];
+        if (i < end_vocab_idx) {
+          LOAD_FROM_GMEM(input_values + i, values);
+        }
+        CUTE_UNROLL
+        for (uint32_t j = 0; j < NUM_VALUES_PER_LOAD_STORE; ++j)
+          values[j] = i + j < end_vocab_idx ? values[j] : oob_fill_value;
+        STORE_TO_GMEM(result_values + i, values);
+      }
+    }
+  }
+
+  static __device__ __forceinline__ void
+  store_selected_output(const TopkSelectArgs &args, int32_t output_idx_offset,
+                        ValueT *smem_value_buf, uint32_t *smem_index_buf, OutIdxT *result_indices,
+                        ValueT *result_values) {
+    // Load & cast & save indices
+    constexpr uint32_t NUM_OUTPUT_IDX_PER_ROUND = cute::min(
+        NUM_BYTES_PER_SMEM_STORE / sizeof(uint32_t), NUM_BYTES_PER_GMEM_STORE / sizeof(OutIdxT));
+#pragma unroll 2
+    for (uint32_t i = threadIdx.x * NUM_OUTPUT_IDX_PER_ROUND; i < args.topk;
+         i += NUM_THREADS * NUM_OUTPUT_IDX_PER_ROUND) {
+      uint32_t indices_u32[NUM_OUTPUT_IDX_PER_ROUND];
+      OutIdxT out[NUM_OUTPUT_IDX_PER_ROUND];
+      ld_shared<NUM_OUTPUT_IDX_PER_ROUND>(indices_u32, smem_index_buf + i);
+      CUTE_UNROLL
+      for (uint32_t j = 0; j < NUM_OUTPUT_IDX_PER_ROUND; ++j)
+        out[j] = (OutIdxT)indices_u32[j] + output_idx_offset;
+      st_global<NUM_OUTPUT_IDX_PER_ROUND>(result_indices + i, out);
+    }
+
+    if constexpr (Config::return_value) {
+      // Load & store values
+      constexpr uint32_t NUM_VALUES_PER_ROUND =
+          cute::min(NUM_BYTES_PER_SMEM_STORE, NUM_BYTES_PER_GMEM_STORE) / sizeof(ValueT);
+#pragma unroll 2
+      for (uint32_t i = threadIdx.x * NUM_VALUES_PER_ROUND; i < args.topk;
+           i += NUM_THREADS * NUM_VALUES_PER_ROUND) {
+        UIntValueT values[NUM_VALUES_PER_ROUND];
+        ld_shared<NUM_VALUES_PER_ROUND>(values, (UIntValueT *)(smem_value_buf + i));
+        st_global<NUM_VALUES_PER_ROUND>((UIntValueT *)(result_values + i), values);
+      }
+    }
+  }
+
+  template <bool IS_SHORTCUT>
+  static __device__ __forceinline__ void
+  sort_and_store_output(const TopkSelectArgs &args, uint32_t end_vocab_idx,
+                        int32_t output_idx_offset, ValueT oob_fill_value, ValueT *smem_value_buf,
+                        uint32_t *smem_index_buf, OutIdxT *result_indices, ValueT *result_values,
+                        BlockRadixSortTempStorageT &radix_sort_temp_storage) {
+    // Sort
+    UIntValueT local_values[NUM_VALUES_PER_THREAD_FOR_SORT];
+    uint32_t local_indices[NUM_VALUES_PER_THREAD_FOR_SORT];
+    uint32_t thread_offset = threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT;
+    ld_shared_with_loop<NUM_VALUES_PER_THREAD_FOR_SORT>(
+        local_values, (UIntValueT *)smem_value_buf + threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT);
+    ld_shared_with_loop<NUM_VALUES_PER_THREAD_FOR_SORT>(
+        local_indices, smem_index_buf + threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT);
+    CUTE_UNROLL
+    for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
+      local_values[i] = distort(local_values[i]);
+    if (IS_SHORTCUT || args.topk < MAX_TOPK) {
+      uint32_t limit = IS_SHORTCUT ? end_vocab_idx : args.topk;
+      CUTE_UNROLL
+      for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
+        local_values[i] = thread_offset + i < limit ? local_values[i] : 0;
+    }
+    __syncthreads(); // To allow `radix_sort_temp_storage` overlap with `smem_value_buf` and
+                     // `smem_index_buf`
+    BlockRadixSortT(radix_sort_temp_storage).SortDescending(local_values, local_indices);
+
+    // Store directly to gmem (no smem buffering)
+    // For common cases, our MAX_TOPK <= 1024 and NUM_THREADS >= 256, so we have
+    // NUM_VALUES_PER_THREAD_FOR_SORT <= 8, which means each thread only need to call STG once. So
+    // we don't use SMEM to buffer here
+    if (thread_offset < args.topk) {
+      CUTE_UNROLL
+      for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
+        local_values[i] =
+            !IS_SHORTCUT || threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT + i < end_vocab_idx
+                ? un_distort(local_values[i])
+                : *(UIntValueT *)&oob_fill_value;
+      OutIdxT local_indices_new[NUM_VALUES_PER_THREAD_FOR_SORT];
+      CUTE_UNROLL
+      for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
+        local_indices_new[i] = (OutIdxT)((int32_t)local_indices[i] + output_idx_offset);
+      auto store = [&]<uint32_t NUM_VALUES, typename T>(T *dst, T src[NUM_VALUES]) {
+        constexpr uint32_t NUM_BYTES_TO_STORE = NUM_VALUES * sizeof(T);
+        if constexpr (NUM_BYTES_TO_STORE <= NUM_BYTES_PER_GMEM_STORE) {
+          // Don't need to do OOB check because the output array is at least padded to the maximum
+          // width of global store.
+          st_global<NUM_VALUES>(dst, src);
+        } else {
+          static_assert(NUM_BYTES_TO_STORE % NUM_BYTES_PER_GMEM_STORE == 0);
+          CUTE_UNROLL
+          for (uint32_t i = 0; i < NUM_BYTES_TO_STORE; i += NUM_BYTES_PER_GMEM_STORE) {
+            uint32_t elem_offset = i / sizeof(T);
+            if (thread_offset + elem_offset < args.topk)
+              STORE_TO_GMEM(dst + elem_offset, src + elem_offset);
+          }
+        }
+      };
+      store.template operator()<NUM_VALUES_PER_THREAD_FOR_SORT>(
+          (UIntValueT *)result_values + thread_offset, local_values);
+      store.template operator()<NUM_VALUES_PER_THREAD_FOR_SORT>(result_indices + thread_offset,
+                                                                local_indices_new);
+    }
+  }
+
   template <bool IS_SHORTCUT> // "shortcut" means `end_vocab_idx` <= `topk`
   static __device__ __forceinline__ void
   topk_select_epilogue(typename Config::ValueT *smem_value_buf, // [MAX_TOPK]
@@ -198,64 +332,11 @@ struct EpilogueRunner {
 
     if constexpr (!Config::sorted_value) {
       if constexpr (IS_SHORTCUT) {
-        // Saves indices 0...end_vocab_idx (plus `output_idx_offset`) followed by
-        // (args.topk-end_vocab_idx) `args.idx_oob_fill_value` into `result_indices`
-        constexpr uint32_t NUM_OUTPUT_IDXS_PER_STORE = NUM_BYTES_PER_GMEM_STORE / sizeof(OutIdxT);
-#pragma unroll 2
-        for (uint32_t i = threadIdx.x * NUM_OUTPUT_IDXS_PER_STORE; i < args.topk;
-             i += NUM_THREADS * NUM_OUTPUT_IDXS_PER_STORE) {
-          OutIdxT out[NUM_OUTPUT_IDXS_PER_STORE];
-          CUTE_UNROLL
-          for (uint32_t j = 0; j < NUM_OUTPUT_IDXS_PER_STORE; ++j)
-            out[j] = i + j < end_vocab_idx ? (OutIdxT)(i + j) + output_idx_offset
-                                           : args.idx_oob_fill_value;
-          STORE_TO_GMEM(result_indices + i, out);
-        }
-
-        // Save values into `result_values`, if `RETURN_VALUE` is `True`
-        if constexpr (Config::return_value) {
-#pragma unroll 2
-          for (uint32_t i = threadIdx.x * NUM_VALUES_PER_LOAD_STORE; i < args.topk;
-               i += NUM_THREADS * NUM_VALUES_PER_LOAD_STORE) {
-            ValueT values[NUM_VALUES_PER_LOAD_STORE];
-            if (i < end_vocab_idx) {
-              LOAD_FROM_GMEM(input_values + i, values);
-            }
-            CUTE_UNROLL
-            for (uint32_t j = 0; j < NUM_VALUES_PER_LOAD_STORE; ++j)
-              values[j] = i + j < end_vocab_idx ? values[j] : oob_fill_value;
-            STORE_TO_GMEM(result_values + i, values);
-          }
-        }
+        store_shortcut_output<IS_SHORTCUT>(args, end_vocab_idx, output_idx_offset, oob_fill_value,
+                                           input_values, result_indices, result_values);
       } else {
-        // Load & cast & save indices
-        constexpr uint32_t NUM_OUTPUT_IDX_PER_ROUND =
-            cute::min(NUM_BYTES_PER_SMEM_STORE / sizeof(uint32_t),
-                      NUM_BYTES_PER_GMEM_STORE / sizeof(OutIdxT));
-#pragma unroll 2
-        for (uint32_t i = threadIdx.x * NUM_OUTPUT_IDX_PER_ROUND; i < args.topk;
-             i += NUM_THREADS * NUM_OUTPUT_IDX_PER_ROUND) {
-          uint32_t indices_u32[NUM_OUTPUT_IDX_PER_ROUND];
-          OutIdxT out[NUM_OUTPUT_IDX_PER_ROUND];
-          ld_shared<NUM_OUTPUT_IDX_PER_ROUND>(indices_u32, smem_index_buf + i);
-          CUTE_UNROLL
-          for (uint32_t j = 0; j < NUM_OUTPUT_IDX_PER_ROUND; ++j)
-            out[j] = (OutIdxT)indices_u32[j] + output_idx_offset;
-          st_global<NUM_OUTPUT_IDX_PER_ROUND>(result_indices + i, out);
-        }
-
-        if constexpr (Config::return_value) {
-          // Load & store values
-          constexpr uint32_t NUM_VALUES_PER_ROUND =
-              cute::min(NUM_BYTES_PER_SMEM_STORE, NUM_BYTES_PER_GMEM_STORE) / sizeof(ValueT);
-#pragma unroll 2
-          for (uint32_t i = threadIdx.x * NUM_VALUES_PER_ROUND; i < args.topk;
-               i += NUM_THREADS * NUM_VALUES_PER_ROUND) {
-            UIntValueT values[NUM_VALUES_PER_ROUND];
-            ld_shared<NUM_VALUES_PER_ROUND>(values, (UIntValueT *)(smem_value_buf + i));
-            st_global<NUM_VALUES_PER_ROUND>((UIntValueT *)(result_values + i), values);
-          }
-        }
+        store_selected_output(args, output_idx_offset, smem_value_buf, smem_index_buf,
+                              result_indices, result_values);
       }
     } else {
       // Load indices & values into shared memory
@@ -278,64 +359,9 @@ struct EpilogueRunner {
         __syncthreads();
       }
 
-      // Sort
-      UIntValueT local_values[NUM_VALUES_PER_THREAD_FOR_SORT];
-      uint32_t local_indices[NUM_VALUES_PER_THREAD_FOR_SORT];
-      uint32_t thread_offset = threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT;
-      ld_shared_with_loop<NUM_VALUES_PER_THREAD_FOR_SORT>(
-          local_values,
-          (UIntValueT *)smem_value_buf + threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT);
-      ld_shared_with_loop<NUM_VALUES_PER_THREAD_FOR_SORT>(
-          local_indices, smem_index_buf + threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT);
-      CUTE_UNROLL
-      for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
-        local_values[i] = distort(local_values[i]);
-      if (IS_SHORTCUT || args.topk < MAX_TOPK) {
-        uint32_t limit = IS_SHORTCUT ? end_vocab_idx : args.topk;
-        CUTE_UNROLL
-        for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
-          local_values[i] = thread_offset + i < limit ? local_values[i] : 0;
-      }
-      __syncthreads(); // To allow `radix_sort_temp_storage` overlap with `smem_value_buf` and
-                       // `smem_index_buf`
-      BlockRadixSortT(radix_sort_temp_storage).SortDescending(local_values, local_indices);
-
-      // Store directly to gmem (no smem buffering)
-      // For common cases, our MAX_TOPK <= 1024 and NUM_THREADS >= 256, so we have
-      // NUM_VALUES_PER_THREAD_FOR_SORT <= 8, which means each thread only need to call STG once. So
-      // we don't use SMEM to buffer here
-      if (thread_offset < args.topk) {
-        CUTE_UNROLL
-        for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
-          local_values[i] =
-              !IS_SHORTCUT || threadIdx.x * NUM_VALUES_PER_THREAD_FOR_SORT + i < end_vocab_idx
-                  ? un_distort(local_values[i])
-                  : *(UIntValueT *)&oob_fill_value;
-        OutIdxT local_indices_new[NUM_VALUES_PER_THREAD_FOR_SORT];
-        CUTE_UNROLL
-        for (uint32_t i = 0; i < NUM_VALUES_PER_THREAD_FOR_SORT; ++i)
-          local_indices_new[i] = (OutIdxT)((int32_t)local_indices[i] + output_idx_offset);
-        auto store = [&]<uint32_t NUM_VALUES, typename T>(T *dst, T src[NUM_VALUES]) {
-          constexpr uint32_t NUM_BYTES_TO_STORE = NUM_VALUES * sizeof(T);
-          if constexpr (NUM_BYTES_TO_STORE <= NUM_BYTES_PER_GMEM_STORE) {
-            // Don't need to do OOB check because the output array is at least padded to the maximum
-            // width of global store.
-            st_global<NUM_VALUES>(dst, src);
-          } else {
-            static_assert(NUM_BYTES_TO_STORE % NUM_BYTES_PER_GMEM_STORE == 0);
-            CUTE_UNROLL
-            for (uint32_t i = 0; i < NUM_BYTES_TO_STORE; i += NUM_BYTES_PER_GMEM_STORE) {
-              uint32_t elem_offset = i / sizeof(T);
-              if (thread_offset + elem_offset < args.topk)
-                STORE_TO_GMEM(dst + elem_offset, src + elem_offset);
-            }
-          }
-        };
-        store.template operator()<NUM_VALUES_PER_THREAD_FOR_SORT>(
-            (UIntValueT *)result_values + thread_offset, local_values);
-        store.template operator()<NUM_VALUES_PER_THREAD_FOR_SORT>(result_indices + thread_offset,
-                                                                  local_indices_new);
-      }
+      sort_and_store_output<IS_SHORTCUT>(args, end_vocab_idx, output_idx_offset, oob_fill_value,
+                                         smem_value_buf, smem_index_buf, result_indices,
+                                         result_values, radix_sort_temp_storage);
     }
   }
 };

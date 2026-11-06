@@ -14,6 +14,7 @@ from ...operators.runtime.native import (
     source_fingerprint,
 )
 from ...source import source_identity
+from .worker_limits import DEFAULT_DECODE_GRAPHS
 
 NATIVE_MODULES = (
     "device",
@@ -37,7 +38,12 @@ def rank_trace_path(value, rank):
 
 
 def execution_modes(
-    strategy=None, *, batch_decode=None, decode_graph=None, decode_graph_limit=None
+    strategy=None,
+    *,
+    batch_decode=None,
+    decode_graph=None,
+    decode_graph_limit=None,
+    proposal_graph=None,
 ):
     from .kernel import native_sparse_graph_enabled
 
@@ -54,14 +60,19 @@ def execution_modes(
         )
     if decode_graph_limit is None:
         decode_graph_limit = int(
-            os.environ.get("OH_MY_VLLM_DEEPSEEK_DECODE_GRAPHS", "32")
+            os.environ.get("OH_MY_VLLM_DEEPSEEK_DECODE_GRAPHS", DEFAULT_DECODE_GRAPHS)
         )
     if type(decode_graph_limit) is not int or decode_graph_limit < 0:
         raise ValueError("DeepSeek decode graph limit must be nonnegative")
+    if proposal_graph is None:
+        proposal_graph = (
+            decode_graph and os.environ.get("OH_MY_VLLM_DEEPSEEK_MTP_GRAPH", "0") == "1"
+        )
     return {
         "batch_decode": batch_decode,
         "decode_graph": decode_graph,
         "decode_graph_limit": decode_graph_limit,
+        "proposal_graph": proposal_graph,
     }
 
 
@@ -72,6 +83,7 @@ def runtime_identity(
     batch_decode=None,
     decode_graph=None,
     decode_graph_limit=None,
+    proposal_graph=None,
 ):
     modules = {}
     for name in NATIVE_MODULES:
@@ -111,6 +123,7 @@ def runtime_identity(
             batch_decode=batch_decode,
             decode_graph=decode_graph,
             decode_graph_limit=decode_graph_limit,
+            proposal_graph=proposal_graph,
         ),
     }
 

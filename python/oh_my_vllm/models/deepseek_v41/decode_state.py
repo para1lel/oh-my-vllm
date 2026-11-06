@@ -74,7 +74,7 @@ class GraphStateExports:
                     scores[:, last - remainder : last]
                 )
 
-    def publish(self, export):
+    def publish(self, export, *, preserve_existing=False):
         for index, (slot, start_pos) in enumerate(
             zip(self.bindings.cache_slots_cpu, self.bindings.positions_cpu, strict=True)
         ):
@@ -86,6 +86,8 @@ class GraphStateExports:
                 if not 0 <= offset < self.bindings.length:
                     continue
                 for key, values in self.windows.items():
-                    step.windows[end, key] = values[index, offset]
+                    if not preserve_existing or (end, key) not in step.windows:
+                        step.windows[end, key] = values[index, offset]
                 for key, (kv, score) in self.tails.items():
-                    step.tails[end, key] = kv[index, offset], score[index, offset]
+                    if not preserve_existing or (end, key) not in step.tails:
+                        step.tails[end, key] = kv[index, offset], score[index, offset]

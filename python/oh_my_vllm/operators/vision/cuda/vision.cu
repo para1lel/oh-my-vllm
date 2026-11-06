@@ -187,19 +187,16 @@ void vision_patch(TensorView images, TensorView weight, TensorView bias, TensorV
   check_cuda(cudaGetLastError());
 }
 
-void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bias,
-                  TensorView qkv_weight, TensorView qkv_bias, TensorView attention_weight,
-                  TensorView attention_bias, TensorView norm2_weight, TensorView norm2_bias,
-                  TensorView up_weight, TensorView up_bias, TensorView down_weight,
-                  TensorView down_bias, TensorView output, TensorView normalized,
-                  TensorView projected, TensorView query, TensorView key, TensorView values,
-                  TensorView padded_attention, TensorView normalizer, TensorView attended,
-                  TensorView activated, int64_t grid_height, int64_t grid_width,
-                  tvm::ffi::Optional<VisionClassicOwner> classic, bool normalized_input) {
-  vision_grid(grid_height, grid_width);
-  int rows = vision_rows(value), tokens = grid_height * grid_width;
-  TVM_FFI_ICHECK(rows % tokens == 0 && rows / tokens <= 4095);
-  int heads = rows / tokens * 16;
+inline void vision_block_contract(TensorView value, TensorView norm1_weight, TensorView norm1_bias,
+                                  TensorView qkv_weight, TensorView qkv_bias,
+                                  TensorView attention_weight, TensorView attention_bias,
+                                  TensorView norm2_weight, TensorView norm2_bias,
+                                  TensorView up_weight, TensorView up_bias, TensorView down_weight,
+                                  TensorView down_bias, TensorView output, TensorView normalized,
+                                  TensorView projected, TensorView query, TensorView key,
+                                  TensorView values, TensorView padded_attention,
+                                  TensorView normalizer, TensorView attended, TensorView activated,
+                                  int rows, int heads, int tokens) {
   for (auto tensor :
        {norm1_weight, norm1_bias, attention_bias, norm2_weight, norm2_bias, down_bias})
     tensor_contract(tensor, value, kDLBfloat, 16, {1152});
@@ -222,6 +219,25 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
                    down_bias},
                   {output, normalized, projected, query, key, values, padded_attention, normalizer,
                    attended, activated});
+}
+
+void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bias,
+                  TensorView qkv_weight, TensorView qkv_bias, TensorView attention_weight,
+                  TensorView attention_bias, TensorView norm2_weight, TensorView norm2_bias,
+                  TensorView up_weight, TensorView up_bias, TensorView down_weight,
+                  TensorView down_bias, TensorView output, TensorView normalized,
+                  TensorView projected, TensorView query, TensorView key, TensorView values,
+                  TensorView padded_attention, TensorView normalizer, TensorView attended,
+                  TensorView activated, int64_t grid_height, int64_t grid_width,
+                  tvm::ffi::Optional<VisionClassicOwner> classic, bool normalized_input) {
+  vision_grid(grid_height, grid_width);
+  int rows = vision_rows(value), tokens = grid_height * grid_width;
+  TVM_FFI_ICHECK(rows % tokens == 0 && rows / tokens <= 4095);
+  int heads = rows / tokens * 16;
+  vision_block_contract(value, norm1_weight, norm1_bias, qkv_weight, qkv_bias, attention_weight,
+                        attention_bias, norm2_weight, norm2_bias, up_weight, up_bias, down_weight,
+                        down_bias, output, normalized, projected, query, key, values,
+                        padded_attention, normalizer, attended, activated, rows, heads, tokens);
   tvm::ffi::CUDADeviceGuard guard(value.device().device_id);
   std::unique_lock<std::mutex> lifetime;
   if (rows > 32) {

@@ -174,6 +174,79 @@ def _seconds(ranks, pooled_score, pooled_wire, pooled_host):
     )
 
 
+def _expert_protocol(strategy, prefix, layer, model, rows, dispatch, collective, add):
+    if strategy == "tp4":
+        collective(
+            f"{prefix}.expert.activation_gather",
+            f"{prefix}.expert.up_gate",
+            f"{prefix}.expert.down",
+            [
+                count * model.experts_per_token * model.moe_intermediate * 2
+                for count in rows
+            ],
+            gather=True,
+        )
+        collective(
+            f"{prefix}.expert.output_gather",
+            f"{prefix}.expert.down",
+            f"{prefix}.shared_expert",
+            [count * model.hidden_size * 4 for count in rows],
+            gather=True,
+        )
+    elif strategy == "tep4":
+        collective(
+            f"{prefix}.expert.reduce",
+            f"{prefix}.expert.down",
+            f"{prefix}.shared_expert",
+            [count * model.hidden_size * 4 for count in rows],
+        )
+    else:
+        matrix = dispatch[layer.layer_id]
+        sent = [
+            sum(matrix[rank][other] for other in range(4) if other != rank)
+            for rank in range(4)
+        ]
+        received = [
+            sum(matrix[other][rank] for other in range(4) if other != rank)
+            for rank in range(4)
+        ]
+        add(
+            f"{prefix}.dispatch",
+            f"{prefix}.router",
+            f"{prefix}.expert.up_gate",
+            [count * model.hidden_size * 2 for count in sent],
+            [count * model.hidden_size * 2 for count in received],
+        )
+        add(
+            f"{prefix}.combine",
+            f"{prefix}.expert.down",
+            f"{prefix}.shared_expert",
+            [count * model.hidden_size * 4 for count in received],
+            [count * model.hidden_size * 4 for count in sent],
+        )
+
+
+def _index_protocol(owned, layer, model, prefix, collective):
+    pairs = [
+        sum(
+            arithmetic.candidate_pairs(
+                length, layer.compress_ratio, model.candidate_positions
+            )
+            if layer.uses_candidate_mask
+            else arithmetic.index_score_pairs(0, length, layer.compress_ratio)
+            for row in local
+            for length in [row["input_tokens"] + row["output_tokens"] - 1]
+        )
+        for local in owned
+    ]
+    collective(
+        f"{prefix}.index.reduce",
+        f"{prefix}.index.score",
+        f"{prefix}.sparse_attention",
+        [count * 4 for count in pairs],
+    )
+
+
 def protocol_stages(target, *, model=arithmetic.DEEPSEEK_V41_MODEL):
     """Ordered, unpadded payload estimates; none adds serial floor seconds."""
     strategy = target.binding["strategy"]
@@ -219,24 +292,7 @@ def protocol_stages(target, *, model=arithmetic.DEEPSEEK_V41_MODEL):
                 ],
             )
         if strategy != "dep4" and layer.owns_index_keys:
-            pairs = [
-                sum(
-                    arithmetic.candidate_pairs(
-                        length, layer.compress_ratio, model.candidate_positions
-                    )
-                    if layer.uses_candidate_mask
-                    else arithmetic.index_score_pairs(0, length, layer.compress_ratio)
-                    for row in local
-                    for length in [row["input_tokens"] + row["output_tokens"] - 1]
-                )
-                for local in owned
-            ]
-            collective(
-                f"{prefix}.index.reduce",
-                f"{prefix}.index.score",
-                f"{prefix}.sparse_attention",
-                [count * 4 for count in pairs],
-            )
+            _index_protocol(owned, layer, model, prefix, collective)
         if strategy != "dep4":
             collective(
                 f"{prefix}.attention.reduce",
@@ -244,55 +300,9 @@ def protocol_stages(target, *, model=arithmetic.DEEPSEEK_V41_MODEL):
                 f"{prefix}.router",
                 [count * model.hidden_size * 4 for count in rows],
             )
-        if strategy == "tp4":
-            collective(
-                f"{prefix}.expert.activation_gather",
-                f"{prefix}.expert.up_gate",
-                f"{prefix}.expert.down",
-                [
-                    count * model.experts_per_token * model.moe_intermediate * 2
-                    for count in rows
-                ],
-                gather=True,
-            )
-            collective(
-                f"{prefix}.expert.output_gather",
-                f"{prefix}.expert.down",
-                f"{prefix}.shared_expert",
-                [count * model.hidden_size * 4 for count in rows],
-                gather=True,
-            )
-        elif strategy == "tep4":
-            collective(
-                f"{prefix}.expert.reduce",
-                f"{prefix}.expert.down",
-                f"{prefix}.shared_expert",
-                [count * model.hidden_size * 4 for count in rows],
-            )
-        else:
-            matrix = dispatch[layer.layer_id]
-            sent = [
-                sum(matrix[rank][other] for other in range(4) if other != rank)
-                for rank in range(4)
-            ]
-            received = [
-                sum(matrix[other][rank] for other in range(4) if other != rank)
-                for rank in range(4)
-            ]
-            add(
-                f"{prefix}.dispatch",
-                f"{prefix}.router",
-                f"{prefix}.expert.up_gate",
-                [count * model.hidden_size * 2 for count in sent],
-                [count * model.hidden_size * 2 for count in received],
-            )
-            add(
-                f"{prefix}.combine",
-                f"{prefix}.expert.down",
-                f"{prefix}.shared_expert",
-                [count * model.hidden_size * 4 for count in received],
-                [count * model.hidden_size * 4 for count in sent],
-            )
+        _expert_protocol(
+            strategy, prefix, layer, model, rows, dispatch, collective, add
+        )
     if strategy != "dep4":
         collective(
             "head.gather",

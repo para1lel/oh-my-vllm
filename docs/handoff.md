@@ -3,70 +3,69 @@
 Use `nightly` for development.
 Read the continuation index in ignored `LOCAL.md` before work.
 It gives host settings, external artifact locations, coordinator rules, and session closure status.
+Use the last external records in the `LOCAL.md` index for resource and Git delivery status.
+
+## Harness continuation
+
+Use the [development loop](development.md#development-loop) for repository checks.
+The code limits are 500 physical lines per file and 80 physical lines per function.
+These limits also apply to tests, checkers, and skill helpers.
+The [verification skill](../.claude/skills/verify-oh-my-vllm/SKILL.md) drives the Rust app with external evidence.
+Its CPU worker fixture checks service and transport. It does not prove GPU inference, numerical correctness, or performance.
+
+The harness work divides Rust, Python, CUDA, and tool code into smaller modules.
+Use current source and binary identities for new acceptance.
+The operator identities in the preceding handoff apply only to their recorded source and binary bytes.
+They do not identify reorganized source or prove its acceptance.
+Check moved source links and native build identities after the source freeze.
 
 ## Delivery target
 
 The target is DeepSeek-V4.1 through the full Rust HTTP service and AgentX.
 The approved HTTP matrix has 38 cases.
 For each of the 19 long-output cases, `deepseek-http-roofline-v6` efficiency must be at least 33%.
-The full approved matrix and the 33% target are not completed.
-Operator measurements and old functional records do not show acceptance for this source.
+The full approved HTTP matrix, the three AgentX workloads, and the 33% target are not completed.
+The old TP4 AgentX records do not prove that all session trees completed.
+After source changes, old acceptance records do not show acceptance for the changed source.
 
-The hard deadline is 2026-11-06 at 14:00 in `Asia/Shanghai`.
-Start final checks and delivery preparation at 11:40 on that date.
-The coordinator prepares plans, gives instructions, and accepts work.
+The coordinator prepares plans, gives instructions, and completes acceptance checks and Git delivery.
 Use `opus` at `max` for all implementation work.
-The local index gives the agent replacement procedure and authorized Git sequence.
+The local index gives the agent replacement procedure.
 
 ## Current implementation
 
-The coordinator accepted these operator candidates for their recorded source and binary identities:
+Do not change the production source for this delivery.
+Do not increase the test scope.
 
-- The `weighted_heads` tail-width path with SHA256 prefix `52b2ac1a`.
-- Dense FP8 projection with narrow output, `N=512` and `K=5120`.
-- The initial grouped FP4 winner with a `128x128` tile.
-- Dense FP8 `Compact` projection with `N=2304` and `K=5120`.
-- The full DeepSelect BF16 `count512` top-k implementation in the DeepSeek Indexer.
-- Sparse FP4 pair dequantization, with the Graph test correction for two global flags.
+The production source contains the MTP proposal Graph, the M16 kernel, and the M32 prefetch change.
+It also contains the HC dot and router prefill changes.
+The [execution guide](models/deepseek_v41/README.md#mtp-proposal-graph) gives the MTP Graph conditions and default setting.
+The [quantization guide](models/deepseek_v41/quantization.md) gives the kernel parameters and numerical contract.
+Acceptance records show acceptance only for the source and binary identities in those records.
 
-A different agent examined the sparse test correction. The coordinator accepted it.
-Its production source and binary identities did not change with that correction.
-No agent has independently completed full-model acceptance of any of these operator changes with the frozen reference.
-
-The grouped TMEM candidate is rejected.
-The repository again has the initial grouped winner.
-The subsequent `weight-store-v1` candidate changes the bit3/bit4 thread permutation.
-It is only in external storage, with a CPU build, no GPU work, and no acceptance by a different agent.
-Its owner handoff, patch, binary identity, and closure record are in the local continuation index.
+The `weight-store-v1` and grouped TMEM candidates are rejected.
+The candidate that uses rawdot scheduling for more small batches is rejected.
+The BF16 Compressor Graph candidate is not in the production source.
+No accepted HTTP measurement shows that this candidate increases performance.
+Do not restore these candidates as the default next step.
 
 ## Next work
 
-1. Read the last coordinator closure status in `LOCAL.md`.
-   Compare the accepted sparse patch with its final identity.
-   Compare the grouped winner identity with the local record.
+1. Read the last coordinator status and combined source identity in `LOCAL.md`.
+   Compare the production source and binary identities with that record.
    Make sure that resources are released before you give GPUs to new work.
 
-2. Use the saved `weight-store-v1` entry for the next short grouped comparison.
-   First, compare literal outputs calculated independently.
-   Then compare the frozen FP32 vectors.
-
-   Then measure the full operation with the existing short procedure.
-   Use separate processes for different projection binaries.
-   Do not generate new expected arrays for this comparison.
-
-3. Do not repeat rejected TMEM, old QK fusion, or the old custom top-k CDF experiments.
-   Do not replace implementation work with more collection or supervision tools.
-   Use short comparisons to select changes that improve performance before long HTTP or AgentX measurements.
-
-4. Do not change numerical order, checkpoint weights and scales, error status, fixtures, or acceptance limits.
-   For capacity changes, measure cache pages, state endpoints, projection storage, and temporary storage first.
+2. Read the acceptance scope for the combined source identity in `LOCAL.md`.
+   Complete only the checks that those records do not cover.
    Use the model guides for the applicable numerical, state, Graph, batch, request-owner, and capacity checks.
-
-5. After implementation changes that improve performance, run the full [frozen-reference procedure](models/deepseek_v41/evaluation.md).
    A case subset or operator comparison does not replace the full-model check done independently.
    Complete the applicable acceptance checks before formal HTTP and AgentX measurements.
 
-6. Complete the [HTTP matrix](models/deepseek_v41/performance.md) and [AgentX workloads](models/deepseek_v41/agentx.md).
+3. Do not change numerical order, checkpoint weights and scales, error status, fixtures, or acceptance limits.
+   For capacity changes, measure cache pages, state endpoints, projection storage, and temporary storage first.
+   If the source changes again, complete the applicable checks for the new source identity.
+
+4. Complete the [HTTP matrix](models/deepseek_v41/performance.md) and [AgentX workloads](models/deepseek_v41/agentx.md).
    Select `deepseek-http-roofline-v6` because the HTTP runner uses the old calculator unless you select a different calculator.
    Use the performance guide's acceptance command for all 19 long-output rows.
    Do not replace formal HTTP rows with operator microbenchmarks.
@@ -87,5 +86,12 @@ Use the fixed [Qwen operator cases](models/qwen38/operators.md) for applicable s
 Obey the [contribution procedure](../CONTRIBUTING.md#delivery) before delivery.
 Get a different agent to examine the documents and implementation.
 Correct review errors before delivery.
+
+The coordinator commits and pushes `nightly` before the squash into `main`.
+The coordinator commits the squash on `main` and pushes `main`.
+The coordinator then sets `nightly` to the same revision as `main`.
+The coordinator pushes `nightly` again.
+Push only `main` and `nightly`.
+
 Stop your workers and temporary services.
-Use the final coordinator record to make sure that sessions are closed and GPU leases are released.
+Use the last external coordinator record in the `LOCAL.md` index to check session closure and GPU lease release.

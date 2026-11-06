@@ -38,6 +38,20 @@ DEP4 将每个请求保留在 Rust 选择的 owner rank.
 没有自有行的 rank 也参加专家交换和完成确认.
 [DEP4 执行器](../../../python/oh_my_vllm/models/deepseek_v41/dep4.py)协调 target 和 proposal 调用.
 
+### MTP proposal Graph
+
+`OH_MY_VLLM_DEEPSEEK_MTP_GRAPH=1` 在[执行设置](../../../python/oh_my_vllm/models/deepseek_v41/trace.py#L40)<!-- source: def execution_modes( -->中选择 proposal Graph.
+默认值为 `0`.
+只有启用 TP4 target Graph 执行且 decode Graph 数量上限为正数时, 它才运行.
+TEP4 和 DEP4 不使用此 proposal Graph.
+
+[Proposal 路径](../../../python/oh_my_vllm/models/deepseek_v41/target_execution.py#L276)<!-- source: def _proposal_graph_step(self, input_ids, main_hidden, start_pos, slot): -->使用形状为 `[1,1]` 的一个 token 行和形状为 `[1,1,15360]` 的一个 hidden-state 行.
+Proposal Graph 仅用于完整窗口分支内的贪心 proposal.
+捕获和重放使用相同的[位置限制](../../../python/oh_my_vllm/models/deepseek_v41/proposal_graph.py#L33)<!-- source: def bind(self, input_ids, main_hidden, position): -->.
+[Seed 路径](../../../python/oh_my_vllm/models/deepseek_v41/target_batch.py#L194)<!-- source: def _seed_mtp_batch( -->使用 Eager 执行.
+Target decode Graph 和 proposal Graph 是不同的图.
+[缓存指南](cache.zh.md#proposal-graph-所有权)给出 proposal Graph 所有权和释放顺序.
+
 ## GPU 配置
 
 使用[开发配置](../../development.zh.md#原生模块)和 [GPU 选择规则](../../distributed.zh.md#gpu-租约).

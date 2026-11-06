@@ -131,7 +131,7 @@ HC mixing 在四个 FP32 accumulator 中独立累加 squared input.
 在 FP32 projection 之后应用 inverse RMS.
 
 Native projection 按已发布的 FP32 reduction order 计算.
-HC 单 row projection 使用 32 个交错 split dot.
+HC projection 对 logical single-row step 使用 32 个交错 split dot.
 其 caller 拥有的 32 MiB workspace 保存 split partial 和 chunk partial.
 多 row step 从实测的已发布 table 选择 split chunk.
 chunk 在每个 row 数范围中保持不变.
@@ -149,6 +149,12 @@ Compressor table 有 512 个 output, width 为 5120.
 
 Router 和 compressor 的单 row projection 使用 32-lane warp reduction.
 这个 workspace 大小是数值契约的一部分.
+
+当 physical row 数至少为 1024 时, [split-dot 路径](../../../python/oh_my_vllm/operators/hyperconnection/cuda/hc_dot.cuh#L209)<!-- source: if (rows >= 1024) -->使用四个 warp.
+它保持 32 个 split, FMA 顺序和加法树.
+当 logical single-row step 有 384 个 output 且至少有 1024 个 physical row 时, [router projection](../../../python/oh_my_vllm/operators/hyperconnection/cuda/hyperconnection.cu#L196)<!-- source: if (outputs == 384 && rows >= 1024) --> 使用两行两输出分组.
+每个 output 保持 32-lane FMA 和 shuffle 顺序.
+当 physical row 数为奇数时, [最后一组](../../../python/oh_my_vllm/operators/hyperconnection/cuda/hc_gemv_prefill.cuh#L20)<!-- source: float second = row + 1 < rows ? second_input[k] : 0.f; --> 包含一个 physical row.
 
 Ratio-1 compressor 使用 BF16 projection.
 其多 row call 使用 SM count target 为八的 cuBLAS handle.
@@ -214,7 +220,14 @@ Dense projection 不使用 device scratch storage.
 
 Grouped projection 使用 device row offset, 不上传 host descriptor.
 算子会在 device scratch 中压缩非空 group.
-Persistent block 使用 device offset 处理 32-row by 64-column expert tile.
+`half_k32_kernel` 使用 device offset 处理包含 16 行或 32 行及 64 列的 tile.
+当 `64 < rows <= groups` 时, 算子使用 16 行 tile.
+
+对于 BF16 输出的 grouped FP4, 16 行 tile 的 [launch 上限](../../../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L328)<!-- source: constexpr int blocks_per_sm = --> 为每个 SM 十个 block.
+32 行 tile 的上限仍为每个 SM 七个 block.
+对于 BF16 输出且 `N=576`, `K=5120` 的分组 FP4, 32 行 tile 在 `rows > 64` 时使用[权重和缩放因子预取](../../../python/oh_my_vllm/operators/projection/cuda/half_k32.cuh#L331)<!-- source: if (rows > 64 && (TileRows == half_rows || rows <= groups) && outputs == 576 && width == 5120) { -->.
+16 行 tile 在 `64 < rows <= groups` 时使用相同的预取.
+
 总 routed row 不超过 64 时, 使用并行 raw dot, 并按原顺序累加 scale.
 Launch 不受 host expert row bound 控制.
 

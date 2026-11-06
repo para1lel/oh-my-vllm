@@ -8,6 +8,147 @@ import numpy as np
 from .cases import load_cases
 
 
+def _assert_repeat_adaptation(self, Sample, collect, ShortInterval):
+    history = []
+
+    def short_block(repeats):
+        history.append(repeats)
+        duration = 0.0005 if len(history) == 6 else 0.001
+        return Sample(duration, 0, repeats)
+
+    retries = []
+    collection = collect(short_block, 30, True, retries=retries)
+    self.assertEqual(len(collection), 30)
+    self.assertEqual({value.repeats for value in collection}, {50})
+    self.assertEqual(len(retries), 1)
+    self.assertEqual(retries[0]["discarded_samples"], 30)
+    with self.assertRaises(ShortInterval):
+        collect(lambda n: Sample(0.0001, 0, n), 30, True, repeats=25)
+
+
+def _assert_timing_lifecycle(
+    self, Events, Prepared, clock, accept, measurement_session
+):
+    lifecycle, replays = [], []
+
+    @contextmanager
+    def events_factory(device):
+        lifecycle.append("events-open")
+        try:
+            yield Events()
+        finally:
+            lifecycle.append("events-close")
+
+    @contextmanager
+    def graph_factory(prepared, events, repeats):
+        lifecycle.append("graph-open")
+
+        def replay():
+            replays.append(repeats)
+            events.begin()
+            clock.value += 0.9 if len(replays) % 2 else 1.1
+            events.record_end()
+
+        try:
+            yield replay
+        finally:
+            lifecycle.append("graph-close")
+
+    def session_factory(prepared):
+        return measurement_session(
+            prepared, events_factory=events_factory, graph_factory=graph_factory
+        )
+
+    prepared = Prepared()
+    prepared.case = SimpleNamespace(mode="graph", boundary="mtp.accept")
+    prepared.setup = {}
+    samples, result = accept(prepared, 1, 1, session_factory=session_factory)
+    self.assertEqual(len(samples), 120)
+    self.assertEqual(result.decision, "unresolved")
+    self.assertEqual(replays, [1] * 130)
+    self.assertEqual(
+        lifecycle, ["events-open", "graph-open", "graph-close", "events-close"]
+    )
+    lifecycle.clear()
+    with (
+        self.assertRaisesRegex(RuntimeError, "sample failure"),
+        session_factory(prepared) as collect_samples,
+    ):
+        collect_samples(count=1)
+        raise RuntimeError("sample failure")
+    self.assertEqual(
+        lifecycle, ["events-open", "graph-open", "graph-close", "events-close"]
+    )
+
+
+def _assert_timing_graph(self, Events):
+    from unittest.mock import patch
+
+    from .timing_graph import TimingGraph
+
+    class Handle:
+        def __init__(self):
+            self.removed = False
+
+        def remove(self):
+            self.removed = True
+
+    class FakeGraph:
+        def __init__(self, data):
+            self.data = data
+
+        def get_graph_data(self):
+            return self.data
+
+    @contextmanager
+    def timing_lease():
+        yield None
+
+    def run_timing(data):
+        installed = []
+        handle = Handle()
+
+        @contextmanager
+        def timing_graph_context(operation):
+            installed[0](FakeGraph(data))
+            yield lambda: None
+
+        def register(hook):
+            installed.append(hook)
+            return handle
+
+        prepared = SimpleNamespace(
+            device=SimpleNamespace(
+                synchronize=lambda: None,
+                ensure_healthy=lambda: None,
+                graph=timing_graph_context,
+            ),
+            reset=lambda: None,
+            graph_lease=timing_lease,
+            run=lambda: None,
+            setup={},
+        )
+        with (
+            patch(
+                "development.operators.timing_graph.register_graph_instantiate_hook",
+                side_effect=register,
+            ),
+            TimingGraph(prepared, Events(), 3) as timing,
+        ):
+            timing()
+        return prepared, handle
+
+    prepared, handle = run_timing({"nodes": [{"index": 0}, {"index": 1}]})
+    record = prepared.setup["timing_graphs"][0]
+    self.assertEqual(record["repeats"], 3)
+    self.assertEqual(record["production_nodes"], 2)
+    self.assertEqual(record["graph_validation"], "get-graph-data")
+    self.assertTrue(handle.removed)
+    for data in ({"nodes": []}, {}):
+        with self.assertRaisesRegex(RuntimeError, "no nodes"):
+            run_timing(data)
+
+
 class PerformanceContracts(unittest.TestCase):
     def test_captured_sparse_bound_ignores_unselected_history(self):
         import torch
@@ -157,21 +298,7 @@ class PerformanceContracts(unittest.TestCase):
         self.assertEqual(check([Sample(2, 0, 1)] * 30, 1, 1).decision, "fail")
         ambiguous = [Sample(value, 0, 1) for value in [0.9, 1.1] * 15]
         self.assertEqual(check(ambiguous, 1, 1).decision, "unresolved")
-        history = []
-
-        def short_block(repeats):
-            history.append(repeats)
-            duration = 0.0005 if len(history) == 6 else 0.001
-            return Sample(duration, 0, repeats)
-
-        retries = []
-        collection = collect(short_block, 30, True, retries=retries)
-        self.assertEqual(len(collection), 30)
-        self.assertEqual({value.repeats for value in collection}, {50})
-        self.assertEqual(len(retries), 1)
-        self.assertEqual(retries[0]["discarded_samples"], 30)
-        with self.assertRaises(ShortInterval):
-            collect(lambda n: Sample(0.0001, 0, n), 30, True, repeats=25)
+        _assert_repeat_adaptation(self, Sample, collect, ShortInterval)
         calls = []
 
         @contextmanager
@@ -186,123 +313,12 @@ class PerformanceContracts(unittest.TestCase):
         self.assertEqual(calls, [30, 90])
         self.assertEqual(len(samples), 120)
         self.assertEqual(result.decision, "unresolved")
-        lifecycle, replays = [], []
-
-        @contextmanager
-        def events_factory(device):
-            lifecycle.append("events-open")
-            try:
-                yield Events()
-            finally:
-                lifecycle.append("events-close")
-
-        @contextmanager
-        def graph_factory(prepared, events, repeats):
-            lifecycle.append("graph-open")
-
-            def replay():
-                replays.append(repeats)
-                events.begin()
-                clock.value += 0.9 if len(replays) % 2 else 1.1
-                events.record_end()
-
-            try:
-                yield replay
-            finally:
-                lifecycle.append("graph-close")
-
-        def session_factory(prepared):
-            return measurement_session(
-                prepared, events_factory=events_factory, graph_factory=graph_factory
-            )
-
-        prepared = Prepared()
-        prepared.case = SimpleNamespace(mode="graph", boundary="mtp.accept")
-        prepared.setup = {}
-        samples, result = accept(prepared, 1, 1, session_factory=session_factory)
-        self.assertEqual(len(samples), 120)
-        self.assertEqual(result.decision, "unresolved")
-        self.assertEqual(replays, [1] * 130)
-        self.assertEqual(
-            lifecycle, ["events-open", "graph-open", "graph-close", "events-close"]
-        )
-        lifecycle.clear()
-        with (
-            self.assertRaisesRegex(RuntimeError, "sample failure"),
-            session_factory(prepared) as collect_samples,
-        ):
-            collect_samples(count=1)
-            raise RuntimeError("sample failure")
-        self.assertEqual(
-            lifecycle, ["events-open", "graph-open", "graph-close", "events-close"]
+        _assert_timing_lifecycle(
+            self, Events, Prepared, clock, accept, measurement_session
         )
         self.assertEqual(calibrate([[Sample(1.23451, 0, 1)] * 30] * 5, 1), 1.2346)
         with self.assertRaisesRegex(ValueError, "five"):
             calibrate([[Sample(1, 0, 1)] * 30], 1)
         with self.assertRaises(ValueError):
             check([Sample(1, 0, 1)] * 29, 1, 1)
-        from unittest.mock import patch
-
-        from .timing_graph import TimingGraph
-
-        class Handle:
-            def __init__(self):
-                self.removed = False
-
-            def remove(self):
-                self.removed = True
-
-        class FakeGraph:
-            def __init__(self, data):
-                self.data = data
-
-            def get_graph_data(self):
-                return self.data
-
-        @contextmanager
-        def timing_lease():
-            yield None
-
-        def run_timing(data):
-            installed = []
-            handle = Handle()
-
-            @contextmanager
-            def timing_graph_context(operation):
-                installed[0](FakeGraph(data))
-                yield lambda: None
-
-            def register(hook):
-                installed.append(hook)
-                return handle
-
-            prepared = SimpleNamespace(
-                device=SimpleNamespace(
-                    synchronize=lambda: None,
-                    ensure_healthy=lambda: None,
-                    graph=timing_graph_context,
-                ),
-                reset=lambda: None,
-                graph_lease=timing_lease,
-                run=lambda: None,
-                setup={},
-            )
-            with (
-                patch(
-                    "development.operators.timing_graph.register_graph_instantiate_hook",
-                    side_effect=register,
-                ),
-                TimingGraph(prepared, Events(), 3) as timing,
-            ):
-                timing()
-            return prepared, handle
-
-        prepared, handle = run_timing({"nodes": [{"index": 0}, {"index": 1}]})
-        record = prepared.setup["timing_graphs"][0]
-        self.assertEqual(record["repeats"], 3)
-        self.assertEqual(record["production_nodes"], 2)
-        self.assertEqual(record["graph_validation"], "get-graph-data")
-        self.assertTrue(handle.removed)
-        for data in ({"nodes": []}, {}):
-            with self.assertRaisesRegex(RuntimeError, "no nodes"):
-                run_timing(data)
+        _assert_timing_graph(self, Events)

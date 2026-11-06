@@ -3,70 +3,69 @@
 使用 `nightly` 进行开发.
 工作前读取被忽略的 `LOCAL.md` 中的接续索引.
 其中提供主机设置, 外部产物位置, 主控规则和会话结束状态.
+资源和 Git 交付状态以 `LOCAL.md` 索引中的最新外部记录为准.
+
+## Harness 接续
+
+仓库检查使用[开发循环](development.zh.md#开发循环).
+代码限制为每个文件 500 个物理行, 每个函数 80 个物理行.
+这些限制也适用于测试, 检查器和技能 helper.
+[验证技能](../.claude/skills/verify-oh-my-vllm/SKILL.zh.md)驱动 Rust 应用, 并保存外部证据.
+其中的 CPU worker fixture 检查服务和传输. 它不证明 GPU 推理, 数值正确性或性能.
+
+Harness 工作将 Rust, Python, CUDA 和工具代码分为较小的模块.
+新的验收使用当前源码和二进制身份.
+前一份交接中的算子身份仅适用于其记录的源码和二进制字节.
+这些身份不代表拆分后的源码, 也不证明其通过验收.
+源码冻结后, 检查已移动的源码链接及原生构建身份.
 
 ## 交付目标
 
 目标是通过完整 Rust HTTP 服务和 AgentX 运行 DeepSeek-V4.1.
 批准的 HTTP 矩阵有 38 个用例.
 其中 19 个长输出用例的效率必须各自达到 `deepseek-http-roofline-v6` 的至少 33%.
-批准的完整矩阵和 33% 目标尚未完成.
-算子测量和旧功能记录不能证明这份源码通过验收.
+批准的完整 HTTP 矩阵, 三组 AgentX 工作负载和 33% 目标尚未完成.
+旧 TP4 AgentX 记录不能证明全部会话树已完成.
+源码变化后, 旧验收记录不能证明变更后的源码通过验收.
 
-硬截止时间是 `Asia/Shanghai` 的 2026-11-06 14:00.
-在当天 11:40 开始最终检查和交付准备.
-主控制订计划, 发出指令并验收工作.
+主控制订计划, 发出指令并完成验收检查和 Git 交付.
 所有实现工作使用 `opus` 和 `max`.
-本机索引提供代理更换流程和已授权的 Git 顺序.
+本机索引提供代理更换流程.
 
 ## 当前实现
 
-主控已按记录的源码和二进制身份签收以下算子候选:
+本次交付不要改动生产源码.
+不要扩大试验范围.
 
-- SHA256 前缀为 `52b2ac1a` 的 `weighted_heads` 尾宽路径.
-- 窄输出 dense FP8 projection, `N=512`, `K=5120`.
-- 使用 `128x128` tile 的最初 grouped FP4 赢家.
-- Dense FP8 `Compact` projection, `N=2304`, `K=5120`.
-- DeepSeek Indexer 中完整的 DeepSelect BF16 `count512` top-k 实现.
-- Sparse FP4 成对反量化, 含 Graph 测试对两个全局标志的修正.
+生产源码包含 MTP proposal Graph, M16 内核和 M32 预取改动.
+其中还包含 HC dot 和 router prefill 改动.
+[执行指南](models/deepseek_v41/README.zh.md#mtp-proposal-graph)给出 MTP Graph 的条件和默认设置.
+[量化指南](models/deepseek_v41/quantization.zh.md)给出内核参数和数值契约.
+验收记录仅适用于记录中的源码和二进制身份.
 
-另一名代理已审查 sparse 测试修正. 主控已签收该修正.
-该修正未改变生产源码和二进制身份.
-尚无代理基于冻结参考独立完成其中任何算子改动的全模型验收.
-
-Grouped TMEM 候选已淘汰.
-仓库已恢复最初 grouped 赢家.
-后续 `weight-store-v1` 候选修改 bit3/bit4 线程置换.
-它仅保存在外部, 已完成 CPU 构建, 未在 GPU 上运行, 也未由另一名代理验收.
-本机接续索引提供其负责人交接文档, patch, 二进制身份和结束记录.
+`weight-store-v1` 和 grouped TMEM 候选已淘汰.
+将 rawdot 调度用于更多小批量场景的候选已淘汰.
+BF16 Compressor Graph 候选未整合到生产源码.
+尚无获批 HTTP 测量表明该候选提高性能.
+不要将恢复这些候选作为默认下一步.
 
 ## 下一步
 
-1. 读取 `LOCAL.md` 中主控最后的结束状态.
-   按最终身份核对已签收的 sparse patch.
-   按本机记录核对 grouped 赢家身份.
+1. 读取 `LOCAL.md` 中主控最新状态和组合源码身份.
+   按该记录核对生产源码和二进制身份.
    为新工作分配 GPU 前, 确保资源已释放.
 
-2. 下一次 grouped 短对照使用已保存的 `weight-store-v1` 入口.
-   先比较独立计算的 literal 输出.
-   再比较冻结 FP32 向量.
-
-   然后按现有短测流程测量完整操作.
-   不同 projection 二进制使用不同进程.
-   不要为此次比较生成新的期望数组.
-
-3. 不要重试已淘汰 TMEM, 旧 QK 融合或旧的自写 top-k CDF 实验.
-   不要用增加采集或巡检工具代替实现工作.
-   在长 HTTP 或 AgentX 测量前, 用短对照选出能提高性能的改动.
-
-4. 不要修改数值顺序, checkpoint weights 和 scales, 错误状态, fixture 或验收阈值.
-   修改容量前, 先测量 cache page, state endpoint, projection storage 和 temporary storage.
+2. 读取 `LOCAL.md` 中组合源码身份的验收范围.
+   仅完成这些记录尚未覆盖的检查.
    适用的数值, 状态, Graph, batch, request owner 和容量检查见模型指南.
-
-5. 提高性能的实现改动后, 运行完整[冻结参考流程](models/deepseek_v41/evaluation.zh.md).
    用例子集或算子对照不能代替独立完成的全模型检查.
    正式 HTTP 和 AgentX 测量前, 完成适用的验收检查.
 
-6. 完成 [HTTP 矩阵](models/deepseek_v41/performance.zh.md)和 [AgentX 工作负载](models/deepseek_v41/agentx.zh.md).
+3. 不要修改数值顺序, checkpoint weights 和 scales, 错误状态, fixture 或验收阈值.
+   修改容量前, 先测量 cache page, state endpoint, projection storage 和 temporary storage.
+   如果源码再次变化, 对新源码身份完成适用检查.
+
+4. 完成 [HTTP 矩阵](models/deepseek_v41/performance.zh.md)和 [AgentX 工作负载](models/deepseek_v41/agentx.zh.md).
    选择 `deepseek-http-roofline-v6`, 因为不另选计算器时 HTTP runner 使用旧计算器.
    对全部 19 个长输出行使用性能指南中的验收命令.
    不要用算子微基准代替正式 HTTP 行.
@@ -87,5 +86,12 @@ Grouped TMEM 候选已淘汰.
 交付前遵守[贡献流程](../CONTRIBUTING.zh.md#交付).
 请另一名代理审查文档和实现.
 交付前修正审查错误.
+
+主控先提交并推送 `nightly`, 然后 squash 到 `main`.
+主控在 `main` 上提交 squash 结果并推送 `main`.
+主控再将 `nightly` 设为与 `main` 相同的修订.
+主控再次推送 `nightly`.
+仅推送 `main` 和 `nightly`.
+
 停止你的 worker 和临时服务.
-按主控最终记录确保会话已结束且 GPU 租约已释放.
+按 `LOCAL.md` 索引中的最新外部主控记录核对会话结束和 GPU 租约释放状态.

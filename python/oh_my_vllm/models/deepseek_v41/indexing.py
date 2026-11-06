@@ -31,7 +31,7 @@ def topk_indices(scores, count, *, request_widths=None, finite_scores=False):
             and scores.is_contiguous()
             and scores.data_ptr() % 16 == 0
         ):
-            from .kernel import _transform_module
+            from .kernel_native import _transform_module
 
             physical = scores
             if width % 512:
@@ -78,7 +78,7 @@ def topk_indices(scores, count, *, request_widths=None, finite_scores=False):
 def _rank_score_chunks(query, keys, weights, chunk_rows, work_bytes):
     import torch.distributed as dist
 
-    from .kernel import _transform_module
+    from .kernel_native import _transform_module
 
     batch, rows, heads, dim = query.shape
     width = keys.size(1)
@@ -169,6 +169,44 @@ def score_chunks(
     Chunk ranges depend only on shapes, dtype size, and the positive integer
     budget. Empty S yields nothing; empty B or T yields one empty score chunk.
     """
+    _validate_score_inputs(query, keys, weights, work_bytes, rank_sum)
+    batch, rows, heads, _dim = query.shape
+    if rows == 0:
+        return
+    length = keys.size(1)
+    if batch == 0 or length == 0:
+        yield 0, rows, query.new_empty((batch, rows, length))
+        return
+    accumulator_dtype, partition_heads, local_sum, chunk_rows = _score_chunk_rows(
+        query, keys, work_bytes, rank_sum, head_partitions
+    )
+    # Width one uses PyTorch's contiguous-head reduction order.
+    if (
+        rank_sum
+        and not local_sum
+        and query.is_cuda
+        and query.dtype == torch.bfloat16
+        and heads == 8
+        and length > 1
+        and weights.is_contiguous()
+        and weights.data_ptr() % 16 == 0
+    ):
+        yield from _rank_score_chunks(query, keys, weights, chunk_rows, int(work_bytes))
+        return
+    yield from _reference_score_chunks(
+        query,
+        keys,
+        weights,
+        rank_sum,
+        head_partitions,
+        accumulator_dtype,
+        partition_heads,
+        local_sum,
+        chunk_rows,
+    )
+
+
+def _validate_score_inputs(query, keys, weights, work_bytes, rank_sum):
     if isinstance(work_bytes, bool) or not isinstance(work_bytes, Integral):
         raise TypeError("work_bytes must be an integer, not a bool or tensor")
     if work_bytes <= 0:
@@ -180,7 +218,7 @@ def score_chunks(
         raise TypeError("query, keys, and weights must be tensors")
     if query.ndim != 4 or keys.ndim != 3 or weights.ndim != 3:
         raise ValueError("expected query [B,S,H,D], keys [B,T,D], weights [B,S,H]")
-    batch, rows, heads, dim = query.shape
+    batch, _rows, heads, dim = query.shape
     if heads == 0 or dim == 0:
         raise ValueError("query head count H and head dimension D must be positive")
     if keys.size(0) != batch or keys.size(2) != dim:
@@ -202,12 +240,11 @@ def score_chunks(
         and torch.get_autocast_dtype(query.device.type) != query.dtype
     ):
         raise ValueError("autocast must not mix FP16 and BF16 index score dtypes")
-    if rows == 0:
-        return
+
+
+def _score_chunk_rows(query, keys, work_bytes, rank_sum, head_partitions):
+    batch, _rows, heads, dim = query.shape
     length = keys.size(1)
-    if batch == 0 or length == 0:
-        yield 0, rows, query.new_empty((batch, rows, length))
-        return
     accumulator_dtype = (
         torch.float32 if query.dtype in (torch.float16, torch.bfloat16) else query.dtype
     )
@@ -235,19 +272,23 @@ def score_chunks(
             f"work_bytes={work_bytes} is too small; need at least {row_bytes} bytes "
             "for one query row"
         )
-    # Width one uses PyTorch's contiguous-head reduction order.
-    if (
-        rank_sum
-        and not local_sum
-        and query.is_cuda
-        and query.dtype == torch.bfloat16
-        and heads == 8
-        and length > 1
-        and weights.is_contiguous()
-        and weights.data_ptr() % 16 == 0
-    ):
-        yield from _rank_score_chunks(query, keys, weights, chunk_rows, int(work_bytes))
-        return
+
+    return accumulator_dtype, partition_heads, local_sum, chunk_rows
+
+
+def _reference_score_chunks(
+    query,
+    keys,
+    weights,
+    rank_sum,
+    head_partitions,
+    accumulator_dtype,
+    partition_heads,
+    local_sum,
+    chunk_rows,
+):
+    batch, rows, _heads, _dim = query.shape
+    length = keys.size(1)
     if rank_sum:
         import torch.distributed as dist
     if rank_sum or local_sum:

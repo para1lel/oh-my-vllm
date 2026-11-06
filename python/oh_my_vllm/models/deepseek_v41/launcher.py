@@ -77,31 +77,7 @@ def _rank_entry(
 
         worker = Worker(config, raw_config=raw_config, strategy=strategy)
         results.send((rank, worker.ready()))
-        while True:
-            message = commands.get()
-            if message is None:
-                break
-            try:
-                if strategy == "dep4":
-                    from .rank_plan import handle_rank
-
-                    reply = handle_rank(worker, message, rank)
-                else:
-                    reply = worker.handle(message)
-                results.send((rank, reply if reply is not None else {"type": "ack"}))
-            except Exception as error:
-                results.send(
-                    (
-                        rank,
-                        {
-                            "type": "error",
-                            "rpc_id": message.get("rpc_id", 0),
-                            "kind": "internal",
-                            "message": _error_message(error),
-                        },
-                    )
-                )
-                break
+        _serve_rank(worker, rank, strategy, commands, results)
     except Exception as error:
         message = _error_message(error)
         print(
@@ -127,6 +103,34 @@ def _rank_entry(
         if dist.is_available() and dist.is_initialized():
             dist.destroy_process_group()
         torch.cuda.empty_cache()
+
+
+def _serve_rank(worker, rank, strategy, commands, results):
+    while True:
+        message = commands.get()
+        if message is None:
+            break
+        try:
+            if strategy == "dep4":
+                from .rank_plan import handle_rank
+
+                reply = handle_rank(worker, message, rank)
+            else:
+                reply = worker.handle(message)
+            results.send((rank, reply if reply is not None else {"type": "ack"}))
+        except Exception as error:
+            results.send(
+                (
+                    rank,
+                    {
+                        "type": "error",
+                        "rpc_id": message.get("rpc_id", 0),
+                        "kind": "internal",
+                        "message": _error_message(error),
+                    },
+                )
+            )
+            break
 
 
 class GroupWorker:

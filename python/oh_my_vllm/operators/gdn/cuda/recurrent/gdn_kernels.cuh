@@ -240,6 +240,38 @@ __device__ inline void gdn_prefetch_rows(unsigned char *storage, const __nv_bflo
   asm volatile("cp.async.commit_group;" ::: "memory");
 }
 
+template <int Values>
+__device__ __forceinline__ void
+gdn_scan_state_update(float (&state)[Values][4], const float (&q)[4], const float (&k)[4],
+                      const __nv_bfloat16 *qkv, float *pool, float *result, float decay, float beta,
+                      int row, int target, int head, int value_base, int lane) {
+#pragma unroll
+  for (int value = 0; value < Values; ++value) {
+    float recalled = 0;
+#pragma unroll
+    for (int key = 0; key < 4; ++key) {
+      state[value][key] *= decay;
+      recalled += state[value][key] * k[key];
+    }
+    recalled = warp_sum(recalled);
+    float input_value =
+        __bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]);
+    float delta = beta * (input_value - recalled);
+    float sum = 0;
+#pragma unroll
+    for (int key = 0; key < 4; ++key) {
+      state[value][key] += delta * k[key];
+      sum += state[value][key] * q[key];
+      if (target >= 0)
+        pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key] =
+            state[value][key];
+    }
+    sum = warp_sum(sum);
+    if (lane == 0)
+      result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
+  }
+}
+
 template <bool FusedBA>
 __global__ void __launch_bounds__(256, 1)
     gdn_scan_quant_kernel(const __nv_bfloat16 *qkv, const __nv_bfloat16 *qkvz, __nv_bfloat16 *ba,
@@ -288,31 +320,8 @@ __global__ void __launch_bounds__(256, 1)
     float softplus = a > 20.f ? a : log1pf(expf(a));
     float decay = expf(-expf(a_log[head]) * softplus);
     float beta = gdn_sigmoid(projected_b);
-#pragma unroll
-    for (int value = 0; value < Values; ++value) {
-      float recalled = 0;
-#pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        state[value][key] *= decay;
-        recalled += state[value][key] * k[key];
-      }
-      recalled = warp_sum(recalled);
-      float input_value =
-          __bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]);
-      float delta = beta * (input_value - recalled);
-      float sum = 0;
-#pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        state[value][key] += delta * k[key];
-        sum += state[value][key] * q[key];
-        if (target >= 0)
-          pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key] =
-              state[value][key];
-      }
-      sum = warp_sum(sum);
-      if (lane == 0)
-        result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
-    }
+    gdn_scan_state_update(state, q, k, qkv, pool, result, decay, beta, row, target, head,
+                          value_base, lane);
     __syncthreads();
     float square = threadIdx.x < 128 ? result[threadIdx.x] * result[threadIdx.x] : 0;
     square = warp_sum(square);

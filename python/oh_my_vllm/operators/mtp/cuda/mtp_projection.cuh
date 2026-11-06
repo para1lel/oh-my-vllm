@@ -8,6 +8,47 @@
 #include <map>
 #include <tuple>
 
+template <class Element, class WeightLayout, class InputTile, class Mma, class InputFragment,
+          class Partial, class Prefetch>
+__device__ __forceinline__ void
+mtp_projection_tiles(const __nv_bfloat16 *input, Element *weights, InputTile &input_tile, Mma &mma,
+                     InputFragment &input_fragment, Partial &partial, uint64_t *barriers,
+                     Prefetch &prefetch, int rows, int thread, int warp) {
+  using namespace cute;
+  for (int tile = 0; tile < 10; ++tile) {
+    int slot = tile & 1;
+    auto weight_tile = make_tensor(make_smem_ptr(weights + slot * 16384), WeightLayout{});
+    auto weight_fragment = mma.get_slice(0).make_fragment_A(weight_tile);
+    for (int index = thread; index < rows * 32; index += 128) {
+      int row = index / 32, column = index % 32 * 8;
+      unsigned destination =
+          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 16), 0, column / 16));
+      const auto *source =
+          input + int64_t(row) * 10240 + int(blockIdx.y) * 2560 + tile * 256 + column;
+      asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(destination), "l"(source)
+                   : "memory");
+    }
+    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+    __syncthreads();
+    wait_barrier(barriers[1 + slot], (tile / 2) & 1);
+    cutlass::arch::fence_view_async_shared();
+    if (warp == 0) {
+      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+#pragma unroll
+      for (int k = 0; k < 16; ++k) {
+        gemm(mma, weight_fragment(_, _, k), input_fragment(_, _, k), partial);
+        mma.accumulate_ = UMMA::ScaleOut::One;
+      }
+      cutlass::arch::umma_arrive(barriers);
+    }
+    wait_barrier(*barriers, tile & 1);
+    // All warps must pass the old barrier phase before the slot is reused.
+    __syncthreads();
+    if (tile + 2 < 10)
+      prefetch(tile + 2, slot);
+  }
+}
+
 template <int Capacity>
 __global__ void mtp_projection_kernel(const __nv_bfloat16 *input, float *output, int rows,
                                       const __grid_constant__ CUtensorMap weight_map) {
@@ -62,38 +103,8 @@ __global__ void mtp_projection_kernel(const __nv_bfloat16 *input, float *output,
   auto partial = partition_fragment_C(mma, Shape<_64, Int<Capacity>>{});
   partial.data() = *tensor_memory;
   mma.accumulate_ = UMMA::ScaleOut::Zero;
-  for (int tile = 0; tile < 10; ++tile) {
-    int slot = tile & 1;
-    auto weight_tile = make_tensor(make_smem_ptr(weights + slot * 16384), WeightLayout{});
-    auto weight_fragment = mma.get_slice(0).make_fragment_A(weight_tile);
-    for (int index = thread; index < rows * 32; index += 128) {
-      int row = index / 32, column = index % 32 * 8;
-      unsigned destination =
-          __cvta_generic_to_shared(&input_tile(make_coord(row, column % 16), 0, column / 16));
-      const auto *source =
-          input + int64_t(row) * 10240 + int(blockIdx.y) * 2560 + tile * 256 + column;
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(destination), "l"(source)
-                   : "memory");
-    }
-    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
-    __syncthreads();
-    wait_barrier(barriers[1 + slot], (tile / 2) & 1);
-    cutlass::arch::fence_view_async_shared();
-    if (warp == 0) {
-      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
-#pragma unroll
-      for (int k = 0; k < 16; ++k) {
-        gemm(mma, weight_fragment(_, _, k), input_fragment(_, _, k), partial);
-        mma.accumulate_ = UMMA::ScaleOut::One;
-      }
-      cutlass::arch::umma_arrive(barriers);
-    }
-    wait_barrier(*barriers, tile & 1);
-    // All warps must pass the old barrier phase before the slot is reused.
-    __syncthreads();
-    if (tile + 2 < 10)
-      prefetch(tile + 2, slot);
-  }
+  mtp_projection_tiles<Element, WeightLayout>(input, weights, input_tile, mma, input_fragment,
+                                              partial, barriers, prefetch, rows, thread, warp);
   asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
   uint32_t address = *tensor_memory + uint32_t(warp * 32) * 65536u;
 #pragma unroll

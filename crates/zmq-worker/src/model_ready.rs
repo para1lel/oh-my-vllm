@@ -77,74 +77,23 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
     }
 
     fn accepted(value: Value, config: &WorkerConfig) -> bool {
-        let bytes = encode(&value).unwrap();
-        let Ok(WorkerMessage::Ready {
-            descriptor,
-            logical_num_blocks,
-            mamba_blocks,
-            ..
-        }) = decode(&bytes)
-        else {
-            return false;
-        };
-        let policy = ModelPolicy::for_family(ModelFamily::Qwen38);
-        validate_ready(
-            policy,
-            config,
-            &descriptor,
-            logical_num_blocks,
-            mamba_blocks,
-        )
-        .is_ok()
+        accepted_for_policy(value, config, ModelPolicy::for_family(ModelFamily::Qwen38))
     }
 
     #[test]
     fn python_deepseek_ready_uses_checkpoint_windows_and_rejects_stale_layouts() {
         let python =
             std::env::var_os("OH_MY_VLLM_WORKER_PYTHON").unwrap_or_else(|| "python3".into());
-        let source = r#"
-import json
-import sys
-from tests.test_deepseek_descriptor import (
-    MODEL_CONFIG, RAW_CONFIG, checkpoint_identity, tokenizer_identity,
-)
-from oh_my_vllm.models.deepseek_v41.descriptor import build_descriptor
-d = build_descriptor(
-    MODEL_CONFIG, raw_config=RAW_CONFIG, checkpoint_identity=checkpoint_identity(),
-    tokenizer_identity=tokenizer_identity(), strategy=sys.argv[1],
-    cache_capacities=dict(window=7, compressed_kv=17, index_keys=17, accepted_state=7),
-)
-print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_blocks=7)))
-"#;
         let policy = ModelPolicy::for_family(ModelFamily::DeepSeekV41);
         let config = WorkerConfig {
             num_gpu_blocks: Some(17),
             mamba_blocks: Some(7),
             ..WorkerConfig::for_model("/synthetic-deepseek".into(), policy)
         };
-        let accepts = |ready: Value| {
-            let bytes = encode(&ready).unwrap();
-            let Ok(WorkerMessage::Ready {
-                descriptor,
-                logical_num_blocks,
-                mamba_blocks,
-                ..
-            }) = decode(&bytes)
-            else {
-                return false;
-            };
-            validate_ready(
-                policy,
-                &config,
-                &descriptor,
-                logical_num_blocks,
-                mamba_blocks,
-            )
-            .is_ok()
-        };
+        let accepts = |ready| accepted_for_policy(ready, &config, policy);
         for strategy in ["tp4", "tep4", "dep4"] {
             let output = Command::new(&python)
-                .args(["-c", source, strategy])
+                .args(["-c", DEEPSEEK_READY_SOURCE, strategy])
                 .current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
                 .env("CUDA_VISIBLE_DEVICES", "")
                 .output()
@@ -239,52 +188,7 @@ print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_b
                 ),
                 Err(Error::WorkerError(_))
             ));
-            let cases = [
-                ("/descriptor/schema_version", json!(2)),
-                ("/descriptor/cache_schema/schema_version", json!(2)),
-                ("/descriptor/architecture", json!("OtherForCausalLM")),
-                ("/descriptor/model_type", json!("other_model")),
-                ("/descriptor/config_sha256", json!("a".repeat(64))),
-                ("/descriptor/checkpoint_sha256", json!("invalid")),
-                ("/descriptor/tokenizer_sha256", json!("A".repeat(64))),
-                ("/descriptor/vocabulary_size", json!(1)),
-                ("/descriptor/max_context_tokens", json!(4096)),
-                ("/descriptor/capabilities", json!(["text"])),
-                ("/descriptor/weight_formats", json!(["f32"])),
-                (
-                    "/descriptor/cache_schema/groups/0/storage/id",
-                    json!("unknown"),
-                ),
-                (
-                    "/descriptor/cache_schema/groups/1/storage/version",
-                    json!(2),
-                ),
-                ("/descriptor/cache_schema/groups/0/block_tokens", json!(785)),
-                (
-                    "/descriptor/cache_schema/groups/0/capacity_blocks",
-                    json!(1607),
-                ),
-                (
-                    "/descriptor/cache_schema/groups/1/capacity_blocks",
-                    json!(127),
-                ),
-                ("/descriptor/cache_schema/groups/0/layers", json!([3])),
-                ("/descriptor/cache_schema/groups/1/layers", json!([0])),
-                (
-                    "/descriptor/cache_schema/groups/1/kind",
-                    json!("model_checkpoint"),
-                ),
-                (
-                    "/descriptor/cache_schema/groups/1/source",
-                    json!({"type": "shared", "producer": "fa"}),
-                ),
-                ("/descriptor/speculation/0/method", json!("unknown")),
-                ("/descriptor/speculation/0/predictor_stages", json!(2)),
-                ("/descriptor/speculation/0/max_draft_tokens", json!(3)),
-                ("/descriptor/speculation/0/max_verification_rows", json!(6)),
-                ("/logical_num_blocks", json!(1607)),
-                ("/mamba_blocks", json!(127)),
-            ];
+            let cases = qwen_mutations();
             for (path, replacement) in cases {
                 let mut changed = ready.clone();
                 *changed.pointer_mut(path).unwrap() = replacement;
@@ -313,69 +217,162 @@ print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_b
                     .collect::<Vec<_>>()
             );
             assert!(!accepted(changed, &config));
-            for invalid_config in [
-                WorkerConfig {
-                    tensor_parallel_size: 4,
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    block_size: 785,
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    max_model_len: 262145,
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    max_model_len: 0,
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    num_speculative_tokens: 1,
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    speculative_mode: Some("unknown".into()),
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    speculative_mode: Some(
-                        if drafts == 0 {
-                            "mtp"
-                        } else {
-                            "none"
-                        }
-                        .into(),
-                    ),
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    num_gpu_blocks: Some(1),
-                    ..config.clone()
-                },
-                WorkerConfig {
-                    mamba_blocks: Some(1),
-                    ..config.clone()
-                },
-            ] {
-                assert!(
-                    !accepted(ready.clone(), &invalid_config),
-                    "{invalid_config:?}"
-                );
-            }
-            assert!(accepted(
-                ready.clone(),
-                &WorkerConfig {
-                    max_model_len: 262144,
-                    num_gpu_blocks: None,
-                    mamba_blocks: None,
-                    ..config.clone()
-                }
-            ));
-            let mut changed = ready.clone();
-            changed["descriptor"]["checkpoint_sha256"] = json!("b".repeat(64));
-            changed["descriptor"]["tokenizer_sha256"] = json!("c".repeat(64));
-            assert!(accepted(changed, &config));
+            reject_qwen_configurations(&ready, &config, drafts);
+            accept_optional_qwen_capacities(&ready, &config);
         }
+    }
+
+    fn accepted_for_policy(value: Value, config: &WorkerConfig, policy: ModelPolicy) -> bool {
+        let bytes = encode(&value).unwrap();
+        let Ok(WorkerMessage::Ready {
+            descriptor,
+            logical_num_blocks,
+            mamba_blocks,
+            ..
+        }) = decode(&bytes)
+        else {
+            return false;
+        };
+        validate_ready(
+            policy,
+            config,
+            &descriptor,
+            logical_num_blocks,
+            mamba_blocks,
+        )
+        .is_ok()
+    }
+
+    const DEEPSEEK_READY_SOURCE: &str = r#"
+import json
+import sys
+from tests.test_deepseek_descriptor import (
+    MODEL_CONFIG, RAW_CONFIG, checkpoint_identity, tokenizer_identity,
+)
+from oh_my_vllm.models.deepseek_v41.descriptor import build_descriptor
+d = build_descriptor(
+    MODEL_CONFIG, raw_config=RAW_CONFIG, checkpoint_identity=checkpoint_identity(),
+    tokenizer_identity=tokenizer_identity(), strategy=sys.argv[1],
+    cache_capacities=dict(window=7, compressed_kv=17, index_keys=17, accepted_state=7),
+)
+print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_blocks=7)))
+"#;
+
+    fn qwen_mutations() -> Vec<(&'static str, Value)> {
+        vec![
+            ("/descriptor/schema_version", json!(2)),
+            ("/descriptor/cache_schema/schema_version", json!(2)),
+            ("/descriptor/architecture", json!("OtherForCausalLM")),
+            ("/descriptor/model_type", json!("other_model")),
+            ("/descriptor/config_sha256", json!("a".repeat(64))),
+            ("/descriptor/checkpoint_sha256", json!("invalid")),
+            ("/descriptor/tokenizer_sha256", json!("A".repeat(64))),
+            ("/descriptor/vocabulary_size", json!(1)),
+            ("/descriptor/max_context_tokens", json!(4096)),
+            ("/descriptor/capabilities", json!(["text"])),
+            ("/descriptor/weight_formats", json!(["f32"])),
+            (
+                "/descriptor/cache_schema/groups/0/storage/id",
+                json!("unknown"),
+            ),
+            (
+                "/descriptor/cache_schema/groups/1/storage/version",
+                json!(2),
+            ),
+            ("/descriptor/cache_schema/groups/0/block_tokens", json!(785)),
+            (
+                "/descriptor/cache_schema/groups/0/capacity_blocks",
+                json!(1607),
+            ),
+            (
+                "/descriptor/cache_schema/groups/1/capacity_blocks",
+                json!(127),
+            ),
+            ("/descriptor/cache_schema/groups/0/layers", json!([3])),
+            ("/descriptor/cache_schema/groups/1/layers", json!([0])),
+            (
+                "/descriptor/cache_schema/groups/1/kind",
+                json!("model_checkpoint"),
+            ),
+            (
+                "/descriptor/cache_schema/groups/1/source",
+                json!({"type": "shared", "producer": "fa"}),
+            ),
+            ("/descriptor/speculation/0/method", json!("unknown")),
+            ("/descriptor/speculation/0/predictor_stages", json!(2)),
+            ("/descriptor/speculation/0/max_draft_tokens", json!(3)),
+            ("/descriptor/speculation/0/max_verification_rows", json!(6)),
+            ("/logical_num_blocks", json!(1607)),
+            ("/mamba_blocks", json!(127)),
+        ]
+    }
+
+    fn reject_qwen_configurations(ready: &Value, config: &WorkerConfig, drafts: usize) {
+        for invalid_config in [
+            WorkerConfig {
+                tensor_parallel_size: 4,
+                ..config.clone()
+            },
+            WorkerConfig {
+                block_size: 785,
+                ..config.clone()
+            },
+            WorkerConfig {
+                max_model_len: 262145,
+                ..config.clone()
+            },
+            WorkerConfig {
+                max_model_len: 0,
+                ..config.clone()
+            },
+            WorkerConfig {
+                num_speculative_tokens: 1,
+                ..config.clone()
+            },
+            WorkerConfig {
+                speculative_mode: Some("unknown".into()),
+                ..config.clone()
+            },
+            WorkerConfig {
+                speculative_mode: Some(
+                    if drafts == 0 {
+                        "mtp"
+                    } else {
+                        "none"
+                    }
+                    .into(),
+                ),
+                ..config.clone()
+            },
+            WorkerConfig {
+                num_gpu_blocks: Some(1),
+                ..config.clone()
+            },
+            WorkerConfig {
+                mamba_blocks: Some(1),
+                ..config.clone()
+            },
+        ] {
+            assert!(
+                !accepted(ready.clone(), &invalid_config),
+                "{invalid_config:?}"
+            );
+        }
+    }
+
+    fn accept_optional_qwen_capacities(ready: &Value, config: &WorkerConfig) {
+        assert!(accepted(
+            ready.clone(),
+            &WorkerConfig {
+                max_model_len: 262144,
+                num_gpu_blocks: None,
+                mamba_blocks: None,
+                ..config.clone()
+            }
+        ));
+        let mut changed = ready.clone();
+        changed["descriptor"]["checkpoint_sha256"] = json!("b".repeat(64));
+        changed["descriptor"]["tokenizer_sha256"] = json!("c".repeat(64));
+        assert!(accepted(changed, config));
     }
 }

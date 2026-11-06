@@ -115,6 +115,100 @@ __global__ void unpack_scores_kernel(const uint64_t *ordered, float *scores, int
   probability[index] = 0;
 }
 
+template <bool Select, class Temporary>
+__device__ __forceinline__ void
+distribution_initialize(const float *scores, const float *p, uint64_t *rng, Temporary &temporary,
+                        float &total, float &prefix, float &retained, float &uniform, int &selected,
+                        int &active, float threshold, float maximum, int row, int lane) {
+  using Reduce = cub::BlockReduce<float, 256>;
+  float local = 0;
+  if (!lane) {
+    int first = 0, last = Vocabulary;
+    while (first < last) {
+      int middle = first + (last - first) / 2;
+      float value = expf(scores[middle] - maximum);
+      if (scores[middle] >= threshold && value > 0 && value >= p[3])
+        first = middle + 1;
+      else
+        last = middle;
+    }
+    active = p[0] == 0 ? 1 : first;
+  }
+  __syncthreads();
+  for (int i = lane; i < active; i += 256)
+    local += expf(scores[i] - maximum);
+  float sum = Reduce(temporary.reduce).Sum(local);
+  if (!lane) {
+    total = sum;
+    prefix = 0;
+    retained = 0;
+    selected = Vocabulary;
+    if constexpr (Select) {
+      curandStatePhilox4_32_10_t state;
+      curand_init(rng[row * 2], 0, rng[row * 2 + 1], &state);
+      uniform = curand_uniform(&state);
+      if (p[0] > 0)
+        ++rng[row * 2 + 1];
+    }
+  }
+}
+
+template <class Temporary>
+__device__ __forceinline__ void
+distribution_retain(const float *scores, const int *ids, const float *p, float *output,
+                    Temporary &temporary, float &prefix, float &retained, float maximum,
+                    float total, int active, int lane) {
+  using Reduce = cub::BlockReduce<float, 256>;
+  using Scan = cub::BlockScan<float, 256>;
+  for (int base = 0; base < active; base += 256) {
+    int i = base + lane;
+    float value = i < active ? expf(scores[i] - maximum) : 0;
+    float inclusive, aggregate;
+    Scan(temporary.scan).InclusiveSum(value, inclusive, aggregate);
+    float before = prefix + (inclusive - value);
+    bool keep = value > 0 && before < p[2] * total;
+    if (i < active)
+      output[ids[i]] = keep ? value : 0;
+    __syncthreads();
+    float kept = Reduce(temporary.reduce).Sum(keep ? value : 0);
+    if (!lane) {
+      retained += kept;
+      prefix += aggregate;
+    }
+    __syncthreads();
+  }
+}
+
+template <class Temporary>
+__device__ __forceinline__ void
+distribution_select(const int *ids, float *output, int64_t *tokens, float *selected_probability,
+                    Temporary &temporary, float &prefix, int &selected, float uniform,
+                    float retained, int active, int row, int lane) {
+  using Scan = cub::BlockScan<float, 256>;
+  for (int base = 0; base < active; base += 256) {
+    int i = base + lane;
+    float value = i < active ? output[ids[i]] : 0;
+    float inclusive, aggregate;
+    Scan(temporary.scan).InclusiveSum(value, inclusive, aggregate);
+    if (i < active && value > 0 && prefix + inclusive >= uniform * retained)
+      atomicMin(&selected, i);
+    if (i < active)
+      output[ids[i]] = value / retained;
+    __syncthreads();
+    if (!lane)
+      prefix += aggregate;
+    __syncthreads();
+  }
+  if (!lane) {
+    if (selected == Vocabulary) {
+      asm volatile("trap;");
+      return;
+    }
+    tokens[row] = ids[selected];
+    selected_probability[row] = output[ids[selected]];
+  }
+}
+
 template <bool Select>
 __global__ void distribution_kernel(const float *sorted, const int *order, const float *parameters,
                                     uint64_t *rng, float *probability, int64_t *tokens,
@@ -150,35 +244,8 @@ __global__ void distribution_kernel(const float *sorted, const int *order, const
   int topk = p[1] > 0 ? int(p[1]) : Vocabulary;
   float threshold = scores[topk - 1];
   float maximum = scores[0], local = 0;
-  if (!lane) {
-    int first = 0, last = Vocabulary;
-    while (first < last) {
-      int middle = first + (last - first) / 2;
-      float value = expf(scores[middle] - maximum);
-      if (scores[middle] >= threshold && value > 0 && value >= p[3])
-        first = middle + 1;
-      else
-        last = middle;
-    }
-    active = p[0] == 0 ? 1 : first;
-  }
-  __syncthreads();
-  for (int i = lane; i < active; i += 256)
-    local += expf(scores[i] - maximum);
-  float sum = Reduce(temporary.reduce).Sum(local);
-  if (!lane) {
-    total = sum;
-    prefix = 0;
-    retained = 0;
-    selected = Vocabulary;
-    if constexpr (Select) {
-      curandStatePhilox4_32_10_t state;
-      curand_init(rng[row * 2], 0, rng[row * 2 + 1], &state);
-      uniform = curand_uniform(&state);
-      if (p[0] > 0)
-        ++rng[row * 2 + 1];
-    }
-  }
+  distribution_initialize<Select>(scores, p, rng, temporary, total, prefix, retained, uniform,
+                                  selected, active, threshold, maximum, row, lane);
   __syncthreads();
   if (p[0] == 0) {
     if (!lane) {
@@ -190,23 +257,8 @@ __global__ void distribution_kernel(const float *sorted, const int *order, const
     }
     return;
   }
-  for (int base = 0; base < active; base += 256) {
-    int i = base + lane;
-    float value = i < active ? expf(scores[i] - maximum) : 0;
-    float inclusive, aggregate;
-    Scan(temporary.scan).InclusiveSum(value, inclusive, aggregate);
-    float before = prefix + (inclusive - value);
-    bool keep = value > 0 && before < p[2] * total;
-    if (i < active)
-      output[ids[i]] = keep ? value : 0;
-    __syncthreads();
-    float kept = Reduce(temporary.reduce).Sum(keep ? value : 0);
-    if (!lane) {
-      retained += kept;
-      prefix += aggregate;
-    }
-    __syncthreads();
-  }
+  distribution_retain(scores, ids, p, output, temporary, prefix, retained, maximum, total, active,
+                      lane);
   if constexpr (!Select) {
     for (int i = lane; i < active; i += 256)
       output[ids[i]] /= retained;
@@ -215,27 +267,18 @@ __global__ void distribution_kernel(const float *sorted, const int *order, const
   if (!lane)
     prefix = 0;
   __syncthreads();
-  for (int base = 0; base < active; base += 256) {
-    int i = base + lane;
-    float value = i < active ? output[ids[i]] : 0;
-    float inclusive, aggregate;
-    Scan(temporary.scan).InclusiveSum(value, inclusive, aggregate);
-    if (i < active && value > 0 && prefix + inclusive >= uniform * retained)
-      atomicMin(&selected, i);
-    if (i < active)
-      output[ids[i]] = value / retained;
-    __syncthreads();
-    if (!lane)
-      prefix += aggregate;
-    __syncthreads();
-  }
-  if (!lane) {
-    if (selected == Vocabulary) {
-      asm volatile("trap;");
-      return;
-    }
-    tokens[row] = ids[selected];
-    selected_probability[row] = output[ids[selected]];
+  distribution_select(ids, output, tokens, selected_probability, temporary, prefix, selected,
+                      uniform, retained, active, row, lane);
+}
+
+template <class Tensors> inline void sample_disjoint(const Tensors &tensors) {
+  int left = 0;
+  for (auto a : tensors) {
+    int right = 0;
+    for (auto b : tensors)
+      if (right++ > left)
+        disjoint(a, b);
+    ++left;
   }
 }
 
@@ -250,14 +293,7 @@ void sample_project(TensorView x, TensorView residual, TensorView norm, TensorVi
   tensor_contract(weight, x, kDLBfloat, 16, {Vocabulary, 5120});
   tensor_contract(logits, x, kDLBfloat, 16, {rows, Vocabulary});
   auto tensors = {x, residual, norm, weight, normalized, logits};
-  int left = 0;
-  for (auto a : tensors) {
-    int right = 0;
-    for (auto b : tensors)
-      if (right++ > left)
-        disjoint(a, b);
-    ++left;
-  }
+  sample_disjoint(tensors);
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
   dispatch_residual(residual, [&](auto skip) {
@@ -306,14 +342,7 @@ void sample_impl(TensorView x, TensorView history, TensorView allowed, TensorVie
                                      ordered, sorted,  order,   probability, workspace};
   if constexpr (Select)
     tensors.insert(tensors.end(), {*rng, *tokens, *selected_probability});
-  int left = 0;
-  for (auto a : tensors) {
-    int right = 0;
-    for (auto b : tensors)
-      if (right++ > left)
-        disjoint(a, b);
-    ++left;
-  }
+  sample_disjoint(tensors);
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
   size_t bytes = 0;

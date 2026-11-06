@@ -115,9 +115,7 @@ def arguments():
     return result
 
 
-def main():
-    args = arguments()
-    validate_agentx_python(args.agentx_python)
+def _validate_harness_version(args):
     version = subprocess.check_output(
         [
             str(args.agentx_python),
@@ -128,6 +126,12 @@ def main():
     ).strip()
     if version != VERSION:
         raise ValueError(f"install agentx-harness=={VERSION}, found {version}")
+
+
+def main():
+    args = arguments()
+    validate_agentx_python(args.agentx_python)
+    _validate_harness_version(args)
     args.artifacts.mkdir(parents=True, exist_ok=False)
     tokenizer = Tokenization(args.model)
     workload = workload_identity(args)

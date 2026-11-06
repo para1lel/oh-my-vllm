@@ -10,6 +10,49 @@ from oh_my_vllm.operators.output.workspace import prepare
 from oh_my_vllm.operators.runtime.device import Device
 
 
+def _compare_sequential_sampling(
+    device,
+    stages,
+    baseline,
+    settings,
+    gpu_rng,
+    gpu_history,
+    logits,
+    history,
+    random,
+    parameters,
+    actual_tokens,
+):
+    for step, stage in enumerate(stages):
+        device.copy(gpu_history, device.upload(history))
+        device.copy(gpu_rng, device.upload(random))
+        device.copy(baseline.outputs.logits, device.upload(logits[step]))
+        baseline.draw(settings, gpu_rng)
+        expected = device.download(baseline.outputs.tokens, np.int64).numpy()
+        np.testing.assert_array_equal(actual_tokens[step], expected)
+        np.testing.assert_array_equal(
+            device.download(stage.outputs.probabilities, np.float32).numpy(),
+            device.download(baseline.outputs.probabilities, np.float32).numpy(),
+        )
+        for row, token in enumerate(expected):
+            history[row, token // 8] |= 1 << (token % 8)
+        random[:, 1] += (parameters[:, 0] > 0).astype(np.uint64)
+
+
+def _assert_presence_edges(device, stages, gpu_history, history, vocabulary):
+    edge_tokens = np.asarray([0, 7, 8, vocabulary - 1], np.int64)
+    device.copy(stages[0].outputs.tokens, device.upload(edge_tokens))
+    stages[0].advance_presence(gpu_history)
+    expected_history = history.copy()
+    expected_history[0, 0] = 1
+    expected_history[1, 0] = 128
+    expected_history[2, 1] = 1
+    expected_history[3, -1] = 128
+    np.testing.assert_array_equal(
+        device.download(gpu_history, np.uint8).numpy(), expected_history
+    )
+
+
 class DraftSampling(unittest.TestCase):
     def test_captured_history_probabilities_and_rng_match_sequential_sampling(self):
         device = Device()
@@ -50,17 +93,7 @@ class DraftSampling(unittest.TestCase):
                 device.copy(token_rows[step], stage.outputs.tokens)
 
         try:
-            edge_tokens = np.asarray([0, 7, 8, vocabulary - 1], np.int64)
-            device.copy(stages[0].outputs.tokens, device.upload(edge_tokens))
-            stages[0].advance_presence(gpu_history)
-            expected_history = history.copy()
-            expected_history[0, 0] = 1
-            expected_history[1, 0] = 128
-            expected_history[2, 1] = 1
-            expected_history[3, -1] = 128
-            np.testing.assert_array_equal(
-                device.download(gpu_history, np.uint8).numpy(), expected_history
-            )
+            _assert_presence_edges(device, stages, gpu_history, history, vocabulary)
             with ExitStack() as resources:
                 for stage in stages:
                     resources.enter_context(stage.graph_lease())
@@ -79,28 +112,19 @@ class DraftSampling(unittest.TestCase):
                     actual_tokens = device.download(captured, np.int64).numpy()
                     actual_rng = device.download(gpu_rng, np.uint64).numpy()
                     actual_history = device.download(gpu_history, np.uint8).numpy()
-                    for step, stage in enumerate(stages):
-                        device.copy(gpu_history, device.upload(history))
-                        device.copy(gpu_rng, device.upload(random))
-                        device.copy(
-                            baseline.outputs.logits, device.upload(logits[step])
-                        )
-                        baseline.draw(settings, gpu_rng)
-                        expected = device.download(
-                            baseline.outputs.tokens, np.int64
-                        ).numpy()
-                        np.testing.assert_array_equal(actual_tokens[step], expected)
-                        np.testing.assert_array_equal(
-                            device.download(
-                                stage.outputs.probabilities, np.float32
-                            ).numpy(),
-                            device.download(
-                                baseline.outputs.probabilities, np.float32
-                            ).numpy(),
-                        )
-                        for row, token in enumerate(expected):
-                            history[row, token // 8] |= 1 << (token % 8)
-                        random[:, 1] += (parameters[:, 0] > 0).astype(np.uint64)
+                    _compare_sequential_sampling(
+                        device,
+                        stages,
+                        baseline,
+                        settings,
+                        gpu_rng,
+                        gpu_history,
+                        logits,
+                        history,
+                        random,
+                        parameters,
+                        actual_tokens,
+                    )
                     np.testing.assert_array_equal(actual_rng, random)
                     np.testing.assert_array_equal(actual_history, history)
             with self.assertRaises(RuntimeError):

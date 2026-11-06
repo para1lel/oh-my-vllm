@@ -43,27 +43,11 @@ __device__ inline void native_output_product(NativeElement *a, NativeElement *b,
   }
 }
 
-__global__ __launch_bounds__(256, 3) void native_output_qk_kernel(
-    const __nv_bfloat16 *qkv, const float *gates, const int *metadata,
-    const __nv_bfloat16 *transforms, const float *prefixes, const __nv_bfloat16 *snapshots,
-    __nv_bfloat16 *output, const __nv_bfloat16 *coefficients) {
-  using namespace cute;
-  int chunk = blockIdx.x, head = blockIdx.y;
-  int first = metadata[chunk * 4], count = metadata[chunk * 4 + 1] - first;
-  if (count <= 0)
-    return;
-  int thread = threadIdx.x, row = thread % 128, segment = thread / 128;
-  extern __shared__ __align__(128) unsigned char memory[];
-  auto &s = *reinterpret_cast<NativeOutputStorage *>(memory);
-  TMEM::Allocator1Sm allocator;
-  if (thread < 32) {
-    allocator.allocate(64, &s.tmem);
-    allocator.release_allocation_lock();
-  }
-  if (thread == 0) {
-    initialize_barrier(s.barrier, 1);
-    cutlass::arch::fence_barrier_init();
-  }
+__device__ __forceinline__ void
+native_output_load(NativeOutputStorage &s, const __nv_bfloat16 *qkv, const float *gates,
+                   const __nv_bfloat16 *transforms, const float *prefixes,
+                   const __nv_bfloat16 *snapshots, const __nv_bfloat16 *coefficients, int chunk,
+                   int head, int first, int count, int thread) {
   auto states = native_tensor(s.states, NativeStateLayout{});
   auto queries = native_tensor(s.queries, NativeWeightLayout{});
   auto deltas = native_tensor(s.delta, NativeOutputDeltaLayout{});
@@ -88,6 +72,31 @@ __global__ __launch_bounds__(256, 3) void native_output_qk_kernel(
     s.prefix[thread] = prefixes[(int64_t(chunk) * 48 + head) * 128 + thread];
     s.decay[thread] = thread < count ? gates[int64_t(first + thread) * 96 + 48 + head] : 1.f;
   }
+}
+
+__global__ __launch_bounds__(256, 3) void native_output_qk_kernel(
+    const __nv_bfloat16 *qkv, const float *gates, const int *metadata,
+    const __nv_bfloat16 *transforms, const float *prefixes, const __nv_bfloat16 *snapshots,
+    __nv_bfloat16 *output, const __nv_bfloat16 *coefficients) {
+  using namespace cute;
+  int chunk = blockIdx.x, head = blockIdx.y;
+  int first = metadata[chunk * 4], count = metadata[chunk * 4 + 1] - first;
+  if (count <= 0)
+    return;
+  int thread = threadIdx.x, row = thread % 128, segment = thread / 128;
+  extern __shared__ __align__(128) unsigned char memory[];
+  auto &s = *reinterpret_cast<NativeOutputStorage *>(memory);
+  TMEM::Allocator1Sm allocator;
+  if (thread < 32) {
+    allocator.allocate(64, &s.tmem);
+    allocator.release_allocation_lock();
+  }
+  if (thread == 0) {
+    initialize_barrier(s.barrier, 1);
+    cutlass::arch::fence_barrier_init();
+  }
+  native_output_load(s, qkv, gates, transforms, prefixes, snapshots, coefficients, chunk, head,
+                     first, count, thread);
   asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
   __syncthreads();
   asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");

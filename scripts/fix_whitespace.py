@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-def fix(path: Path) -> bool:
+def fix(path: Path, *, check: bool = False) -> bool:
     original = path.read_bytes()
 
     if b"\x00" in original:
@@ -25,14 +25,16 @@ def fix(path: Path) -> bool:
     if cleaned.encode("utf-8") == original:
         return False
 
-    path.write_text(cleaned, encoding="utf-8")
+    if not check:
+        path.write_text(cleaned, encoding="utf-8")
     return True
 
 
 def main(argv: list[str]) -> int:
-    changed = [str(p) for arg in argv if fix(p := Path(arg))]
+    check = bool(argv and argv[0] == "--check")
+    changed = [str(p) for arg in argv[int(check) :] if fix(p := Path(arg), check=check)]
     for name in changed:
-        print(f"fixed {name}")
+        print(f"{'needs whitespace fix:' if check else 'fixed'} {name}")
     return 1 if changed else 0
 
 

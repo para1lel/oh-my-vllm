@@ -6,7 +6,7 @@ import statistics
 from pathlib import Path
 
 import torch
-from oh_my_vllm.models.deepseek_v41 import kernel
+from oh_my_vllm.models.deepseek_v41 import kernel, kernel_native
 from oh_my_vllm.operators.sparse_attention.plan import scratch_bytes
 from safetensors.torch import load_file
 
@@ -15,7 +15,7 @@ def fp32_case(tensors, logical_rows, module=None):
     values, weight = tensors["input_0"], tensors["input_1"]
     expected = tensors["output_0"]
     output = torch.empty_like(expected)
-    module = module or kernel._hyperconnection_module()
+    module = module or kernel_native._hyperconnection_module()
     workspace = torch.empty(32 * 1024 * 1024, dtype=torch.uint8, device=values.device)
 
     def run():
@@ -31,7 +31,7 @@ def fp32_case(tensors, logical_rows, module=None):
 def hc_case(tensors, logical_rows, module=None):
     residual = tensors["residual"]
     rows = residual.size(0)
-    module = module or kernel._hyperconnection_module()
+    module = module or kernel_native._hyperconnection_module()
     names = ("normalized_projection", "post", "comb", "collapsed", "next_pre")
     output = {name: torch.empty_like(tensors[name]) for name in names}
     flat = torch.empty_like(tensors["flat_input"])

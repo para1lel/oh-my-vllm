@@ -2,53 +2,8 @@ import unittest
 from types import SimpleNamespace
 
 import torch
-from oh_my_vllm.models.deepseek_v41.cache import DeepSeekCache
-from oh_my_vllm.models.deepseek_v41.packed_cache import PackedHistory, TokenHistory
 
-
-class FakeModel:
-    def __init__(self, *, batch_size=2, context=8):
-        args = SimpleNamespace(
-            max_batch_size=batch_size, max_seq_len=context, lazy_cache=False
-        )
-        self.layers = [
-            SimpleNamespace(
-                attn=SimpleNamespace(
-                    is_kv_source=True,
-                    window_kv_cache=torch.zeros(batch_size, 4, 3),
-                    compress_kv_cache=PackedHistory(
-                        args, 32, 2, 16, torch.float8_e4m3fn
-                    ),
-                    compress_ratio=2,
-                    indexer=SimpleNamespace(
-                        owns_k=True,
-                        k_cache=PackedHistory(args, 32, 2, 32, torch.float8_e8m0fnu),
-                    ),
-                    compressor=SimpleNamespace(
-                        kv_state=torch.zeros(batch_size, 2, 3),
-                        score_state=torch.zeros(batch_size, 2, 3),
-                    ),
-                )
-            )
-        ]
-        self.mtp = [
-            SimpleNamespace(
-                attn=SimpleNamespace(window_kv_cache=torch.zeros(batch_size, 4, 3))
-            )
-        ]
-        self.engram_hash = SimpleNamespace(cache=TokenHistory(args))
-
-
-def cache_for(model, **options):
-    return DeepSeekCache(model, fa_capacity=128, **options)
-
-
-def row(fa, mamba):
-    return {
-        "request_id": 7,
-        "fa_block_table": fa,
-        "mamba_block_table": mamba,
-    }
+from tests.deepseek_cache_fixtures import FakeModel, cache_for, row
 
 
 class DeepSeekCacheBehavior(unittest.TestCase):
@@ -417,48 +372,16 @@ class DeepSeekCacheBehavior(unittest.TestCase):
             torch.equal(model.engram_hash.cache[0, :6], torch.arange(6) + 20)
         )
 
-        cache.clear_slot(0)
-        partial = {
-            **row([5, 6], [0, 8]),
-            "prefix_state_slot": 8,
-        }
-        cache.restore(7, 0, partial, start_pos=6)
+        accepted = self._check_cache_prefix_state(cache, model)
+
+        self._check_cache_restore_errors(cache, accepted)
+
+        cache.copy_prefix([(5, 9, 2)])
         self.assertTrue(
-            torch.equal(model.engram_hash.cache[0, 4:6], torch.arange(4, 6) + 20)
+            torch.equal(cache.fa_pages[9].engram[0][:2], torch.tensor([20, 21]))
         )
 
-        cache.mamba_pages[7].tails[0][0].zero_()
-        cache.mamba_pages[7].tails[0][1].fill_(-torch.inf)
-        cache.restore(7, 0, {**partial, "mamba_block_table": [0, 7]}, start_pos=6)
-        self.assertTrue(
-            torch.equal(
-                model.layers[0].attn.compressor.kv_state[0], torch.full((2, 3), 11)
-            )
-        )
-        self.assertTrue(
-            torch.equal(
-                model.layers[0].attn.compressor.score_state[0],
-                torch.full((2, 3), 13),
-            )
-        )
-        model.layers[0].attn.compressor.kv_state[0].fill_(22)
-        model.layers[0].attn.compressor.score_state[0].fill_(23)
-        accepted = {**partial, "mamba_block_table": [0, 7]}
-        cache.commit(7, accepted, 0, start_pos=6, accepted_end=6)
-        cache.restore(
-            7,
-            0,
-            {**accepted, "prefix_state_slot": 8},
-            start_pos=6,
-            use_prefix_state=False,
-        )
-        self.assertTrue(
-            torch.equal(
-                model.layers[0].attn.compressor.kv_state[0],
-                torch.full((2, 3), 22),
-            )
-        )
-
+    def _check_cache_restore_errors(self, cache, accepted):
         with self.assertRaisesRegex(ValueError, "request does not match"):
             cache.handle(
                 {
@@ -502,10 +425,49 @@ class DeepSeekCacheBehavior(unittest.TestCase):
                 accepted_end=6,
             )
 
-        cache.copy_prefix([(5, 9, 2)])
+    def _check_cache_prefix_state(self, cache, model):
+        cache.clear_slot(0)
+        partial = {
+            **row([5, 6], [0, 8]),
+            "prefix_state_slot": 8,
+        }
+        cache.restore(7, 0, partial, start_pos=6)
         self.assertTrue(
-            torch.equal(cache.fa_pages[9].engram[0][:2], torch.tensor([20, 21]))
+            torch.equal(model.engram_hash.cache[0, 4:6], torch.arange(4, 6) + 20)
         )
+
+        cache.mamba_pages[7].tails[0][0].zero_()
+        cache.mamba_pages[7].tails[0][1].fill_(-torch.inf)
+        cache.restore(7, 0, {**partial, "mamba_block_table": [0, 7]}, start_pos=6)
+        self.assertTrue(
+            torch.equal(
+                model.layers[0].attn.compressor.kv_state[0], torch.full((2, 3), 11)
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                model.layers[0].attn.compressor.score_state[0],
+                torch.full((2, 3), 13),
+            )
+        )
+        model.layers[0].attn.compressor.kv_state[0].fill_(22)
+        model.layers[0].attn.compressor.score_state[0].fill_(23)
+        accepted = {**partial, "mamba_block_table": [0, 7]}
+        cache.commit(7, accepted, 0, start_pos=6, accepted_end=6)
+        cache.restore(
+            7,
+            0,
+            {**accepted, "prefix_state_slot": 8},
+            start_pos=6,
+            use_prefix_state=False,
+        )
+        self.assertTrue(
+            torch.equal(
+                model.layers[0].attn.compressor.kv_state[0],
+                torch.full((2, 3), 22),
+            )
+        )
+        return accepted
 
 
 if __name__ == "__main__":

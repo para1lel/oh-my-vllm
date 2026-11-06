@@ -1,3 +1,6 @@
+mod macro_templates;
+mod sizes;
+
 use std::collections::BTreeSet;
 use std::env;
 use std::error::Error;
@@ -104,6 +107,12 @@ fn missing_blank_lines(source: &str) -> Result<BTreeSet<usize>, syn::Error> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let arguments: Vec<_> = env::args().skip(1).collect();
+    if arguments
+        .first()
+        .is_some_and(|arg| arg == "--function-spans")
+    {
+        return sizes::report(&arguments[1..]);
+    }
     let fix = arguments
         .first()
         .is_some_and(|argument| argument == "--fix");

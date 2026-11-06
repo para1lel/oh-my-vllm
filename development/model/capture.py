@@ -56,7 +56,6 @@ def run(model_path, *, decode_token=None, mode="decode"):
     from oh_my_vllm.models.qwen38.cache import Cache
     from oh_my_vllm.models.qwen38.model import Model
     from oh_my_vllm.models.qwen38.weights import Weights
-    from oh_my_vllm.operators.output import api as output
     from oh_my_vllm.operators.output.plan import make_plan
     from oh_my_vllm.operators.output.workspace import prepare
     from oh_my_vllm.operators.runtime.device import Device
@@ -99,44 +98,26 @@ def run(model_path, *, decode_token=None, mode="decode"):
         mamba_block_table=[1],
     )
 
-    def forward(batch, graph):
-        result, _, graph = model.forward(batch, graph)
-        value, residual = (
-            device.view(tensor, (1, 5120), (batch.rows - 1) * 5120) for tensor in result
-        )
-
-        def project():
-            output.sample(
-                weights.sample,
-                sample,
-                output.Inputs(value, residual),
-                output.Settings(*parameters[:3], greedy=True),
-                parameters[3],
-            )
-
-        with ExitStack() as resources:
-            project()
-            if graph:
-                device.synchronize()
-                replay = resources.enter_context(device.graph(project))
-                replay()
-            logits = sample.outputs.logits
-            bits = device.download(logits, np.uint16).numpy().reshape(-1)
-        value = (bits.astype(np.uint32) << 16).view(np.float32)
-        if value.shape != (248320,) or not np.isfinite(value).all():
-            raise ValueError("model returned invalid endpoint logits")
-        return value
-
     try:
         batch = cache.batch([row], [request], False)
-        prefill = forward(batch, False)
+        prefill = _forward_logits(
+            model, device, weights, sample, parameters, batch, False
+        )
         cache.commit(request, batch, 0, None)
         if decode_token is None:
             decode_token = int(np.argmax(prefill))
         outputs = {"prefill": prefill}
         if mode == "decode":
             row.update(num_computed_tokens=len(PROMPT), token_ids=[decode_token])
-            outputs["decode"] = forward(cache.batch([row], [request], True), True)
+            outputs["decode"] = _forward_logits(
+                model,
+                device,
+                weights,
+                sample,
+                parameters,
+                cache.batch([row], [request], True),
+                True,
+            )
         checkpoint = weights.checkpoint.verify_identity()
         if runtime_identity() != identity:
             raise ValueError("runtime changed during logits capture")
@@ -150,3 +131,34 @@ def run(model_path, *, decode_token=None, mode="decode"):
     finally:
         model.close()
         device.synchronize()
+
+
+def _forward_logits(model, device, weights, sample, parameters, batch, graph):
+    from oh_my_vllm.operators.output import api as output
+
+    result, _, graph = model.forward(batch, graph)
+    value, residual = (
+        device.view(tensor, (1, 5120), (batch.rows - 1) * 5120) for tensor in result
+    )
+
+    def project():
+        output.sample(
+            weights.sample,
+            sample,
+            output.Inputs(value, residual),
+            output.Settings(*parameters[:3], greedy=True),
+            parameters[3],
+        )
+
+    with ExitStack() as resources:
+        project()
+        if graph:
+            device.synchronize()
+            replay = resources.enter_context(device.graph(project))
+            replay()
+        logits = sample.outputs.logits
+        bits = device.download(logits, np.uint16).numpy().reshape(-1)
+    value = (bits.astype(np.uint32) << 16).view(np.float32)
+    if value.shape != (248320,) or not np.isfinite(value).all():
+        raise ValueError("model returned invalid endpoint logits")
+    return value

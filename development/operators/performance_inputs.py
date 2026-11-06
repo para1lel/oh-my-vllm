@@ -139,79 +139,25 @@ def recurrent(data, case, rng):
             data.write(prefix + name, assigned)
 
 
-def make(case, weights):
-    numerical = next(
-        item
-        for item in load_cases()
-        if item.id == case.id.replace(".performance.", ".numerics.")
+def _hidden_cache(data, rng, rows):
+    selected = (
+        list(range(rows))
+        if rows <= 20
+        else [row for row in range(rows) if (row + 1) % 784 == 0 or row == rows - 1]
     )
-    prototype = load_fixture(numerical)
-    loaded = weights.identity["files"]
-    if any(
-        loaded.get(name) != identity
-        for name, identity in prototype.manifest["checkpoint"]["files"].items()
-    ):
-        raise ValueError("performance prototype uses different checkpoint files")
-    rng = np.random.default_rng(
-        int.from_bytes(hashlib.sha256(case.id.encode()).digest()[:8])
+    slots = np.full(rows, -1, np.int32)
+    slots[selected] = np.arange(1, len(selected) + 1)
+    data.add("inputs", "slots", slots)
+    data.add(
+        "state",
+        "hidden_cache",
+        bf16(rng.standard_normal((len(selected) + 2, 5120), dtype=np.float32) * 0.25),
+        "bfloat16",
     )
-    data = Inputs()
-    boundary, shape = case.boundary, case.shape
-    rows = shape.get("rows", 0)
-    if boundary in {
-        "fa",
-        "gdn",
-        "ffn",
-        "output.hidden",
-        "output.distribution",
-        "output.sample",
-    }:
-        random_hidden(data, rng, rows, fp32_residual=boundary != "ffn")
-    if boundary == "fa":
-        cache(data, case, prototype, weights)
-    elif boundary == "gdn":
-        recurrent(data, case, rng)
-    elif boundary == "output.hidden":
-        selected = (
-            list(range(rows))
-            if rows <= 20
-            else [row for row in range(rows) if (row + 1) % 784 == 0 or row == rows - 1]
-        )
-        slots = np.full(rows, -1, np.int32)
-        slots[selected] = np.arange(1, len(selected) + 1)
-        data.add("inputs", "slots", slots)
-        data.add(
-            "state",
-            "hidden_cache",
-            bf16(
-                rng.standard_normal((len(selected) + 2, 5120), dtype=np.float32) * 0.25
-            ),
-            "bfloat16",
-        )
-        data.write("hidden_cache", slots[selected])
-    elif boundary in {"mtp.context", "mtp.draft", "mtp.chain"}:
-        cache(data, case, prototype, weights)
-        random_hidden(data, rng, rows, ("hidden",))
-        data.add(
-            "inputs", "tokens", (np.arange(rows, dtype=np.int64) * 17 + 760) % 248320
-        )
-        if boundary == "mtp.context":
-            indices = np.arange(rows, dtype=np.int32) - 1
-            indices[:: shape["queries"]] = -1
-            data.add("inputs", "hidden_rows", indices)
-            data.add(
-                "inputs",
-                "boundary_rows",
-                np.repeat(np.arange(shape["batch"], dtype=np.int32), shape["queries"]),
-            )
-            data.add(
-                "inputs",
-                "boundary_hidden",
-                bf16(
-                    rng.standard_normal((shape["batch"], 5120), dtype=np.float32) * 0.5
-                ),
-                "bfloat16",
-            )
+    data.write("hidden_cache", slots[selected])
+
+
+def _prototype_inputs(data, prototype, boundary, case):
     if boundary in {
         "output.distribution",
         "output.sample",
@@ -263,6 +209,66 @@ def make(case, weights):
     elif boundary.startswith("vision."):
         for name, value in prototype.inputs.items():
             data.add("inputs", name, value.copy(), prototype.dtype("inputs", name))
+
+
+def make(case, weights):
+    numerical = next(
+        item
+        for item in load_cases()
+        if item.id == case.id.replace(".performance.", ".numerics.")
+    )
+    prototype = load_fixture(numerical)
+    loaded = weights.identity["files"]
+    if any(
+        loaded.get(name) != identity
+        for name, identity in prototype.manifest["checkpoint"]["files"].items()
+    ):
+        raise ValueError("performance prototype uses different checkpoint files")
+    rng = np.random.default_rng(
+        int.from_bytes(hashlib.sha256(case.id.encode()).digest()[:8])
+    )
+    data = Inputs()
+    boundary, shape = case.boundary, case.shape
+    rows = shape.get("rows", 0)
+    if boundary in {
+        "fa",
+        "gdn",
+        "ffn",
+        "output.hidden",
+        "output.distribution",
+        "output.sample",
+    }:
+        random_hidden(data, rng, rows, fp32_residual=boundary != "ffn")
+    if boundary == "fa":
+        cache(data, case, prototype, weights)
+    elif boundary == "gdn":
+        recurrent(data, case, rng)
+    elif boundary == "output.hidden":
+        _hidden_cache(data, rng, rows)
+    elif boundary in {"mtp.context", "mtp.draft", "mtp.chain"}:
+        cache(data, case, prototype, weights)
+        random_hidden(data, rng, rows, ("hidden",))
+        data.add(
+            "inputs", "tokens", (np.arange(rows, dtype=np.int64) * 17 + 760) % 248320
+        )
+        if boundary == "mtp.context":
+            indices = np.arange(rows, dtype=np.int32) - 1
+            indices[:: shape["queries"]] = -1
+            data.add("inputs", "hidden_rows", indices)
+            data.add(
+                "inputs",
+                "boundary_rows",
+                np.repeat(np.arange(shape["batch"], dtype=np.int32), shape["queries"]),
+            )
+            data.add(
+                "inputs",
+                "boundary_hidden",
+                bf16(
+                    rng.standard_normal((shape["batch"], 5120), dtype=np.float32) * 0.5
+                ),
+                "bfloat16",
+            )
+    _prototype_inputs(data, prototype, boundary, case)
     manifest = dict(
         case=case.definition(),
         checkpoint=weights.identity,

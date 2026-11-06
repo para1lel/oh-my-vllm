@@ -143,6 +143,84 @@ fn readiness_binds_rank_identity_layout_and_the_full_capacity_budget() {
     assert_eq!(capacity.owned_slots, 22);
     assert!(!group.is_failed());
 
+    reject_invalid_rank_results(now);
+    let mut group = started("dep4", now);
+    group
+        .begin(plan(), now + Duration::from_secs(1), now)
+        .unwrap();
+    assert!(
+        group
+            .accept_result(1, result(1, &[]), now)
+            .unwrap()
+            .is_none()
+    );
+    assert!(group.accept_result(1, result(1, &[]), now).is_err());
+    assert!(group.is_failed());
+
+    let mut group = started("dep4", now);
+    group
+        .begin(plan(), now + Duration::from_secs(1), now)
+        .unwrap();
+    for rank in 0..3 {
+        let ids: &[u64] = match rank {
+            0 => &[90],
+            2 => &[91],
+            _ => &[],
+        };
+        assert!(
+            group
+                .accept_result(rank, result(rank, ids), now)
+                .unwrap()
+                .is_none()
+        );
+    }
+    assert!(
+        group
+            .accept_result(3, result(3, &[]), now + Duration::from_secs(1))
+            .is_err()
+    );
+    assert!(group.is_failed());
+    let mut starting = gate("dep4", now);
+    assert!(
+        starting
+            .check_deadline(now + Duration::from_secs(10))
+            .is_err()
+    );
+    assert!(starting.is_failed());
+    let mut group = started("dep4", now);
+    group.fail_rank(2);
+    assert!(
+        group
+            .begin(plan(), now + Duration::from_secs(1), now)
+            .is_err()
+    );
+    assert!(group.is_failed());
+}
+
+fn reject_invalid_step_plans(group: &mut GroupGate, step: &StepPlan, now: Instant) {
+    for case in 0..8 {
+        let mut invalid = step.clone();
+        match case {
+            0 => invalid.step_id = 0,
+            1 => invalid.requests[1].request_id = 10,
+            2 => invalid.requests[1].transaction_id = 90,
+            3 => invalid.requests[0].transaction_id = 0,
+            4 => invalid.requests[0].owner_rank = 4,
+            5 => invalid.requests[0].rows = 0,
+            6 => invalid.requests[0].rows = u32::MAX,
+            7 => invalid.collective_plan.world_size = 1,
+            _ => unreachable!(),
+        }
+        assert!(
+            group
+                .begin(invalid, now + Duration::from_secs(1), now)
+                .is_err()
+        );
+        assert!(!group.is_failed());
+    }
+}
+
+fn reject_invalid_rank_results(now: Instant) {
     for case in 0..10 {
         let mut group = gate("dep4", now);
         let mut message = ready("dep4", 0);
@@ -211,26 +289,7 @@ fn all_ranks_complete_one_plan_including_empty_partitions() {
         if strategy != "dep4" {
             step.requests[1].owner_rank = 0;
         }
-        for case in 0..8 {
-            let mut invalid = step.clone();
-            match case {
-                0 => invalid.step_id = 0,
-                1 => invalid.requests[1].request_id = 10,
-                2 => invalid.requests[1].transaction_id = 90,
-                3 => invalid.requests[0].transaction_id = 0,
-                4 => invalid.requests[0].owner_rank = 4,
-                5 => invalid.requests[0].rows = 0,
-                6 => invalid.requests[0].rows = u32::MAX,
-                7 => invalid.collective_plan.world_size = 1,
-                _ => unreachable!(),
-            }
-            assert!(
-                group
-                    .begin(invalid, now + Duration::from_secs(1), now)
-                    .is_err()
-            );
-            assert!(!group.is_failed());
-        }
+        reject_invalid_step_plans(&mut group, &step, now);
         let dispatch = group
             .begin(step.clone(), now + Duration::from_secs(1), now)
             .unwrap();
@@ -319,55 +378,4 @@ fn invalid_or_missing_completion_fails_without_partial_publication() {
         assert!(group.is_failed());
         assert!(group.accept_result(2, result(2, &[91]), now).is_err());
     }
-    let mut group = started("dep4", now);
-    group
-        .begin(plan(), now + Duration::from_secs(1), now)
-        .unwrap();
-    assert!(
-        group
-            .accept_result(1, result(1, &[]), now)
-            .unwrap()
-            .is_none()
-    );
-    assert!(group.accept_result(1, result(1, &[]), now).is_err());
-    assert!(group.is_failed());
-
-    let mut group = started("dep4", now);
-    group
-        .begin(plan(), now + Duration::from_secs(1), now)
-        .unwrap();
-    for rank in 0..3 {
-        let ids: &[u64] = match rank {
-            0 => &[90],
-            2 => &[91],
-            _ => &[],
-        };
-        assert!(
-            group
-                .accept_result(rank, result(rank, ids), now)
-                .unwrap()
-                .is_none()
-        );
-    }
-    assert!(
-        group
-            .accept_result(3, result(3, &[]), now + Duration::from_secs(1))
-            .is_err()
-    );
-    assert!(group.is_failed());
-    let mut starting = gate("dep4", now);
-    assert!(
-        starting
-            .check_deadline(now + Duration::from_secs(10))
-            .is_err()
-    );
-    assert!(starting.is_failed());
-    let mut group = started("dep4", now);
-    group.fail_rank(2);
-    assert!(
-        group
-            .begin(plan(), now + Duration::from_secs(1), now)
-            .is_err()
-    );
-    assert!(group.is_failed());
 }

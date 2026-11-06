@@ -1,3 +1,7 @@
+mod chat;
+mod completion;
+mod delta;
+
 use super::request::Request;
 use crate::models::output::Delta;
 use serde_json::{Value, json};
@@ -90,315 +94,30 @@ impl Output {
     }
 
     pub fn delta(&mut self, delta: Delta) -> Vec<Value> {
-        let mut events = Vec::new();
         if !self.request.responses {
-            let wire = match delta {
-                Delta::Text(text) => {
-                    self.content.push_str(&text);
-                    json!({
-                        "content": text,
-                    })
-                }
-                Delta::Reasoning(text) => {
-                    self.reasoning_text.push_str(&text);
-                    json!({
-                        "reasoning_content": text,
-                    })
-                }
-                Delta::Tool {
-                    index,
-                    name,
-                    arguments,
-                } => {
-                    let call = json!({
-                        "id": format!("call_{}_{}",self.id,index),
-                        "type": "function",
-                        "function": {
-                            "name": name,
-                            "arguments": arguments,
-                        },
-                    });
-                    self.calls.push(call.clone());
-                    let mut c = call;
-                    c["index"] = json!(index);
-                    json!({
-                        "tool_calls": [
-                            c,
-                        ],
-                    })
-                }
-            };
-            return vec![self.chat_chunk(wire, Value::Null)];
+            return self.chat_delta(delta);
         }
+        let mut events = Vec::new();
         match delta {
-            Delta::Reasoning(text) => {
-                if text.is_empty() {
-                    return events;
-                }
-                self.reasoning_text.push_str(&text);
-                let index = if let Some(i) = self.reasoning {
-                    i
-                } else {
-                    let i = self.output.len();
-                    let item = json!({
-                        "id": format!("rs_{}",self.id),
-                        "type": "reasoning",
-                        "summary": [],
-                    });
-                    self.output.push(item.clone());
-                    self.reasoning = Some(i);
-                    events.push(self.event(
-                        "response.output_item.added",
-                        json!({
-                            "output_index": i,
-                            "item": item,
-                        }),
-                    ));
-                    events.push(self.event(
-                        "response.reasoning_summary_part.added",
-                        json!({
-                            "item_id": item["id"],
-                            "output_index": i,
-                            "summary_index": 0,
-                            "part": {
-                                "type": "summary_text",
-                                "text": "",
-                            },
-                        }),
-                    ));
-                    self.output[i]["summary"] = json!([
-                        {
-                            "type": "summary_text",
-                            "text": "",
-                        },
-                    ]);
-                    i
-                };
-                if let Value::String(value) = &mut self.output[index]["summary"][0]["text"] {
-                    value.push_str(&text);
-                }
-                events.push(self.event(
-                    "response.reasoning_summary_text.delta",
-                    json!({
-                        "item_id": self.output[index]["id"],
-                        "output_index": index,
-                        "summary_index": 0,
-                        "delta": text,
-                    }),
-                ));
-            }
-            Delta::Text(text) => {
-                if text.is_empty() {
-                    return events;
-                }
-                self.content.push_str(&text);
-                let index = if let Some(i) = self.message {
-                    i
-                } else {
-                    let i = self.output.len();
-                    let item = json!({
-                        "id": format!("msg_{}",self.id),
-                        "type": "message",
-                        "status": "in_progress",
-                        "role": "assistant",
-                        "content": [],
-                    });
-                    self.output.push(item.clone());
-                    self.message = Some(i);
-                    events.push(self.event(
-                        "response.output_item.added",
-                        json!({
-                            "output_index": i,
-                            "item": item,
-                        }),
-                    ));
-                    let part = json!({
-                        "type": "output_text",
-                        "text": "",
-                        "annotations": [],
-                        "logprobs": [],
-                    });
-                    events.push(self.event(
-                        "response.content_part.added",
-                        json!({
-                            "item_id": item["id"],
-                            "output_index": i,
-                            "content_index": 0,
-                            "part": part,
-                        }),
-                    ));
-                    self.output[i]["content"] = json!([part,]);
-                    i
-                };
-                if let Value::String(value) = &mut self.output[index]["content"][0]["text"] {
-                    value.push_str(&text);
-                }
-                events.push(self.event(
-                    "response.output_text.delta",
-                    json!({
-                        "item_id": self.output[index]["id"],
-                        "output_index": index,
-                        "content_index": 0,
-                        "delta": text,
-                        "logprobs": [],
-                    }),
-                ));
-            }
+            Delta::Reasoning(text) => self.reasoning_delta(text, &mut events),
+            Delta::Text(text) => self.text_delta(text, &mut events),
             Delta::Tool {
                 index,
                 name,
                 arguments,
-            } => {
-                let call_id = format!("call_{}_{}", self.id, index);
-                self.calls.push(json!({
-                    "id": call_id,
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "arguments": arguments,
-                    },
-                }));
-                let i = self.output.len();
-                let item = json!({
-                    "id": format!("fc_{}_{}",self.id,index),
-                    "type": "function_call",
-                    "status": "in_progress",
-                    "call_id": call_id,
-                    "name": name,
-                    "arguments": "",
-                });
-                self.output.push(item.clone());
-                events.push(self.event(
-                    "response.output_item.added",
-                    json!({
-                        "output_index": i,
-                        "item": item,
-                    }),
-                ));
-                events.push(self.event(
-                    "response.function_call_arguments.delta",
-                    json!({
-                        "item_id": item["id"],
-                        "output_index": i,
-                        "delta": arguments,
-                    }),
-                ));
-                self.output[i]["arguments"] = json!(arguments);
-            }
+            } => self.tool_delta(index, name, arguments, &mut events),
         }
         events
     }
 
     pub fn finish(&mut self, reason: &str) -> (Value, Vec<Value>) {
         if !self.request.responses {
-            let finish = if reason == "length" {
-                "length"
-            } else if !self.calls.is_empty() {
-                "tool_calls"
-            } else {
-                "stop"
-            };
-            let mut events = vec![self.chat_chunk(json!({}), json!(finish))];
-            if self.request.include_usage {
-                events.push(json!({
-                    "id": self.id,
-                    "object": "chat.completion.chunk",
-                    "created": self.created,
-                    "model": self.request.model,
-                    "choices": [],
-                    "usage": self.usage(),
-                }));
-            }
-            let mut message = json!({
-                "role": "assistant",
-                "content": if self.content.is_empty() {Value::Null} else {json!(self.content)},
-            });
-            if !self.reasoning_text.is_empty() {
-                message["reasoning_content"] = json!(self.reasoning_text);
-            }
-            if !self.calls.is_empty() {
-                message["tool_calls"] = json!(self.calls);
-            }
-            let result = json!({
-                "id": self.id,
-                "object": "chat.completion",
-                "created": self.created,
-                "model": self.request.model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": message,
-                        "finish_reason": finish,
-                    },
-                ],
-                "usage": self.usage(),
-            });
-            return (result, events);
+            return self.finish_chat(reason);
         }
         let mut events = Vec::new();
         for i in 0..self.output.len() {
             let item = self.output[i].clone();
-            match item["type"].as_str().unwrap() {
-                "reasoning" => {
-                    events.push(self.event(
-                        "response.reasoning_summary_text.done",
-                        json!({
-                            "item_id": item["id"],
-                            "output_index": i,
-                            "summary_index": 0,
-                            "text": self.reasoning_text,
-                        }),
-                    ));
-                    events.push(self.event(
-                        "response.reasoning_summary_part.done",
-                        json!({
-                            "item_id": item["id"],
-                            "output_index": i,
-                            "summary_index": 0,
-                            "part": item["summary"][0],
-                        }),
-                    ));
-                }
-                "message" => {
-                    events.push(self.event(
-                        "response.output_text.done",
-                        json!({
-                            "item_id": item["id"],
-                            "output_index": i,
-                            "content_index": 0,
-                            "text": self.content,
-                            "logprobs": [],
-                        }),
-                    ));
-                    events.push(self.event(
-                        "response.content_part.done",
-                        json!({
-                            "item_id": item["id"],
-                            "output_index": i,
-                            "content_index": 0,
-                            "part": item["content"][0],
-                        }),
-                    ));
-                    self.output[i]["status"] = json!(if reason == "length" {
-                        "incomplete"
-                    } else {
-                        "completed"
-                    });
-                }
-                "function_call" => {
-                    events.push(self.event(
-                        "response.function_call_arguments.done",
-                        json!({
-                            "item_id": item["id"],
-                            "output_index": i,
-                            "name": item["name"],
-                            "arguments": item["arguments"],
-                        }),
-                    ));
-                    self.output[i]["status"] = json!("completed");
-                }
-                _ => unreachable!(),
-            }
+            self.finish_item(i, &item, reason, &mut events);
             events.push(self.event(
                 "response.output_item.done",
                 json!({

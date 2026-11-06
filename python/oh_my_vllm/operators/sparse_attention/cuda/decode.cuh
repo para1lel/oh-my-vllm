@@ -19,6 +19,44 @@ inline DecodeScratch decode_scratch(void *data, int tiles) {
           reinterpret_cast<int32_t *>(values + int64_t(tiles) * 16 * 512)};
 }
 
+__device__ __forceinline__ void decode_dot_scores(float (&scores)[4], const __nv_bfloat16 *q,
+                                                  const __nv_bfloat16 *kv, int lane, int warp) {
+  for (int inner = 0; inner < 512; inner += 16) {
+    unsigned a[4], b[2];
+    load_a(a, q, inner, lane, 512);
+    load_key(b, kv, inner, warp, lane);
+    mma(scores, a, b);
+  }
+}
+
+template <bool Bf16Compressed>
+__device__ __forceinline__ void
+decode_load_values(__nv_bfloat16 *values, const __nv_bfloat16 *window, const uint8_t *compressed,
+                   const uint8_t *compressed_scales, const int32_t *indices, int64_t window_rows,
+                   int b, int lane, int row, int slots, int column, bool &invalid) {
+#pragma unroll
+  for (int step = 0; step < 2; ++step) {
+    int selected = step * 32 + lane, slot = b * 64 + selected;
+    int id = slot < slots ? indices[int64_t(row) * slots + slot] : -1;
+    uint4 value = {};
+    if (id >= 0 && id < window_rows) {
+      value = *reinterpret_cast<const uint4 *>(window + int64_t(id) * 512 + column);
+    } else if (id >= 0) {
+      if constexpr (Bf16Compressed) {
+        const auto *table = reinterpret_cast<const __nv_bfloat16 *>(compressed);
+        value = *reinterpret_cast<const uint4 *>(table + int64_t(id - window_rows) * 512 + column);
+      } else {
+        auto *decoded = reinterpret_cast<__nv_bfloat16 *>(&value);
+#pragma unroll
+        for (int c = 0; c < 8; ++c)
+          decoded[c] = read_compressed<false>(compressed, compressed_scales, id - window_rows,
+                                              column + c, invalid);
+      }
+    }
+    *reinterpret_cast<uint4 *>(values + selected * 8) = value;
+  }
+}
+
 template <bool Bf16Compressed>
 __global__ void decode_scores(const __nv_bfloat16 *query, const float *sink, const int32_t *indices,
                               const __nv_bfloat16 *window, const uint8_t *compressed,
@@ -67,12 +105,7 @@ __global__ void decode_scores(const __nv_bfloat16 *query, const float *sink, con
   }
   float scores[4] = {};
   if (!rejected) {
-    for (int inner = 0; inner < 512; inner += 16) {
-      unsigned a[4], b[2];
-      load_a(a, q, inner, lane, 512);
-      load_key(b, kv, inner, warp, lane);
-      mma(scores, a, b);
-    }
+    decode_dot_scores(scores, q, kv, lane, warp);
   }
 #pragma unroll
   for (int rg = 0; rg < 2; ++rg) {
@@ -184,28 +217,8 @@ __global__ void decode_ordered_values(const float *sink, const int32_t *indices,
         destination[2] = __float2bfloat16_rn(loaded.z);
         destination[3] = __float2bfloat16_rn(loaded.w);
       }
-#pragma unroll
-      for (int step = 0; step < 2; ++step) {
-        int selected = step * 32 + lane, slot = b * 64 + selected;
-        int id = slot < slots ? indices[int64_t(row) * slots + slot] : -1;
-        uint4 value = {};
-        if (id >= 0 && id < window_rows) {
-          value = *reinterpret_cast<const uint4 *>(window + int64_t(id) * 512 + column);
-        } else if (id >= 0) {
-          if constexpr (Bf16Compressed) {
-            const auto *table = reinterpret_cast<const __nv_bfloat16 *>(compressed);
-            value =
-                *reinterpret_cast<const uint4 *>(table + int64_t(id - window_rows) * 512 + column);
-          } else {
-            auto *decoded = reinterpret_cast<__nv_bfloat16 *>(&value);
-#pragma unroll
-            for (int c = 0; c < 8; ++c)
-              decoded[c] = read_compressed<false>(compressed, compressed_scales, id - window_rows,
-                                                  column + c, invalid);
-          }
-        }
-        *reinterpret_cast<uint4 *>(values + selected * 8) = value;
-      }
+      decode_load_values<Bf16Compressed>(values, window, compressed, compressed_scales, indices,
+                                         window_rows, b, lane, row, slots, column, invalid);
       __syncwarp();
 #pragma unroll
       for (int rg = 0; rg < 2; ++rg) {

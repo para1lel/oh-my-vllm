@@ -66,28 +66,7 @@ def optional_modules():
     return {"collectives": FUNCTIONS, "paged": PAGED_FUNCTIONS}
 
 
-@functools.cache
-def build(name, functions):
-    from tvm_ffi import load_module
-    from tvm_ffi.cpp import build_inline
-
-    if os.environ.setdefault("TVM_FFI_CUDA_ARCH_LIST", "10.0a") != "10.0a":
-        raise ValueError("native operators require the B200 architecture 10.0a")
-    cuda = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")).resolve()
-    nvcc = cuda / "bin/nvcc"
-    if not nvcc.is_file():
-        raise RuntimeError(f"CUDA compiler nvcc is not available in {cuda}")
-    nvcc = str(nvcc)
-    flags = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a", "-lineinfo")
-    source = (MODULE_SOURCES | OPTIONAL_MODULE_SOURCES)[name]
-    source_fingerprint = source_digest(source)
-    compiler = subprocess.check_output([nvcc, "--version"]).decode()
-    environment = build_environment_identity(cuda, compiler)
-    include_paths = [
-        str(source.parent),
-        str(SOURCES),
-        *(str(path) for path in cuda_include_directories(cuda)),
-    ]
+def _build_dependencies(name, flags, include_paths):
     commit = None
     if name in MODULES and name != "device":
         cutlass = Path(os.environ["OH_MY_VLLM_CUTLASS"])
@@ -116,29 +95,22 @@ def build(name, functions):
     if vendor is not None:
         include_paths.append(vendor["include_directory"])
         build_options["extra_ldflags"] = vendor["ldflags"]
-    source_id = build_digest(
-        source_fingerprint,
-        compiler,
-        flags,
-        importlib.metadata.version("apache-tvm-ffi"),
-        commit,
-        functions,
-        vendor=vendor,
-        environment=environment,
-    )
-    cache = cache_directory()
-    directory = cache / source_id
-    directory.mkdir(parents=True, exist_ok=True)
-    library = build_inline(
-        f"oh_my_vllm_{name}",
-        cuda_sources=f'#include "{source.name}"',
-        functions=functions,
-        extra_cuda_cflags=flags,
-        extra_include_paths=include_paths,
-        build_directory=str(directory),
-        backend="cuda",
-        **build_options,
-    )
+    return flags, include_paths, commit, vendor, build_options
+
+
+def _store_binary(
+    library,
+    cache,
+    source_id,
+    source_fingerprint,
+    functions,
+    compiler,
+    flags,
+    commit,
+    environment,
+    vendor,
+    name,
+):
     with Path(library).open("rb") as file:
         binary_id = hashlib.file_digest(file, "sha256").hexdigest()
     binary_directory = cache / "binaries" / source_id / binary_id
@@ -172,6 +144,70 @@ def build(name, functions):
     temporary = cache / f"{name}.{os.getpid()}.json"
     temporary.write_text(encoded)
     temporary.replace(cache / f"{name}.json")
+    return immutable_library
+
+
+@functools.cache
+def build(name, functions):
+    from tvm_ffi import load_module
+    from tvm_ffi.cpp import build_inline
+
+    if os.environ.setdefault("TVM_FFI_CUDA_ARCH_LIST", "10.0a") != "10.0a":
+        raise ValueError("native operators require the B200 architecture 10.0a")
+    cuda = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda")).resolve()
+    nvcc = cuda / "bin/nvcc"
+    if not nvcc.is_file():
+        raise RuntimeError(f"CUDA compiler nvcc is not available in {cuda}")
+    nvcc = str(nvcc)
+    flags = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a", "-lineinfo")
+    source = (MODULE_SOURCES | OPTIONAL_MODULE_SOURCES)[name]
+    source_fingerprint = source_digest(source)
+    compiler = subprocess.check_output([nvcc, "--version"]).decode()
+    environment = build_environment_identity(cuda, compiler)
+    include_paths = [
+        str(source.parent),
+        str(SOURCES),
+        *(str(path) for path in cuda_include_directories(cuda)),
+    ]
+    flags, include_paths, commit, vendor, build_options = _build_dependencies(
+        name, flags, include_paths
+    )
+    source_id = build_digest(
+        source_fingerprint,
+        compiler,
+        flags,
+        importlib.metadata.version("apache-tvm-ffi"),
+        commit,
+        functions,
+        vendor=vendor,
+        environment=environment,
+    )
+    cache = cache_directory()
+    directory = cache / source_id
+    directory.mkdir(parents=True, exist_ok=True)
+    library = build_inline(
+        f"oh_my_vllm_{name}",
+        cuda_sources=f'#include "{source.name}"',
+        functions=functions,
+        extra_cuda_cflags=flags,
+        extra_include_paths=include_paths,
+        build_directory=str(directory),
+        backend="cuda",
+        **build_options,
+    )
+    immutable_library = _store_binary(
+        library,
+        cache,
+        source_id,
+        source_fingerprint,
+        functions,
+        compiler,
+        flags,
+        commit,
+        environment,
+        vendor,
+        name,
+    )
     module = load_module(str(immutable_library))
     if name == "vision":
         verify_vision_vendor_images(module, vendor)

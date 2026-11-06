@@ -52,6 +52,90 @@ __global__ void fp4_clear_tail(Output *output, const int32_t *offsets, int group
     output[index] = Output(0.f);
 }
 
+template <class Output>
+__device__ __forceinline__ void fp4_invalid_group_output(Output *output, int rows, int outputs,
+                                                         int first_column, int warp, int lane) {
+  for (int first_row = 0; first_row < rows; first_row += 16) {
+    int row = first_row + lane / 4;
+#pragma unroll
+    for (int value = 0; value < 4; ++value) {
+      int r = row + 8 * (value >> 1);
+      int column = first_column + warp * 8 + (lane & 3) * 2 + (value & 1);
+      if (r < rows)
+        output[int64_t(r) * outputs + column] = Output(fp8_scale(255));
+    }
+  }
+}
+
+template <class ScaleLayout>
+__device__ __forceinline__ void
+fp4_load_stage(const uint8_t *input, const uint8_t *weight, const uint8_t *input_scales,
+               const uint8_t *weight_scales, uint8_t *a_shared, uint8_t *b_shared, uint8_t *sa,
+               uint8_t *sb, int valid_rows, int columns, int row_offset, int first_row,
+               int first_column, int width, int weight_stride, int width_groups, int start,
+               int stage_groups, ScaleLayout layout) {
+  for (int index = threadIdx.x * 16; index < (valid_rows + 32) * columns;
+       index += blockDim.x * 16) {
+    int row = index / columns, column = index % columns;
+    if (row < valid_rows) {
+      int global_row = row_offset + first_row + row;
+      *reinterpret_cast<uint4 *>(a_shared + fp8_address(row, column)) =
+          *reinterpret_cast<const uint4 *>(input + int64_t(global_row) * width + start + column);
+    } else {
+      int local_row = row - valid_rows, global_row = first_column + local_row;
+      uint64_t packed = *reinterpret_cast<const uint64_t *>(
+          weight + int64_t(global_row) * weight_stride + (start + column) / 2);
+      uint4 converted;
+      converted.x = fp4_to_fp8_four(packed);
+      converted.y = fp4_to_fp8_four(packed >> 16);
+      converted.z = fp4_to_fp8_four(packed >> 32);
+      converted.w = fp4_to_fp8_four(packed >> 48);
+      *reinterpret_cast<uint4 *>(b_shared + fp8_address(local_row, column)) = converted;
+    }
+  }
+  for (int index = threadIdx.x; index < valid_rows * stage_groups; index += blockDim.x) {
+    int row = index / stage_groups, group = index % stage_groups;
+    sa[row * fp8_tile_groups + group] =
+        input_scales[int64_t(row_offset + first_row + row) * width_groups + start / 32 + group];
+  }
+  for (int index = threadIdx.x; index < 32 * stage_groups; index += blockDim.x) {
+    int row = index / stage_groups, group = index % stage_groups;
+    sb[row * fp8_tile_groups + group] =
+        weight_scales[layout(cute::make_coord(first_column + row, start + group * 32, 0))];
+  }
+}
+
+__device__ __forceinline__ void fp4_accumulate_stage(const uint8_t *a_shared,
+                                                     const uint8_t *b_shared, const uint8_t *sa,
+                                                     const uint8_t *sb, float (&total)[4],
+                                                     int stage_groups, int valid_rows, int low_row,
+                                                     int first_k, int warp, int lane) {
+  using Mma = cute::SM89_16x8x32_F32E4M3E4M3F32_TN;
+  for (int group = 0; group < stage_groups; ++group) {
+    uint32_t a[4], b[2];
+#pragma unroll
+    for (int reg = 0; reg < 4; ++reg)
+      a[reg] = fp8_shared_four(a_shared, low_row + 8 * (reg & 1), valid_rows,
+                               group * 32 + first_k + 16 * (reg >> 1));
+#pragma unroll
+    for (int reg = 0; reg < 2; ++reg)
+      b[reg] =
+          fp8_shared_four(b_shared, warp * 8 + (lane >> 2), 32, group * 32 + first_k + 16 * reg);
+    float raw[4];
+    Mma::fma(raw[0], raw[1], raw[2], raw[3], a[0], a[1], a[2], a[3], b[0], b[1], 0.f, 0.f, 0.f,
+             0.f);
+#pragma unroll
+    for (int value = 0; value < 4; ++value) {
+      int row = low_row + 8 * (value >> 1);
+      int column = warp * 8 + (lane & 3) * 2 + (value & 1);
+      float input_scale = row < valid_rows ? fp8_scale(sa[row * fp8_tile_groups + group]) : 1.f;
+      float weight_scale = fp8_scale(sb[column * fp8_tile_groups + group]);
+      // Each released K32 dot starts at zero, followed by one MUL and one FMA.
+      total[value] = __fmaf_rn(__fmul_rn(raw[value], input_scale), weight_scale, total[value]);
+    }
+  }
+}
+
 template <class Output, class ScaleLayout, bool Grouped>
 __global__ void fp4_k32_kernel(const uint8_t *__restrict__ input, const uint8_t *weight,
                                const uint8_t *__restrict__ input_scales,
@@ -75,16 +159,7 @@ __global__ void fp4_k32_kernel(const uint8_t *__restrict__ input, const uint8_t 
       // One group fills the complete output, so the grid does not read a row bound.
       if (group != 0)
         return;
-      for (int first_row = 0; first_row < rows; first_row += 16) {
-        int row = first_row + lane / 4;
-#pragma unroll
-        for (int value = 0; value < 4; ++value) {
-          int r = row + 8 * (value >> 1);
-          int column = first_column + warp * 8 + (lane & 3) * 2 + (value & 1);
-          if (r < rows)
-            output[int64_t(r) * outputs + column] = Output(fp8_scale(255));
-        }
-      }
+      fp4_invalid_group_output(output, rows, outputs, first_column, warp, lane);
       return;
     }
     row_offset = offsets[group];
@@ -103,60 +178,12 @@ __global__ void fp4_k32_kernel(const uint8_t *__restrict__ input, const uint8_t 
     float total[4] = {};
     for (int start = 0; start < width; start += fp8_tile_width) {
       int columns = min(fp8_tile_width, width - start), stage_groups = columns / 32;
-      for (int index = threadIdx.x * 16; index < (valid_rows + 32) * columns;
-           index += blockDim.x * 16) {
-        int row = index / columns, column = index % columns;
-        if (row < valid_rows) {
-          int global_row = row_offset + first_row + row;
-          *reinterpret_cast<uint4 *>(a_shared + fp8_address(row, column)) =
-              *reinterpret_cast<const uint4 *>(input + int64_t(global_row) * width + start +
-                                               column);
-        } else {
-          int local_row = row - valid_rows, global_row = first_column + local_row;
-          uint64_t packed = *reinterpret_cast<const uint64_t *>(
-              weight + int64_t(global_row) * weight_stride + (start + column) / 2);
-          uint4 converted;
-          converted.x = fp4_to_fp8_four(packed);
-          converted.y = fp4_to_fp8_four(packed >> 16);
-          converted.z = fp4_to_fp8_four(packed >> 32);
-          converted.w = fp4_to_fp8_four(packed >> 48);
-          *reinterpret_cast<uint4 *>(b_shared + fp8_address(local_row, column)) = converted;
-        }
-      }
-      for (int index = threadIdx.x; index < valid_rows * stage_groups; index += blockDim.x) {
-        int row = index / stage_groups, group = index % stage_groups;
-        sa[row * fp8_tile_groups + group] =
-            input_scales[int64_t(row_offset + first_row + row) * width_groups + start / 32 + group];
-      }
-      for (int index = threadIdx.x; index < 32 * stage_groups; index += blockDim.x) {
-        int row = index / stage_groups, group = index % stage_groups;
-        sb[row * fp8_tile_groups + group] =
-            weight_scales[layout(cute::make_coord(first_column + row, start + group * 32, 0))];
-      }
+      fp4_load_stage(input, weight, input_scales, weight_scales, a_shared, b_shared, sa, sb,
+                     valid_rows, columns, row_offset, first_row, first_column, width, weight_stride,
+                     width_groups, start, stage_groups, layout);
       __syncthreads();
-      for (int group = 0; group < stage_groups; ++group) {
-        uint32_t a[4], b[2];
-#pragma unroll
-        for (int reg = 0; reg < 4; ++reg)
-          a[reg] = fp8_shared_four(a_shared, low_row + 8 * (reg & 1), valid_rows,
-                                   group * 32 + first_k + 16 * (reg >> 1));
-#pragma unroll
-        for (int reg = 0; reg < 2; ++reg)
-          b[reg] = fp8_shared_four(b_shared, warp * 8 + (lane >> 2), 32,
-                                   group * 32 + first_k + 16 * reg);
-        float raw[4];
-        Mma::fma(raw[0], raw[1], raw[2], raw[3], a[0], a[1], a[2], a[3], b[0], b[1], 0.f, 0.f, 0.f,
-                 0.f);
-#pragma unroll
-        for (int value = 0; value < 4; ++value) {
-          int row = low_row + 8 * (value >> 1);
-          int column = warp * 8 + (lane & 3) * 2 + (value & 1);
-          float input_scale = row < valid_rows ? fp8_scale(sa[row * fp8_tile_groups + group]) : 1.f;
-          float weight_scale = fp8_scale(sb[column * fp8_tile_groups + group]);
-          // Each released K32 dot starts at zero, followed by one MUL and one FMA.
-          total[value] = __fmaf_rn(__fmul_rn(raw[value], input_scale), weight_scale, total[value]);
-        }
-      }
+      fp4_accumulate_stage(a_shared, b_shared, sa, sb, total, stage_groups, valid_rows, low_row,
+                           first_k, warp, lane);
       __syncthreads();
     }
 #pragma unroll
@@ -313,7 +340,12 @@ void launch_grouped_fp4_k32(const uint8_t *input, const uint8_t *input_scales,
                                            compact_counts, compact_weight_ptrs, compact_scale_ptrs);
   bool prefill = rows >= 4096 && outputs == 2304 && width == 5120 &&
                  reinterpret_cast<uintptr_t>(input) % 16 == 0;
-  if (prefill)
+  bool small_tile = rows > 64 && rows <= groups && !prefill;
+  if (small_tile)
+    fp4_group_offsets<16><<<1, 1, 0, stream>>>(counts, groups, compact_counts, offsets,
+                                               tile_offsets, bound, rows, max_rows,
+                                               (outputs + 63) / 64, status);
+  else if (prefill)
     fp4_group_offsets<prefill_rows>
         <<<1, 1, 0, stream>>>(counts, groups, compact_counts, offsets, tile_offsets, bound, rows,
                               max_rows, (outputs + prefill_columns - 1) / prefill_columns, status);
@@ -331,6 +363,10 @@ void launch_grouped_fp4_k32(const uint8_t *input, const uint8_t *input_scales,
     launch_grouped_prefill_k32(input, input_scales, compact_weight_ptrs, compact_scale_ptrs,
                                offsets, tile_offsets, output, bound, rows, outputs, width,
                                weight_stride, layout, stream);
+  else if (small_tile)
+    launch_half_k32<Output, ScaleLayout, 4, true, 16>(
+        input, nullptr, input_scales, nullptr, output, compact_weight_ptrs, compact_scale_ptrs,
+        offsets, tile_offsets, bound, rows, outputs, width, weight_stride, layout, stream);
   else
     launch_half_k32<Output, ScaleLayout, 4, true>(
         input, nullptr, input_scales, nullptr, output, compact_weight_ptrs, compact_scale_ptrs,

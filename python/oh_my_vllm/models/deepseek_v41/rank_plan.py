@@ -103,64 +103,70 @@ def merge_replies(message, replies):
             ranks=list(range(4)),
         )
     if kind == "execute":
-        outputs = {}
-        completions = []
-        for rank in range(4):
-            _local, schedule = local_execute(message, rank)
-            reply = replies[rank]
-            if (
-                reply.get("type") != "execute_result"
-                or reply.get("rpc_id") != message["rpc_id"]
-            ):
-                raise ValueError("DEP4 rank returned the wrong execute reply")
-            completion = reply.get("rank_completion")
-            if completion != {
-                "rank": rank,
-                "step_id": message["step_id"],
-                "schedule": schedule,
-            }:
-                raise ValueError("DEP4 rank did not acknowledge its Rust schedule")
-            ids = [row["request_id"] for row in reply["outputs"]]
-            if len(set(ids)) != len(ids) or sorted(ids) != sorted(
-                schedule["request_ids"]
-            ):
-                raise ValueError("DEP4 rank returned unowned or missing output rows")
-            outputs.update((row["request_id"], row) for row in reply["outputs"])
-            completions.append(completion)
-        return {
-            "type": "execute_result",
-            "rpc_id": message["rpc_id"],
-            "outputs": [outputs[row["request_id"]] for row in message["scheduled"]],
-            "rank_completions": completions,
-        }
+        return _merge_execute(message, replies)
     if kind == "stats":
         reply = dict(replies[0])
         reply["stats"] = dict(reply["stats"])
         reply["stats"]["ranks"] = [replies[rank]["stats"] for rank in range(4)]
         return reply
     if kind == "cache":
-        completed = {}
-        for rank in range(4):
-            reply = replies[rank]
-            expected = [
-                op["transfer_id"]
-                for op in message["operations"]
-                if op["owner_rank"] == rank
-            ]
-            ids = [row["transfer_id"] for row in reply.get("completed", [])]
-            if (
-                reply.get("type") != "cache_result"
-                or reply.get("rpc_id") != message["rpc_id"]
-            ):
-                raise ValueError("DEP4 rank returned the wrong cache reply")
-            if len(set(ids)) != len(ids) or sorted(ids) != sorted(expected):
-                raise ValueError("DEP4 rank returned unowned cache completion")
-            completed.update((row["transfer_id"], row) for row in reply["completed"])
-        return dict(
-            type="cache_result",
-            rpc_id=message["rpc_id"],
-            host_cache_bytes=replies[0]["host_cache_bytes"],
-            completed=[completed[op["transfer_id"]] for op in message["operations"]],
-            cache_rank_completions=list(range(4)),
-        )
+        return _merge_cache(message, replies)
     return replies[0]
+
+
+def _merge_execute(message, replies):
+    outputs = {}
+    completions = []
+    for rank in range(4):
+        _local, schedule = local_execute(message, rank)
+        reply = replies[rank]
+        if (
+            reply.get("type") != "execute_result"
+            or reply.get("rpc_id") != message["rpc_id"]
+        ):
+            raise ValueError("DEP4 rank returned the wrong execute reply")
+        completion = reply.get("rank_completion")
+        if completion != {
+            "rank": rank,
+            "step_id": message["step_id"],
+            "schedule": schedule,
+        }:
+            raise ValueError("DEP4 rank did not acknowledge its Rust schedule")
+        ids = [row["request_id"] for row in reply["outputs"]]
+        if len(set(ids)) != len(ids) or sorted(ids) != sorted(schedule["request_ids"]):
+            raise ValueError("DEP4 rank returned unowned or missing output rows")
+        outputs.update((row["request_id"], row) for row in reply["outputs"])
+        completions.append(completion)
+    return {
+        "type": "execute_result",
+        "rpc_id": message["rpc_id"],
+        "outputs": [outputs[row["request_id"]] for row in message["scheduled"]],
+        "rank_completions": completions,
+    }
+
+
+def _merge_cache(message, replies):
+    completed = {}
+    for rank in range(4):
+        reply = replies[rank]
+        expected = [
+            op["transfer_id"]
+            for op in message["operations"]
+            if op["owner_rank"] == rank
+        ]
+        ids = [row["transfer_id"] for row in reply.get("completed", [])]
+        if (
+            reply.get("type") != "cache_result"
+            or reply.get("rpc_id") != message["rpc_id"]
+        ):
+            raise ValueError("DEP4 rank returned the wrong cache reply")
+        if len(set(ids)) != len(ids) or sorted(ids) != sorted(expected):
+            raise ValueError("DEP4 rank returned unowned cache completion")
+        completed.update((row["transfer_id"], row) for row in reply["completed"])
+    return dict(
+        type="cache_result",
+        rpc_id=message["rpc_id"],
+        host_cache_bytes=replies[0]["host_cache_bytes"],
+        completed=[completed[op["transfer_id"]] for op in message["operations"]],
+        cache_rank_completions=list(range(4)),
+    )

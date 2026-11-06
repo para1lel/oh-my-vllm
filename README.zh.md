@@ -20,6 +20,10 @@ Python 模型适配器通过 ZMQ DEALER 和 msgpack 调用原生 CUDA 算子.
 
 ## 开发
 
+使用[开发循环](docs/development.zh.md#开发循环)选择仓库检查.
+使用[验证技能](.claude/skills/verify-oh-my-vllm/SKILL.zh.md)驱动 Rust 应用并采集证据.
+其中的 CPU fixture 检查服务和传输行为. 它不证明 GPU 推理, 数值正确性或性能.
+
 使用[适配器契约](docs/adapters.zh.md), [GPU 执行规则](docs/execution.zh.md)和[测试范围](docs/testing.zh.md).
-模型目录包含各自的数学定义, 固定数值限值, 测量流程和最新完整结果.
+模型目录包含各自的数学定义, 固定数值限值, 测量流程和最近一次的完整结果.
 [交接](docs/handoff.zh.md)给出当前工作和下一步.

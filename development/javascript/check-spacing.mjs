@@ -3,6 +3,46 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+if (require("acorn/package.json").version !== "8.19.0") throw new Error("acorn==8.19.0 required");
+
+function parseSource(source, typescript, comments = []) {
+  return parse(typescript ? stripTypeScriptTypes(source, { mode: "strip" }) : source,
+    { ecmaVersion: "latest", sourceType: "module", locations: true, onComment: comments });
+}
+
+export function functionSpans(source, typescript = false) {
+  const functions = [];
+
+  function visit(node, parent = null) {
+    if (["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"].includes(node.type)) {
+      const declaration = parent?.type === "MethodDefinition" || parent?.method ? parent : node;
+      const start = declaration.loc.start.line;
+      const end = node.loc.end.line;
+      functions.push({ name: node.id?.name ?? parent?.key?.name ?? parent?.id?.name ?? "<anonymous>", kind: node.type, start, end, lines: end - start + 1 });
+    }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) {
+        for (const child of value) if (child && typeof child.type === "string") visit(child);
+      } else if (value && typeof value.type === "string") visit(value, node);
+    }
+  }
+
+  visit(parseSource(source, typescript));
+  return functions;
+}
+
+function reportFunctionSpans(paths) {
+  return paths.map((path) => {
+    try {
+      return { path, functions: functionSpans(readFileSync(path, "utf8"), path.endsWith(".ts")), errors: [] };
+    } catch (error) {
+      return { path, functions: [], errors: [{ line: error.loc?.line ?? 1, message: error.message }] };
+    }
+  });
+}
 
 function isDefinition(node) {
   if (node.type === "ExportNamedDeclaration" || node.type === "ExportDefaultDeclaration") {
@@ -20,8 +60,7 @@ function isDefinition(node) {
 
 export function missingDefinitionSpacing(source, typescript = false) {
   const comments = [];
-  const syntax = parse(typescript ? stripTypeScriptTypes(source, { mode: "strip" }) : source,
-    { ecmaVersion: "latest", sourceType: "module", locations: true, onComment: comments });
+  const syntax = parseSource(source, typescript, comments);
   const insertions = new Map();
 
   function inspect(entries) {
@@ -64,6 +103,10 @@ export function missingDefinitionSpacing(source, typescript = false) {
 }
 
 function main(arguments_) {
+  if (arguments_[0] === "--function-spans") {
+    console.log(JSON.stringify(reportFunctionSpans(arguments_.slice(1))));
+    return;
+  }
   const fix = arguments_[0] === "--fix";
   let failed = false;
   for (const path of arguments_.slice(Number(fix))) {

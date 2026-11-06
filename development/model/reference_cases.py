@@ -59,15 +59,19 @@ def make_inputs(case, config):
     return arrays
 
 
-def reference(case, arrays, weights):
-    tokens = arrays["tokens"]
-    coordinates = torch.from_numpy(arrays["positions"]).to("cuda")
-    embedded = layers.embeddings(weights, tokens)
+def _embed_media(case, arrays, weights, embedded):
     for media in case.media:
         pixels = torch.from_numpy(arrays[media.name + "_pixels"]).to("cuda")
         encoded = layers.vision(weights, pixels, media.grid)
         for first, count, offset in media.spans:
             embedded[first : first + count] = encoded[offset : offset + count]
+
+
+def reference(case, arrays, weights):
+    tokens = arrays["tokens"]
+    coordinates = torch.from_numpy(arrays["positions"]).to("cuda")
+    embedded = layers.embeddings(weights, tokens)
+    _embed_media(case, arrays, weights, embedded)
     prefill, hidden, states = layers.forward(
         weights, tokens, coordinates, embedded=embedded
     )

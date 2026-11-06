@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import torch
-from oh_my_vllm.models.deepseek_v41 import kernel
+from oh_my_vllm.models.deepseek_v41 import kernel, kernel_hc
 from oh_my_vllm.operators.hyperconnection import workspace as hc_workspace
 from oh_my_vllm.operators.hyperconnection.api import (
     BLAS_WORKSPACE_BYTES,
@@ -112,7 +112,7 @@ class HyperconnectionWorkspaceCuda(unittest.TestCase):
             with self.subTest(rows=rows):
                 proxy = Mock(wraps=self.module)
                 with patch.object(
-                    kernel, "_hyperconnection_module", return_value=proxy
+                    kernel_hc, "_hyperconnection_module", return_value=proxy
                 ):
                     case = self.make_case(rows)
                     residual, _, _, _, workspace = case
@@ -136,23 +136,7 @@ class HyperconnectionWorkspaceCuda(unittest.TestCase):
                     try:
                         with torch.cuda.graph(graph, stream=stream):
                             collapsed, expanded = run()
-                        recorded = (
-                            proxy.hc_prepare.call_args.args,
-                            proxy.hc_expand.call_args.args,
-                        )
-                        self.assertEqual(len(recorded[0]), 13)
-                        self.assertEqual(len(recorded[1]), 5)
-                        for argument, name in zip(
-                            recorded[0][-3:],
-                            ("flat", "statistics", "blas"),
-                            strict=True,
-                        ):
-                            self.assertEqual(
-                                argument.data_ptr(), workspace[name].data_ptr()
-                            )
-                        self.assertEqual(workspace["blas"].data_ptr() % 256, 0)
-                        # Only the workspace and input owners retain graph storage.
-                        del recorded, argument
+                        self._check_recorded_workspace(proxy, workspace)
                         proxy.reset_mock()
                         gc.collect()
                         for value in (2, 4):
@@ -324,6 +308,23 @@ class HyperconnectionWorkspaceCuda(unittest.TestCase):
         )
         torch.cuda.current_stream().synchronize()
         self.assert_sentinels(workspace)
+
+    def _check_recorded_workspace(self, proxy, workspace):
+        recorded = (
+            proxy.hc_prepare.call_args.args,
+            proxy.hc_expand.call_args.args,
+        )
+        self.assertEqual(len(recorded[0]), 13)
+        self.assertEqual(len(recorded[1]), 5)
+        for argument, name in zip(
+            recorded[0][-3:],
+            ("flat", "statistics", "blas"),
+            strict=True,
+        ):
+            self.assertEqual(argument.data_ptr(), workspace[name].data_ptr())
+        self.assertEqual(workspace["blas"].data_ptr() % 256, 0)
+        # Only the workspace and input owners retain graph storage.
+        del recorded, argument
 
 
 if __name__ == "__main__":

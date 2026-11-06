@@ -2,17 +2,17 @@ import unittest
 from unittest.mock import patch
 
 import torch
-from oh_my_vllm.models.deepseek_v41 import kernel
+from oh_my_vllm.models.deepseek_v41 import kernel, model_attention, model_context
 from oh_my_vllm.models.deepseek_v41.quantization import fp4_dequantize
 
+from tests.deepseek_quantization_fixtures import DeepSeekQuantizationFixture
+from tests.deepseek_quantization_memory import (
+    DeepSeekQuantizationMemory as DeepSeekQuantizationMemory,
+)
 
-class DeepSeekQuantization(unittest.TestCase):
+
+class DeepSeekQuantization(DeepSeekQuantizationFixture, unittest.TestCase):
     device = "cpu"
-
-    def setUp(self):
-        device = torch.device(self.device)
-        device.__enter__()
-        self.addCleanup(device.__exit__, None, None, None)
 
     def test_fp4_decode_preserves_all_codes_scales_and_signed_zero(self):
         levels = torch.tensor(
@@ -476,41 +476,14 @@ class DeepSeekQuantizationIntegration(unittest.TestCase):
         try:
             torch.set_default_dtype(torch.bfloat16)
             with (
-                patch.object(model, "default_dtype", torch.bfloat16),
-                patch.object(model, "world_size", 1),
-                patch.object(model, "rank", 0),
+                patch.object(model_context, "default_dtype", torch.bfloat16),
+                patch.object(model_context, "world_size", 1),
+                patch.object(model_context, "rank", 0),
             ):
                 attention = model.Attention(0, args)
                 for parameter in attention.parameters():
                     torch.nn.init.zeros_(parameter)
-                with patch.object(model, "sparse_attn", side_effect=attend):
+                with patch.object(model_attention, "sparse_attn", side_effect=attend):
                     attention(torch.zeros((1, 4, 64), dtype=torch.bfloat16), 0)
         finally:
             torch.set_default_dtype(previous_dtype)
-
-
-@unittest.skipUnless(torch.cuda.is_available(), "CUDA is required")
-class DeepSeekQuantizationMemory(unittest.TestCase):
-    def test_encoded_quantization_scratch_does_not_grow_with_history(self):
-        for rows in (4096, 8192):
-            for quantize, block, dtype in (
-                (kernel.fp4_act_quant, 16, torch.float8_e4m3fn),
-                (kernel.act_quant, 32, torch.float8_e8m0fnu),
-            ):
-                with self.subTest(rows=rows, quantize=quantize.__name__):
-                    values = torch.zeros(
-                        (2, rows, 512), device="cuda", dtype=torch.bfloat16
-                    )
-                    torch.cuda.synchronize()
-                    baseline = torch.cuda.memory_allocated()
-                    torch.cuda.reset_peak_memory_stats()
-
-                    codes, scales = quantize(values, block, scale_dtype=dtype)
-                    torch.cuda.synchronize()
-
-                    output_bytes = codes.numel() + scales.numel()
-                    scratch = (
-                        torch.cuda.max_memory_allocated() - baseline - output_bytes
-                    )
-                    self.assertLessEqual(scratch, 1 << 20)
-                    del values, codes, scales

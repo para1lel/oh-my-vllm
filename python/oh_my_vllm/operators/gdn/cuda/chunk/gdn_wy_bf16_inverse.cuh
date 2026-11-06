@@ -65,14 +65,7 @@ template <class Storage> __device__ inline void merge_block8(Storage &s, int bas
       gdn_wy::native_pair(product[0], product[1]);
 }
 
-template <class Storage> __device__ inline void inverse_blocks(Storage &s) {
-  for (int index = threadIdx.x; index < 64 * 64; index += 256) {
-    int row = index / 64, column = index % 64;
-    s.low.inverse[row * Stride + column] = __float2bfloat16_rn(row == column ? 1.f : 0.f);
-    s.low.raw[row * Stride + column] =
-        __float2bfloat16_rn(row > column ? s.products[row * gdn_wy::ProductStride + column] : 0.f);
-  }
-  __syncthreads();
+template <class Storage> __device__ __forceinline__ void inverse_diagonal_blocks(Storage &s) {
   if (threadIdx.x < 64) {
     int base = threadIdx.x / 8 * 8, row = threadIdx.x % 8;
     float solved[8];
@@ -96,6 +89,17 @@ template <class Storage> __device__ inline void inverse_blocks(Storage &s) {
     for (int column = 0; column < 8; ++column)
       s.low.inverse[(base + row) * Stride + base + column] = __float2bfloat16_rn(solved[column]);
   }
+}
+
+template <class Storage> __device__ inline void inverse_blocks(Storage &s) {
+  for (int index = threadIdx.x; index < 64 * 64; index += 256) {
+    int row = index / 64, column = index % 64;
+    s.low.inverse[row * Stride + column] = __float2bfloat16_rn(row == column ? 1.f : 0.f);
+    s.low.raw[row * Stride + column] =
+        __float2bfloat16_rn(row > column ? s.products[row * gdn_wy::ProductStride + column] : 0.f);
+  }
+  __syncthreads();
+  inverse_diagonal_blocks(s);
   __syncthreads();
   int warp = threadIdx.x / 32;
   if (warp < 4)

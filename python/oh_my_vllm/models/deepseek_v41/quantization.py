@@ -1,9 +1,12 @@
 """Released block quantization with nearest-even value and scale rounding."""
 
+from functools import lru_cache
+
 import torch
 
 from ...operators.runtime.native import load
 from ...operators.transform.api import FUNCTIONS
+from .kernel_graph import retain_cached_tensor
 
 
 def _groups(values, block_size):
@@ -97,10 +100,20 @@ def act_quant(
     return encoded.reshape_as(values), scales.to(scale_dtype)
 
 
+@retain_cached_tensor
+@lru_cache(8)
+def _fp4_levels(device, dtype):
+    # Eager preparation supplies the constant table to later Graph recording.
+    with torch.inference_mode(False):
+        return torch.tensor(
+            (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0), dtype=dtype, device=device
+        )
+
+
 def fp4_values(encoded):
     raw = encoded.view(torch.uint8)
     codes = torch.stack((raw & 15, raw >> 4), dim=-1).flatten(-2)
-    levels = torch.tensor((0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0), device=raw.device)
+    levels = _fp4_levels(raw.device, torch.get_default_dtype())
     return levels[(codes & 7).long()] * torch.where((codes & 8).bool(), -1.0, 1.0)
 
 
