@@ -23,8 +23,6 @@ struct Cli {
     num_gpu_blocks: Option<u32>,
     #[arg(long)]
     mamba_blocks: Option<u32>,
-    #[arg(long)]
-    host_cache_bytes: Option<u64>,
     #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
     max_num_batched_tokens: Option<u32>,
     #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
@@ -100,7 +98,6 @@ impl Cli {
             socket_path: self.socket.clone(),
             num_gpu_blocks: self.num_gpu_blocks,
             mamba_blocks: self.mamba_blocks.or(defaults.mamba_blocks),
-            host_cache_bytes: self.host_cache_bytes,
             block_size: self.block_size.unwrap_or(defaults.block_size),
             tensor_parallel_size: self.tp.unwrap_or(defaults.tensor_parallel_size),
             max_model_len: self.max_model_len.unwrap_or(defaults.max_model_len),
@@ -259,11 +256,25 @@ async fn run() -> Result<()> {
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,
         gdn_pool_blocks = mamba_blocks,
-        host_cache_bytes = client.host_cache_bytes,
         rust_sources_sha256 = env!("OH_MY_VLLM_RUST_SOURCES_SHA256"),
         "BENCH_CONFIG"
     );
-    if let Some(dep4) = client.dep4_cache(kv.empty_like()) {
+    if matches!(
+        &client.cache_layout,
+        oh_my_vllm_zmq_worker::protocol::CacheLayout::QwenRadixV1 { .. }
+    ) {
+        ensure!(
+            blocks == client.logical_num_blocks && blocks == mamba_blocks * 64,
+            "Qwen usable page capacity must equal 64 times checkpoint capacity"
+        );
+        let cache = oh_my_vllm_scheduler::policy::qwen::QwenResidentCache::new(
+            mamba_blocks,
+            config.max_num_seqs as usize,
+            config.max_model_len as usize,
+            config.max_num_batched_tokens as usize,
+        );
+        run_scheduler(cli, client, cache, run_prompts, bench_prompts).await
+    } else if let Some(dep4) = client.dep4_cache(kv.empty_like()) {
         run_scheduler(cli, client, dep4, run_prompts, bench_prompts).await
     } else {
         run_scheduler(cli, client, kv, run_prompts, bench_prompts).await
@@ -375,7 +386,7 @@ mod tests {
             (vec!["--speculative-mode", "none"], "none", 0),
         ] {
             let config = cli(model_path, &flags).worker_config(model).unwrap();
-            assert_eq!(config.block_size, 784);
+            assert_eq!(config.block_size, 128);
             assert_eq!(config.tensor_parallel_size, 1);
             assert_eq!(config.max_model_len, 262144);
             assert_eq!(config.max_num_batched_tokens, 32768);

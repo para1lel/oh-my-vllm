@@ -122,7 +122,13 @@ class Execution(unittest.TestCase):
             for verify, graph in ((False, True), (True, True), (True, False)):
                 with self.subTest(batch=count, verify=verify, graph=graph):
                     batch = self._metadata_batch(count, verify)
-                    cache = SimpleNamespace(parallel=count, hidden=None, fa=(None,))
+                    cache = SimpleNamespace(
+                        parallel=count,
+                        hidden=None,
+                        fa=((None, None),),
+                        layout=SimpleNamespace(max_context=128),
+                        validate_context=Mock(),
+                    )
                     operation = Mock(outputs=(torch.zeros(count, 5120),) * 2)
                     with (
                         patch.object(model, "prepare_fa", return_value=operation),
@@ -170,7 +176,11 @@ class Execution(unittest.TestCase):
                                     set(metadata.device_arenas),
                                     {torch.uint8}
                                     if enabled
-                                    else {torch.int32, torch.int64},
+                                    else (
+                                        {torch.int8, torch.int32, torch.int64}
+                                        if metadata is workspace.metadata_inputs
+                                        else {torch.int32, torch.int64}
+                                    ),
                                 )
                         finally:
                             workspace.close()
@@ -299,8 +309,7 @@ class Execution(unittest.TestCase):
             scheduled=[
                 dict(
                     request_id=index,
-                    num_computed_tokens=0,
-                    fa_block_table=[0],
+                    forward_start=0,
                 )
                 for index in range(count)
             ],
@@ -315,9 +324,18 @@ class Execution(unittest.TestCase):
                 np.zeros((count, 1), np.int32),
                 np.arange(count + 1, dtype=np.int32),
                 np.ones(count, np.int32),
+                np.ones(count, np.int8),
             ),
             tokens=np.ones(count, np.int64),
-            writes=list(range(count)),
+            writes=list(range(1, count + 1)),
+            plans=tuple(
+                SimpleNamespace(
+                    end=1,
+                    write_mask=(True,),
+                    pages=({"slot": index + 1, "access": "write"},),
+                )
+                for index in range(count)
+            ),
         )
         return batch
 

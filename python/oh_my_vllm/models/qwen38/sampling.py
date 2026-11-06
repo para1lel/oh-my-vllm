@@ -286,6 +286,17 @@ class Sampling:
         self.execute("project", self.project, graph)
         return self.select_from_logits(requests, graph, **options)
 
+    def select_hidden(self, hidden, requests, graph):
+        self.device.copy(self.operation.outputs.hidden, hidden)
+        self.execute(
+            "project_hidden",
+            lambda: self.operation.project_hidden(
+                self.weights, self.operation.outputs.hidden
+            ),
+            graph,
+        )
+        return self.select_from_logits(requests, graph)
+
     def upload_packed(self, select_token):
         values = (
             self.inputs.presence_history_view

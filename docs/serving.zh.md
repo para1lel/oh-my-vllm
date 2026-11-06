@@ -69,6 +69,25 @@ Responses 默认存储 response, `store=false` 时不存储.
 curl http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/json'   -d '{"model":"qwen3.8-27b-fp8","messages":[{"role":"user","content":"Hello"}],"max_tokens":64,"reasoning_effort":"off"}'
 ```
 
+## 缓存身份
+
+[身份解析器](../crates/zmq-worker/src/serving/identity.rs)优先选择 `metadata.session_id`, 再选择 `X-Correlation-ID` header.
+这些标识符对会话工作分组, 不认证用户身份.
+`prompt_cache_key` 选择缓存 namespace, 与会话身份分开.
+没有会话标识符的 Chat 请求使用匿名身份.
+没有标识符的 Responses root 使用新的根身份.
+
+已存 Responses 的续接继承根会话和 namespace.
+续接标识符或 namespace 冲突会导致验证错误.
+分支具有独立的活跃资源 pin.
+服务在异步准备前记录准入顺序.
+[Qwen 缓存契约](models/qwen38/cache.zh.md#成功会话尾)规定成功尾的替换.
+
+终态成功等待经过验证的模型专属收尾.
+[收尾代码](../crates/zmq-worker/src/serving/engine/output.rs)在成功缓存发布前准备解析结果和存储容量.
+随后才发送 Chat 和 Responses 最终标记.
+后续连接失败不能回退其他请求已可读取的缓存状态.
+
 ## 离线命令
 
 ```bash

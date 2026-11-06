@@ -17,6 +17,8 @@ The service supplies Chat and Responses APIs, streaming, tools, and structured o
 | DeepSeek-V4.1-Flash | Four GPUs, text target decode and DSpark5 | [Adapter](docs/models/deepseek_v41/README.md), [HTTP procedure](docs/models/deepseek_v41/performance.md), [AgentX procedure](docs/models/deepseek_v41/agentx.md) |
 
 Only the listed adapters can start a model service. Unknown models cause startup errors.
+The new [Qwen GPU cache](docs/models/qwen38/cache.md) has no completed model or performance acceptance.
+The linked result tables apply only to their recorded implementation identities.
 
 ## Development
 

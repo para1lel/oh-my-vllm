@@ -373,7 +373,7 @@ class Offline(unittest.TestCase):
                     "--batch-size",
                     "2",
                     "--input-len",
-                    "786",
+                    "8192",
                     "--output-len",
                     "8",
                     "--prefix-hit",
@@ -393,7 +393,7 @@ class Offline(unittest.TestCase):
                 for line in result.stdout.splitlines()
                 if line.startswith("BENCH_RESULT ")
             )
-            self.assertEqual(row["initial_prefix_hit_tokens"], 2 * 785)
+            self.assertEqual(row["initial_prefix_hit_tokens"], 2 * 8192)
 
 
 if __name__ == "__main__":

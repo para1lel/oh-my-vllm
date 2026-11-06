@@ -66,6 +66,18 @@ class Workspace:
         )
         return self.outputs
 
+    def head_hidden(self, weights, inputs, state):
+        self.check_open()
+        self.module.final_head_hidden(
+            inputs.value,
+            inputs.residual,
+            weights.norm,
+            self.outputs.hidden,
+            state.cache,
+            state.slots,
+        )
+        return self.outputs
+
     def project(self, weights, inputs):
         self.check_open()
         self.module.sample_project(
@@ -75,6 +87,15 @@ class Workspace:
             weights.projection,
             self.outputs.hidden,
             self.outputs.logits,
+        )
+        return self.outputs
+
+    def project_hidden(self, weights, hidden):
+        self.check_open()
+        if self.plan.hidden_only:
+            raise ValueError("cached hidden projection requires a logits workspace")
+        self.module.sample_project_hidden(
+            hidden, weights.projection, self.outputs.logits
         )
         return self.outputs
 

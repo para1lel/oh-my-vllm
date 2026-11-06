@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from .capture import runtime_identity
+from .capture import capture_config, capture_row, runtime_identity
 
 
 def harness_identity():
@@ -74,15 +74,10 @@ class Capture:
         self.resources, self.case, self.fixture = resources, case, fixture
         self.device = Device()
         self.weights = Weights(self.device, model_path, "mtp_first" in case.outputs)
-        pages = (case.prefix_length + 5 + 783) // 784
         self.cache = Cache(
             self.device,
-            dict(
-                num_gpu_blocks=pages + 1,
-                mamba_blocks=pages + 1,
-                max_num_seqs=1,
-                max_num_batched_tokens=case.prefix_length,
-                num_speculative_tokens=4 if "mtp_first" in case.outputs else 0,
+            capture_config(
+                case.prefix_length + 5, case.prefix_length, "mtp_first" in case.outputs
             ),
         )
         media, items, delta = media_processor(
@@ -98,6 +93,8 @@ class Capture:
         self.request = SimpleNamespace(
             state_position=0,
             state_slot=None,
+            kv_valid_end=0,
+            endpoints={},
             mtp_position=0,
             history=fixture.inputs["tokens"].tolist(),
             media=items,
@@ -118,16 +115,9 @@ class Capture:
             SimpleNamespace(record=lambda *args, **kwargs: None),
         )
         resources.callback(self.speculation.close)
-        self.row = dict(
-            request_id=case.id,
-            num_computed_tokens=0,
-            token_ids=fixture.inputs["tokens"].tolist(),
-            fa_block_table=list(range(1, pages + 1)),
-            mamba_block_table=list(range(1, pages + 1)),
-        )
 
     def batch(self, tokens, start, verify):
-        row = {**self.row, "token_ids": list(tokens), "num_computed_tokens": start}
+        row = capture_row(self.cache, self.request, tokens, start, self.case.id, verify)
         return self.cache.batch([row], [self.request], verify)
 
     def forward(self, batch, *, graph, all_rows=False):
@@ -136,7 +126,15 @@ class Capture:
         from oh_my_vllm.operators.output.workspace import prepare
 
         d = self.device
+        copies = [
+            item
+            for row in batch.scheduled
+            for item in row["model_state"]["page_copies"]
+        ]
+        self.cache.validate_pages(batch.plans, copies)
+        self.cache.copy_prefix(copies)
         (value, residual), hidden, graph = self.model.forward(batch, graph)
+        self.cache.complete_exports(batch)
         count = batch.rows if all_rows else 1
         if not all_rows:
             value, residual = (
@@ -157,7 +155,8 @@ class Capture:
         return logits if all_rows else logits[0], hidden
 
     def draft(self, endpoint, table, *, graph):
-        from oh_my_vllm.models.qwen38.speculation import Draft
+        from oh_my_vllm.models.qwen38.cache_budget import PAGE_TOKENS
+        from oh_my_vllm.models.qwen38.speculation_ops import Draft
 
         d, request = self.device, self.request
         hidden = endpoint[0]
@@ -165,7 +164,13 @@ class Capture:
         for stage, name in enumerate(("mtp_first", "mtp_next")):
             if name not in self.case.outputs:
                 continue
-            operation = Draft(d, self.weights, 1, stage == 0)
+            operation = Draft(
+                d,
+                self.weights,
+                1,
+                stage == 0,
+                table_width=self.cache.layout.table_width,
+            )
             self.resources.callback(operation.close)
             operation.copy(operation.hidden, hidden)
             position = request.state_position + stage
@@ -178,8 +183,8 @@ class Capture:
                 np.asarray(request.position(position), np.int64)[:, None],
                 np.asarray(
                     [
-                        self.row["fa_block_table"][position // 784] * 784
-                        + position % 784
+                        int(table[0, position // PAGE_TOKENS]) * PAGE_TOKENS
+                        + position % PAGE_TOKENS
                     ],
                     np.int32,
                 ),
@@ -205,16 +210,18 @@ class Capture:
         continuation = arrays["continuation"].tolist()
         if case.restore_checkpoint:
             self.speculation.context(prefix, hidden, False, {})
+            self.cache.complete_context(prefix)
             request.state_slot = None
             request.state_position = 0
             batch = self.batch(arrays["verification"], case.prefix_length, True)
-            if batch.schedule.read_slots != (1,):
+            if batch.schedule.read_slots != (prefix.plans[0].exports[-1].slot,):
                 raise ValueError("verification did not restore the logical checkpoint")
             verified, hidden = self.forward(batch, graph=True, all_rows=True)
             self.cache.commit(request, batch, 0, case.accepted_rows - 1)
             request.history += arrays["verification"][: case.accepted_rows].tolist()
             request.history += continuation
             endpoints = self.speculation.context(batch, hidden, True, {0: True})
+            self.cache.complete_context(batch)
             outputs = {
                 "verified": verified,
                 **self.draft(endpoints[0], batch.metadata[2], graph=True),
@@ -228,6 +235,7 @@ class Capture:
             outputs = dict(prefill=prefill)
             if "mtp_first" in case.outputs:
                 endpoints = self.speculation.context(prefix, hidden, False, {0: True})
+                self.cache.complete_context(prefix)
                 outputs.update(
                     self.draft(endpoints[0], prefix.metadata[2], graph=False)
                 )
@@ -256,6 +264,7 @@ def run(model_path, case, fixture):
             raise ValueError("checkpoint differs from the frozen full-model fixture")
         metadata = dict(
             runtime=identity,
+            cache_layout=capture.cache.layout.wire(),
             harness=harness,
             execution=execution_policy(),
             checkpoint=checkpoint,

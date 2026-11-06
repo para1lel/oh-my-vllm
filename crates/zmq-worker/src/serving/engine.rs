@@ -1,4 +1,5 @@
-mod output;
+pub(super) mod output;
+mod trace;
 
 use crate::client::WorkerClient;
 use crate::models::ServiceCache;
@@ -14,9 +15,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
-async fn execute(
+async fn execute<P: ServiceCache>(
     client: &mut WorkerClient,
-    batch: &oh_my_vllm_scheduler::SchedulerOutput,
+    batch: &oh_my_vllm_scheduler::SchedulerOutput<P::State>,
     step_timeout: Duration,
 ) -> Result<oh_my_vllm_scheduler::WorkerOutput> {
     if batch.scheduled.len() > 1 {
@@ -25,7 +26,7 @@ async fn execute(
     }
     let output = tokio::time::timeout(
         step_timeout,
-        client.execute_one_step(
+        client.execute_one_step::<P>(
             &batch.scheduled,
             &batch.finished_request_ids,
             &batch.preempted_request_ids,
@@ -51,7 +52,9 @@ pub(super) async fn run_engine<P: ServiceCache>(
 ) -> Result<()> {
     let max_running = (client.configuration().max_num_seqs as usize).min(64);
     let admission_limit = max_running.saturating_add(1).min(64);
+    let trace = trace::ExecutionTrace::open(client);
     let mut state = EngineLoop {
+        trace,
         client,
         scheduler,
         incoming,
@@ -64,19 +67,11 @@ pub(super) async fn run_engine<P: ServiceCache>(
     };
     let mut next_diagnostics = Instant::now();
     loop {
-        tokio::time::timeout(
-            context.step_timeout,
-            state.client.cache_step(state.scheduler),
-        )
-        .await??;
         let was_idle = state.active.is_empty();
         if was_idle {
-            execute(
-                state.client,
-                &state.scheduler.schedule(),
-                context.step_timeout,
-            )
-            .await?;
+            let cleanup = state.scheduler.schedule();
+            state.scheduler.mark_submitted(&cleanup)?;
+            execute::<P>(state.client, &cleanup, context.step_timeout).await?;
         }
         update_resource_counts(
             &context.health,
@@ -115,14 +110,11 @@ fn update_resource_counts<P: ServiceCache>(
     status["pending_admissions"] = json!(pending);
     status["scheduler_running"] = json!(scheduler.num_running());
     status["scheduler_waiting"] = json!(scheduler.num_waiting());
-    let (fa, fa_free, fa_cached, gdn, gdn_free, gdn_cached) = scheduler.cache_resource_counts();
-    status["kv"] = json!({
-        "fa_blocks": fa, "fa_free": fa_free, "fa_cached": fa_cached,
-        "gdn_blocks": gdn, "gdn_free": gdn_free, "gdn_cached": gdn_cached,
-    });
+    status["kv"] = scheduler.cache_policy().resource_snapshot();
 }
 
 struct EngineLoop<'a, P: ServiceCache> {
+    trace: trace::ExecutionTrace,
     client: &'a mut WorkerClient,
     scheduler: &'a mut Scheduler<P>,
     incoming: &'a mut mpsc::Receiver<Submission>,
@@ -165,12 +157,10 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
             _ = tokio::time::sleep_until(diagnostics_at) => {
                 return Ok(IdleReceive::Retry);
             }
-            _ = tokio::time::sleep(Duration::from_millis(1)), if self.scheduler.cache_pending() => {
-                return Ok(IdleReceive::Retry);
-            }
         };
         *self.pending = begin_admit(
             self.client,
+            self.scheduler,
             self.active.len(),
             self.admission_limit,
             submission,
@@ -194,6 +184,7 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
                 };
                 *self.pending = begin_admit(
                     self.client,
+                    self.scheduler,
                     self.active.len(),
                     self.admission_limit,
                     submission,
@@ -204,7 +195,7 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
             }
         } else if let Some(preparing) = self.pending.as_ref() {
             if preparing.submission.ready.is_closed() || Instant::now() >= preparing.deadline {
-                cancel_admit(self.client, self.pending.take().unwrap()).await?;
+                cancel_admit(self.client, self.scheduler, self.pending.take().unwrap()).await?;
             } else if let Some(result) = self.client.poll_prepare_request()? {
                 let preparing = self.pending.take().unwrap();
                 complete_admit(self.client, self.scheduler, self.active, preparing, result).await?;
@@ -262,6 +253,7 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
         {
             *self.pending = begin_admit(
                 self.client,
+                self.scheduler,
                 self.active.len(),
                 self.admission_limit,
                 submission,
@@ -273,21 +265,12 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
     }
 
     async fn execute_step(&mut self) -> Result<()> {
-        let batch = self.scheduler.schedule();
-        tokio::time::timeout(
-            self.context.step_timeout,
-            self.client.cache_step(self.scheduler),
-        )
-        .await??;
-        for (id, message) in self.scheduler.take_cache_failures() {
-            if let Some(request) = self.active.remove(&id) {
-                request.fail(message);
-            }
-            warn!(
-                request_id = id,
-                message, "host cache capacity rejected request"
-            );
+        for event in self.client.take_prepare_traces() {
+            self.trace.prepared(event);
         }
+        let batch = self.scheduler.schedule();
+        self.finish_finalized();
+        self.trace.retain(self.active.keys().copied());
         if batch.cache_hit_tokens > 0 {
             let mut status = self.context.health.lock().unwrap();
             status["prefix_hit_tokens"] = json!(
@@ -301,7 +284,8 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
             tokio::time::sleep(Duration::from_millis(10)).await;
             return Ok(());
         }
-        let worker = execute(self.client, &batch, self.context.step_timeout).await?;
+        self.scheduler.mark_submitted(&batch)?;
+        let worker = execute::<P>(self.client, &batch, self.context.step_timeout).await?;
         for scheduled in &batch.scheduled {
             let id = scheduled.request_id;
             if let Some(error) = self.client.serving_errors.remove(&id) {
@@ -313,22 +297,16 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
                 warn!(request_id = id, %error, "request failed in worker");
             }
         }
-        let mut worker = worker;
-        while let Err(invalid) = self.scheduler.validate_output(&worker) {
-            let id = invalid.request_id;
-            let message = invalid.to_string();
-            worker.outputs.retain(|output| output.request_id != id);
-            self.scheduler.abort(id);
-            self.client.serving_outputs.remove(&id);
-            if let Some(request) = self.active.remove(&id) {
-                request.fail(&message);
-            }
-            warn!(request_id = id, %message, "invalid worker output");
-        }
+        self.scheduler.validate_output(&worker)?;
         let worker = self
             .scheduler
             .update(worker)
             .context("validated worker output changed")?;
+        self.trace.validated(
+            &batch.scheduled,
+            &worker.outputs,
+            self.client.take_execution_trace(),
+        );
         if batch.scheduled.is_empty() && !self.active.is_empty() {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }

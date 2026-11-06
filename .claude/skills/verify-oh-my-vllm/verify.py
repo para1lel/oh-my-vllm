@@ -91,7 +91,7 @@ def command_factory(binary, model, scratch):
             "--socket",
             str(scratch / f"{label}.ipc"),
             "--num-gpu-blocks",
-            "128",
+            "8192",
         ]
 
     return command

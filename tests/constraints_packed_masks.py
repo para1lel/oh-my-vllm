@@ -5,9 +5,12 @@ from unittest.mock import patch
 
 import numpy as np
 import torch
+from oh_my_vllm.models.qwen38.cache import Cache
 from oh_my_vllm.models.qwen38.request import Request
 
 from tests.constraints_fixtures import ChainDevice, ChainDraft, ChainSample
+from tests.qwen_radix_physical_fixtures import Device as CacheDevice
+from tests.qwen_radix_physical_fixtures import config, reference, row
 
 
 class ConstraintsPackedMasks(unittest.TestCase):
@@ -194,53 +197,49 @@ class ConstraintsPackedMasks(unittest.TestCase):
     def test_draft_cached_rows_track_batch_requests_and_page_tables(self):
         from oh_my_vllm.models.qwen38.speculation import Speculation
 
-        tokenizer = SimpleNamespace(
-            eos={256},
-            grammar=SimpleNamespace(vocab_size=248320),
-            valid_tokens=259,
-            think_end=257,
-            generation={},
-            decode_bytes=lambda tokens: bytes(tokens),
-        )
-
-        def make_request():
-            value = Request(
-                tokenizer,
-                [4, 4],
-                {
-                    "max_tokens": 32,
-                    "min_tokens": 16,
-                    "sampling": {"temperature": 0, "repetition_guard": False},
-                },
-            )
-            value.append([5])
-            value.state_position = 2
-            return value
-
         device = ChainDevice()
+        cache = Cache(
+            CacheDevice(),
+            config(mamba_blocks=4, num_gpu_blocks=256, num_speculative_tokens=4),
+        )
         speculation = Speculation(
             device,
             None,
-            SimpleNamespace(fa=[None], blocks=8),
+            cache,
             None,
             SimpleNamespace(record=lambda *args, **kwargs: None),
         )
         with (
             patch("oh_my_vllm.models.qwen38.speculation.Draft", ChainDraft),
-            patch("oh_my_vllm.models.qwen38.speculation.can_chain", return_value=False),
             patch("oh_my_vllm.models.qwen38.sampling.prepare", ChainSample),
             patch("oh_my_vllm.models.qwen38.sampling.Sampling.upload_packed"),
         ):
             for count, table, hidden in ((2, 1, 2), (4, 2, 4), (2, 3, 6), (1, 4, 8)):
-                requests = [make_request() for _ in range(count)]
-                batch = SimpleNamespace(
-                    requests=requests,
-                    scheduled=[
-                        {"request_id": i + 1, "fa_block_table": [table]}
-                        for i in range(count)
-                    ],
-                    metadata=(None, None, np.full((count, 335), table, np.int32)),
-                )
+                requests = [self._cached_rows_request() for _ in range(count)]
+                scheduled = []
+                for index, value in enumerate(requests):
+                    private = 5 + 6 * index
+                    item = row(
+                        end=2,
+                        sampling="target",
+                        pages=[
+                            dict(
+                                page_index=0,
+                                slot=table + index,
+                                version=1,
+                                valid_tokens=0,
+                                access="write",
+                            )
+                        ],
+                        exports=[{**reference(2, private), "role": "private_endpoint"}],
+                    )
+                    item.update(request_id=index + 1, token_ids=value.history[:2])
+                    item["model_state"]["private_checkpoints"] = [
+                        {"slot": slot, "version": 1}
+                        for slot in range(private, private + 6)
+                    ]
+                    scheduled.append(item)
+                batch = cache.batch(scheduled, requests, False)
                 endpoints = {
                     i: (np.full((1, 5120), hidden, np.float32), None)
                     for i in range(count)
@@ -257,13 +256,39 @@ class ConstraintsPackedMasks(unittest.TestCase):
                     expected.append(2 * expected[-1] + 1)
                 for value in requests:
                     self.assertEqual(value.drafts, expected)
+                tables = np.zeros((count, cache.layout.table_width), np.int32)
+                tables[:, 0] = np.arange(table, table + count)
                 for first in (True, False):
                     operation = speculation.drafts[count, first]
-                    np.testing.assert_array_equal(operation.metadata_arrays[2], table)
+                    np.testing.assert_array_equal(operation.metadata_arrays[2], tables)
                     stage = 0 if first else 3
                     np.testing.assert_array_equal(
-                        operation.metadata_arrays[1], table * 784 + 2 + stage
+                        operation.metadata_arrays[1],
+                        np.arange(table, table + count) * 128 + 2 + stage,
                     )
+        speculation.close()
+
+    def _cached_rows_request(self):
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={},
+            decode_bytes=lambda tokens: bytes(tokens),
+        )
+        value = Request(
+            tokenizer,
+            [4, 4],
+            {
+                "max_tokens": 32,
+                "min_tokens": 16,
+                "sampling": {"temperature": 0, "repetition_guard": False},
+            },
+        )
+        value.append([5])
+        value.state_position = 2
+        return value
 
     def _packed_mask_request(self):
         tokenizer = SimpleNamespace(

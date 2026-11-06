@@ -16,12 +16,13 @@ from tests.deepseek_speculation_fixtures import (
     _chain_row,
     _chain_worker,
     _verification_worker,
+    _wire_message,
     _worker,
 )
 
 
 class DeepSeekSpeculationLifecycle(DeepSeekSpeculationFixture, unittest.TestCase):
-    def test_host_store_then_abort_releases_graph_lease_before_slot_reuse(self):
+    def test_abort_releases_graph_lease_before_slot_reuse(self):
         worker = _chain_worker()
         worker.slots.intersection_update({0})
         self.addCleanup(worker.cache.close)
@@ -31,19 +32,9 @@ class DeepSeekSpeculationLifecycle(DeepSeekSpeculationFixture, unittest.TestCase
         slot = request.cache_slot
         lease = worker.cache.page_table.acquire()
         worker.proposal_graphs = {slot: SimpleNamespace(close=lease.close)}
-        operation = dict(
-            transfer_id=1,
-            snapshot_id=9,
-            kind="store",
-            request_id=1,
-            fa_blocks=[1],
-            mamba_blocks=[1],
-        )
-        stored = worker.handle(dict(type="cache", rpc_id=7, operations=[operation]))
-        self.assertEqual(stored["completed"][0]["status"], "complete")
+        worker.handle(dict(type="abort", request_id=1))
         self.assertIsNone(request.cache_slot)
         self.assertEqual(worker.cache.page_table.leases, 0)
-        worker.handle(dict(type="abort", request_id=1))
         worker.tokenizer = request.tokenizer
         worker.handle(
             dict(
@@ -60,22 +51,25 @@ class DeepSeekSpeculationLifecycle(DeepSeekSpeculationFixture, unittest.TestCase
     def test_execute_rejects_a_resident_position_mismatch(self):
         worker = _worker()
         worker.requests = {
-            1: SimpleNamespace(cache_slot=0, state_position=4),
+            1: SimpleNamespace(cache_slot=0, state_position=4, history=[10] * 5),
         }
         with self.assertRaisesRegex(ValueError, "position"):
             worker.execute(
-                {
-                    "finished_request_ids": [],
-                    "preempted_request_ids": [],
-                    "scheduled": [
-                        {
-                            "request_id": 1,
-                            "token_ids": [],
-                            "num_computed_tokens": 3,
-                        }
-                    ],
-                    "rpc_id": 1,
-                }
+                _wire_message(
+                    worker,
+                    {
+                        "finished_request_ids": [],
+                        "preempted_request_ids": [],
+                        "scheduled": [
+                            {
+                                "request_id": 1,
+                                "token_ids": [10],
+                                "num_computed_tokens": 3,
+                            }
+                        ],
+                        "rpc_id": 1,
+                    },
+                )
             )
 
     def test_execute_restarts_a_preempted_request_in_the_same_step(self):
@@ -88,12 +82,15 @@ class DeepSeekSpeculationLifecycle(DeepSeekSpeculationFixture, unittest.TestCase
         scheduled["mamba_block_table"] = [1, 2, 3, 4, 5, 6, 7]
 
         result = worker.execute(
-            {
-                "rpc_id": 7,
-                "finished_request_ids": [],
-                "preempted_request_ids": [1],
-                "scheduled": [scheduled],
-            }
+            _wire_message(
+                worker,
+                {
+                    "rpc_id": 7,
+                    "finished_request_ids": [],
+                    "preempted_request_ids": [1],
+                    "scheduled": [scheduled],
+                },
+            )
         )
 
         self.assertEqual(result["outputs"][0]["token_ids"], [])
@@ -107,21 +104,26 @@ class DeepSeekSpeculationLifecycle(DeepSeekSpeculationFixture, unittest.TestCase
         )
 
     def test_execute_rejects_finished_request_reuse_before_state_changes(self):
-        row = {"request_id": 1, "token_ids": [], "num_computed_tokens": 4}
+        row = {"request_id": 1, "token_ids": [10], "num_computed_tokens": 4}
         for scheduled, preempted in (([row], []), ([], [1])):
             with self.subTest(preempted=preempted):
                 worker = _worker()
-                request = SimpleNamespace(cache_slot=0, state_position=4)
+                request = SimpleNamespace(
+                    cache_slot=0, state_position=4, history=[10] * 5
+                )
                 worker.requests = {1: request}
                 worker.slots = {1}
                 with self.assertRaisesRegex(ValueError, "overlap"):
                     worker.execute(
-                        {
-                            "rpc_id": 7,
-                            "finished_request_ids": [1],
-                            "preempted_request_ids": preempted,
-                            "scheduled": scheduled,
-                        }
+                        _wire_message(
+                            worker,
+                            {
+                                "rpc_id": 7,
+                                "finished_request_ids": [1],
+                                "preempted_request_ids": preempted,
+                                "scheduled": scheduled,
+                            },
+                        )
                     )
                 self.assertIs(worker.requests[1], request)
                 self.assertEqual(request.cache_slot, 0)
@@ -132,12 +134,15 @@ class DeepSeekSpeculationLifecycle(DeepSeekSpeculationFixture, unittest.TestCase
         worker.requests = {}
         with self.assertRaisesRegex(ValueError, "unknown request"):
             worker.execute(
-                {
-                    "finished_request_ids": [1],
-                    "preempted_request_ids": [],
-                    "scheduled": [],
-                    "rpc_id": 1,
-                }
+                _wire_message(
+                    worker,
+                    {
+                        "finished_request_ids": [1],
+                        "preempted_request_ids": [],
+                        "scheduled": [],
+                        "rpc_id": 1,
+                    },
+                )
             )
 
     def test_restore_failure_releases_the_new_request_slot(self):

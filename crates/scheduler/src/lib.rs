@@ -1,17 +1,19 @@
-pub mod cache;
+pub mod execution;
+mod lifecycle;
 pub mod output;
 mod planning;
 pub mod policy;
 pub mod request;
 mod scheduling;
+pub mod session;
 pub mod transaction;
 mod update;
 
 use std::collections::VecDeque;
 
 use oh_my_vllm_kv_cache::group::RequestId;
-
 use policy::CachePolicy;
+use session::{RequestIdentity, RequestTicket, SessionRegistry};
 
 pub use output::{RequestOutput, ScheduledRequest, SchedulerOutput, WorkerOutput};
 pub use request::{Request, RequestStatus};
@@ -50,15 +52,19 @@ pub struct Scheduler<P: CachePolicy> {
     kv: P,
     finished_ids: Vec<u64>,
     prefill_cursor: Option<RequestId>,
-    host: cache::HostCache<P>,
+    sessions: SessionRegistry,
+    worker_epoch: u64,
+    step_id: u64,
+    next_lease: u64,
     detached_state: bool,
 }
 
 impl<P: CachePolicy> Scheduler<P> {
     pub fn empty_like(&self) -> Self {
-        let mut scheduler = Self::new(self.config.clone(), self.kv.empty_like());
-        scheduler.enable_host_cache(self.host.capacity);
-        scheduler
+        let mut replacement = Self::new(self.config.clone(), self.kv.empty_like());
+        replacement.sessions = self.sessions.empty_like();
+        replacement.worker_epoch = self.worker_epoch;
+        replacement
     }
 
     pub fn cache_policy(&self) -> &P {
@@ -70,11 +76,7 @@ impl<P: CachePolicy> Scheduler<P> {
     }
 
     pub fn reset_prefix_cache(&mut self) -> bool {
-        if self.num_running() + self.num_waiting() != 0 || !self.host.pending.is_empty() {
-            return false;
-        }
-        self.clear_host_prefixes();
-        self.kv.reset_prefix_cache()
+        self.num_running() + self.num_waiting() == 0 && self.kv.reset_prefix_cache()
     }
 
     fn aligned_prefill(&self, request: &Request, start: usize, count: usize) -> usize {
@@ -98,23 +100,26 @@ impl<P: CachePolicy> Scheduler<P> {
     pub fn new(config: SchedulerConfig, kv: P) -> Self {
         Self {
             config,
+            kv,
             waiting: VecDeque::new(),
             running: VecDeque::new(),
-            paused: rustc_hash::FxHashSet::default(),
-            kv,
+            paused: Default::default(),
             finished_ids: Vec::new(),
             prefill_cursor: None,
-            host: cache::HostCache::default(),
+            sessions: SessionRegistry::default(),
+            worker_epoch: 1,
+            step_id: 0,
+            next_lease: 0,
             detached_state: false,
         }
     }
 
     fn lookahead(&self, request: &Request, start: usize, count: usize) -> usize {
-        if self.config.enable_mtp {
+        if self.config.enable_mtp && request.status != RequestStatus::Finalizing {
             self.config.mtp_draft_len.min(
                 request
                     .prompt_len
-                    .saturating_add(request.max_tokens.saturating_sub(1))
+                    .saturating_add(request.max_tokens)
                     .saturating_sub(start.saturating_add(count)),
             )
         } else {
@@ -122,20 +127,64 @@ impl<P: CachePolicy> Scheduler<P> {
         }
     }
 
+    pub fn reserve_admission(
+        &mut self,
+        identity: RequestIdentity,
+        request_id: u64,
+    ) -> RequestTicket {
+        self.sessions.reserve(identity, request_id)
+    }
+
+    pub fn release_admission(&mut self, ticket: &RequestTicket) -> bool {
+        self.sessions.release_pending(ticket)
+    }
+
     pub fn add_request(&mut self, mut req: Request) -> bool {
-        if !self.kv.accepts(&req, &self.config, self.host.capacity > 0) {
+        req.enable_mtp = self.config.enable_mtp;
+        if self
+            .running
+            .iter()
+            .chain(&self.waiting)
+            .any(|row| row.id == req.id)
+        {
+            if let Some(ticket) = &req.ticket {
+                self.sessions.release_pending(ticket);
+            }
             return false;
         }
+        if !self.kv.accepts(&req, &self.config) {
+            if let Some(ticket) = &req.ticket {
+                self.sessions.release_pending(ticket);
+            }
+            return false;
+        }
+        let ticket = req.ticket.take().unwrap_or_else(|| {
+            let mut identity = RequestIdentity::anonymous(req.id);
+            identity.namespace.clone_from(&req.cache_domain.namespace);
+            self.reserve_admission(identity, req.id)
+        });
+        if ticket.request != req.id || !self.sessions.consume(&ticket) {
+            return false;
+        }
+        req.cache_domain
+            .namespace
+            .clone_from(&ticket.identity.namespace);
+        req.cache_domain.salt = req.cache_salt;
+        req.ticket = Some(ticket);
         self.kv.initialize_hashes(&mut req);
         self.waiting.push_back(req);
         true
     }
 
     pub fn num_waiting(&self) -> usize {
-        self.waiting.len() + self.host.requests.len() + self.host.request_transfers()
+        self.waiting.len()
     }
 
     pub fn num_running(&self) -> usize {
+        self.running.len()
+    }
+
+    fn resident_count(&self) -> usize {
         self.running.len()
     }
 
@@ -148,33 +197,19 @@ impl<P: CachePolicy> Scheduler<P> {
     }
 
     fn preempt_request(&mut self, mut req: Request, output: &mut SchedulerOutput<P::State>) {
+        assert!(
+            req.in_flight.is_none(),
+            "cannot reclaim submitted execution"
+        );
         self.kv.free(req.id);
         req.num_computed_tokens = 0;
         req.prefill_start = 0;
         req.num_in_flight_tokens = 0;
         req.draft_token_ids.clear();
+        req.work = None;
         req.status = RequestStatus::Preempted;
         output.preempted_request_ids.push(req.id);
         self.waiting.push_front(req);
-    }
-
-    pub fn abort(&mut self, request_id: RequestId) {
-        self.paused.remove(&request_id);
-        self.host.prefix_hits.remove(&request_id);
-        if self.abort_host_request(request_id) {
-            return;
-        }
-        if self.running.iter().any(|r| r.id == request_id) {
-            self.running.retain(|r| r.id != request_id);
-            self.kv.free(request_id);
-            self.finished_ids.push(request_id);
-        } else {
-            let before = self.waiting.len();
-            self.waiting.retain(|r| r.id != request_id);
-            if self.waiting.len() != before {
-                self.finished_ids.push(request_id);
-            }
-        }
     }
 }
 

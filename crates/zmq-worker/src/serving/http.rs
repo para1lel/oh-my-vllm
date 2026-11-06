@@ -3,7 +3,7 @@ use crate::serving::{App, Submission, request, resources, sampling};
 use axum::body::Body;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::sse::{Event, KeepAlive};
 use axum::response::{IntoResponse, Response, Sse};
@@ -99,22 +99,25 @@ pub(super) async fn diagnostics(State(app): State<App>) -> Json<Value> {
 pub(super) async fn chat(
     State(app): State<App>,
     Extension(lease): Extension<Lease>,
+    headers: HeaderMap,
     body: std::result::Result<Json<Value>, JsonRejection>,
 ) -> Response {
-    generate(app, lease, body, false).await
+    generate(app, lease, headers, body, false).await
 }
 
 pub(super) async fn responses(
     State(app): State<App>,
     Extension(lease): Extension<Lease>,
+    headers: HeaderMap,
     body: std::result::Result<Json<Value>, JsonRejection>,
 ) -> Response {
-    generate(app, lease, body, true).await
+    generate(app, lease, headers, body, true).await
 }
 
 async fn generate(
     app: App,
     lease: Lease,
+    headers: HeaderMap,
     body: std::result::Result<Json<Value>, JsonRejection>,
     responses: bool,
 ) -> Response {
@@ -130,10 +133,26 @@ async fn generate(
         Ok(previous) => previous,
         Err((status, message)) => return error(status, message),
     };
-    let mut request = match request::normalize(body, responses, &app.model, previous) {
+    let identity = match super::identity::resolve(
+        &app.scope,
+        &body,
+        &headers,
+        previous.as_ref().map(|previous| &previous.identity),
+        responses,
+    ) {
+        Ok(identity) => identity,
+        Err(reason) => return error(StatusCode::BAD_REQUEST, reason),
+    };
+    let mut request = match request::normalize(
+        body,
+        responses,
+        &app.model,
+        previous.map(|previous| previous.history),
+    ) {
         Ok(r) => r,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
     };
+    request.identity = identity;
     if request.normalized["thinking_token_budget"].is_null() {
         request.normalized["thinking_token_budget"] = json!(app.thinking_token_budget);
     }
@@ -227,13 +246,18 @@ pub(super) async fn delete(State(app): State<App>, Path(id): Path<String>) -> Re
     }
 }
 
+struct PreviousResponse {
+    history: Vec<Value>,
+    identity: super::identity::Identity,
+}
+
 fn previous_history(
     app: &App,
     lease: &Lease,
     body: &Value,
     body_bytes: usize,
     responses: bool,
-) -> std::result::Result<Option<Vec<Value>>, (StatusCode, String)> {
+) -> std::result::Result<Option<PreviousResponse>, (StatusCode, String)> {
     if let Some(id) = body.get("previous_response_id").filter(|v| !v.is_null()) {
         if !responses {
             return Err((
@@ -258,7 +282,10 @@ fn previous_history(
                 if let Err(error) = lease.resize(reservation) {
                     return Err((StatusCode::SERVICE_UNAVAILABLE, error.to_string()));
                 }
-                Ok(Some(s.history.clone()))
+                Ok(Some(PreviousResponse {
+                    history: s.history.clone(),
+                    identity: s.identity.clone(),
+                }))
             }
             None => Err((
                 StatusCode::NOT_FOUND,

@@ -115,7 +115,7 @@ class ChainSample:
 
 
 class ChainDraft:
-    def __init__(self, device, weights, batch, first):
+    def __init__(self, device, weights, batch, first, *, table_width=2048):
         from oh_my_vllm.models.qwen38.sampling import Sampling
 
         self.device, self.first = device, first
@@ -131,7 +131,7 @@ class ChainDraft:
                 for shape, dtype in (
                     ((3, batch), "int64"),
                     ((batch,), "int32"),
-                    ((batch, 335), "int32"),
+                    ((batch, table_width), "int32"),
                     ((batch + 1,), "int32"),
                     ((batch,), "int32"),
                     ((batch,), "int64"),

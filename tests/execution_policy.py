@@ -11,46 +11,60 @@ from oh_my_vllm.operators.runtime.device import Device
 
 class ExecutionPolicy(unittest.TestCase):
     def test_execute_delegates_prefill_and_mixed_graph_policy(self):
-        worker = Worker.__new__(Worker)
-        worker.speculation = None
-        worker.requests = {
-            "decode": SimpleNamespace(prompt_len=16, history=list(range(17))),
-            "prefill": SimpleNamespace(prompt_len=40000, history=list(range(40000))),
-        }
-        decode = dict(request_id="decode", num_computed_tokens=16, token_ids=[13])
-        prefill = dict(
-            request_id="prefill", num_computed_tokens=0, token_ids=[1] * 40000
+        from tests.qwen_radix_physical_fixtures import (
+            execute_message,
+            request,
+            row,
+            worker,
         )
-        for rows, expected in (
-            ([decode], [(True, True)]),
-            ([prefill], [(False, None), (False, None)]),
-            ([decode, prefill], [(True, None), (False, None), (False, None)]),
+
+        owner = worker(request())
+        decode = row(
+            16,
+            21,
+            sampling="verify",
+            deepest=16,
+            contiguous=16,
+            resume={"end": 16, "slot": 1, "version": 1},
+        )
+        decode["sampling"]["drafts"] = 4
+        pages = [
+            {
+                "page_index": index,
+                "slot": index + 1,
+                "version": 1,
+                "valid_tokens": 0,
+                "access": "write",
+            }
+            for index in range(157)
+        ]
+        first = row(end=20000, pages=pages)
+        second = dict(first, request_id=19)
+        first["request_id"] = 18
+        owner.requests.update({18: request(), 19: request()})
+        for step, (rows, expected) in enumerate(
+            (
+                ([decode], [(True, True)]),
+                ([first, second], [(False, None), (False, None)]),
+                ([decode, first, second], [(True, None), (False, None), (False, None)]),
+            ),
+            1,
         ):
             calls = []
 
             def batch(items, verify, graph, calls=calls):
                 calls.append((verify, graph))
-                if not verify:
-                    for item in items:
-                        end = item["num_computed_tokens"] + len(item["token_ids"])
-                        if end < 40000:
-                            self.assertEqual(end % 784, 0)
                 return [dict(request_id=item["request_id"]) for item in items]
 
-            worker.execute_batch = batch
-            result = worker.execute(
-                dict(
-                    rpc_id="execution",
-                    scheduled=rows,
-                    finished_request_ids=[],
-                    preempted_request_ids=[],
-                )
-            )
+            owner.execute_batch = batch
+            message = execute_message(rows[0])
+            message.update(scheduled=rows, step_id=step)
+            result = owner.execute(message)
             self.assertEqual(calls, expected)
-            self.assertEqual(result["rpc_id"], "execution")
+            self.assertEqual(result["rpc_id"], message["rpc_id"])
             self.assertEqual(
-                {row["request_id"] for row in result["outputs"]},
-                {row["request_id"] for row in rows},
+                {item["request_id"] for item in result["outputs"]},
+                {item["request_id"] for item in rows},
             )
 
     def test_execute_rejects_a_poisoned_device_before_model_work(self):
@@ -62,9 +76,6 @@ class ExecutionPolicy(unittest.TestCase):
             raise RuntimeError("CUDA Graph device is unusable")
 
         worker.device = SimpleNamespace(ensure_healthy=reject)
-        worker.offload = SimpleNamespace(
-            check_execute=lambda *_: calls.append("offload")
-        )
         with self.assertRaisesRegex(RuntimeError, "unusable"):
             worker.execute(
                 dict(
@@ -116,98 +127,89 @@ class ExecutionPolicy(unittest.TestCase):
 
         self._check_prefill_context_reuse()
 
-    def test_prefill_fragments_preserve_blocks_and_token_intervals(self):
+    def test_packing_preserves_scheduler_token_ranges_and_exports(self):
+        from tests.qwen_radix_physical_fixtures import config
+
         worker = Worker.__new__(Worker)
-        for limit in (32764, 32768, 783):
+        for limit, mtp in ((32764, True), (32768, False), (783, False)):
+            worker.config = config(
+                max_num_batched_tokens=limit, num_speculative_tokens=4 if mtp else 0
+            )
+            worker.speculation = object() if mtp else None
             rows = [
                 dict(
                     request_id=index,
-                    num_computed_tokens=start,
+                    forward_start=317,
+                    forward_end=317 + count,
                     token_ids=list(range(count)),
+                    model_state=object(),
                 )
-                for index, (start, count) in enumerate(
-                    (
-                        (0, 40000),
-                        (32144, 623),
-                        (317, 467),
-                        (0, 1568),
-                        (32767, 1),
-                        (317, 40000),
-                        *((0, 784),) * 4,
-                    )
-                )
+                for index, count in enumerate((limit // 2, limit // 3, limit // 2, 1))
             ]
-            with self.subTest(limit=limit):
-                fragments = list(worker.fragments(rows, limit, 4, block_size=784))
-                restored = {row["request_id"]: [] for row in rows}
-                positions = {
-                    row["request_id"]: row["num_computed_tokens"] for row in rows
-                }
-                for batch in fragments:
-                    self.assertLessEqual(
-                        sum(len(row["token_ids"]) for row in batch), limit
-                    )
-                    self.assertLessEqual(len(batch), 4)
-                    for row in batch:
-                        request = row["request_id"]
-                        self.assertEqual(row["num_computed_tokens"], positions[request])
-                        restored[request].extend(row["token_ids"])
-                        positions[request] += len(row["token_ids"])
-                for row in rows:
-                    self.assertEqual(restored[row["request_id"]], row["token_ids"])
-                if limit >= 784:
-                    self.assertEqual(len(fragments[0][0]["token_ids"]), 32144)
-        tails = [
-            dict(request_id=i, num_computed_tokens=784, token_ids=[i] * count)
-            for i, count in enumerate((317, 450))
-        ]
-        self.assertEqual(list(worker.fragments(tails, 784, 4, block_size=784)), [tails])
+            groups = list(worker.batches(rows))
+            restored = [item for group in groups for item in group]
+            self.assertEqual(restored, rows)
+            for actual, original in zip(restored, rows, strict=True):
+                self.assertIs(actual, original)
+            self.assertTrue(
+                all(
+                    sum(len(item["token_ids"]) for item in group) <= limit
+                    for group in groups
+                )
+            )
+            with self.assertRaises(ValueError):
+                list(worker.batches([dict(token_ids=[0] * (limit + 1))]))
 
     def test_stop_truncation_controls_accepted_slot(self):
-        from oh_my_vllm.models.qwen38.cache import Cache
+        from tests.qwen_radix_physical_fixtures import (
+            execute_message,
+            reference,
+            request,
+            row,
+            worker,
+        )
 
-        for emitted, expected_slot, expected_position in ((1, 10, 101), (0, 99, 100)):
-            worker = Worker.__new__(Worker)
-            request = SimpleNamespace(
-                prompt_len=16,
-                state_slot=99,
-                state_position=100,
-                finish="stop",
-                thinking_count=0,
-                drafts=[],
-                append=lambda tokens, n=emitted: (tokens[:n], ""),
+        for emitted in (1, 2, 0):
+            state = request(history=list(range(101)), finish=None)
+            owner = worker(state)
+            owner.execute(execute_message(row(end=100)))
+
+            def append(tokens, count=emitted, state=state):
+                kept = tokens[:count]
+                state.history.extend(kept)
+                state.finish = "stop"
+                return kept, ""
+
+            state.append = append
+            item = row(
+                100,
+                105,
+                sampling="verify",
+                deepest=100,
+                contiguous=100,
+                resume=reference(100, 5),
+                exports=[
+                    {**reference(end, slot), "role": "private_endpoint"}
+                    for end, slot in zip(range(101, 106), range(6, 11), strict=True)
+                ],
             )
-            rows = [
-                dict(
-                    request_id="stop",
-                    num_computed_tokens=100,
-                    token_ids=[1, 2, 3, 4, 5],
-                )
-            ]
-            batch = SimpleNamespace(
-                rows=5,
-                scheduled=rows,
-                writes=[10, 11, 12, 13, 14],
-                schedule=SimpleNamespace(sequence_rows=(0, 5)),
-            )
-            worker.requests = {"stop": request}
-            cache = Cache.__new__(Cache)
-            cache.batch = lambda *_, batch=batch: batch
-            worker.cache = cache
-            worker.model = SimpleNamespace(
-                forward=lambda *_: ((None, None), None, True)
-            )
-            worker.sampler = lambda *_: None
-            worker.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
-            worker.speculation = SimpleNamespace(
+            item["sampling"]["drafts"] = 4
+            owner.sampler = lambda *_: None
+            owner.mtp_endpoint = lambda *_: None
+            owner.speculation = SimpleNamespace(
                 accept=lambda *_: [[2, 3, 4, 5]],
                 context=lambda *_: {},
                 propose=lambda *_: None,
             )
-            result = worker.execute_batch(rows, True, True)
-            self.assertEqual(result[0]["token_ids"], [2][:emitted])
-            self.assertEqual(request.state_slot, expected_slot)
-            self.assertEqual(request.state_position, expected_position)
+            if not emitted:
+                with self.assertRaisesRegex(ValueError, "no accepted output"):
+                    owner.execute_batch([item], True, True)
+                self.assertEqual(state.state_position, 100)
+            else:
+                result = owner.execute_batch([item], True, True)
+                self.assertEqual(result[0]["token_ids"], [2, 3][:emitted])
+                self.assertEqual(state.state_slot, 5 + emitted)
+                self.assertEqual(state.state_position, 100 + emitted)
 
     def test_graph_owns_capture_replay_and_cleanup(self):
         from oh_my_vllm.models.qwen38.speculation_ops import GraphOperation
@@ -308,15 +310,22 @@ class ExecutionPolicy(unittest.TestCase):
         )
         batch = SimpleNamespace(
             requests=[request],
-            scheduled=[
-                dict(request_id="prefill", num_computed_tokens=0, fa_block_table=[0])
-            ],
+            scheduled=[dict(request_id="prefill", forward_start=0)],
             schedule=SimpleNamespace(
                 verify=False, sequence_rows=(0, 2), read_slots=(0,)
             ),
-            metadata=(None, None, np.zeros((1, 1), np.int32)),
+            metadata=(None, None, np.ones((1, 1), np.int32)),
+            plans=(
+                SimpleNamespace(
+                    end=2,
+                    write_mask=(True, True),
+                    pages=({"slot": 1, "access": "write"},),
+                ),
+            ),
         )
-        cache = SimpleNamespace()
+        cache = SimpleNamespace(
+            layout=SimpleNamespace(max_context=128), validate_context=Mock()
+        )
         owner = speculation.Speculation(
             SimpleNamespace(view=lambda *_: self.fail("prefill must retain hidden")),
             None,
@@ -397,7 +406,7 @@ class ExecutionPolicy(unittest.TestCase):
             batch = SimpleNamespace(
                 rows=rows,
                 schedule=SimpleNamespace(verify=verify, sequence_rows=(0, rows)),
-                scheduled=[dict(num_computed_tokens=0, token_ids=[1])],
+                scheduled=[dict(forward_start=0, token_ids=[1])],
                 requests=[SimpleNamespace(media=media)],
             )
             result = owner.forward(batch, graph)

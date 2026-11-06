@@ -1,16 +1,24 @@
 use crate::models::ServiceCache;
 use crate::serving::engine::EngineLoop;
-use crate::serving::{Active, Store, send_events};
-use anyhow::Result;
-use serde_json::json;
+use crate::serving::{Active, Store, Stored, send_events};
+use anyhow::{Result, ensure};
+use oh_my_vllm_scheduler::execution::WorkPurpose;
+use serde_json::{Value, json};
 use std::sync::Mutex;
 use std::time::Instant;
 use tracing::info;
 
+pub(in crate::serving) struct Completion {
+    response: Value,
+    events: Vec<Value>,
+    stored: Option<Stored>,
+    reason: String,
+}
+
 impl<P: ServiceCache> EngineLoop<'_, P> {
     pub(super) fn process_results(
         &mut self,
-        batch: &oh_my_vllm_scheduler::SchedulerOutput,
+        batch: &oh_my_vllm_scheduler::SchedulerOutput<P::State>,
         worker: oh_my_vllm_scheduler::WorkerOutput,
     ) {
         for result in worker.outputs {
@@ -18,19 +26,12 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
             let Some(request) = self.active.get_mut(&id) else {
                 continue;
             };
-            request.record_result(&result, batch.scheduled.iter().find(|s| s.request_id == id));
-            let (text, mut reason, reasoning_tokens) =
-                self.client.serving_outputs.remove(&id).unwrap_or_default();
-            if let Err(error) = request.lease.grow(
-                text.len()
-                    .saturating_mul(8)
-                    .saturating_add(result.token_ids.len().saturating_mul(16)),
-            ) {
-                self.scheduler.abort(id);
-                self.active.remove(&id).unwrap().fail(&error.to_string());
+            let output = self.client.serving_outputs.remove(&id).unwrap_or_default();
+            if request.completion.is_some() || result.work.purpose == WorkPurpose::Finalize {
                 continue;
             }
-            request.output.reasoning_tokens = reasoning_tokens;
+            let (text, mut reason, reasoning_tokens) = output;
+            request.record_result(&result, batch.scheduled.iter().find(|s| s.request_id == id));
             if request.output.output_tokens
                 >= request.output.request.normalized["max_tokens"]
                     .as_u64()
@@ -38,29 +39,74 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
             {
                 reason.get_or_insert("length".to_owned());
             }
-            if let Err(error) = request.parse_result(&text, &reason) {
+            let preparation = (|| -> Result<()> {
+                request.lease.grow(
+                    text.len()
+                        .saturating_mul(8)
+                        .saturating_add(result.token_ids.len().saturating_mul(16)),
+                )?;
+                request.output.reasoning_tokens = reasoning_tokens;
+                request.parse_result(&text, &reason)?;
+                if let Some(reason) = reason {
+                    request.completion =
+                        Some(Completion::prepare(request, &reason, &self.context.store)?);
+                    self.trace.accepted(
+                        id,
+                        request.output.input_tokens + request.output.output_tokens,
+                    );
+                    self.scheduler.finalize_request(
+                        id,
+                        request.output.input_tokens + request.output.output_tokens,
+                    )?;
+                    self.scheduler.resume(id);
+                } else if request.stream_buffer.is_blocked() {
+                    self.scheduler.pause(id);
+                }
+                Ok(())
+            })();
+            if let Err(error) = preparation {
                 self.scheduler.abort(id);
                 self.active.remove(&id).unwrap().fail_delivery(&error);
-                info!(request_id = id, error = %error, "request aborted");
+            }
+        }
+        self.finish_finalized();
+    }
+
+    pub(super) fn finish_finalized(&mut self) {
+        let ready: Vec<_> = self
+            .active
+            .iter()
+            .filter(|(id, request)| {
+                request.completion.is_some() && self.scheduler.is_finalized(**id)
+            })
+            .map(|(&id, _)| id)
+            .collect();
+        for id in ready {
+            let request = &self.active[&id];
+            if request.events.is_closed() || Instant::now() >= request.lease.deadline() {
+                self.scheduler.abort(id);
+                self.active
+                    .remove(&id)
+                    .unwrap()
+                    .fail_with_status("request cancelled or timed out", "cancelled");
                 continue;
             }
-            if request.stream_buffer.is_blocked() {
-                self.scheduler.pause(id);
-            }
-            if let Some(reason) = reason {
+            if let Err(error) = self.scheduler.finish_success(id) {
                 self.scheduler.abort(id);
-                let request = self.active.remove(&id).unwrap();
-                finish_request(request, id, &reason, &self.context.store);
+                self.active.remove(&id).unwrap().fail(&error.to_string());
+                continue;
             }
+            self.trace.complete(id);
+            finish_request(self.active.remove(&id).unwrap(), id, &self.context.store);
         }
     }
 }
 
 impl Active {
-    fn record_result(
+    fn record_result<S>(
         &mut self,
         result: &oh_my_vllm_scheduler::RequestOutput,
-        scheduled: Option<&oh_my_vllm_scheduler::ScheduledRequest>,
+        scheduled: Option<&oh_my_vllm_scheduler::ScheduledRequest<S>>,
     ) {
         if let Some(scheduled) = scheduled {
             if self.steps == 0 {
@@ -94,17 +140,50 @@ impl Active {
     }
 }
 
-fn finish_request(mut request: Active, id: u64, reason: &str, store: &Mutex<Store>) {
-    let (response, events) = request.output.finish(reason);
-    if request.output.request.store
-        && !store.lock().unwrap().insert(
-            request.output.id.clone(),
-            response.clone(),
-            request.output.history(),
-        )
-    {
-        request.fail("response exceeds configured storage capacity");
-        return;
+impl Completion {
+    fn prepare(request: &mut Active, reason: &str, store: &Mutex<Store>) -> Result<Self> {
+        let (response, events) = request.output.finish(reason);
+        let stored = if request.output.request.store {
+            let history = request.output.history();
+            let bytes = serde_json::to_vec(&response)?.len()
+                + serde_json::to_vec(&history)?.len()
+                + request.output.request.identity.retained_bytes();
+            ensure!(
+                bytes <= store.lock().unwrap().max_bytes,
+                "response exceeds configured storage capacity"
+            );
+            request.lease.grow(bytes)?;
+            Some(Stored {
+                response: response.clone(),
+                history,
+                identity: request.output.request.identity.clone(),
+                saved: Instant::now(),
+                bytes,
+            })
+        } else {
+            None
+        };
+        Ok(Self {
+            response,
+            events,
+            stored,
+            reason: reason.to_owned(),
+        })
+    }
+}
+
+fn finish_request(mut request: Active, id: u64, store: &Mutex<Store>) {
+    let Completion {
+        response,
+        events,
+        stored,
+        reason,
+    } = request.completion.take().unwrap();
+    if let Some(stored) = stored {
+        store
+            .lock()
+            .unwrap()
+            .insert(request.output.id.clone(), stored);
     }
     if let Err(error) = send_events(&mut request, events) {
         request.fail_delivery(&error);
@@ -120,24 +199,11 @@ fn finish_request(mut request: Active, id: u64, reason: &str, store: &Mutex<Stor
     let pending = std::mem::take(&mut request.stream_buffer);
     let _ = pending.drain_after_completion(request.events.clone(), Some(request.lease.clone()));
     let elapsed = request.started.elapsed().as_secs_f64();
-    let ttft_ms = request
-        .first_token
-        .map(|t| t.duration_since(request.started).as_millis());
-    info!(request_id = id,
-        output_tokens = request.output.output_tokens,
-        input_tokens = request.output.input_tokens,
-        cached_tokens = request.output.cached_tokens,
-        reasoning_tokens = request.output.reasoning_tokens,
-        thinking_token_budget = request.output.request.normalized
-            ["thinking_token_budget"].as_i64(),
-        elapsed_s = elapsed,
-        ttft_ms,
-        output_tps = request.output.output_tokens as f64 / elapsed,
-        steps = request.steps,
-        proposed_draft_tokens = request.proposed,
-        verified_draft_tokens = request.proposed,
-        accepted_draft_tokens = request.accepted,
-        finish_reason = %reason, "request completed");
+    info!(request_id = id, output_tokens = request.output.output_tokens,
+        input_tokens = request.output.input_tokens, cached_tokens = request.output.cached_tokens,
+        reasoning_tokens = request.output.reasoning_tokens, elapsed_s = elapsed,
+        steps = request.steps, proposed_draft_tokens = request.proposed,
+        accepted_draft_tokens = request.accepted, finish_reason = %reason, "request completed");
     request.metric("completed");
     let _ = request.done.send(Ok(response));
 }

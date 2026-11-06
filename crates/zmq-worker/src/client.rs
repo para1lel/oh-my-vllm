@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use oh_my_vllm_scheduler::output::ScheduledRequest;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use zeromq::DealerSendHalf;
@@ -28,7 +27,7 @@ pub struct WorkerConfig {
     pub socket_path: PathBuf,
     pub num_gpu_blocks: Option<u32>,
     pub mamba_blocks: Option<u32>,
-    pub host_cache_bytes: Option<u64>,
+    pub worker_epoch: u64,
     pub block_size: u32,
     pub tensor_parallel_size: u32,
     pub max_model_len: u32,
@@ -49,7 +48,7 @@ impl WorkerConfig {
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: None,
             mamba_blocks: Some(defaults.mamba_blocks),
-            host_cache_bytes: None,
+            worker_epoch: 1,
             block_size: defaults.block_size,
             tensor_parallel_size: defaults.tensor_parallel_size,
             max_model_len: defaults.max_model_len,
@@ -76,15 +75,18 @@ pub struct WorkerClient {
     reader: JoinHandle<()>,
     _child: ManagedChild,
     step_id: u64,
+    execution_trace: Option<serde_json::Value>,
+    preparation_trace: preparation::trace::PreparationTrace,
     rpc_id: u64,
     pending_prepare: Option<(u64, u64)>,
     last_prepare: Option<(u64, u64)>,
     cancelled_prepares: BTreeSet<u64>,
     prepared_reply: Option<crate::protocol::WorkerMessage>,
     serving_enabled: bool,
+    verified_reasoning_tokens: std::collections::BTreeMap<u64, usize>,
     pub logical_num_blocks: u32,
     pub mamba_blocks: u32,
-    pub host_cache_bytes: u64,
+    pub cache_layout: crate::protocol::CacheLayout,
     pub serving_outputs: std::collections::BTreeMap<u64, (String, Option<String>, usize)>,
     pub serving_errors: std::collections::BTreeMap<u64, String>,
     binding: Binding,
@@ -97,6 +99,14 @@ impl Drop for WorkerClient {
 }
 
 impl WorkerClient {
+    pub(crate) fn take_prepare_traces(&mut self) -> Vec<serde_json::Value> {
+        self.preparation_trace.take()
+    }
+
+    pub(crate) fn take_execution_trace(&mut self) -> Option<serde_json::Value> {
+        self.execution_trace.take()
+    }
+
     pub fn configuration(&self) -> WorkerConfig {
         self.config.clone()
     }
@@ -152,70 +162,6 @@ fn worker_error(error: crate::protocol::ErrorMsg) -> Error {
     }
 }
 
-fn validate_reply_ids(
-    scheduled: &[ScheduledRequest],
-    outputs: &[crate::protocol::RequestResultMsg],
-) -> Result<()> {
-    let expected: BTreeSet<_> = scheduled.iter().map(|request| request.request_id).collect();
-    let mut received = BTreeSet::new();
-    for output in outputs {
-        if !expected.contains(&output.request_id) || !received.insert(output.request_id) {
-            return Err(Error::UnexpectedMessageType(
-                "unknown or duplicate execution request ID".to_owned(),
-            ));
-        }
-        if output.error.is_some()
-            && (!output.token_ids.is_empty()
-                || output.num_accepted_draft_tokens != 0
-                || !output.new_draft_token_ids.is_empty())
-        {
-            return Err(Error::UnexpectedMessageType(
-                "error result contains successful token state".to_owned(),
-            ));
-        }
-    }
-    if received != expected {
-        return Err(Error::UnexpectedMessageType(
-            "missing execution request ID".to_owned(),
-        ));
-    }
-    Ok(())
-}
-
 #[cfg(all(test, unix))]
 #[path = "test_worker.rs"]
 pub(crate) mod fixture;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::protocol::RequestResultMsg;
-
-    #[test]
-    fn execution_reply_ids_must_be_complete_unique_and_known() {
-        let scheduled = [ScheduledRequest {
-            request_id: 1,
-            token_ids: vec![1],
-            prefill_token_ids: None,
-            num_computed_tokens: 0,
-            state: Default::default(),
-        }];
-        let output = |id| RequestResultMsg {
-            request_id: id,
-            error: None,
-            token_ids: vec![2],
-            num_accepted_draft_tokens: 0,
-            new_draft_token_ids: vec![],
-            text: "a".to_owned(),
-            finish_reason: None,
-            reasoning_tokens: 0,
-        };
-        assert!(validate_reply_ids(&scheduled, &[output(1)]).is_ok());
-        for invalid in [vec![], vec![output(2)], vec![output(1), output(1)]] {
-            assert!(validate_reply_ids(&scheduled, &invalid).is_err());
-        }
-        let mut mixed = output(1);
-        mixed.error = Some("failed".to_owned());
-        assert!(validate_reply_ids(&scheduled, &[mixed]).is_err());
-    }
-}

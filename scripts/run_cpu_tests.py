@@ -42,6 +42,8 @@ def main() -> int:
         parser.error(
             "CPU tests require CUDA_VISIBLE_DEVICES=''; use scripts/check.py cpu"
         )
+    # With no visible devices, this path returns before CUDA or NVML probing.
+    os.environ["PYTORCH_NVML_BASED_CUDA_CHECK"] = "1"
     modules = options.modules or test_modules()
     if "tests.test_service" in modules:
         parser.error(

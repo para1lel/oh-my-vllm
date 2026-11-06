@@ -160,12 +160,9 @@ fn selected_configuration_preserves_defaults_modes_and_rejections() {
             config.max_num_seqs,
             config.mamba_blocks,
         ),
-        (784, 1, 262144, 32768, 4, Some(128))
+        (128, 1, 262144, 32768, 4, Some(128))
     );
-    assert_eq!(
-        (config.num_gpu_blocks, config.host_cache_bytes),
-        (None, None)
-    );
+    assert_eq!((config.num_gpu_blocks, config.worker_epoch), (None, 1));
     assert_eq!(
         (
             config.num_speculative_tokens,
@@ -261,6 +258,10 @@ fn reject_invalid_options(path: &str, policy: ModelPolicy) {
             ..config.clone()
         },
         WorkerConfig {
+            max_num_batched_tokens: 32769,
+            ..config.clone()
+        },
+        WorkerConfig {
             max_num_seqs: 0,
             ..config.clone()
         },
@@ -303,7 +304,7 @@ fn reject_invalid_options(path: &str, policy: ModelPolicy) {
                 num_gpu_blocks: None,
                 mamba_blocks: None,
                 max_num_seqs: 32,
-                max_num_batched_tokens: 65536,
+                max_num_batched_tokens: 32768,
                 num_speculative_tokens: 4,
                 speculative_mode: Some("mtp".into()),
                 ..config

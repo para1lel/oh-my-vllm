@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 const CONFIG_SHA256: &str = "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc";
 const ARCHITECTURE: &str = "Qwen3_5ForConditionalGeneration";
 const MODEL_TYPE: &str = "qwen3_5";
-const CAPABILITIES: [Capability; 8] = [
+const CAPABILITIES: [Capability; 7] = [
     Capability::Text,
     Capability::Images,
     Capability::Video,
@@ -22,12 +22,11 @@ const CAPABILITIES: [Capability; 8] = [
     Capability::Reasoning,
     Capability::StructuredOutputs,
     Capability::PrefixCache,
-    Capability::HostOffload,
 ];
 
 pub(in crate::models) fn defaults() -> ModelDefaults {
     ModelDefaults {
-        block_size: 784,
+        block_size: 128,
         tensor_parallel_size: 1,
         max_model_len: 262144,
         max_num_batched_tokens: 32768,
@@ -117,15 +116,15 @@ pub(in crate::models) fn validate_runtime_options(config: &WorkerConfig) -> Resu
     require_options(config.tensor_parallel_size == 1, "only TP1 is implemented")?;
     require_options(
         config.block_size == defaults().block_size,
-        "only 784-token cache blocks are implemented",
+        "Qwen requires 128-token KV pages",
     )?;
     require_options(
         (1..=defaults().max_model_len).contains(&config.max_model_len),
         "requested context exceeds supported limits",
     )?;
     require_options(
-        config.max_num_batched_tokens > 0 && config.max_num_seqs > 0,
-        "token and sequence budgets must be positive",
+        (1..=32768).contains(&config.max_num_batched_tokens) && config.max_num_seqs > 0,
+        "Qwen token budget must be 1..32768 and sequence budget must be positive",
     )?;
     require_options(
         config.num_gpu_blocks.is_none_or(|count| count > 1)
@@ -175,13 +174,13 @@ pub(in crate::models) fn validate_ready(
     validate_group(
         cache_group(descriptor, "fa")?,
         CacheKind::FullAttention,
-        "qwen38_paired_fa_kv_bf16",
+        "qwen38_radix_fa_fp8kv128",
         &fa_layers,
     )?;
     validate_group(
         cache_group(descriptor, "gdn")?,
         CacheKind::Recurrent,
-        "qwen38_paired_gdn_f32_conv_bf16_hidden_bf16",
+        "qwen38_radix_gdn8192_f32_conv_bf16_hidden_bf16",
         &(0..64).filter(|layer| layer % 4 != 3).collect::<Vec<_>>(),
     )
 }
@@ -230,15 +229,16 @@ pub(in crate::models) fn validate_runtime_ready(
     )?;
     require_ready(
         descriptor.cache_schema.groups.len() == 2,
-        "expected paired FA and GDN cache groups",
+        "expected independent FA and GDN cache groups",
     )?;
     let fa = cache_group(descriptor, "fa")?;
     let gdn = cache_group(descriptor, "gdn")?;
     require_ready(
-        fa.capacity_blocks == u64::from(logical_num_blocks)
-            && gdn.capacity_blocks == u64::from(mamba_blocks)
+        fa.capacity_blocks == u64::from(logical_num_blocks) + 1
+            && gdn.capacity_blocks == u64::from(mamba_blocks) + 1
             && fa.block_tokens == config.block_size
-            && gdn.block_tokens == config.block_size,
+            && gdn.block_tokens == 8192
+            && mamba_blocks.checked_mul(64) == Some(logical_num_blocks),
         "cache groups disagree with Ready capacities or Init block size",
     )
 }

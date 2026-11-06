@@ -12,7 +12,7 @@ fn descriptor() -> Value {
         "vocabulary_size": 101,
         "max_context_tokens": 97,
         "capabilities": ["text", "images", "video", "tools", "reasoning",
-                         "structured_outputs", "prefix_cache", "host_offload"],
+                         "structured_outputs", "prefix_cache"],
         "weight_formats": ["bf16", "f32", "qwen_fp8_e4m3_block128x128_fp32_scales"],
         "cache_schema": {
             "schema_version": 1,

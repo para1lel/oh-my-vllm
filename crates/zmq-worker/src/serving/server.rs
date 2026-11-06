@@ -125,6 +125,7 @@ fn create_app(
     let app = App {
         submit: tx,
         store: store.clone(),
+        scope: crate::serving::identity::random_id().expect("service identity entropy"),
         model: model_name,
         thinking_token_budget: args.thinking_token_budget,
         sampling_defaults,

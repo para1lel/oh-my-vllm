@@ -38,6 +38,8 @@ Use different checks for protocols, state ownership, and numerical results.
 
 The [case definitions](../../../development/model/cases.py) specify stored inputs and complete vocabulary outputs.
 Usual tests load repository fixtures.
+The fixed 784-token restoration case does not define the new cache's periodic checkpoint interval.
+Frozen inputs and limits stay unchanged. New-layout GPU and full-model acceptance are not complete.
 
 | Case | Fixed input | Vocabulary outputs |
 |---|---|---|

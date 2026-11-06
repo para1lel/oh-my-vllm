@@ -30,7 +30,6 @@ impl WorkerClient {
                     }
                     crate::protocol::WorkerMessage::Error(_) => true,
                     crate::protocol::WorkerMessage::StatsResult { .. } => true,
-                    crate::protocol::WorkerMessage::CacheResult { .. } => true,
                     crate::protocol::WorkerMessage::AbortResult { .. } => true,
                     _ => false,
                 };
@@ -154,7 +153,6 @@ fn reply_rpc_id(reply: &crate::protocol::WorkerMessage) -> Result<u64> {
         crate::protocol::WorkerMessage::ExecuteResult(result) => Ok(result.rpc_id),
         crate::protocol::WorkerMessage::Error(error) => Ok(error.rpc_id),
         crate::protocol::WorkerMessage::StatsResult { rpc_id, .. } => Ok(*rpc_id),
-        crate::protocol::WorkerMessage::CacheResult { rpc_id, .. } => Ok(*rpc_id),
         crate::protocol::WorkerMessage::AbortResult { rpc_id, .. } => Ok(*rpc_id),
         other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
     }

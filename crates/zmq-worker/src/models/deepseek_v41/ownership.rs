@@ -70,10 +70,10 @@ impl RequestOwners {
         })
     }
 
-    pub(crate) fn schedule(
+    pub(crate) fn schedule<S>(
         &mut self,
         step: u64,
-        scheduled: &[ScheduledRequest],
+        scheduled: &[ScheduledRequest<S>],
         finished: &[u64],
         preempted: &[u64],
     ) -> Result<Vec<RankSchedule>> {
@@ -167,6 +167,7 @@ mod tests {
             .map(|schedule| RankCompletion {
                 rank: schedule.rank,
                 step_id,
+                worker_epoch: 1,
                 schedule: schedule.clone(),
             })
             .collect()
@@ -205,13 +206,13 @@ mod tests {
         let mut owners = RequestOwners::default();
         owners.assign(1);
         assert_eq!(owners.assign(2), 1);
-        let plan = owners.schedule(1, &[], &[2], &[]).unwrap();
+        let plan = owners.schedule::<()>(1, &[], &[2], &[]).unwrap();
         assert_eq!(plan.len(), 4);
         assert!(plan.iter().all(|rank| rank.request_ids.is_empty()));
         let replies = completions(1, &plan);
         assert!(owners.complete(1, &replies[..3]).is_err());
         assert_eq!(owners.owner(2).unwrap(), 1);
-        assert!(owners.schedule(2, &[], &[], &[]).is_err());
+        assert!(owners.schedule::<()>(2, &[], &[], &[]).is_err());
         let mut duplicate = replies.clone();
         duplicate[3] = duplicate[0].clone();
         assert!(owners.complete(1, &duplicate).is_err());
@@ -239,7 +240,7 @@ mod tests {
         for id in 1..=5 {
             owners.assign(id);
         }
-        let plan = owners.schedule(1, &[], &[], &[2]).unwrap();
+        let plan = owners.schedule::<()>(1, &[], &[], &[2]).unwrap();
         owners.complete(1, &completions(1, &plan)).unwrap();
         assert_eq!(owners.owner(2).unwrap(), 1);
         let mut requests = [1, 2, 5].map(|id| Request::new(id, vec![7; 256], 4, vec![]));
@@ -248,7 +249,7 @@ mod tests {
         }
         assert_ne!(requests[0].cache_salt, requests[1].cache_salt);
         assert_eq!(requests[0].cache_salt, requests[2].cache_salt);
-        let plan = owners.schedule(2, &[], &[2], &[]).unwrap();
+        let plan = owners.schedule::<()>(2, &[], &[2], &[]).unwrap();
         let mut wrong = completions(2, &plan);
         wrong[1].schedule.finished_request_ids.clear();
         assert!(owners.complete(2, &wrong).is_err());

@@ -49,7 +49,7 @@ import sys
 import time
 import msgpack
 import zmq
-from tests.test_models import sample_descriptor
+from tests.worker_fixture import descriptor, cache_layout
 address = sys.argv[sys.argv.index("--socket") + 1]
 context = zmq.Context()
 socket = context.socket(zmq.DEALER)
@@ -59,9 +59,12 @@ init = msgpack.unpackb(socket.recv(), raw=False)
 assert init["descriptor_version"] == 1
 child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
 Path(address.removeprefix("ipc://") + ".pids").write_text(f"{os.getpid()} {child.pid}")
-d = sample_descriptor(num_speculative_tokens=0)
+config = dict(num_speculative_tokens=0,max_num_seqs=4,max_num_batched_tokens=32768)
+d = descriptor(config,8192,128)
 d["schema_version"] = 2
-reply = dict(type="ready", descriptor=d, logical_num_blocks=1608, mamba_blocks=128)
+reply = dict(type="ready", protocol_version=2, worker_epoch=init["worker_epoch"],
+             descriptor=d, logical_num_blocks=8192, mamba_blocks=128,
+             cache_layout=cache_layout(config,8192,128))
 payload = msgpack.packb(reply, use_bin_type=True)
 if OVERSIZED:
     payload = b"x" * ((1 << 20) + 1)
@@ -105,7 +108,7 @@ fn rejection_config(oversized: bool) -> WorkerConfig {
     std::fs::set_permissions(&launcher, std::fs::Permissions::from_mode(0o700)).unwrap();
     WorkerConfig {
         socket_path: socket.clone(),
-        num_gpu_blocks: Some(1608),
+        num_gpu_blocks: Some(8192),
         mamba_blocks: Some(128),
         python_executable: launcher,
         init_timeout: Duration::from_secs(5),

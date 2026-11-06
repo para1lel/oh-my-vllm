@@ -51,8 +51,8 @@ def sample_inputs():
         raw_config=raw,
         checkpoint_identity=checkpoint,
         tokenizer_identity=tokenizer,
-        fa_capacity_blocks=1608,
-        gdn_capacity_blocks=128,
+        fa_capacity_blocks=513,
+        gdn_capacity_blocks=9,
         num_speculative_tokens=4,
     )
 
@@ -144,23 +144,24 @@ class ModelDescriptor(unittest.TestCase):
         self.assertEqual(fa["layers"], [*range(3, 64, 4), 64])
         self.assertEqual(gdn["layers"], [n for n in range(64) if n % 4 != 3])
         self.assertEqual(
-            fa["storage"], dict(type="layout", id="qwen38_paired_fa_kv_bf16", version=1)
+            fa["storage"], dict(type="layout", id="qwen38_radix_fa_fp8kv128", version=1)
         )
         self.assertEqual(
             gdn["storage"],
             dict(
                 type="layout",
-                id="qwen38_paired_gdn_f32_conv_bf16_hidden_bf16",
+                id="qwen38_radix_gdn8192_f32_conv_bf16_hidden_bf16",
                 version=1,
             ),
         )
-        self.assertEqual([fa["capacity_blocks"], gdn["capacity_blocks"]], [1608, 128])
+        self.assertEqual([fa["capacity_blocks"], gdn["capacity_blocks"]], [513, 9])
+        self.assertEqual([fa["block_tokens"], gdn["block_tokens"]], [128, 8192])
         for group in (fa, gdn):
-            self.assertEqual(group["block_tokens"], 784)
             self.assertEqual(group["source"], {"type": "owned"})
-        resized = sample_descriptor(fa_capacity_blocks=42, gdn_capacity_blocks=17)
+        self.assertNotIn("host_offload", descriptor["capabilities"])
+        resized = sample_descriptor(fa_capacity_blocks=129, gdn_capacity_blocks=3)
         self.assertEqual(
-            [g["capacity_blocks"] for g in resized["cache_schema"]["groups"]], [42, 17]
+            [g["capacity_blocks"] for g in resized["cache_schema"]["groups"]], [129, 3]
         )
         for key in ("checkpoint_sha256", "tokenizer_sha256", "config_sha256"):
             self.assertEqual(resized[key], descriptor[key])
@@ -385,25 +386,24 @@ class ModelRegistry(unittest.TestCase):
 
 class ModelReady(unittest.TestCase):
     def test_qwen_ready_returns_a_private_descriptor_with_actual_capacities(self):
+        from oh_my_vllm.models.qwen38.cache_budget import CacheLayout
         from oh_my_vllm.models.qwen38.inference import Worker as QwenWorker
 
         worker = QwenWorker.__new__(QwenWorker)
-        worker.descriptor = sample_descriptor(
-            fa_capacity_blocks=11, gdn_capacity_blocks=9
+        worker.descriptor = sample_descriptor()
+        worker.epoch = 7
+        worker.cache = SimpleNamespace(
+            blocks=512, mamba_blocks=8, layout=CacheLayout(8, 4, 32768, 17)
         )
-        worker.cache = SimpleNamespace(blocks=11, mamba_blocks=9)
-        worker.cache_memory = {"policy": "fixed"}
-        worker.offload = SimpleNamespace(limit=123)
+        worker.cache_memory = {"policy": "radix_fixed_slabs"}
         result = worker.ready()
         self.assertEqual(result["descriptor"], worker.descriptor)
         self.assertEqual(
-            (
-                result["logical_num_blocks"],
-                result["mamba_blocks"],
-                result["host_cache_bytes"],
-            ),
-            (11, 9, 123),
+            (result["logical_num_blocks"], result["mamba_blocks"]), (512, 8)
         )
+        self.assertEqual((result["protocol_version"], result["worker_epoch"]), (2, 7))
+        self.assertEqual(result["cache_layout"], worker.cache.layout.wire())
+        self.assertNotIn("host_cache_bytes", result)
         result["descriptor"]["cache_schema"]["groups"][0]["layers"].clear()
         self.assertEqual(
             worker.ready()["descriptor"]["cache_schema"]["groups"][0]["layers"],
@@ -414,7 +414,12 @@ class ModelReady(unittest.TestCase):
         from oh_my_vllm.worker import zmq_bridge
 
         for version in (None, True, 0, 2, "1"):
-            config = {"model_path": "/synthetic-model", "descriptor_version": 1}
+            config = {
+                "model_path": "/synthetic-model",
+                "descriptor_version": 1,
+                "protocol_version": 2,
+                "worker_epoch": 7,
+            }
             if version is None:
                 config.pop("descriptor_version")
             else:
@@ -426,7 +431,12 @@ class ModelReady(unittest.TestCase):
                 ):
                     zmq_bridge.initialize(config)
                 create.assert_not_called()
-        config = {"model_path": "/synthetic-model", "descriptor_version": 1}
+        config = {
+            "model_path": "/synthetic-model",
+            "descriptor_version": 1,
+            "protocol_version": 2,
+            "worker_epoch": 7,
+        }
         with patch.object(zmq_bridge, "create_worker") as create:
             self.assertIs(zmq_bridge.initialize(config), create.return_value)
             create.assert_called_once_with(config)

@@ -69,6 +69,25 @@ For a sample request:
 curl http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/json'   -d '{"model":"qwen3.8-27b-fp8","messages":[{"role":"user","content":"Hello"}],"max_tokens":64,"reasoning_effort":"off"}'
 ```
 
+## Cache identity
+
+The [identity resolver](../crates/zmq-worker/src/serving/identity.rs) selects `metadata.session_id` before the `X-Correlation-ID` header.
+These identifiers group session work. They do not authenticate a user.
+`prompt_cache_key` selects the cache namespace separately from session identity.
+A Chat request without a session identifier gets an anonymous identity.
+A Responses root without an identifier gets a new root identity.
+
+A stored Responses continuation inherits its root session and namespace.
+Conflicting continuation identifiers or namespaces cause validation errors.
+Branches have separate active resource pins.
+The service registers admission order before asynchronous preparation.
+The [Qwen cache contract](models/qwen38/cache.md#successful-session-tails) defines successful-tail replacement.
+
+Terminal success waits for validated model-specific completion.
+The [completion code](../crates/zmq-worker/src/serving/engine/output.rs) prepares parsing and storage capacity before successful cache publication.
+It sends final Chat and Responses markers after that publication.
+A later connection failure cannot reverse cache state already published to another request.
+
 ## Offline commands
 
 ```bash

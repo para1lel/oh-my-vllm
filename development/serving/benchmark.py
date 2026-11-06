@@ -10,21 +10,26 @@ import subprocess
 import time
 from pathlib import Path
 
-from oh_my_vllm.models.qwen38.cache_budget import gpu_blocks
+from oh_my_vllm.models.qwen38.cache_budget import (
+    PAGE_TOKENS,
+    PAGES_PER_CHECKPOINT,
+    cache_layout,
+)
 from oh_my_vllm.models.qwen38.tokenizer import Tokenization, tokenizer_identity
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 from oh_my_vllm.source import source_identity
 from oh_my_vllm.worker.execution import execution_policy
 
 from .accounting import RATES, VERSION
+from .benchmark_case import archive_case, formal_reference
 from .benchmark_options import CONFIGURATIONS as CONFIGURATIONS
 from .benchmark_options import OUTPUT_LENGTHS as OUTPUT_LENGTHS
 from .benchmark_options import REQUEST_SHAPES as REQUEST_SHAPES
 from .benchmark_options import ROOT as ROOT
 from .benchmark_options import argument_parser as argument_parser
 from .benchmark_options import select_configurations as select_configurations
+from .benchmark_trace import read_trace, rust_source_identity
 from .device import device_identity, selected_uuid
-from .roofline import lower_bound
 from .workload import PROFILE, SAMPLING_FIELDS, TOOLS, request_body, validate_tools
 
 SHUTDOWN_GRACE_SECONDS = 35
@@ -33,9 +38,9 @@ SHUTDOWN_GRACE_SECONDS = 35
 NATIVE_MODULES = (
     "device",
     "ffn",
-    "fa",
-    "gdn",
-    "mtp",
+    "fa_fp8",
+    "gdn_radix",
+    "mtp_fp8",
     "sample",
     "vision",
 )
@@ -120,8 +125,17 @@ def artifact_identity(arguments):
         "native": native_identity(),
         "checkpoint": checkpoint_identity(arguments.model),
         "tokenizer": tokenizer_identity(arguments.model),
-        "device": device_identity(arguments.gpu_uuid),
-        "accounting": dict(version=VERSION, rates=RATES),
+        "device": device_identity(arguments.gpu_uuid, include_properties=True)
+        if formal_reference(arguments)
+        else device_identity(arguments.gpu_uuid),
+        "accounting": dict(version=arguments.reference_version, rates=RATES)
+        if formal_reference(arguments)
+        else dict(version=VERSION, rates=RATES),
+        **(
+            {"rust_sources_sha256": rust_source_identity(ROOT)}
+            if formal_reference(arguments)
+            else {}
+        ),
         "workload": PROFILE,
     }
 
@@ -190,7 +204,13 @@ class Service:
         self.ipc = Path(f"/tmp/oh-my-vllm-benchmark-{os.getpid()}.ipc")
         self.trace = arguments.artifacts / f"{mode}-execution.jsonl"
         self.log = (arguments.artifacts / f"{mode}-service.log").open("x")
+        self.rust_trace = arguments.artifacts / f"{mode}-rust-execution.jsonl"
         environment = dict(os.environ, OH_MY_VLLM_EXECUTION_TRACE=str(self.trace))
+        if formal_reference(arguments):
+            environment.update(
+                OH_MY_VLLM_RUST_EXECUTION_TRACE=str(self.rust_trace),
+                OH_MY_VLLM_RUN_MANIFEST=str(arguments.artifacts / "identity.json"),
+            )
         command = [
             str(arguments.binary),
             "--model",
@@ -268,28 +288,31 @@ class Service:
             blocks = int(os.environ["OH_MY_VLLM_NUM_GPU_BLOCKS"])
         config = {
             "model_path": str(arguments.model),
-            "num_gpu_blocks": gpu_blocks(
-                dict(
-                    num_gpu_blocks=blocks,
-                    num_speculative_tokens=4 if self.mode == "mtp4" else 0,
-                )
+            "num_gpu_blocks": (
+                blocks
+                if blocks is not None
+                else PAGES_PER_CHECKPOINT * arguments.mamba_blocks
             ),
             "mamba_blocks": arguments.mamba_blocks,
-            "block_size": 784,
+            "block_size": PAGE_TOKENS,
             "tensor_parallel_size": 1,
             "max_model_len": 262144,
             "max_num_batched_tokens": 32768,
             "max_num_seqs": 4,
             "num_speculative_tokens": 4 if self.mode == "mtp4" else 0,
         }
+        layout = cache_layout(config)
         with self.trace.open() as source:
-            verify_trace_identity(
-                (json.loads(line) for line in source),
-                checkpoint,
-                config,
-                tokenizer,
-                execution_policy(),
-            )
+            identities = [
+                event
+                for event in map(json.loads, source)
+                if event["operation"] == "identity"
+            ]
+        verify_trace_identity(
+            identities, checkpoint, config, tokenizer, execution_policy()
+        )
+        if identities[0]["cache_memory"]["pool_bytes"] != layout.pool_bytes:
+            raise ValueError("trace cache pools differ from the requested layout")
 
     def check_tools(self, tokenizer):
         body = request_body(
@@ -320,11 +343,13 @@ class Service:
         if sampling.get("temperature", 1) <= 0:
             raise ValueError("benchmark requires stochastic serving defaults")
         previous = self.trace.read_bytes()
+        rust_previous = (
+            read_trace(self.rust_trace) if formal_reference(self.arguments) else b""
+        )
         started = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=batch) as pool:
             responses = list(pool.map(lambda body: post(self.port, body), bodies))
         finished = time.perf_counter()
-        seconds = finished - started
         for value in responses:
             usage = value["usage"]
             if (
@@ -333,51 +358,20 @@ class Service:
                 or usage["prompt_tokens_details"]["cached_tokens"] != 0
             ):
                 raise ValueError(f"token count or cold-prefix check failed: {usage}")
-        manifest = {
-            "artifact_id": self.arguments.artifact_id,
-            "mode": self.mode,
-            "sampling": sampling,
-            "workload": PROFILE,
-            "requests": [
-                dict(
-                    ordinal=index,
-                    id=int(value["id"].rsplit("_", 1)[1]),
-                    response_id=value["id"],
-                    input_tokens=length,
-                    output_tokens=output,
-                    seed=index,
-                    body_sha256=json_digest(bodies[index]),
-                    tools=validate_tools(value, tokenizer),
-                )
-                for index, value in enumerate(responses)
-            ],
-            "timer": dict(clock="perf_counter", started=started, finished=finished),
-        }
-        current = self.trace.read_bytes()
-        if not current.startswith(previous):
-            raise ValueError("execution trace changed before the case boundary")
-        identities = [
-            json.loads(line)
-            for line in previous.splitlines()
-            if json.loads(line)["operation"] == "identity"
-        ]
-        events = identities + [
-            json.loads(line) for line in current[len(previous) :].splitlines()
-        ]
-        bound = lower_bound(events, manifest)
-        return {
-            "mode": self.mode,
-            "batch": batch,
-            "input_tokens": length,
-            "output_tokens": output,
-            "seconds": seconds,
-            "lower_bound": bound,
-            "manifest": manifest,
-            "manifest_id": json_digest(manifest),
-            "trace_id": json_digest(events),
-            "efficiency": efficiency(seconds, bound["seconds"]),
-            "responses": responses,
-        }
+        return archive_case(
+            self,
+            tokenizer,
+            batch,
+            length,
+            output,
+            bodies,
+            responses,
+            sampling,
+            started,
+            finished,
+            previous,
+            rust_previous,
+        )
 
 
 def _run_cases(arguments, configurations, identity, tokenizer):
@@ -462,7 +456,10 @@ def main():
     arguments.artifact_id = json_digest(identity)
     tokenizer = Tokenization(arguments.model)
     tokenizer.verify_identity(identity["tokenizer"])
-    (arguments.artifacts / "identity.json").write_text(json.dumps(identity, indent=2))
+    (arguments.artifacts / "identity.json").write_text(
+        json.dumps(identity, sort_keys=True, separators=(",", ":"))
+    )
+    arguments.run_identity = identity
     results = _run_cases(arguments, configurations, identity, tokenizer)
     verify_artifact_identity(arguments, identity)
     (arguments.artifacts / "summary.json").write_text(

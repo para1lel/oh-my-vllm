@@ -48,7 +48,7 @@ async fn cohort_case(initial: usize) {
         first
             .scheduled
             .iter()
-            .all(|row| { row.num_computed_tokens == 0 && row.prefill_token_ids.is_some() })
+            .all(|row| { row.forward_start == 0 && row.prefill_token_ids.is_some() })
     );
     verify_active_decode(&mut running, &mut worker.socket, &cohort, first).await;
     for response in responses.iter_mut().take(cohort.len()) {
@@ -126,10 +126,10 @@ async fn verify_active_decode<F>(
             let position = positions
                 .get_mut(&row.request_id)
                 .expect("only the finite cohort can execute before Prepare completes");
-            assert_eq!(row.num_computed_tokens, *position);
+            assert_eq!(row.forward_start, *position);
             assert!(!row.token_ids.is_empty());
             *position += row.token_ids.len() as u32;
-            if row.num_computed_tokens >= 8 {
+            if row.forward_start >= 8 {
                 assert!(
                     withheld.is_some(),
                     "decode must run with Prepare unanswered"

@@ -123,7 +123,7 @@ class DeepSeekPackedCacheLeases(DeepSeekPackedCacheFixture, unittest.TestCase):
         self.cache.activate_row(schedule, 0, end_pos=4)
         self.cache.require_active_slots((0,))
 
-    def test_missing_endpoint_state_and_wrong_host_layout_do_not_publish_pages(self):
+    def test_missing_endpoint_state_does_not_publish_pages(self):
         schedule = row([1], [3])
         self.cache.begin_step(schedule, 0, start_pos=0, end_pos=4)
         self.produce(0, 0, 2)
@@ -132,38 +132,6 @@ class DeepSeekPackedCacheLeases(DeepSeekPackedCacheFixture, unittest.TestCase):
             self.cache.commit(7, schedule, 0, accepted_end=4)
         self.assertEqual(self.cache.fa_pages[1].valid_tokens, 0)
         self.assertEqual(self.cache.mamba_pages[3].endpoint, 0)
-        self.cache.exports.discard(0)
-        self.cache.commit(7, schedule, 0, accepted_end=4)
-        self.cache.handle(
-            {
-                "operations": [
-                    dict(
-                        kind="store",
-                        transfer_id=1,
-                        snapshot_id=1,
-                        fa_blocks=[1],
-                        mamba_blocks=[3],
-                    )
-                ]
-            }
-        )
-        self.cache.snapshots[1].layout_version = 2
-        with self.assertRaisesRegex(ValueError, "layout"):
-            self.cache.handle(
-                {
-                    "operations": [
-                        dict(
-                            kind="load",
-                            transfer_id=2,
-                            snapshot_id=1,
-                            fa_blocks=[2],
-                            mamba_blocks=[4],
-                        )
-                    ]
-                }
-            )
-        self.assertNotIn(2, self.cache.fa_pages)
-        self.assertNotIn(4, self.cache.mamba_pages)
 
     def test_reference_sparse_graph_selection_stops_before_preparation(self):
         for disabled, failed in ((True, False), (False, True)):

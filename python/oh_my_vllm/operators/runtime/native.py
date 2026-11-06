@@ -1,3 +1,4 @@
+import copy
 import functools
 import hashlib
 import importlib.metadata
@@ -17,10 +18,13 @@ MODULE_SOURCES = {
         ("activation", "activation"),
         ("sample", "output"),
         ("fa", "fa"),
+        ("fa_fp8", "fa_fp8"),
         ("gdn", "gdn"),
+        ("gdn_radix", "gdn_radix"),
         ("hyperconnection", "hyperconnection"),
         ("ffn", "ffn"),
         ("mtp", "mtp"),
+        ("mtp_fp8", "mtp_fp8"),
         ("projection", "projection"),
         ("routing", "routing"),
         ("sparse_attention", "sparse_attention"),
@@ -377,6 +381,13 @@ def verify_hyperconnection_vendor_images(module, vendor):
     verify_vendor_images(paths, vendor["images"], "HC")
 
 
+_loaded_identities = {}
+
+
+def loaded_identities():
+    return copy.deepcopy(_loaded_identities)
+
+
 @functools.cache
 def load(name, functions):
     manifest = cache_directory() / f"{name}.json"
@@ -420,4 +431,5 @@ def load(name, functions):
         verify_collectives_vendor_images(module, vendor)
     elif name == "hyperconnection":
         verify_hyperconnection_vendor_images(module, vendor)
+    _loaded_identities[name] = copy.deepcopy(metadata)
     return module, metadata["source_id"], library

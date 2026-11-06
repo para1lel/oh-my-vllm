@@ -56,7 +56,9 @@ impl TestWorker {
                 descriptor: descriptor.clone(),
                 logical_num_blocks,
                 mamba_blocks: config.mamba_blocks.unwrap(),
-                host_cache_bytes: config.host_cache_bytes.unwrap_or(0),
+                protocol_version: crate::protocol::EXECUTION_PROTOCOL_VERSION,
+                worker_epoch: config.worker_epoch,
+                cache_layout: qwen_layout(&config),
                 cache_memory: None,
             },
         )?))
@@ -109,7 +111,7 @@ impl TestWorker {
         let client = WorkerClient {
             logical_num_blocks,
             mamba_blocks: config.mamba_blocks.unwrap(),
-            host_cache_bytes: config.host_cache_bytes.unwrap_or(0),
+            cache_layout: qwen_layout(&config),
             execution: crate::models::execution::ModelExecution::new(model_family, &descriptor),
             descriptor,
             model_family,
@@ -119,12 +121,15 @@ impl TestWorker {
             reader,
             _child: ManagedChild::new(child),
             step_id: 0,
+            execution_trace: None,
+            preparation_trace: Default::default(),
             rpc_id: 0,
             pending_prepare: None,
             last_prepare: None,
             cancelled_prepares: BTreeSet::new(),
             prepared_reply: None,
             serving_enabled: false,
+            verified_reasoning_tokens: Default::default(),
             serving_outputs: Default::default(),
             serving_errors: Default::default(),
             binding,
@@ -166,7 +171,7 @@ pub(crate) fn qwen_descriptor(config: &WorkerConfig) -> ModelDescriptor {
         "max_context_tokens": 262144,
         "capabilities": [
             "text", "images", "video", "tools", "reasoning",
-            "structured_outputs", "prefix_cache", "host_offload",
+            "structured_outputs", "prefix_cache",
         ],
         "weight_formats": ["bf16", "f32", "qwen_fp8_e4m3_block128x128_fp32_scales"],
         "cache_schema": {
@@ -174,18 +179,18 @@ pub(crate) fn qwen_descriptor(config: &WorkerConfig) -> ModelDescriptor {
             "groups": [
                 {
                     "name": "fa", "kind": "full_attention",
-                    "block_tokens": 784, "capacity_blocks": config.num_gpu_blocks.unwrap(),
+                    "block_tokens": 128, "capacity_blocks": config.num_gpu_blocks.unwrap() + 1,
                     "storage": {
-                        "type": "layout", "id": "qwen38_paired_fa_kv_bf16", "version": 1,
+                        "type": "layout", "id": "qwen38_radix_fa_fp8kv128", "version": 1,
                     },
                     "layers": fa_layers, "source": {"type": "owned"},
                 },
                 {
                     "name": "gdn", "kind": "recurrent",
-                    "block_tokens": 784, "capacity_blocks": config.mamba_blocks.unwrap(),
+                    "block_tokens": 8192, "capacity_blocks": config.mamba_blocks.unwrap() + 1,
                     "storage": {
                         "type": "layout",
-                        "id": "qwen38_paired_gdn_f32_conv_bf16_hidden_bf16",
+                        "id": "qwen38_radix_gdn8192_f32_conv_bf16_hidden_bf16",
                         "version": 1,
                     },
                     "layers": gdn_layers, "source": {"type": "owned"},
@@ -201,4 +206,20 @@ pub(crate) fn qwen_descriptor(config: &WorkerConfig) -> ModelDescriptor {
         }],
     }))
     .unwrap()
+}
+
+pub(crate) fn qwen_layout(config: &WorkerConfig) -> crate::protocol::CacheLayout {
+    crate::protocol::CacheLayout::QwenRadixV1 {
+        layout_id: crate::protocol::QWEN_LAYOUT_ID.into(),
+        gdn_period_tokens: 8192,
+        kv_page_tokens: 128,
+        usable_checkpoints: config.mamba_blocks.unwrap(),
+        usable_pages: config.num_gpu_blocks.unwrap(),
+        null_checkpoints: 1,
+        null_pages: 1,
+        private_checkpoints: 6 * config.max_num_seqs,
+        scratch_checkpoints: config.max_num_batched_tokens.div_ceil(8192) + config.max_num_seqs,
+        pool_bytes: std::collections::BTreeMap::from([("fixture".into(), 1)]),
+        format_fingerprint: crate::protocol::QWEN_FORMAT_FINGERPRINT.into(),
+    }
 }

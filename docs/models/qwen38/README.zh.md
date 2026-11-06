@@ -9,14 +9,16 @@ Qwen3.8-27B-FP8 在单张 NVIDIA B200 上运行.
 Checkpoint 声明 `Qwen3_5ForConditionalGeneration` 和 `qwen3_5`.
 保持这些原始标识符.
 
-使用块大小 784, 16 层 FA, 48 层 GDN 和 `mamba_cache_mode="align"`.
+缓存使用 128-token FP8 KV page 和独立的 8192-token GDN checkpoint, 涉及 16 层 FA 和 48 层 GDN.
+新布局的 GPU 行为, 数值质量, 容量, HTTP 性能和 AgentX 行为均未验证.
+[缓存指南](cache.zh.md)规定当前契约和收尾规则.
 默认调度器提供四个请求槽位和 32768-token 步骤预算.
 默认公开模型名称为 `qwen3.8-27b-fp8`.
 
 ## 指南
 
 - [模型数学和精度](model.zh.md)
-- [缓存容量, 前缀和主机换出](cache.zh.md)
+- [GPU 缓存容量, 独立前缀和精确会话尾](cache.zh.md)
 - [全模型数值验收](evaluation.zh.md)
 - [算子用例](operators.zh.md), [数值限值](precision.zh.md)和[性能计算](operator-performance.zh.md)
 - [HTTP 流程](performance.zh.md), [AgentX 流程](agentx.zh.md)和[最新 HTTP 结果](results.zh.md)

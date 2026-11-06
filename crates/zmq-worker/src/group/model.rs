@@ -20,6 +20,9 @@ pub struct ModelState<L> {
 #[derive(Serialize)]
 pub(crate) struct ModelInput<'a, L> {
     pub request_id: u64,
+    pub execution: oh_my_vllm_scheduler::execution::ExecutionKey,
+    pub work: oh_my_vllm_scheduler::execution::WorkSpec,
+    pub accepted_end: usize,
     pub token_ids: &'a [u32],
     pub num_computed_tokens: usize,
     pub state: &'a ModelState<L>,

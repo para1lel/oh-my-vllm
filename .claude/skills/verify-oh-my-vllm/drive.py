@@ -237,7 +237,7 @@ def drive_operations(http, processes, command):
             "--batch-size",
             "2",
             "--input-len",
-            "786",
+            "8192",
             "--output-len",
             "8",
             "--prefix-hit",
@@ -267,7 +267,7 @@ def drive_operations(http, processes, command):
             )
             row = json.loads(line.split(" ", 1)[1])
             require(
-                row["initial_prefix_hit_tokens"] == 1570, "Bench prefix reuse differs"
+                row["initial_prefix_hit_tokens"] == 16384, "Bench prefix reuse differs"
             )
     return {"diagnostics": diagnostics, "offline_scope": "fixture protocol only"}
 

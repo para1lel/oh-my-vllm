@@ -14,7 +14,7 @@ CPU checks cover model selection, readiness, constraints, evidence identities, a
 
 The [execution checks](../tests/test_execution.py) cover adaptive selection, preparation reuse, binding changes, and Graph resource ownership.
 They check recording failure, replay stream, interruption, and closure order.
-The [worker checks](../tests/test_offload_worker.py) cover the offload worker and execution boundaries.
+The [worker checks](../tests/test_offload_worker.py) cover execution-protocol validation and rejection of removed host-cache messages.
 Transfer checks cover cancellation and storage lifetime.
 Use Compute Sanitizer when native memory or synchronization behavior changes.
 

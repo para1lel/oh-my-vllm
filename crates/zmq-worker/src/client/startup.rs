@@ -62,25 +62,16 @@ impl WorkerClient {
         .await
         .map_err(|_| Error::Timeout)??;
 
-        let (model_family, descriptor, logical_num_blocks, mamba_blocks, host_cache_bytes) =
+        let (model_family, descriptor, logical_num_blocks, mamba_blocks, cache_layout) =
             Self::validate_startup(model, &config, ready_reply)?;
         config.num_gpu_blocks = Some(logical_num_blocks);
         config.mamba_blocks = Some(mamba_blocks);
-        if config
-            .host_cache_bytes
-            .is_some_and(|limit| host_cache_bytes > limit)
-            || (config.host_cache_bytes.is_some_and(|limit| limit > 0) && host_cache_bytes == 0)
-        {
-            return Err(Error::UnexpectedMessageType(
-                "host cache exceeds requested limit".into(),
-            ));
-        }
-        config.host_cache_bytes = Some(host_cache_bytes);
 
         Ok(Self::connected(
             config,
             model_family,
             descriptor,
+            cache_layout,
             sock,
             child,
             binding,
@@ -110,11 +101,12 @@ impl WorkerClient {
 
     fn init_message(config: &WorkerConfig) -> RustMessage {
         RustMessage::Init(InitMsg {
+            protocol_version: crate::protocol::EXECUTION_PROTOCOL_VERSION,
+            worker_epoch: config.worker_epoch,
             descriptor_version: MODEL_DESCRIPTOR_VERSION,
             model_path: config.model_path.to_string_lossy().into_owned(),
             num_gpu_blocks: config.num_gpu_blocks,
             mamba_blocks: config.mamba_blocks,
-            host_cache_bytes: config.host_cache_bytes,
             block_size: config.block_size,
             tensor_parallel_size: config.tensor_parallel_size,
             max_model_len: config.max_model_len,
@@ -165,21 +157,56 @@ impl WorkerClient {
         model: ModelPolicy,
         config: &WorkerConfig,
         ready_reply: crate::protocol::WorkerMessage,
-    ) -> Result<(ModelFamily, ModelDescriptor, u32, u32, u64)> {
+    ) -> Result<(
+        ModelFamily,
+        ModelDescriptor,
+        u32,
+        u32,
+        crate::protocol::CacheLayout,
+    )> {
         match ready_reply {
             crate::protocol::WorkerMessage::Ready {
                 descriptor,
                 logical_num_blocks,
                 mamba_blocks,
-                host_cache_bytes,
+                protocol_version,
+                worker_epoch,
+                cache_layout,
                 cache_memory,
             } => {
+                if protocol_version != crate::protocol::EXECUTION_PROTOCOL_VERSION
+                    || worker_epoch != config.worker_epoch
+                    || !cache_layout.validate(
+                        logical_num_blocks,
+                        mamba_blocks,
+                        config.max_num_seqs,
+                        config.max_num_batched_tokens,
+                    )
+                {
+                    return Err(Error::WorkerError(
+                        "invalid execution version, epoch or cache layout".into(),
+                    ));
+                }
                 let model_family =
                     validate_ready(model, config, &descriptor, logical_num_blocks, mamba_blocks)?;
+                if !matches!(
+                    (model_family, &cache_layout),
+                    (
+                        ModelFamily::Qwen38,
+                        crate::protocol::CacheLayout::QwenRadixV1 { .. }
+                    ) | (
+                        ModelFamily::DeepSeekV41,
+                        crate::protocol::CacheLayout::DeepseekResidentV1 { .. }
+                    )
+                ) {
+                    return Err(Error::WorkerError(
+                        "cache layout belongs to a different model".into(),
+                    ));
+                }
                 info!(
                     logical_num_blocks,
                     mamba_blocks,
-                    host_cache_bytes,
+                    ?cache_layout,
                     ?cache_memory,
                     "Worker is ready"
                 );
@@ -188,7 +215,7 @@ impl WorkerClient {
                     descriptor,
                     logical_num_blocks,
                     mamba_blocks,
-                    host_cache_bytes,
+                    cache_layout,
                 ))
             }
             crate::protocol::WorkerMessage::Error(e) => Err(Error::WorkerError(e.message)),
@@ -200,6 +227,7 @@ impl WorkerClient {
         config: WorkerConfig,
         model_family: ModelFamily,
         descriptor: ModelDescriptor,
+        cache_layout: crate::protocol::CacheLayout,
         sock: DealerSocket,
         child: ManagedChild,
         binding: Binding,
@@ -217,7 +245,6 @@ impl WorkerClient {
         });
         let logical_num_blocks = config.num_gpu_blocks.expect("validated blocks");
         let mamba_blocks = config.mamba_blocks.expect("validated Mamba blocks");
-        let host_cache_bytes = config.host_cache_bytes.expect("validated host cache");
         Self {
             config,
             execution: crate::models::execution::ModelExecution::new(model_family, &descriptor),
@@ -228,15 +255,18 @@ impl WorkerClient {
             reader,
             _child: child,
             step_id: 0,
+            execution_trace: None,
+            preparation_trace: Default::default(),
             rpc_id: 0,
             pending_prepare: None,
             last_prepare: None,
             cancelled_prepares: BTreeSet::new(),
             prepared_reply: None,
             serving_enabled: false,
+            verified_reasoning_tokens: Default::default(),
             logical_num_blocks,
             mamba_blocks,
-            host_cache_bytes,
+            cache_layout,
             serving_outputs: Default::default(),
             serving_errors: Default::default(),
             binding,

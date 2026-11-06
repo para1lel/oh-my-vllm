@@ -35,7 +35,7 @@ This budget excludes decoded keys, inputs, selected outputs, and native library 
 Candidate filters keep one boolean per block.
 Query chunking does not bound the full decoded key workspace.
 
-## Accepted state and transfers
+## Resident accepted state
 
 Token pages hold compressed KV, index keys, and Engram history.
 Accepted-state pages hold target windows, MTP windows, and incomplete compressor groups at an exact endpoint.
@@ -46,19 +46,21 @@ Commit publishes only the accepted endpoint and scheduled checkpoints.
 Restoration checks the endpoint before it clears the active slot.
 A prefix copy includes only token-page fields.
 
-Host snapshots keep encoded values and scale bytes.
-DEP4 snapshots keep their owner rank after request release.
+KV pages and accepted-state pages stay GPU resident. There is no host snapshot or restoration path through host storage.
+DEP4 keeps its four-rank owner placement and empty-rank acknowledgements.
 All ranks complete execution before owner release.
-The shared [cache policy](../../cache-policy.md) controls logical ownership and transfer completion.
+The shared [cache policy](../../cache-policy.md) controls logical ownership and safe release.
+
+Engram CPU and file-backed weight storage is separate from the KV cache and stays available.
+Necessary token and metadata transfers also stay available.
 
 ## Proposal Graph ownership
 
 The [proposal Graph cache](../../../python/oh_my_vllm/models/deepseek_v41/target_execution.py#L285)<!-- source: graph = self.proposal_graphs.get(slot) --> has at most one proposal Graph per request slot.
 It closes a graph with invalid bindings before it creates another graph.
 
-A [completed host store](../../../python/oh_my_vllm/models/deepseek_v41/cache_transfer.py#L145)<!-- source: self._release_request_slot(operation.get("request_id")) --> releases the request slot through the worker callback.
-The worker's [`_free_slot`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L46)<!-- source: def _free_slot(self, request): --> closes the proposal Graph before it clears and releases the slot.
-[`Worker.close`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L243)<!-- source: def close(self): --> closes proposal Graphs before cache storage and weights.
+The worker's [`_free_slot`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L54)<!-- source: def _free_slot(self, request): --> closes the proposal Graph before it clears and releases the slot.
+[`Worker.close`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L250)<!-- source: def close(self): --> closes proposal Graphs before cache storage and weights.
 The [graph release procedure](../../../python/oh_my_vllm/models/deepseek_v41/proposal_graph.py#L179)<!-- source: def close(self): --> synchronizes the device and resets the graph before release of its owners and PageLease.
 The [execution guide](README.md#mtp-proposal-graph) gives the conditions and default setting.
 

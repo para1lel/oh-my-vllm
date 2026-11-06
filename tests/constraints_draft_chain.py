@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import numpy as np
 import torch
+from oh_my_vllm.models.qwen38.cache import Cache
 from oh_my_vllm.models.qwen38.request import Request
 
 from tests.constraints_fixtures import (
@@ -15,6 +16,8 @@ from tests.constraints_fixtures import (
     ChainSample,
     PackedAcceptance,
 )
+from tests.qwen_radix_physical_fixtures import Device as CacheDevice
+from tests.qwen_radix_physical_fixtures import config, reference, row
 
 
 class ConstraintsDraftChain(unittest.TestCase):
@@ -27,7 +30,10 @@ class ConstraintsDraftChain(unittest.TestCase):
         request = self._chain_request_factory()
 
         d = ChainDevice()
-        cache = SimpleNamespace(fa=[None], blocks=8)
+        cache = Cache(
+            CacheDevice(),
+            config(mamba_blocks=4, num_gpu_blocks=256, num_speculative_tokens=4),
+        )
         events = []
         trace = SimpleNamespace(
             record=lambda *args, **kwargs: events.append((args, kwargs))
@@ -38,11 +44,9 @@ class ConstraintsDraftChain(unittest.TestCase):
             patch("oh_my_vllm.models.qwen38.sampling.prepare", ChainSample),
         ):
             first = request()
-            batch = SimpleNamespace(
-                requests=[first],
-                scheduled=[{"request_id": 1, "fa_block_table": [1]}],
-                metadata=(None, None, np.ones((1, 335), np.int32)),
-            )
+            item = row(end=2, sampling="target")
+            item.update(request_id=1, token_ids=first.history[:2])
+            batch = cache.batch([item], [first], False)
             endpoints = {0: (np.full((1, 5120), 2, np.float32), None)}
             first.proposal_offset = 17
             speculation.propose(batch, endpoints, True)
@@ -98,16 +102,17 @@ class ConstraintsDraftChain(unittest.TestCase):
         first.append([5])
         first.state_position = 2
         device = AcceptDevice()
-        cache = SimpleNamespace(
-            fa=[None], blocks=8, slots=8, private_slots=lambda *_: []
+        cache = Cache(
+            CacheDevice(),
+            config(mamba_blocks=4, num_gpu_blocks=256, num_speculative_tokens=4),
         )
         trace = SimpleNamespace(record=lambda *args, **kwargs: None)
         speculation = Speculation(device, None, cache, None, trace)
-        batch = SimpleNamespace(
-            requests=[first],
-            scheduled=[{"request_id": 1, "fa_block_table": [1]}],
-            metadata=(None, None, np.ones((1, 335), np.int32)),
-        )
+        item = row(end=2, sampling="target")
+        item.update(request_id=1, token_ids=first.history[:2])
+        batch = cache.batch([item], [first], False)
+        cache.complete_exports(batch)
+        cache.commit(first, batch, 0, None)
         endpoints = {0: (np.full((1, 5120), 2, np.float32), None)}
         with (
             patch("oh_my_vllm.models.qwen38.speculation.Draft", ChainDraft),
@@ -117,9 +122,21 @@ class ConstraintsDraftChain(unittest.TestCase):
         acceptance = PackedAcceptance(torch.zeros((1, 7), dtype=torch.int64))
         speculation.acceptance[1] = acceptance
         proposed = list(first.drafts)
-        batch.schedule = SimpleNamespace(sequence_rows=[0, 5], read_slots=[0])
-        batch.tokens = np.asarray([5, *proposed], dtype=np.int64)
-        batch.writes = np.zeros(5, np.int32)
+        item = row(
+            2,
+            7,
+            sampling="verify",
+            deepest=2,
+            contiguous=2,
+            resume=reference(2, first.state_slot),
+            exports=[
+                {**reference(end, slot), "role": "private_endpoint"}
+                for end, slot in zip(range(3, 8), range(6, 11), strict=True)
+            ],
+        )
+        item.update(request_id=1, token_ids=[5, *proposed])
+        item["sampling"]["drafts"] = len(proposed)
+        batch = cache.batch([item], [first], True)
         sampler = SimpleNamespace(
             greedy=True, token_rows=None, select=lambda *args, **kwargs: (None, None)
         )
@@ -153,9 +170,15 @@ class ConstraintsDraftChain(unittest.TestCase):
                 "sampling": {"temperature": 1, "presence_penalty": 0.5},
             },
         )
-        batch = SimpleNamespace(requests=[request], scheduled=[{"fa_block_table": [1]}])
+        cache = Cache(
+            CacheDevice(),
+            config(mamba_blocks=4, num_gpu_blocks=256, num_speculative_tokens=4),
+        )
+        item = row(end=1, sampling="target")
+        item["token_ids"] = request.history.copy()
+        batch = cache.batch([item], [request], False)
         request.state_position = 1
-        self.assertTrue(can_chain(batch, [0], True, 8))
+        self.assertTrue(can_chain(batch, [0], True, cache.blocks))
         for history in (
             [1] * 60,
             [1] * 61,
@@ -165,7 +188,7 @@ class ConstraintsDraftChain(unittest.TestCase):
             list(range(23)) * 3,
         ):
             request.history = [4, *history]
-            eligible = can_chain(batch, [0], True, 8)
+            eligible = can_chain(batch, [0], True, cache.blocks)
             if history == [1] * 61 or history == [1, 2] * 31:
                 self.assertFalse(eligible)
             if eligible:
@@ -179,12 +202,12 @@ class ConstraintsDraftChain(unittest.TestCase):
                             initial,
                         )
         request.history = [4, *range(128)]
-        self.assertTrue(can_chain(batch, [0], True, 8))
+        self.assertTrue(can_chain(batch, [0], True, cache.blocks))
         request.minimum = request.generated + 2
-        self.assertFalse(can_chain(batch, [0], True, 8))
+        self.assertFalse(can_chain(batch, [0], True, cache.blocks))
         request.minimum = 0
         request.ignore_eos = False
-        self.assertFalse(can_chain(batch, [0], True, 8))
+        self.assertFalse(can_chain(batch, [0], True, cache.blocks))
 
     def _check_chain_fallbacks(
         self, request, batch, d, speculation, endpoints, can_chain, cache
@@ -221,8 +244,12 @@ class ConstraintsDraftChain(unittest.TestCase):
         rejected.constraint.matcher = object()
         self.assertFalse(can_chain(batch, [0], True, cache.blocks))
         rejected.constraint.matcher = None
-        for table in ([], [0], [8]):
-            batch.scheduled[0]["fa_block_table"] = table
+        for table in ([], [0], [cache.blocks + 1]):
+            batch.metadata = (
+                *batch.metadata[:2],
+                np.asarray([table], np.int32),
+                *batch.metadata[3:],
+            )
             with self.subTest(table=table):
                 self.assertFalse(can_chain(batch, [0], True, cache.blocks))
 

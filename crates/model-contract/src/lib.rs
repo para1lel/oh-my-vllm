@@ -36,7 +36,6 @@ pub enum Capability {
     Reasoning,
     StructuredOutputs,
     PrefixCache,
-    HostOffload,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

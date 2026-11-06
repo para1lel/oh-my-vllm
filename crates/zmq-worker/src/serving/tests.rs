@@ -1,5 +1,6 @@
 mod cancellation;
 mod cohort;
+mod finalization;
 
 use super::*;
 use crate::client::{WorkerConfig, fixture::TestWorker};
@@ -105,7 +106,7 @@ struct Response {
 
 fn configuration() -> WorkerConfig {
     WorkerConfig {
-        num_gpu_blocks: Some(128),
+        num_gpu_blocks: Some(4096),
         mamba_blocks: Some(64),
         max_num_seqs: 4,
         max_num_batched_tokens: 16,
@@ -219,9 +220,17 @@ async fn executed(socket: &mut DealerSocket, message: &ExecuteMsg) {
         .scheduled
         .iter()
         .map(|row| {
-            let final_chunk = row.num_computed_tokens as usize + row.token_ids.len() >= 8;
+            let final_chunk = row.sampling != crate::protocol::Sampling::None;
             RequestResultMsg {
                 request_id: row.request_id,
+                lease_id: row.lease_id,
+                purpose: row.purpose,
+                action: row.action,
+                computed_end: row.forward_end,
+                accepted_end: row.accepted_end + u32::from(final_chunk),
+                validated_exports: vec![],
+                committed_page_valid_ends: vec![],
+                mtp_accepted_endpoint: None,
                 error: None,
                 token_ids: if final_chunk {
                     vec![42]
@@ -245,6 +254,8 @@ async fn executed(socket: &mut DealerSocket, message: &ExecuteMsg) {
         socket,
         WorkerMessage::ExecuteResult(ExecuteResultMsg {
             rpc_id: message.rpc_id,
+            worker_epoch: message.worker_epoch,
+            step_id: message.step_id,
             outputs,
             rank_completions: Vec::new(),
         }),
@@ -257,7 +268,7 @@ async fn admission_respects_configured_sequence_capacity() {
     let mut worker = TestWorker::launch(configuration()).await.unwrap();
     let budget = Budget::new(1 << 28);
     let (request, mut response) = submission(&budget);
-    let pending = begin_admit(&mut worker.client, 1, 1, request, 1)
+    let pending = begin_admit(&mut worker.client, &mut scheduler(), 1, 1, request, 1)
         .await
         .unwrap();
 

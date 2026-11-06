@@ -3,10 +3,12 @@ from collections import OrderedDict
 import numpy as np
 import torch
 
-from ...operators.mtp.plan import context_plan
+from ...operators.mtp_fp8.plan import context_plan
+from .cache_wire import write_ranges
 from .draft_chain import DraftChain, can_chain
 from .draft_pipeline import DraftPipeline, can_pipeline
 from .model import MAX_GRAPH_WORKSPACES
+from .mtp_context import context_rows
 from .speculation_ops import Acceptance, Context, Draft
 
 
@@ -68,13 +70,16 @@ class Speculation:
                 ]
             )
             selected = list(batch.writes[first:last])
-            for slot in self.cache.private_slots(
-                batch.scheduled[index]["request_id"], batch.schedule.read_slots[index]
-            ):
+            for entry in batch.scheduled[index]["model_state"]["private_checkpoints"]:
+                slot = entry["slot"]
                 if slot not in selected and slot not in batch.schedule.read_slots:
                     selected.append(slot)
                 if len(selected) >= 5:
                     break
+            if len(selected) != 5:
+                raise ValueError(
+                    "verification requires five distinct lease-owned private slots"
+                )
             slots.append(selected[:5])
             random.append((request.seed ^ 0xD1B54A32D192ED03, request.accept_offset))
             if not request.drafts_greedy and request.proposals is None:
@@ -114,15 +119,18 @@ class Speculation:
         return result
 
     def context(self, batch, hidden, graph, final):
-        prepared = self._context_rows(batch, final)
+        prepared = context_rows(batch, final)
         if prepared is None:
             return {}
-        tokens, active, media_entries, arrays, starts, lengths = prepared
+        tokens, active, media_entries, arrays, starts, lengths, writes = prepared
+        self.cache.validate_context(arrays[4], writes)
         plan = context_plan(
             rows=len(tokens),
             batch=len(active),
             table_width=arrays[5].shape[1],
-            max_queries=max(np.diff(starts)),
+            max_queries=int(max(np.diff(starts))),
+            max_context=self.cache.layout.max_context,
+            write_ranges=write_ranges(writes),
         )
         operation = self._context_operation(batch, hidden, graph, arrays, plan)
         operation.media, indices = self.media.rows(media_entries)
@@ -154,66 +162,6 @@ class Speculation:
             for local, index in enumerate(active)
             if index in final
         }
-
-    def _context_rows(self, batch, final):
-        tokens, hidden_rows, boundaries, positions, slots, lengths, starts = (
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [0],
-        )
-        active = []
-        media_entries = []
-        for index, (row, request) in enumerate(
-            zip(batch.scheduled, batch.requests, strict=True)
-        ):
-            start = row["num_computed_tokens"]
-            last = (
-                request.state_position
-                - 1
-                + int(
-                    index in final
-                    and not request.finish
-                    and request.generated + 1 < request.limit
-                )
-            )
-            begin = max(1, start, request.mtp_position + 1)
-            if begin > last:
-                continue
-            active.append(index)
-            for position in range(begin, last + 1):
-                media_entries.append((request, position, len(tokens)))
-                tokens.append(request.history[position])
-                hidden_rows.append(
-                    batch.schedule.sequence_rows[index] + position - start - 1
-                    if position > start
-                    else -1
-                )
-                boundaries.append(batch.schedule.read_slots[index])
-                positions.append(request.position(position))
-                slots.append(
-                    row["fa_block_table"][position // 784] * 784 + position % 784
-                )
-                lengths.append(position + 1)
-            starts.append(len(tokens))
-            request.mtp_position = last
-        if not tokens:
-            return None
-        arrays = (
-            np.asarray(tokens, np.int64),
-            np.asarray(hidden_rows, np.int32),
-            np.asarray(boundaries, np.int32),
-            np.asarray(positions, np.int64).T.copy(),
-            np.asarray(slots, np.int32),
-            batch.metadata[2][active].copy(),
-            np.asarray(starts, np.int32),
-            np.asarray(lengths, np.int32),
-        )
-
-        return tokens, active, media_entries, arrays, starts, lengths
 
     def _context_operation(self, batch, hidden, graph, arrays, plan):
         # Prefill retains its target input; only decode needs independent staging.
@@ -292,7 +240,16 @@ class Speculation:
             if count not in self.pipelines:
                 self.pipelines[count] = DraftPipeline(
                     d,
-                    [Draft(d, self.weights, count, stage == 0) for stage in range(4)],
+                    [
+                        Draft(
+                            d,
+                            self.weights,
+                            count,
+                            stage == 0,
+                            table_width=self.cache.layout.table_width,
+                        )
+                        for stage in range(4)
+                    ],
                     self.cache.fa[-1],
                 )
             operation = self.pipelines[count]
@@ -306,7 +263,13 @@ class Speculation:
             count = len(active)
             key = (count, stage == 0)
             if key not in self.drafts:
-                self.drafts[key] = Draft(d, self.weights, count, stage == 0)
+                self.drafts[key] = Draft(
+                    d,
+                    self.weights,
+                    count,
+                    stage == 0,
+                    table_width=self.cache.layout.table_width,
+                )
             operation = self.drafts[key]
             arrays, cached_rows, requests = self._draft_metadata(
                 batch, active, stage, operation, previous
@@ -362,7 +325,16 @@ class Speculation:
         if key not in self.chains:
             self.chains[key] = DraftChain(
                 d,
-                [Draft(d, self.weights, count, stage == 0) for stage in range(4)],
+                [
+                    Draft(
+                        d,
+                        self.weights,
+                        count,
+                        stage == 0,
+                        table_width=self.cache.layout.table_width,
+                    )
+                    for stage in range(4)
+                ],
                 count,
                 greedy,
             )
@@ -380,10 +352,12 @@ class Speculation:
         requests = [batch.requests[index] for index in active]
         positions, slots, tables, tokens = [], [], [], []
         for local, index in enumerate(active):
-            request, row = batch.requests[index], batch.scheduled[index]
+            request = batch.requests[index]
             position = request.state_position + stage
             positions.append(request.position(position))
-            slots.append(row["fa_block_table"][position // 784] * 784 + position % 784)
+            slots.append(
+                int(batch.metadata[2][index, position // 128]) * 128 + position % 128
+            )
             tables.append(batch.metadata[2][index])
             tokens.append(request.history[-1] if stage == 0 else request.drafts[-1])
             operation.copy(

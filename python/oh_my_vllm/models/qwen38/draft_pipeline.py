@@ -15,10 +15,10 @@ def can_pipeline(batch, active, graph, blocks):
         request = batch.requests[index]
         if request.generated + 4 >= request.limit:
             return False
-        table = batch.scheduled[index]["fa_block_table"]
+        table = batch.metadata[2][index]
         for position in range(request.state_position, request.state_position + 4):
-            page = position // 784
-            if page < 0 or page >= len(table) or not 0 < table[page] < blocks:
+            page = position // 128
+            if page < 0 or page >= len(table) or not 0 < table[page] <= blocks:
                 return False
     return True
 
@@ -28,9 +28,16 @@ class DraftPipeline:
         self.device, self.stages = device, stages
         self.count = stages[0].hidden.shape[0]
         self.cache = cache
-        self.cache_rows = device.view(cache[0], (cache[0].shape[0] * 1568, 1024))
+        self.cache_rows = (
+            device.view(cache[0], (cache[0].shape[0] * 256, 1024)),
+            device.view(cache[1], (cache[1].shape[0] * 256, 4)),
+        )
         self.saved = [
-            device.empty((self.count * 2, 1024), "bfloat16") for _ in range(3)
+            (
+                device.empty((self.count * 2, 1024), "uint8"),
+                device.empty((self.count * 2, 4), "float32"),
+            )
+            for _ in range(3)
         ]
         self.indices = None
         self.metadata = Metadata(
@@ -87,8 +94,7 @@ class DraftPipeline:
             positions = [request.state_position + number for request in requests]
             slots = np.asarray(
                 [
-                    batch.scheduled[index]["fa_block_table"][position // 784] * 784
-                    + position % 784
+                    batch.metadata[2][index][position // 128] * 128 + position % 128
                     for index, position in zip(active, positions, strict=True)
                 ],
                 np.int32,
@@ -111,8 +117,8 @@ class DraftPipeline:
                 )
             )
             if number:
-                keys = slots // 784 * 1568 + slots % 784
-                indices.append(np.concatenate((keys, keys + 784)))
+                keys = slots // 128 * 256 + slots % 128
+                indices.append(np.concatenate((keys, keys + 128)))
         arrays.append(
             np.asarray([request.history[-1] for request in requests], np.int64)
         )
@@ -124,11 +130,12 @@ class DraftPipeline:
     def launch(self, number, graph):
         stage = self.stages[number]
         if number:
-            self.device.module.gather_rows(
-                self.saved[number - 1],
-                self.cache_rows,
-                self.metadata.arrays[20 + number],
-            )
+            for destination, source in zip(
+                self.saved[number - 1], self.cache_rows, strict=True
+            ):
+                self.device.module.gather_rows(
+                    destination, source, self.metadata.arrays[20 + number]
+                )
             self.snapshots.add(number)
         prepared = stage.runs and stage.thread == get_ident()
         stage.execute(graph if prepared else False)
@@ -136,11 +143,13 @@ class DraftPipeline:
     def restore(self, number):
         if number not in self.snapshots:
             return
-        saved = self.saved[number - 1]
-        for index, row in enumerate(self.indices[number - 1]):
-            destination = self.device.view(self.cache_rows, (1, 1024), int(row) * 1024)
-            source = self.device.view(saved, (1, 1024), index * 1024)
-            self.device.copy(destination, source)
+        for saved, cache, width in zip(
+            self.saved[number - 1], self.cache_rows, (1024, 4), strict=True
+        ):
+            for index, row in enumerate(self.indices[number - 1]):
+                destination = self.device.view(cache, (1, width), int(row) * width)
+                source = self.device.view(saved, (1, width), index * width)
+                self.device.copy(destination, source)
         self.snapshots.remove(number)
 
     def readback(self, value, next_stage, graph):

@@ -8,7 +8,11 @@ from unittest.mock import patch
 
 import numpy as np
 import torch
+from oh_my_vllm.models.qwen38.cache import Cache
 from oh_my_vllm.operators.runtime.device import Device
+
+from tests.qwen_radix_physical_fixtures import Device as CacheDevice
+from tests.qwen_radix_physical_fixtures import config, reference, row
 
 
 class GraphOwner:
@@ -384,20 +388,23 @@ class GraphCapture(unittest.TestCase):
                 limit=10,
                 position=lambda value: (value,) * 3,
             )
-            batch = SimpleNamespace(
-                requests=[request],
-                scheduled=[
-                    dict(
-                        request_id="request",
-                        num_computed_tokens=0,
-                        fa_block_table=[0],
-                    )
-                ],
-                schedule=SimpleNamespace(
-                    verify=True, sequence_rows=(0, 2), read_slots=(0,)
-                ),
-                metadata=(None, None, np.zeros((1, 1), np.int32)),
+            cache = Cache(
+                CacheDevice(),
+                config(mamba_blocks=4, num_gpu_blocks=256, num_speculative_tokens=4),
             )
+            item = row(
+                end=2,
+                sampling="verify",
+                exports=[
+                    {**reference(end, slot), "role": "private_endpoint"}
+                    for end, slot in ((1, 5), (2, 6))
+                ],
+            )
+            item.update(request_id="request", token_ids=request.history.copy())
+            item["sampling"]["drafts"] = 1
+            batch = cache.batch([item], [request], True)
+            cache.complete_exports(batch)
+            cache.commit(request, batch, 0, None)
             closed = []
             live = []
             peak = [0]
@@ -419,7 +426,7 @@ class GraphCapture(unittest.TestCase):
             owner = speculation.Speculation(
                 SimpleNamespace(view=lambda *_: object()),
                 None,
-                SimpleNamespace(),
+                cache,
                 SimpleNamespace(rows=lambda _: (None, None)),
                 SimpleNamespace(record=lambda *_, **__: None),
             )
@@ -437,6 +444,7 @@ class GraphCapture(unittest.TestCase):
                 for _ in range(4):
                     request.mtp_position = 0
                     owner.context(batch, np.zeros((1, 1), np.float32), True, set())
+                    self.assertEqual(request.mtp_position, request.state_position - 1)
                     self.assertLessEqual(len(live), 2)
                 self.assertEqual(len(owner.context_decode), 2)
                 self.assertEqual(closed, [1])

@@ -3,25 +3,25 @@
 The [Rust scheduler](../crates/scheduler/src/lib.rs) uses an explicit model-selected [cache policy](../crates/scheduler/src/policy.rs).
 Shared scheduling controls queues, token budgets, preemption, cancellation, and output validation.
 It does not interpret model group names, block tables, or physical slot layouts.
+KV cache state stays on the GPU. There is no host cache protocol or host storage budget.
 
 ## Model operations
 
-The policy supplies admission demand, prefix lookup, valid prefill lengths, allocation units, reservations, assignments, and resource counts.
-Valid prefill lengths reflect state correctness constraints.
+The policy supplies admission demand, prefix lookup, valid prefill lengths, reservations, assignments, and resource counts.
+Valid prefill lengths obey model state constraints.
 Scheduling preferences must not exclude usable residual tokens.
 The shared scheduler applies the priorities in the [runtime contract](requirements.md).
 
-`PrefixHit` contains a token length and model-selected metadata.
-A default hit has zero length and no new prefix state.
-Prefix hits leave at least one accepted-history token for computation.
+`PrefixHit` contains a recovery length and model-selected metadata.
 The policy can supply a fallback prefix after allocation fails.
+A model can use saved hidden values for a complete prompt hit if that operation is permitted by its cache contract.
 
 `ScheduledRequest<State>` contains shared request fields and a model-selected assignment.
 An assignment names state locations. It does not own storage.
-The policy keeps referenced storage available until execution and transfers permit release.
+The policy pins referenced storage until execution and necessary copies let it release that storage.
 Allocation failure must not publish a prefix or keep an unusable request allocation.
 
-## Commit and ownership
+## Commit and completion
 
 The scheduler validates the full worker output before calling `commit_cache` for any request.
 The policy selects accepted state from validated progress.
@@ -30,39 +30,32 @@ An arena-based policy selects storage through live owners in the [state arena](s
 
 The caller proves device completion before supplying results to the scheduler.
 Distributed callers also prove [all-rank completion](distributed.md#transactions-and-publication).
-Policy callbacks are trusted implementation code, not worker input.
-They must validate complete identity sets before transferring ownership.
+The [wire contract](adapters.md#execution-protocol) binds results to the complete execution identity.
+
+`completion_plan` selects forward computation, endpoint export, or a completed endpoint.
+`validate_cache_step` checks model-specific state evidence before commit.
+`finish_request` distinguishes success, cancellation, and failure.
+Only a validated success can publish the successful request tail.
+The [session registry](../crates/scheduler/src/session.rs) supplies admission order for that publication.
+
+## Retirement
 
 `free` releases request ownership only when its caller permits release.
 `Scheduler::abort` alone does not prove device completion.
-Pending host transfers keep their owners after request cancellation until completion.
+A cancelled submitted request enters `Retiring` while its execution is in flight.
+The [lifecycle implementation](../crates/scheduler/src/lifecycle.rs) releases pins only after validated completion clears the execution identity.
 
-## Host transfers
-
-The [host cache](../crates/scheduler/src/cache.rs) uses three policy types:
-
-| Type | Meaning |
-|---|---|
-| `Snapshot` | Cloneable host metadata, not a live GPU lease |
-| `Transfer` | Transfer ownership, without a `Clone` obligation |
-| `TransferPlan` | Wire metadata, without storage ownership |
-
-The policy prepares request stores, prefix stores, and load reservations.
-A failed load reservation releases temporary pins and request allocation.
-Transfer pins protect source and destination storage until asynchronous access completes.
-
-After validated completion, `finish_transfer` releases transfer pins and returns snapshot metadata.
-Deferred and capacity responses also use this release step.
-They must prove that no transfer continues to use the buffers.
-Request ownership has a separate lifetime from transfer ownership.
-
-`CacheOperation<TransferPlan>` keeps common transfer identities and a flattened model plan.
-A drop operation has no transfer owner and uses the policy's empty plan.
-Cloneable plans and snapshots cannot replace a pending transfer owner.
+Kernel work, auxiliary streams, rollback, exports, and copies must finish before physical release.
+Finished-request and preempted-request notifications still release worker state.
+Worker replacement first proves that the old worker has exited, then resets state in a new epoch.
+Necessary token and metadata transfers obey the [execution rules](execution.md).
 
 ## Implementations
 
-The [Qwen policy](../crates/scheduler/src/policy/qwen.rs) uses `HybridCoordinator` and paired FA/GDN assignments.
-Its [adapter cache guide](models/qwen38/cache.md) specifies physical restoration and wire fields.
-The [transaction policy](../crates/scheduler/src/policy.rs) connects typed storage with rank execution.
+The [Qwen policy](../crates/scheduler/src/policy/qwen.rs) uses independent checkpoint and KV page pools with one token radix tree.
+Its [cache guide](models/qwen38/cache.md) specifies independent prefix positions, exact session tails, and physical storage.
+
+The [DeepSeek policy](../crates/zmq-worker/src/models/deepseek_v41/cache.rs) uses its resident paired-block assignments and accepted-state rules.
+It does not use Qwen's capacity ratio, checkpoint interval, or exact-tail computation rule.
+Its [cache guide](models/deepseek_v41/cache.md) specifies the model storage.
 A generic policy interface does not prove model mathematics, capacity, or device safety.

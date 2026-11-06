@@ -15,6 +15,10 @@
 | MTP4 | 1, 2, 4 | 32768, 65536, 131072 | 64, 8192 |
 
 共 24 种配置.
+新缓存布局必须完成完整矩阵和批准的 AgentX 工作负载.
+12 个输出为 8192 tokens 的配置必须各自达到至少 40% 效率.
+新布局的 HTTP 和 AgentX 验收均未完成.
+
 64-token 输出使测量对 prefill 时间敏感.
 保留 8192-token 输出用于长 decode 测量.
 使用 32768-token 预算, 最多同时运行 4 个请求.
@@ -56,9 +60,9 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark 
 它还在计时前为每个模式检查一次完整工具调用.
 它检查 HTTP usage 中的 prompt 长度, 输出长度和无缓存前缀.
 
-Worker 使用固定 FA 默认值, 并按[服务显存预算](cache.zh.md#cache-内存)执行启动检查.
-默认 GDN 容量为 128 个 slot.
-使用 `--blocks` 显式设置较小的 FA 容量, 使用 `--mamba-blocks` 调整 GDN 容量.
+Worker 通过[缓存字节预算](cache.zh.md#cache-内存)确定容量.
+可用 page 数和 checkpoint 数必须满足 `P = 64 * C`.
+当前计划不证明实测 GPU 容量.
 Trace 身份记录实际容量和显存预算.
 
 使用 `--case ordinary:1:32768` 选择两个输出长度.
@@ -95,8 +99,14 @@ efficiency = reference_seconds / HTTP_seconds
 
 ## 下界计算
 
-[参考计算](../../../development/serving/kernels.py)使用版本 `http-reference-v5`.
-它使用当前 kernel 边界和精度规则, 不使用实测校准输入.
+[参考计算](../../../development/serving/kernels.py)为[已记录矩阵](results.zh.md)使用版本 `http-reference-v5`.
+后续计算, 内存, 算术和省略项章节规定该版本的旧 BF16 布局和 784-token checkpoint.
+这些章节不定义新 FP8 布局的计量.
+计算不使用实测校准输入.
+
+局部[组件计算](../../../development/serving/qwen_fp8_roofline.py) `qwen-fp8-components-v1` 不是完整 HTTP 验收计算器.
+新格式效率需要经过审查的完整计算器, 并使用独立身份.
+组件估算或旧 v5 结果不能证明新的 40% 目标.
 
 [Trace 验证器](../../../development/serving/trace.py)先检查完整 prefill, 连续接受位置, proposal 依赖和输出数量.
 唯一 trace identity 必须匹配服务模式.

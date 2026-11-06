@@ -1,14 +1,30 @@
-use crate::client::{WorkerClient, validate_reply_ids, worker_error};
+use crate::client::{WorkerClient, worker_error};
 use crate::error::{Error, Result};
+use crate::models::ServiceCache;
 use crate::protocol::{ExecuteMsg, RustMessage, ScheduledRequestMsg};
 use oh_my_vllm_scheduler::output::{RequestOutput, ScheduledRequest, WorkerOutput};
 use std::time::Instant;
 use tracing::debug;
 
+mod codec;
+mod resources;
+mod validation;
+
+#[cfg(test)]
+mod tests;
+
+fn wire_digest(value: &impl serde::Serialize) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = serde_json::to_value(value)
+        .and_then(|value| serde_json::to_vec(&value))
+        .map_err(|error| Error::UnexpectedMessageType(error.to_string()))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
 impl WorkerClient {
-    pub async fn execute_one_step(
+    pub async fn execute_one_step<P: ServiceCache>(
         &mut self,
-        scheduled: &[ScheduledRequest],
+        scheduled: &[ScheduledRequest<P::State>],
         finished_request_ids: &[u64],
         preempted_request_ids: &[u64],
         num_batched_tokens: usize,
@@ -17,33 +33,23 @@ impl WorkerClient {
             && finished_request_ids.is_empty()
             && preempted_request_ids.is_empty()
         {
-            debug!("empty batch — skipping execute");
             return Ok(WorkerOutput {
                 outputs: Vec::new(),
             });
         }
-
-        self.step_id += 1;
         self.rpc_id += 1;
         let rpc_id = self.rpc_id;
-        let started = Instant::now();
+        let rows = scheduled
+            .iter()
+            .map(codec::encode_row::<P>)
+            .collect::<Result<Vec<ScheduledRequestMsg>>>()?;
+        self.step_id =
+            validation::execution_step(scheduled, self.config.worker_epoch, self.step_id)?;
         let msg = RustMessage::Execute(ExecuteMsg {
             rpc_id,
             step_id: self.step_id,
-            scheduled: scheduled
-                .iter()
-                .map(|s| ScheduledRequestMsg {
-                    request_id: s.request_id,
-                    token_ids: s.token_ids.clone(),
-                    prefill_token_ids: s.prefill_token_ids.clone(),
-                    num_computed_tokens: s.num_computed_tokens as u32,
-                    fa_block_table: s.state.fa_block_table.clone(),
-                    mamba_block_table: s.state.mamba_block_table.clone(),
-                    fa_block_copies: s.state.fa_block_copies.clone(),
-                    prefix_state_slot: s.state.prefix_state_slot,
-                    cache_checkpoint: s.state.cache_checkpoint,
-                })
-                .collect(),
+            worker_epoch: self.config.worker_epoch,
+            scheduled: rows,
             finished_request_ids: finished_request_ids.to_vec(),
             preempted_request_ids: preempted_request_ids.to_vec(),
             num_batched_tokens: num_batched_tokens as u32,
@@ -54,8 +60,8 @@ impl WorkerClient {
                 preempted_request_ids,
             )?,
         });
+        let started = Instant::now();
         Self::send_raw(&mut self.sock, &msg).await?;
-
         let reply = self.recv_for(rpc_id).await?;
         debug!(
             step_id = self.step_id,
@@ -65,44 +71,28 @@ impl WorkerClient {
             "execute_round_trip"
         );
         match reply {
-            crate::protocol::WorkerMessage::ExecuteResult(r) => self.finish_execution(scheduled, r),
-            crate::protocol::WorkerMessage::Error(e) => Err(worker_error(e)),
-            other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
-        }
-    }
-
-    pub async fn cache_step<P: crate::models::ServiceCache>(
-        &mut self,
-        scheduler: &mut oh_my_vllm_scheduler::Scheduler<P>,
-    ) -> Result<()> {
-        if !scheduler.cache_pending() {
-            return Ok(());
-        }
-        self.rpc_id += 1;
-        let rpc_id = self.rpc_id;
-        let mut operations = scheduler.cache_operations();
-        self.execution.route_cache(&mut operations)?;
-        Self::send_raw(&mut self.sock, &RustMessage::Cache { rpc_id, operations }).await?;
-        match self.recv_for(rpc_id).await? {
-            crate::protocol::WorkerMessage::CacheResult {
-                completed,
-                host_cache_bytes,
-                cache_rank_completions,
-                ..
-            } => {
-                self.execution
-                    .complete_cache(&cache_rank_completions, &completed)?;
-                if host_cache_bytes != self.host_cache_bytes {
-                    return Err(Error::UnexpectedMessageType(
-                        "host cache capacity changed".into(),
-                    ));
-                }
-                scheduler
-                    .complete_cache(&completed)
-                    .map_err(|error| Error::UnexpectedMessageType(error.to_string()))
+            crate::protocol::WorkerMessage::ExecuteResult(result) => {
+                let RustMessage::Execute(sent) = msg else {
+                    unreachable!()
+                };
+                validation::validate_reply(
+                    scheduled,
+                    &result,
+                    self.config.worker_epoch,
+                    self.step_id,
+                    self.descriptor.vocabulary_size,
+                    self.config.num_speculative_tokens,
+                    &self.verified_reasoning_tokens,
+                )?;
+                resources::validate(
+                    &sent.scheduled,
+                    &result.outputs,
+                    self.config.num_speculative_tokens > 0,
+                )?;
+                self.finish_execution(scheduled, finished_request_ids, &sent, result)
             }
-            crate::protocol::WorkerMessage::Error(error) => Err(Error::WorkerError(error.message)),
-            reply => Err(Error::UnexpectedMessageType(format!("{reply:?}"))),
+            crate::protocol::WorkerMessage::Error(error) => Err(worker_error(error)),
+            other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
         }
     }
 
@@ -130,20 +120,43 @@ impl WorkerClient {
         }
     }
 
-    fn finish_execution(
+    fn finish_execution<S>(
         &mut self,
-        scheduled: &[ScheduledRequest],
-        r: crate::protocol::ExecuteResultMsg,
+        scheduled: &[ScheduledRequest<S>],
+        finished_request_ids: &[u64],
+        sent: &ExecuteMsg,
+        result: crate::protocol::ExecuteResultMsg,
     ) -> Result<WorkerOutput> {
-        validate_reply_ids(scheduled, &r.outputs)?;
-        self.execution.complete(self.step_id, &r.rank_completions)?;
         if !self.serving_enabled
-            && let Some(error) = r.outputs.iter().find_map(|output| output.error.as_ref())
+            && let Some(error) = result
+                .outputs
+                .iter()
+                .find_map(|output| output.error.as_ref())
         {
             return Err(Error::WorkerError(error.clone()));
         }
+        self.execution
+            .complete(self.step_id, &result.rank_completions)?;
+        if std::env::var_os("OH_MY_VLLM_RUST_EXECUTION_TRACE").is_some() {
+            self.execution_trace = Some(serde_json::json!({
+                "worker_epoch": result.worker_epoch, "step_id": result.step_id,
+                "scheduled_sha256": wire_digest(&sent.scheduled)?,
+                "outputs_sha256": wire_digest(&result.outputs)?,
+            }));
+        }
+        for request_id in finished_request_ids {
+            self.verified_reasoning_tokens.remove(request_id);
+        }
+        for output in &result.outputs {
+            if output.error.is_none()
+                && output.purpose == oh_my_vllm_scheduler::execution::WorkPurpose::Advance
+            {
+                self.verified_reasoning_tokens
+                    .insert(output.request_id, output.reasoning_tokens);
+            }
+        }
         if self.serving_enabled {
-            for output in &r.outputs {
+            for output in &result.outputs {
                 if let Some(error) = &output.error {
                     self.serving_errors.insert(output.request_id, error.clone());
                 } else {
@@ -158,18 +171,38 @@ impl WorkerClient {
                 }
             }
         }
+        let rows: std::collections::BTreeMap<_, _> =
+            scheduled.iter().map(|row| (row.request_id, row)).collect();
         Ok(WorkerOutput {
-            outputs: r
+            outputs: result
                 .outputs
                 .into_iter()
-                .filter(|o| o.error.is_none())
-                .map(|o| RequestOutput {
-                    request_id: o.request_id,
-                    token_ids: o.token_ids,
-                    num_accepted_draft_tokens: o.num_accepted_draft_tokens as usize,
-                    new_draft_token_ids: o.new_draft_token_ids,
+                .filter(|output| output.error.is_none())
+                .map(|output| {
+                    let row = rows[&output.request_id];
+                    RequestOutput {
+                        request_id: output.request_id,
+                        execution: row.execution,
+                        work: row.work,
+                        cache_result: codec::cache_result(&output, row.execution),
+                        token_ids: output.token_ids,
+                        num_accepted_draft_tokens: output.num_accepted_draft_tokens as usize,
+                        new_draft_token_ids: output.new_draft_token_ids,
+                    }
                 })
                 .collect(),
         })
+    }
+}
+
+#[cfg(test)]
+mod trace_binding {
+    #[test]
+    fn wire_hash_matches_python_sorted_utf8_json() {
+        let value = serde_json::json!({"b": "实际输出", "a": 7});
+        assert_eq!(
+            super::wire_digest(&value).unwrap(),
+            "78a8a0581641da657df7ff0c6f6f6110947aeaeed544d5953519c08b7c7df3ec"
+        );
     }
 }

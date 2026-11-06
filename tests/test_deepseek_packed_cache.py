@@ -248,58 +248,6 @@ class DeepSeekPackedCache(DeepSeekPackedCacheFixture, unittest.TestCase):
             )
         )
 
-    def test_host_roundtrip_retains_original_codes_scales_and_tokens(self):
-        schedule = row([1], [3])
-        self.cache.begin_step(schedule, 0, start_pos=0, end_pos=4)
-        self.produce(0, 0, 2)
-        self.model.engram_hash.cache[0, :4] = torch.arange(100, 104)
-        self.cache.commit(7, schedule, 0, accepted_end=4)
-        source = self.cache.fa_pages[1]
-        source.compressed[0].codes[0, 0] = 0x80
-        source.index[0].scales[0, 0] = 0x04
-        expected_codes = source.compressed[0].codes.clone()
-        expected_scales = source.index[0].scales.clone()
-        operations = [
-            dict(
-                kind="store",
-                transfer_id=1,
-                snapshot_id=1,
-                fa_blocks=[1],
-                mamba_blocks=[3],
-            )
-        ]
-        stored = self.cache.handle({"operations": operations})
-        loaded = self.cache.handle(
-            {
-                "operations": [
-                    dict(
-                        kind="load",
-                        transfer_id=2,
-                        snapshot_id=1,
-                        fa_blocks=[2],
-                        mamba_blocks=[4],
-                    )
-                ]
-            }
-        )
-        target = self.cache.fa_pages[2]
-        torch.testing.assert_close(
-            target.compressed[0].codes, expected_codes, atol=0, rtol=0
-        )
-        torch.testing.assert_close(
-            target.index[0].scales, expected_scales, atol=0, rtol=0
-        )
-        torch.testing.assert_close(target.engram[0], source.engram[0], atol=0, rtol=0)
-        self.assertEqual(stored[0]["bytes"], loaded[0]["bytes"])
-        self.assertEqual(
-            stored[0]["bytes"],
-            self.cache._fa_page_bytes() + self.cache._mamba_page_bytes(),
-        )
-        self.cache.restore(7, 1, row([2], [4]), start_pos=4)
-        torch.testing.assert_close(
-            self.model.engram_hash.cache[1, :4], torch.arange(100, 104), atol=0, rtol=0
-        )
-
     def test_rejected_suffix_is_unpublished_and_odd_endpoint_uses_the_tail(self):
         schedule = row([1, 2], [3, 4])
         self.cache.begin_step(schedule, 0, start_pos=0, end_pos=8, minimum_end=3)

@@ -26,6 +26,7 @@ fn trace(prompt_len: usize) -> Vec<Step> {
         let scheduled = scheduler.schedule();
         assert!(scheduled.preempted_request_ids.is_empty());
         assert_eq!(scheduled.scheduled.len(), 1);
+        scheduler.mark_submitted(&scheduled).unwrap();
         let request = &scheduled.scheduled[0];
         let count = request.token_ids.len();
         assert!(count > 0);
@@ -37,6 +38,16 @@ fn trace(prompt_len: usize) -> Vec<Step> {
             .update(WorkerOutput {
                 outputs: vec![RequestOutput {
                     request_id: 1,
+                    execution: request.execution,
+                    work: request.work,
+                    cache_result: oh_my_vllm_scheduler::execution::CacheStepResult {
+                        execution: request.execution,
+                        computed_end: computed,
+                        accepted_end: request.accepted_end + outputs,
+                        exported_checkpoints: vec![],
+                        page_valid_ends: vec![],
+                        mtp_accepted_end: None,
+                    },
                     token_ids: if outputs == 1 {
                         vec![42]
                     } else {

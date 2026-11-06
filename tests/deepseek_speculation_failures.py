@@ -11,6 +11,7 @@ from tests.deepseek_speculation_fixtures import (
     _chain_worker,
     _PositionModel,
     _verification_worker,
+    _wire_message,
     _worker,
 )
 from tests.test_deepseek_cache import cache_for
@@ -94,6 +95,7 @@ class DeepSeekSpeculationFailures(DeepSeekSpeculationFixture, unittest.TestCase)
             finished_request_ids=[],
             preempted_request_ids=[],
         )
+        message = _wire_message(worker, message)
         bridge = GroupWorker.__new__(GroupWorker)
         bridge.commands = []
         bridge.close = Mock()

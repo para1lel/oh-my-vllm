@@ -251,6 +251,11 @@ class GroupWorker:
         ready = replies[0]
         descriptor = ready["descriptor"]
         for rank in range(1, WORLD_SIZE):
+            for field in ("protocol_version", "worker_epoch", "cache_layout"):
+                if replies[rank][field] != ready[field]:
+                    raise ValueError(
+                        f"DeepSeek rank {rank} {field} differs from rank zero"
+                    )
             if replies[rank]["descriptor"] != descriptor:
                 raise ValueError(
                     f"DeepSeek rank {rank} descriptor differs from rank zero"
@@ -283,15 +288,19 @@ class GroupWorker:
             command.put(dict(message))
         try:
             replies = self._collect(COMMAND_TIMEOUT_SECONDS)
+            if self.strategy == "dep4":
+                from .rank_plan import merge_replies
+
+                reply = merge_replies(message, replies)
+            elif message["type"] == "execute":
+                from .rank_plan import merge_replicated_execute
+
+                reply = merge_replicated_execute(message, replies)
+            else:
+                reply = replies[0]
         except BaseException:
             self.close()
             raise
-        if self.strategy == "dep4":
-            from .rank_plan import merge_replies
-
-            reply = merge_replies(message, replies)
-        else:
-            reply = replies[0]
         return reply if reply.get("type") != "ack" else None
 
     def close(self):

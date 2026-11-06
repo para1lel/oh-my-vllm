@@ -25,6 +25,9 @@ class Request:
         self.accept_offset = 0
         self.state_slot = None
         self.state_position = 0
+        self.computed_end = 0
+        self.kv_valid_end = 0
+        self.endpoints = {}
         self.constraint = Constraint.for_request(
             tokenizer.grammar, options, tool_grammar=tool_grammar
         )

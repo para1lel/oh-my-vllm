@@ -2,96 +2,78 @@
 
 Use `nightly` for development.
 Read the continuation index in ignored `LOCAL.md` before work.
-It gives host settings, external artifact locations, coordinator rules, and session closure status.
-Use the last external records in the `LOCAL.md` index for resource and Git delivery status.
+The index gives external contracts, coordinator state, resource ownership, and Git delivery records.
+The current deadline is 2026-11-07 at 09:00 CST.
+The maintainer authorized the current cache and service changes.
 
-## Harness continuation
+## Delivery targets
 
-Use the [development loop](development.md#development-loop) for repository checks.
-The code limits are 500 physical lines per file and 80 physical lines per function.
-These limits also apply to tests, checkers, and skill helpers.
-The [verification skill](../.claude/skills/verify-oh-my-vllm/SKILL.md) drives the Rust app with external evidence.
-Its CPU worker fixture checks service and transport. It does not prove GPU inference, numerical correctness, or performance.
+| Model | HTTP and AgentX scope | Long-output requirement |
+|---|---|---|
+| Qwen | Full 24-case HTTP matrix and approved AgentX workload | Each of 12 long-output cases has efficiency at least 40% |
+| DeepSeek-V4.1 | Full 38-case HTTP matrix and three approved AgentX workloads | Each of 19 long-output cases has efficiency at least 33% with `deepseek-http-roofline-v6` |
 
-The harness work divides Rust, Python, CUDA, and tool code into smaller modules.
-Use current source and binary identities for new acceptance.
-The operator identities in the preceding handoff apply only to their recorded source and binary bytes.
-They do not identify reorganized source or prove its acceptance.
-Check moved source links and native build identities after the source freeze.
-
-## Delivery target
-
-The target is DeepSeek-V4.1 through the full Rust HTTP service and AgentX.
-The approved HTTP matrix has 38 cases.
-For each of the 19 long-output cases, `deepseek-http-roofline-v6` efficiency must be at least 33%.
-The full approved HTTP matrix, the three AgentX workloads, and the 33% target are not completed.
-The old TP4 AgentX records do not prove that all session trees completed.
-After source changes, old acceptance records do not show acceptance for the changed source.
-
-The coordinator prepares plans, gives instructions, and completes acceptance checks and Git delivery.
-Use `opus` at `max` for all implementation work.
-The local index gives the agent replacement procedure.
+The coordinator owns planning, resource assignment, acceptance, and Git integration.
+Use `opus` at `max` for implementation.
+Use the current coordinator record for file ownership and GPU authorization.
 
 ## Current implementation
 
-Do not change the production source for this delivery.
-Do not increase the test scope.
+The project removes KV host storage, its protocol, and its configuration.
+Engram CPU and file-backed weights stay available.
+Necessary token, metadata, and draft transfers stay available.
 
-The production source contains the MTP proposal Graph, the M16 kernel, and the M32 prefetch change.
-It also contains the HC dot and router prefill changes.
-The [execution guide](models/deepseek_v41/README.md#mtp-proposal-graph) gives the MTP Graph conditions and default setting.
-The [quantization guide](models/deepseek_v41/quantization.md) gives the kernel parameters and numerical contract.
-Acceptance records show acceptance only for the source and binary identities in those records.
+The [Qwen cache](models/qwen38/cache.md) separates 8192-token GDN checkpoints from 128-token FP8 KV pages.
+Usable persistent capacity follows `P = 64 * C`, with separate null, private, and scratch storage in the byte budget.
+The radix policy keeps independent prefix evidence and orders successful session-tail replacement by admission generation.
+The service uses the [version 2 execution protocol](adapters.md#execution-protocol) and model-specific completion rules.
+DeepSeek keeps its resident cache, accepted-state restoration, and four-rank owner rules.
 
-The `weight-store-v1` and grouped TMEM candidates are rejected.
-The candidate that uses rawdot scheduling for more small batches is rejected.
-The BF16 Compressor Graph candidate is not in the production source.
-No accepted HTTP measurement shows that this candidate increases performance.
-Do not restore these candidates as the default next step.
+Model acceptance with production checkpoint weights or GPU execution stays closed until public comparisons give satisfactory results for all shapes that the operators use. CPU unit tests are permitted, also for small models with generated or synthetic weights.
+The new Qwen format, physical capacity, GPU behavior, full HTTP matrix, and AgentX acceptance are not verified.
+The complete DeepSeek HTTP, AgentX, and efficiency targets are not complete.
+Old measurements apply only to their recorded source, binary, and accounting identities.
 
 ## Next work
 
-1. Read the last coordinator status and combined source identity in `LOCAL.md`.
-   Compare the production source and binary identities with that record.
-   Make sure that resources are released before you give GPUs to new work.
+1. Read the current external implementation contracts and coordinator state from the `LOCAL.md` index.
+   Check the assigned files and current source identities.
+   Get reviews from other agents. Correct their findings.
 
-2. Read the acceptance scope for the combined source identity in `LOCAL.md`.
-   Complete only the checks that those records do not cover.
-   Use the model guides for the applicable numerical, state, Graph, batch, request-owner, and capacity checks.
-   A case subset or operator comparison does not replace the full-model check done independently.
-   Complete the applicable acceptance checks before formal HTTP and AgentX measurements.
+2. Complete the public comparison gate for all shapes that the operators use before checkpoint or GPU model acceptance.
+   CPU unit tests are permitted, also for small models with generated or synthetic weights.
+   Use the [execution rules](execution.md) for GPU ownership.
+   An authorization record cannot replace a live resource lease.
 
-3. Do not change numerical order, checkpoint weights and scales, error status, fixtures, or acceptance limits.
-   For capacity changes, measure cache pages, state endpoints, projection storage, and temporary storage first.
-   If the source changes again, complete the applicable checks for the new source identity.
+3. Check the complete Qwen budget before capacity acceptance.
+   Count cache slabs, endpoint bundles, hidden values, scales, workspaces, metadata, MTP backups, Graphs, and allocator storage.
+   Measure physical peaks when execution is authorized.
+   Static capacity examples do not prove usable GPU capacity.
 
-4. Complete the [HTTP matrix](models/deepseek_v41/performance.md) and [AgentX workloads](models/deepseek_v41/agentx.md).
-   Select `deepseek-http-roofline-v6` because the HTTP runner uses the old calculator unless you select a different calculator.
-   Use the performance guide's acceptance command for all 19 long-output rows.
-   Do not replace formal HTTP rows with operator microbenchmarks.
+4. Complete applicable numerical, state, cancellation, copy-on-write, Graph, and full-model checks for the frozen implementation identity.
+   Keep checkpoint weights, scales, frozen fixtures, numerical order, error status, and acceptance limits unchanged.
+   Use the [test scope](testing.md) and model guides.
+   Recheck changed identities after further source changes.
 
-## Guides and delivery
+5. Complete the approved [Qwen HTTP](models/qwen38/performance.md) and [AgentX](models/qwen38/agentx.md) measurements.
+   Complete the approved [DeepSeek HTTP](models/deepseek_v41/performance.md) and [AgentX](models/deepseek_v41/agentx.md) measurements.
+   Use the DeepSeek performance guide's explicit v6 selection and acceptance command.
+   Report request completion and session-tree completion separately.
 
-The [v6 calculator](../development/serving/deepseek_accounting_roofline.py) supplies the approved efficiency reference.
-The [accounting guide](models/deepseek_v41/accounting.md) defines necessary communication, native formats, and parallel placement.
-Use the [reporting policy](testing.md#reporting) for approved result documents.
-Replace a result table only after its new matrix completes.
-Keep raw records external to the repository.
+## Evidence and delivery
 
-Use the [architecture](architecture.md), [runtime contracts](requirements.md), and [execution rules](execution.md) for shared behavior.
-Use the [DeepSeek guide](models/deepseek_v41/README.md) for model details and acceptance scope.
-The [Qwen results](models/qwen38/results.md) give its last completed HTTP and AgentX results.
-Use the fixed [Qwen operator cases](models/qwen38/operators.md) for applicable shared operator changes.
+The partial `qwen-fp8-components-v1` resource calculation is not a complete HTTP acceptance calculator.
+The [recorded Qwen results](models/qwen38/results.md) keep the approved v5 tables and their recorded scope.
+Do not replace result tables before a new full matrix completes.
+Keep raw records and checks external to the repository.
 
-Obey the [contribution procedure](../CONTRIBUTING.md#delivery) before delivery.
-Get a different agent to examine the documents and implementation.
-Correct review errors before delivery.
+Use the [development loop](development.md#development-loop), [reporting policy](testing.md#reporting), and [contribution procedure](../CONTRIBUTING.md#delivery).
+The [verification skill](../.claude/skills/verify-oh-my-vllm/SKILL.md) records Rust app behavior.
+Its CPU fixture does not prove GPU inference, numerical correctness, or capacity.
+Get implementation and document reviews from other agents before delivery.
 
-The coordinator commits and pushes `nightly` before the squash into `main`.
-The coordinator commits the squash on `main` and pushes `main`.
-The coordinator then sets `nightly` to the same revision as `main`.
-The coordinator pushes `nightly` again.
-Push only `main` and `nightly`.
-
-Stop your workers and temporary services.
-Use the last external coordinator record in the `LOCAL.md` index to check session closure and GPU lease release.
+The coordinator commits and pushes `nightly`, then completes the squash and push to `main`.
+The coordinator then sets `nightly` to the same revision as `main` and pushes `nightly`.
+Push only `main` and `nightly`. Keep hooks active.
+Stop owned workers and temporary services.
+Check process identities, IPC cleanup, and resource release against the external coordinator record.

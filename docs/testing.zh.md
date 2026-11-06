@@ -14,7 +14,7 @@ CPU 检查涵盖模型选择, readiness, 约束, 证据身份, 计算口径和 m
 
 [执行检查](../tests/test_execution.py)覆盖自适应选择, 准备复用, 绑定变化和 Graph 资源所有权.
 它们检查录制失败, replay stream, 中断和关闭顺序.
-[Worker 检查](../tests/test_offload_worker.py)覆盖 offload worker 和执行边界.
+[Worker 检查](../tests/test_offload_worker.py)覆盖执行协议验证, 并检查已删除的主机缓存消息被拒绝.
 传输检查覆盖取消和存储生命周期.
 原生内存或同步行为改变时使用 Compute Sanitizer.
 

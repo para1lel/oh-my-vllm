@@ -6,6 +6,8 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tracing::{debug, warn};
 
+pub(super) mod trace;
+
 impl WorkerClient {
     pub async fn register_request(&mut self, request_id: u64, prompt_token_ids: Vec<u32>) {
         self.send_registration(request_id, prompt_token_ids, None)
@@ -101,6 +103,8 @@ impl WorkerClient {
                 }
             }
         }
+        self.verified_reasoning_tokens.remove(&request_id);
+        self.preparation_trace.cancel(request_id);
         Ok(())
     }
 
@@ -118,6 +122,8 @@ impl WorkerClient {
         self.rpc_id += 1;
         let rpc_id = self.rpc_id;
         self.last_prepare = Some((request_id, rpc_id));
+        self.preparation_trace
+            .begin(self.config.worker_epoch, rpc_id, request_id, &request);
         Self::send_raw(
             &mut self.sock,
             &RustMessage::Prepare {
@@ -195,6 +201,7 @@ impl WorkerClient {
         &mut self,
         reply: crate::protocol::WorkerMessage,
     ) -> Result<Result<Vec<u32>>> {
+        self.preparation_trace.finish(self.pending_prepare, &reply);
         self.pending_prepare = None;
         self.last_prepare = None;
         let result = match reply {

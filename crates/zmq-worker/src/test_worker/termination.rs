@@ -4,7 +4,7 @@ use super::*;
 #[tokio::test]
 async fn terminate_reports_unconfirmed_cleanup_for_an_unowned_process_group() {
     let config = WorkerConfig {
-        num_gpu_blocks: Some(128),
+        num_gpu_blocks: Some(4096),
         mamba_blocks: Some(64),
         ..WorkerConfig::for_model(
             "/synthetic-qwen".into(),

@@ -72,9 +72,10 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.agentx \
 共享的 HTTP 性能核算字段不适用于这些结果.
 执行 trace 的身份记录给出实际 cache 容量和内存计算.
 
-FA 容量使用[服务显存设置](cache.zh.md#cache-内存)中的固定 MTP4 默认值.
-使用 `--blocks` 或 `OH_MY_VLLM_NUM_GPU_BLOCKS` 修改容量. 如果提供了命令参数, 则使用该参数.
-所选数量必须符合启动时的张量预算.
+[缓存内存契约](cache.zh.md#cache-内存)规定当前 FP8 page 和 GDN checkpoint 容量.
+选定容量必须满足 `P = 64 * C` 和完整字节预算.
+新布局的 AgentX 行为和物理容量均未验证.
+成功 HTTP 请求不能证明全部会话树已完成.
 
 原始记录, 服务日志, 执行 trace 和计数报告保留在仓库外.
 获准保存的 AgentX CSV 和图片是此次测量的仓库产物.

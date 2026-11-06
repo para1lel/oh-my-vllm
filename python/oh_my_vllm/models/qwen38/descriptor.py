@@ -1,25 +1,4 @@
-"""Pure Qwen descriptor construction; this module does not load a backend.
-
-Both cache layouts use the existing paired FA/GDN reservation and commit.
-They describe owned storage, not a shared-producer relationship:
-
-* qwen38_paired_fa_kv_bf16 v1: each layer owns BF16
-  [capacity_blocks, 2, 784, 4, 256] K/V storage. Target layer IDs are 0..63.
-  Logical layer 64 names the single MTP predictor; its FA storage is present
-  only when four-draft MTP is configured, after the 16 target FA arrays.
-* qwen38_paired_gdn_f32_conv_bf16_hidden_bf16 v1: each of the 48 GDN
-  layers owns FP32 [slots, 48, 128, 128] recurrent state and BF16
-  [slots, 10240, 3] convolution history. One BF16 [slots, 5120] target
-  boundary hidden-state array belongs to the same checkpoint bundle.
-  capacity_blocks is the resolved mamba_blocks pool, including null slot 0.
-  Private and scratch slots are additional workspace, not scheduler blocks:
-  slots = mamba_blocks + 6*parallel + ceil(min(32768, token_budget)/784)
-          + parallel.
-
-Both block units are 784 tokens, including partial endpoint checkpoints.
-FA capacity also includes null block 0. Neither group can be admitted or
-committed independently by a future consumer of these paired layouts.
-"""
+"""Build the Qwen descriptor without a backend or checkpoint allocation."""
 
 import hashlib
 import json
@@ -86,11 +65,11 @@ def _capacity(value, maximum, name):
     return value
 
 
-def _group(name, kind, layout, layers, capacity):
+def _group(name, kind, layout, layers, capacity, tokens):
     return {
         "name": name,
         "kind": kind,
-        "block_tokens": MODEL["block_size"],
+        "block_tokens": tokens,
         "capacity_blocks": capacity,
         "storage": {"type": "layout", "id": layout, "version": 1},
         "layers": layers,
@@ -203,16 +182,18 @@ def _cache_schema(
             _group(
                 "fa",
                 "full_attention",
-                "qwen38_paired_fa_kv_bf16",
+                "qwen38_radix_fa_fp8kv128",
                 fa_layers,
                 fa_capacity_blocks,
+                128,
             ),
             _group(
                 "gdn",
                 "recurrent",
-                "qwen38_paired_gdn_f32_conv_bf16_hidden_bf16",
+                "qwen38_radix_gdn8192_f32_conv_bf16_hidden_bf16",
                 gdn_layers,
                 gdn_capacity_blocks,
+                8192,
             ),
         ],
     }

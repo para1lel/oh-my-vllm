@@ -1,7 +1,9 @@
 import ctypes
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import torch
 
 
 class PinnedTransfers(unittest.TestCase):
@@ -19,135 +21,111 @@ class PinnedTransfers(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "700"):
             engine.ready(700)
 
-    def test_pool_defers_growth_and_preserves_live_slices(self):
-        from oh_my_vllm.operators.runtime.transfers import PinnedPool
+    def test_draft_d2h_retains_pending_owners_and_reuses_events(self):
+        from oh_my_vllm.operators.runtime.transfers import TransferEngine
 
-        allocations, pin_calls, idle, device = self._pinned_pool_device()
-        pool = PinnedPool(device, 1024, lambda: idle[0])
-        self.assertIsNone(pool.acquire(256))
-        self.assertFalse(allocations)
-        idle[0] = True
-        first, second = pool.acquire(256), pool.acquire(512)
-        first.tensor[:] = 17
-        second.tensor[:] = 29
-        self.assertEqual(pool.allocated_bytes, 1024)
-        self.assertEqual(pool.used_bytes, 768)
-        idle[0] = False
-        pool.release(first)
-        self.assertIsNone(first.pool)
-        self.assertIsNone(first.slab)
-        self.assertIsNone(first.tensor)
-        self.assertEqual(pool.used_bytes, 512)
-        with self.assertRaises(ValueError):
-            pool.release(first)
-        first.close()
-        self.assertEqual(pool.used_bytes, 512)
-        third = pool.acquire(256)
-        fourth = pool.acquire(256)
-        self.assertIsNotNone(third)
-        self.assertIsNotNone(fourth)
-        self.assertNotEqual(third.tensor.data_ptr(), fourth.tensor.data_ptr())
-        third.tensor[:] = 42
-        fourth.tensor[:] = 53
-        self.assertTrue((third.tensor == 42).all())
-        self.assertTrue((second.tensor == 29).all())
-        self.assertEqual(pool.used_bytes, 1024)
-        self.assertIsNone(pool.acquire(512))
-        second.close()
-        third.close()
-        third.close()
-        with self.assertRaises(ValueError):
-            pool.release(third)
-        fourth.close()
-        self.assertEqual(pool.used_bytes, 0)
-        self.assertEqual(len(allocations), 1)
-        idle[0] = True
-        pool.close()
-        self.assertFalse(allocations)
-        with self.assertRaisesRegex(RuntimeError, "closed"):
-            pool.acquire(1)
-
-        from oh_my_vllm.models.qwen38.offload import Offload
-
-        engine = SimpleNamespace(quiescent=lambda: idle[0], close=lambda: None)
-        device.wait_pinned_safe = lambda: idle.__setitem__(0, True)
-        idle[0] = False
-        with patch(
-            "oh_my_vllm.operators.runtime.transfers.TransferEngine", return_value=engine
+        device, events = self._device()
+        source, destination = torch.tensor([9]), torch.tensor([0])
+        with (
+            patch(
+                "oh_my_vllm.operators.runtime.transfers.torch_adapter.current_stream",
+                return_value=19,
+            ),
+            patch(
+                "oh_my_vllm.operators.runtime.transfers.torch.ops.oh_my_vllm.native_copy_batch"
+            ) as copy,
         ):
-            offload = Offload(device, None, {}, 1025)
-        self.assertEqual(offload.pool.allocated_bytes, 1025)
-        self.assertEqual(offload.pool.used_bytes, 0)
-        addresses = set(allocations)
-        pin_count = len(pin_calls)
-        idle[0] = False
-        slices = [offload.pool.acquire(size) for size in (256, 512, 256)]
-        self.assertTrue(all(value is not None for value in slices))
-        self.assertEqual(set(allocations), addresses)
-        self.assertEqual(len(pin_calls), pin_count)
-        for value in slices:
-            value.close()
-        idle[0] = True
-        offload.close()
-        self.assertFalse(allocations)
-
-    def test_pool_rejects_invalid_sizes_and_live_close(self):
-        from oh_my_vllm.models.qwen38.offload import Offload
-        from oh_my_vllm.operators.runtime.transfers import PinnedPool
-
-        device = SimpleNamespace()
-        pool = PinnedPool(device, 0, lambda: True)
-        self.assertIsNone(pool.acquire(1))
-        for size in (0, -1, True, 1.5):
+            engine = TransferEngine(device)
+            engine.submit(7, (destination,), (source,), "d2h")
+            self.assertIs(engine.pending[7].sources[0], source)
+            self.assertIs(engine.pending[7].destinations[0], destination)
+            self.assertEqual(copy.call_args.args[2], engine.streams["d2h"].value)
+            device.runtime.cudaEventQuery.side_effect = [600, 0]
+            self.assertEqual(engine.poll(), [])
+            self.assertIn(7, engine.pending)
             with self.assertRaises(ValueError):
-                pool.acquire(size)
-        pool.close()
+                engine.submit(7, (destination,), (source,), "d2h")
+            self.assertEqual(engine.poll(), [7])
+            allocated = events[0]
+            engine.submit(8, (destination,), (source,), "d2h")
+            self.assertEqual(events[0], allocated)
+            engine.close()
+        self.assertFalse(engine.pending)
+        self.assertFalse(device.transfer_engines)
+        self.assertEqual(device.runtime.cudaStreamSynchronize.call_count, 2)
+        self.assertEqual(len(device.destroy_handles.call_args.args[0]), 4)
 
-        closed = []
-        engine = SimpleNamespace(
-            quiescent=lambda: True, close=lambda: closed.append(True)
+    def test_failed_batch_joins_submitted_copies_before_owner_release(self):
+        from oh_my_vllm.operators.runtime.transfers import TransferEngine
+
+        device, _ = self._device()
+        calls = []
+        device.runtime.cudaStreamSynchronize.side_effect = lambda stream: (
+            calls.append("joined") or 0
         )
-        device.wait_pinned_safe = lambda: None
-        with patch(
-            "oh_my_vllm.operators.runtime.transfers.TransferEngine", return_value=engine
+        with (
+            patch(
+                "oh_my_vllm.operators.runtime.transfers.torch_adapter.current_stream",
+                return_value=19,
+            ),
+            patch(
+                "oh_my_vllm.operators.runtime.transfers.torch.ops.oh_my_vllm.native_copy_batch",
+                side_effect=RuntimeError("copy failed"),
+            ),
         ):
-            tiny = Offload(device, None, {}, 255)
-            self.assertEqual(tiny.pool.allocated_bytes, 0)
-            tiny.close()
-            with (
-                patch(
-                    "oh_my_vllm.operators.runtime.transfers.HostStorage",
-                    side_effect=MemoryError("pinned reservation"),
-                ),
-                self.assertRaisesRegex(MemoryError, "pinned reservation"),
-            ):
-                Offload(device, None, {}, 1024)
-        self.assertEqual(closed, [True, True])
+            engine = TransferEngine(device)
+            with self.assertRaisesRegex(RuntimeError, "copy failed"):
+                engine.submit(7, (torch.zeros(1),), (torch.ones(1),), "d2h")
+            self.assertEqual(calls, ["joined"])
+            self.assertEqual(engine.pending, {})
+            self.assertEqual(len(engine.events), 2)
+            engine.close()
 
-    def _pinned_pool_device(self):
-        allocations = {}
-        pin_calls = []
-        idle = [False]
+    def test_transfer_rejects_invalid_direction_and_tensor_lists(self):
+        from oh_my_vllm.operators.runtime.transfers import TransferEngine
 
-        def allocate(pointer, size, flags):
-            self.assertTrue(idle[0], "pinning overlapped active CUDA work")
-            pin_calls.append(size)
-            memory = ctypes.create_string_buffer(size)
-            address = ctypes.addressof(memory)
-            allocations[address] = memory
-            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = address
+        device, _ = self._device()
+        engine = TransferEngine(device)
+        value = torch.zeros(1)
+        for destinations, sources, direction in (
+            ((), (), "d2h"),
+            ((value,), (), "d2h"),
+            ((value,), (value,), "invalid"),
+        ):
+            with self.subTest(direction=direction), self.assertRaises(ValueError):
+                engine.submit(7, destinations, sources, direction)
+        self.assertEqual(engine.pending, {})
+        engine.close()
+        with self.assertRaises(ValueError):
+            engine.submit(7, (value,), (value,), "d2h")
+
+    def _device(self):
+        handles = [0]
+
+        def allocate(pointer, flags):
+            handles[0] += 1
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = handles[0]
             return 0
 
-        def release(pointer):
-            self.assertTrue(idle[0])
-            del allocations[pointer.value]
-            return 0
+        def checked(status):
+            if status:
+                raise RuntimeError(f"CUDA failure {status}")
 
-        device = SimpleNamespace(
-            runtime=SimpleNamespace(cudaHostAlloc=allocate, cudaFreeHost=release),
-            checked=lambda status: self.assertEqual(status, 0),
+        runtime = SimpleNamespace(
+            cudaStreamCreateWithFlags=allocate,
+            cudaEventCreateWithFlags=allocate,
+            cudaEventRecord=Mock(return_value=0),
+            cudaStreamWaitEvent=Mock(return_value=0),
+            cudaEventQuery=Mock(return_value=0),
+            cudaStreamQuery=Mock(return_value=0),
+            cudaStreamSynchronize=Mock(return_value=0),
         )
-        return allocations, pin_calls, idle, device
+        return SimpleNamespace(
+            runtime=runtime,
+            checked=checked,
+            transfer_engines=set(),
+            destroy_handles=Mock(),
+        ), handles
 
 
 if __name__ == "__main__":

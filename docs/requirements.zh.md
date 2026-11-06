@@ -35,7 +35,7 @@ Python 负责模型计算和物理张量.
 | 工具 | Auto/none/required/named 选择, 并行调用控制, 历史, 流式参数 |
 | 结构化输出 | JSON object/schema, token 掩码, 独立推测 grammar 状态 |
 | 媒体 | 有序文本/图片/视频, 限制, 帧时间戳, 历史, 前缀隔离 |
-| 缓存 | 整块和部分前缀, copy-on-write, 抢占, 主机换出, 恢复, 淘汰 |
+| 缓存 | 完整和部分 GPU 前缀, copy-on-write, 抢占, 已接受状态恢复, 有界淘汰 |
 | 生命周期 | 截止时间, 断连取消, 背压, worker 失败/替换, 正常关闭 |
 
 每个请求只有一个 completion.

@@ -72,3 +72,33 @@ void final_hidden(TensorView value, TensorView residual, TensorView weight, Tens
   });
   check_cuda(cudaGetLastError());
 }
+
+void final_head_hidden(TensorView value, TensorView residual, TensorView weight, TensorView output,
+                       TensorView cache, TensorView slots) {
+  TVM_FFI_ICHECK(value.device().device_type == kDLCUDA && value.ndim() == 2 && value.size(0) > 0 &&
+                 value.size(0) <= 32768);
+  int rows = value.size(0);
+  for (auto tensor : {value, output})
+    tensor_contract(tensor, value, kDLBfloat, 16, {rows, 5120});
+  residual_contract(residual, value, rows);
+  tensor_contract(weight, value, kDLFloat, 32, {5120});
+  TVM_FFI_ICHECK(cache.ndim() == 2 && cache.size(0) > 0 && cache.size(0) <= 65536);
+  tensor_contract(cache, value, kDLBfloat, 16, {cache.size(0), 5120});
+  tensor_contract(slots, value, kDLInt, 32, {rows});
+  for (auto tensor : {value, residual, weight, slots}) {
+    disjoint(tensor, output);
+    disjoint(tensor, cache);
+  }
+  disjoint(output, cache);
+  tvm::ffi::CUDADeviceGuard guard(value.device().device_id);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, value.device().device_id));
+  dispatch_residual(residual, [&](auto skip) {
+    final_hidden_kernel<640>
+        <<<rows, 640, 0, stream>>>(static_cast<const __nv_bfloat16 *>(value.data_ptr()), skip,
+                                   static_cast<const float *>(weight.data_ptr()),
+                                   static_cast<__nv_bfloat16 *>(output.data_ptr()),
+                                   static_cast<__nv_bfloat16 *>(cache.data_ptr()),
+                                   static_cast<const int32_t *>(slots.data_ptr()), cache.size(0));
+  });
+  check_cuda(cudaGetLastError());
+}

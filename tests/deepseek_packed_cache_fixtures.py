@@ -49,7 +49,6 @@ class DeepSeekPackedCacheFixture:
             block_tokens=4,
             max_seq_len=16,
             fa_capacity=16,
-            host_limit=1 << 20,
         )
         self.addCleanup(self.cache.close)
 

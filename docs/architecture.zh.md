@@ -4,7 +4,7 @@
 
 [服务](../crates/zmq-worker/src/lib.rs)负责 CLI, HTTP API, worker 生命周期和传输.
 [调度器](../crates/scheduler/src/lib.rs)负责准入, 请求队列, token 预算, 抢占和经过验证的状态提交.
-[缓存策略](cache-policy.zh.md)提供模型专属分配, 前缀查询, 状态分配和恢复.
+[缓存策略](cache-policy.zh.md)提供模型专属分配, 前缀查询, 状态分配, 恢复和收尾.
 [KV crate](../crates/kv-cache/src/lib.rs) 提供逻辑存储和所有权机制.
 
 调度遵循[运行时契约](requirements.zh.md)中的优先级.

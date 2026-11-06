@@ -53,6 +53,9 @@ fn model_payload<L>(batch: &SchedulerOutput<ModelState<L>>) -> ModelPayload<'_, 
             .iter()
             .map(|request| ModelInput {
                 request_id: request.request_id,
+                execution: request.execution,
+                work: request.work,
+                accepted_end: request.accepted_end,
                 token_ids: &request.token_ids,
                 num_computed_tokens: request.num_computed_tokens,
                 state: &request.state,

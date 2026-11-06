@@ -33,11 +33,14 @@ mod tests {
 import json
 import msgpack
 import sys
-from tests.test_models import sample_descriptor
-d = sample_descriptor(num_speculative_tokens=int(sys.argv[1]))
+from tests.worker_fixture import descriptor, cache_layout
+config = dict(num_speculative_tokens=int(sys.argv[1]), max_num_seqs=4,
+              max_num_batched_tokens=32768)
+d = descriptor(config, 8192, 128)
 # The synthetic helper patches config bytes only inside its test context.
 d["config_sha256"] = "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc"
-ready = dict(type="ready", descriptor=d, logical_num_blocks=1608, mamba_blocks=128)
+ready = dict(type="ready", protocol_version=2, worker_epoch=1, descriptor=d,
+             logical_num_blocks=8192, mamba_blocks=128, cache_layout=cache_layout(config,8192,128))
 sys.stdout.buffer.write(json.dumps(ready).encode("ascii") + b"\n")
 sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
 "#;
@@ -65,7 +68,7 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
 
     fn configuration(drafts: usize) -> WorkerConfig {
         WorkerConfig {
-            num_gpu_blocks: Some(1608),
+            num_gpu_blocks: Some(8192),
             mamba_blocks: Some(128),
             max_model_len: 4096,
             num_speculative_tokens: drafts,
@@ -228,11 +231,25 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
             descriptor,
             logical_num_blocks,
             mamba_blocks,
+            protocol_version,
+            worker_epoch,
+            cache_layout,
             ..
         }) = decode(&bytes)
         else {
             return false;
         };
+        if protocol_version != crate::protocol::EXECUTION_PROTOCOL_VERSION
+            || worker_epoch != config.worker_epoch
+            || !cache_layout.validate(
+                logical_num_blocks,
+                mamba_blocks,
+                config.max_num_seqs,
+                config.max_num_batched_tokens,
+            )
+        {
+            return false;
+        }
         validate_ready(
             policy,
             config,
@@ -255,7 +272,9 @@ d = build_descriptor(
     tokenizer_identity=tokenizer_identity(), strategy=sys.argv[1],
     cache_capacities=dict(window=7, compressed_kv=17, index_keys=17, accepted_state=7),
 )
-print(json.dumps(dict(type="ready", descriptor=d, logical_num_blocks=17, mamba_blocks=7)))
+print(json.dumps(dict(type="ready", protocol_version=2, worker_epoch=1,
+    cache_layout=dict(kind="deepseek_resident_v1",layout_id="deepseek_v41_paired128_resident_v1"),
+    descriptor=d, logical_num_blocks=17, mamba_blocks=7)))
 "#;
 
     fn qwen_mutations() -> Vec<(&'static str, Value)> {

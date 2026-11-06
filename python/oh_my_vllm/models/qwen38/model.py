@@ -5,19 +5,20 @@ from threading import get_ident
 
 import numpy as np
 
-from ...operators.fa import api as fa
-from ...operators.fa.plan import make_plan as fa_plan
-from ...operators.fa.workspace import prepare as prepare_fa
+from ...operators.fa_fp8 import api as fa
+from ...operators.fa_fp8.plan import make_plan as fa_plan
+from ...operators.fa_fp8.workspace import prepare as prepare_fa
 from ...operators.ffn import api as ffn
 from ...operators.ffn.plan import make_plan as ffn_plan
 from ...operators.ffn.workspace import prepare as prepare_ffn
-from ...operators.gdn import api as gdn
-from ...operators.gdn.plan import make_plan as gdn_plan
-from ...operators.gdn.workspace import prepare as prepare_gdn
+from ...operators.gdn_radix import api as gdn
+from ...operators.gdn_radix.plan import make_plan as gdn_plan
+from ...operators.gdn_radix.workspace import prepare as prepare_gdn
 from ...operators.output import api as output
 from ...operators.output.plan import make_plan as output_plan
 from ...operators.output.workspace import prepare as prepare_output
 from ...worker.metadata import Metadata
+from .cache_wire import write_ranges
 
 PREFILL_GRAPH_ROWS = 1024
 PREFILL_GRAPH_REUSE = 4
@@ -26,11 +27,12 @@ MAX_GRAPH_WORKSPACES = 8
 
 def metadata_arrays(batch):
     return (
-        *batch.metadata,
+        *batch.metadata[:5],
         batch.tokens,
         np.asarray(batch.schedule.sequence_rows, np.int32),
         np.asarray(batch.schedule.read_slots, np.int32),
         np.asarray(batch.writes, np.int32),
+        batch.metadata[5],
     )
 
 
@@ -42,6 +44,7 @@ def make_plans(batch, hidden):
         max_queries=batch.max_queries,
         max_context=int(batch.metadata[4].max()),
         min_context=int(batch.metadata[4][batch.metadata[3][1:] - 1].min()),
+        write_ranges=write_ranges(batch.write_mask),
     )
     return (
         attention,
@@ -91,7 +94,7 @@ class Workspace:
         metadata = self.metadata_inputs.arrays
         self.tokens = metadata[5]
         self.batch_view = fa.BatchView(metadata[0], metadata[3], metadata[4])
-        self.recurrent_view = gdn.BatchView(*metadata[6:])
+        self.recurrent_view = gdn.BatchView(*metadata[6:9])
         self.write_slots = metadata[8]
         self.hidden_operation = (
             prepare_output(plans[3], device, (weights.sample,), allocate=device.scratch)
@@ -113,7 +116,9 @@ class Workspace:
         recurrent = full = 0
         for index, layer in enumerate(weights.layers):
             if layer.kind == "full_attention":
-                state = fa.CacheView(cache.fa[full], metadata[1], metadata[2])
+                state = fa.CacheView(
+                    *cache.fa[full], metadata[1], metadata[2], metadata[9]
+                )
                 arguments = (layer.attention, value, self.batch_view, state)
                 operation = self.fa
                 full += 1
@@ -142,12 +147,21 @@ class Workspace:
         if self.hidden_operation is not None:
             self.calls.append(
                 partial(
-                    self.hidden_operation.hidden,
+                    self.hidden_operation.head_hidden,
                     weights.sample,
                     value,
-                    output.HiddenState(cache.hidden, self.write_slots),
+                    output.HiddenState(cache.head_hidden, self.write_slots),
                 )
             )
+            if cache.head_hidden is not cache.hidden:
+                self.calls.append(
+                    partial(
+                        self.hidden_operation.hidden,
+                        weights.sample,
+                        value,
+                        output.HiddenState(cache.hidden, self.write_slots),
+                    )
+                )
 
     def close(self):
         self.resources.close()
@@ -222,7 +236,7 @@ class Model:
             self.prefill.close()
 
     def forward(self, batch, graph):
-        plans = make_plans(batch, self.mtp)
+        plans = make_plans(batch, True)
         key = tuple(plan.reuse_key for plan in plans if plan is not None)
         created = False
         if batch.schedule.verify:
@@ -254,7 +268,7 @@ class Model:
             [
                 (
                     request,
-                    row["num_computed_tokens"] + offset,
+                    row["forward_start"] + offset,
                     batch.schedule.sequence_rows[index] + offset,
                 )
                 for index, (row, request) in enumerate(

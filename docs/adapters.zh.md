@@ -37,8 +37,8 @@ Python 拒绝重复 JSON 键和非对象配置值.
 选定适配器提供默认值并验证显式选项.
 公开的模型别名不能改变所选模型族.
 
-Init 指定 `descriptor_version=1`.
-Ready 在构造调度器前提供经过验证的描述符.
+Init 指定 `descriptor_version=1` 和 `protocol_version=2`, 并携带 worker epoch.
+Ready 在构造调度器前返回相同协议版本和 epoch, 经过验证的描述符, 以及模型选择的缓存布局.
 [Rust 类型](../crates/model-contract/src/lib.rs)和 [Python 验证器](../python/oh_my_vllm/models/descriptor.py)使用相同的版本化命名 map 字段.
 它们拒绝未知字段, 不支持的版本, 无效值, 重复分组和无效 producer 链.
 Python 布尔值不能替代整数.
@@ -51,6 +51,46 @@ Python 布尔值不能替代整数.
 推测将预测阶段与草稿数和验证容量分开.
 验证容量等于最大草稿数加一.
 描述符不能启用尚未实现的执行模式.
+
+## 执行协议
+
+[Wire 类型](../crates/zmq-worker/src/protocol.rs)通过 ZMQ DEALER 使用第 2 版 named-map msgpack.
+Init 和 Ready 的协议版本, worker epoch, 描述符版本和选定缓存布局必须一致.
+[布局验证器](../crates/zmq-worker/src/protocol/layout.rs)检查模型专属布局和容量.
+替换不能静默改变已接受布局.
+
+| 字段 | 值和含义 |
+|---|---|
+| `purpose` | `advance` 推进生成进度. `finalize` 完成已接受状态 |
+| `action` | `forward` 计算显式 token 区间. `head_only` 使用保存的 hidden 值. `export_only` 导出端点 |
+| `sampling` | `none`, `target`, 或携带显式 draft 数量的 `verify` |
+| `forward_start`, `forward_end` | 显式左闭右开区间, 与返回 token 数量独立 |
+| `accepted_end`, `endpoint` | 已接受历史与选定操作端点 |
+| `model_state` | 带标签的模型专属分配信息 |
+
+非前向 action 的 token 行数为零, 前向区间的起止相等.
+收尾使用 `none` 采样. 使用保存 hidden 的 head 操作使用当前请求的 target sampler.
+成功的 `none` 结果输出零个 token. 成功的 `target` 结果输出一个 token.
+成功的 `verify` 结果输出已接受 draft 数加一个 token.
+
+一条已调度行必须恰有一条回复, 即使 token 行数为零.
+
+`ExecutionKey` 包含 `worker_epoch`, `step_id`, `request_id` 和 `lease_id`.
+调度器使用 `in_flight: Option<ExecutionKey>` 跟踪执行, 与 token 行数独立.
+[回复验证器](../crates/zmq-worker/src/client/execution/validation.rs)检查完整输出集合和执行身份.
+RPC 身份, rank 调度, 端点导出和 page 有效末尾也必须在状态发布前通过验证.
+过期, 重复, 未知或缺失的行都会在提交前导致错误.
+
+Transport 标签为 `qwen_radix_v1` 和 `deepseek_resident_v1`.
+调度器使用类型化策略分配, 不解释这些 wire 标签.
+Qwen 使用[独立池和精确端点](models/qwen38/cache.zh.md).
+DeepSeek 保持[驻留 paired128 布局](models/deepseek_v41/cache.zh.md)和 DEP4 owner 放置方式.
+全部四个 DEP4 rank 都返回确认, 即使某个 rank 没有已调度请求.
+DeepSeek 收尾使用已计算的驻留端点, 不增加 Qwen 的最终 token 计算.
+
+协议没有 KV 主机存储消息, host capability 或主机字节预算字段.
+已完成请求和被抢占请求的通知仍负责释放物理状态.
+Engram host 权重和必要的 token, metadata 及 draft 传输使用独立契约.
 
 ## 状态和输出
 

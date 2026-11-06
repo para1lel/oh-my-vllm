@@ -4,10 +4,14 @@ from threading import get_ident
 import numpy as np
 import torch
 
-from ...operators.fa import api as fa
-from ...operators.mtp import api as mtp
-from ...operators.mtp.plan import accept_plan, draft_plan
-from ...operators.mtp.workspace import prepare_accept, prepare_context, prepare_draft
+from ...operators.fa_fp8 import api as fa
+from ...operators.mtp_fp8 import api as mtp
+from ...operators.mtp_fp8.plan import accept_plan, draft_plan
+from ...operators.mtp_fp8.workspace import (
+    prepare_accept,
+    prepare_context,
+    prepare_draft,
+)
 from ...worker.metadata import Metadata
 from .sampling import Sampling
 
@@ -68,10 +72,7 @@ class Context(GraphOperation):
             weights.attention_variant(weights.mtp_layer.attention, "kv_only"),
         )
         self.operation = prepare_context(
-            plan,
-            device,
-            (self.weights,),
-            allocate=device.scratch,
+            plan, device, (self.weights,), allocate=device.scratch
         )
         self.metadata_inputs = Metadata(device, arrays, single_upload=single_upload)
         self.arrays = self.metadata_inputs.arrays
@@ -113,8 +114,9 @@ class Context(GraphOperation):
             tables,
             starts,
             lengths,
+            endpoints,
         ) = self.arrays
-        inputs = mtp.Inputs(
+        inputs = mtp.ContextInputs(
             mtp.InputView(
                 self.hidden,
                 tokens,
@@ -125,13 +127,14 @@ class Context(GraphOperation):
                 self.media_rows,
             ),
             fa.BatchView(positions, starts, lengths),
-            fa.CacheView(self.cache, slots, tables),
+            fa.CacheView(*self.cache, slots, tables),
+            endpoints,
         )
         return self.operation.run(self.weights, inputs)
 
 
 class Draft(GraphOperation):
-    def __init__(self, device, weights, batch, first, *, table_width=335):
+    def __init__(self, device, weights, batch, first, *, table_width=2048):
         super().__init__(device)
         self.first = first
         self.weights = mtp.Weights(
@@ -143,7 +146,12 @@ class Draft(GraphOperation):
             weights.mtp_sample,
         )
         self.operation = prepare_draft(
-            draft_plan(rows=batch, first=first, table_width=table_width),
+            draft_plan(
+                rows=batch,
+                first=first,
+                table_width=table_width,
+                max_context=min(262144, table_width * 128),
+            ),
             device,
             (self.weights,),
             allocate=device.scratch,
@@ -197,7 +205,6 @@ class Draft(GraphOperation):
                 )
                 for value, width in zip(bindings, (5120, 248320, 5120), strict=True)
             )
-            # Strong source references prevent identity reuse while views are cached.
             self._row_bindings = bindings
         return self._row_views
 
@@ -221,8 +228,8 @@ class Draft(GraphOperation):
                 self.hidden, self.tokens, self.rows, self.hidden, self.boundary_rows
             ),
             fa.BatchView(positions, starts, lengths),
-            fa.CacheView(self.cache, slots, tables),
-            fa.Inputs(self.hidden, self.zero),
+            fa.CacheView(*self.cache, slots, tables),
+            fa.Inputs(self.hidden, self.zero) if self.first else None,
         )
         self.operation.project(self.weights, inputs)
         self.output = self.ffn.outputs

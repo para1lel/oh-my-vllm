@@ -23,6 +23,7 @@ pub struct Request {
     pub include_usage: bool,
     pub model: String,
     pub original: Value,
+    pub(super) identity: super::identity::Identity,
 }
 
 pub fn normalize(
@@ -35,7 +36,9 @@ pub fn normalize(
     if body.get("metadata").is_none() {
         body["metadata"] = json!({});
     }
+    let identity = super::identity::resolve("", &body, &Default::default(), None, responses)?;
     Ok(Request {
+        identity,
         responses,
         stream: body["stream"].as_bool().unwrap_or(false),
         store: responses && body["store"].as_bool().unwrap_or(true),

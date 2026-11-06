@@ -14,6 +14,12 @@ The [source validator](../../../development/serving/deepseek_accounting.py) auth
 The [roofline calculator](../../../development/serving/deepseek_accounting_roofline.py) uses the reviewed [partial arithmetic](../../../development/serving/deepseek_accounting_floor.py).
 The [resource functions](../../../development/serving/deepseek_accounting_math.py) give dimensions, formats, and peaks.
 
+V4 reports `dep4_communication_modeled=False` because its DEP4 protocol bytes are diagnostic values only.
+V5 and v6 report `dep4_communication_modeled=True` for DEP4.
+For TP4 and TEP4, these calculators report `dep4_communication_modeled=False`.
+This flag identifies the selected calculator's capability for the selected strategy, independent of the trace's communication volume.
+V4, v5, and v6 report `dep4_communication_measured=False` because their communication estimates are mathematical.
+
 ## Roofline scope
 
 V6 is a conditional resource lower bound for the fixed target algorithm, numerical rules, and four-rank placement.
@@ -38,6 +44,9 @@ Expert arithmetic uses received assignments, also on ranks with no owned request
 | FP32 vector | 75 TFLOPS |
 | NVLink 5 | 900 GB/s per direction |
 | PCIe 5.0 x16 | 63.02 GB/s per direction |
+
+The HGX B200 column on page 8 of the [NVIDIA Blackwell datasheet](https://dam-cdn.nvd.orangelogic.com/AssetLink/y441155802qub41q118b2852i557jem5.pdf#page=8) gives the HBM, FP32, and tensor peaks per GPU.
+Footnote 2 gives dense tensor peaks as half the listed sparse values.
 
 FP4 expert storage uses FP8 dot products.
 FP8 and BF16 share the tensor resource.
@@ -142,8 +151,11 @@ The protocol diagnostics put each useful collective at its dependency:
 | TP4/TEP4 | Head projection, FP32 vocabulary gather, sampling |
 
 Different rows can overlap these stages.
-V6 gives the global serial-stage diagnostic no extra floor seconds.
+V6 calculates a resource floor without a dependency latency lower bound.
+The `dependency_seconds=0` field means dependency latency is not included.
+The target algorithm still has dependencies.
 The aggregate resource constraints stay necessary with maximum overlap.
+V6 does not calculate the full minimum physical latency.
 
 For four ranks, ring all-reduce sends and receives `1.5*N` bytes per rank for an `N`-byte input.
 Ring all-gather sends and receives `0.75*N` bytes for an `N`-byte full output.

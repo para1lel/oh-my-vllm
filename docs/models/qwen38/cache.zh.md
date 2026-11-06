@@ -1,145 +1,133 @@
-# KV 卸载
+# GPU 缓存
 
-## 范围
+Rust 通过 [Qwen 策略](../../../crates/scheduler/src/policy/qwen.rs)管理 token 身份, 预留, pin 和淘汰.
+Python 管理[物理缓存](../../../python/oh_my_vllm/models/qwen38/cache.py).
+KV 历史和 recurrent checkpoint 保存在 GPU 上.
+没有 KV 主机存储或主机淘汰路径.
+必要的 token, metadata 和 draft 读回传输遵循[执行规则](../../execution.zh.md).
 
-Host 缓存保留被中断的请求和可复用的前缀.
-Rust 管理逻辑标识, 引用, 准入和淘汰.
-Python 管理物理存储和 CUDA 传输.
-GPU 缓存为 CUDA Graph 执行保持固定地址.
-GPU 容量使用[服务指南](cache.zh.md#cache-内存)中的固定默认值和启动检查.
-
-## 所有权
-
-缓存条目可以处于 GPU 驻留, 换出中, host 驻留或换入中状态.
-每次传输在 worker 生命周期内具有唯一标识.
-调度器在传输前预留目标容量.
-源引用在 worker 报告完成前保持有效.
-取消操作不会释放未完成传输仍可访问的内存.
-替换 worker 会使该 worker 的全部 host 条目失效.
-
-请求仅在换入完成后才可被调度.
-传输期间, 其他已驻留请求仍可被调度.
-没有请求可执行时, 服务仍查询传输进度.
-计算 stream 不等待无关的换入.
+新布局尚未完成 GPU, 全模型, HTTP 或 AgentX 验收.
+[已记录结果](results.zh.md)只适用于记录中的源码和旧缓存布局.
 
 ## 存储
 
-Host 内存池在 Ready 前预留可用的 pinned 容量, 并复用空闲存储.
-其字节上限包括已分配 slab, 预留空间和传输.
-自动上限遵守可用主机内存和进程内存限制.
-显式字节上限可以限制此容量.
-预留操作等待计算和传输 stream 均空闲.
-请求处理不会为每次拷贝分配或释放 pinned 缓存存储.
+布局身份为 `qwen_radix_gdn8192_fp8kv128_v1`.
+[布局计算](../../../python/oh_my_vllm/models/qwen38/cache_budget.py)将可用持久容量与其他存储分开.
 
-预留会增加启动时间, 并在首次传输前占用主机内存.
-字节上限和前缀保留策略不变.
-如果无法分配 pinned 预留空间, worker 启动失败.
+| 数量 | 含义 |
+|---|---|
+| `C` | 可用的持久 GDN checkpoint 数 |
+| `P = 64 * C` | 可用的持久 KV page 数 |
+| 128 tokens | KV 页长 |
+| 8192 tokens | 周期性 GDN checkpoint 间隔 |
+| 每个池一个 null slot | 不计入可用容量 |
+| `6 * N` | `N` 个请求槽位使用的私有 checkpoint slot 数 |
+| `ceil(T / 8192) + N` | token 预算为 `T` 时的 scratch checkpoint slot 数 |
 
-容量不足时先删除未使用的 host 前缀.
-请求快照在恢复或取消前保持受保护状态.
-如果 host 容量不能让处理继续, 服务报告容量错误, 而不是重置请求进度.
+Target FA 层共享逻辑 page ID. MTP 另有一层使用相同格式的 FA.
+各层具有固定地址的稠密 slab, 形状如下:
 
-独立的 nonblocking stream 执行 H2D 和 D2H 传输.
-原生运行时批量提交独立的拷贝.
-D2H 拷贝等待源数据的生产者事件.
-事件保护源 tensor, 目标 tensor 和 host 切片.
-事件查询报告完成状态, 不在 CPU 上等待.
-传输可以与计算重叠, 但仍会竞争内存带宽.
+| 张量 | 类型 | 形状 |
+|---|---|---|
+| Codes | 原始 E4M3FN 字节, `uint8` | `[P+1, 2, 128, 4, 256]` |
+| Scales | FP32 | `[P+1, 2, 128, 4]` |
 
-## 状态
+每个 scale 对应一个 token, 一个 head 的一条 256 元素 K 或 V 向量.
+Null page 零不是有效历史.
+页表宽度为 `ceil(max_context / 128)`, 在 262144 tokens 时为 2048.
+不保存完整 KV 历史的 BF16 副本.
+Recurrent checkpoint 使用 FP32. 卷积和保存的 hidden 值使用 BF16.
 
-请求快照包括 target 和 MTP attention block, GDN 状态, convolution 状态和边界 hidden 值.
-它包括选中的私有端点, 而不只是逻辑 checkpoint slot.
-待验证的随机 draft 保留其 proposal 分布.
-CPU 历史, 约束, decoder 状态, 位置, draft 和 RNG offset 保持不变.
-卸载不会重新生成 proposal 或重置已计算进度.
+[FA 算子](../../../python/oh_my_vllm/operators/fa_fp8)将量化融合到 K/V producer, 将解码融合到 attention 读取.
+新行与复用行都使用相同的已存 codes 和 scales.
+Q 和 P 使用 BF16. QK 和 PV 使用 BF16 操作数, softmax 和累加使用 FP32.
+[格式参考](../../../development/operators/qwen_fp8_reference.py)规定舍入和 scale 计算.
+Page copy 和 rollback 同时移动 codes 与 scales, 不重新量化.
 
-可复用前缀包含已验证的 attention block 和匹配的递推 checkpoint.
-调度器在 GPU 容量压力要求淘汰时存储可复用前缀, 而不是在每个请求完成后存储.
-Host 前缀保留有容量边界, 不保证每个旧前缀均可命中.
-部分端点保留精确的 token 数.
+[GDN 算子](../../../python/oh_my_vllm/operators/gdn_radix)使用独立于 KV page 的显式导出 slot.
+其 64 行计算在显式导出位置及序列末尾分段.
+[MTP 算子](../../../python/oh_my_vllm/operators/mtp_fp8)的 context 和 draft 使用同一 FP8 缓存.
+旧 FA, GDN 和 MTP 算子仍保留在算子层.
 
-Host 前缀不包含其他请求的采样状态.
-共享 block 保留引用与写时复制规则.
-Host 索引仅在所有必要拷贝完成后发布前缀.
-恢复的部分 checkpoint 保持独立读取 slot, 直到第一次续算结果通过验证.
+## 独立的前缀状态
 
-## 验证
+一棵 token radix tree 在 cache domain 内比较精确 token 值.
+Checkpoint 附件与 page 附件具有独立的容量, 版本, 淘汰和 pin.
+淘汰只解除选中附件, 不删除另一类附件或后代节点.
 
-所有权检查覆盖延迟完成, 取消, 容量压力和过期结果.
-GPU 检查比较恢复后的数值及固定 seed 的后续执行.
-时间线检查分别分析传输重叠和分配窗口.
+[前缀查询](../../../crates/scheduler/src/policy/qwen/lookup.rs)返回三个不同位置:
 
-AgentX 测量使用 MTP4 和四个会话树.
-其数据集, seed 和正式采样时长保持不变.
-[AgentX 指南](agentx.zh.md)给出当前 drain 上限.
-[测试范围](../../testing.zh.md)规定其他必要检查.
+| 位置 | 含义 |
+|---|---|
+| `D` | 最深的 checkpoint 命中 |
+| `K` | 连续 KV 前缀的末尾 |
+| `R` | 不晚于 `K` 的可用恢复 checkpoint |
+
+`min(D, K)` 不会产生一个恢复 checkpoint.
+缺页之后仍有效的 page span 可以继续复用.
+Replay 从 `R` 开始遵循完整层序.
+复用区间跳过 K/V 投影, 量化和写入, 但继续计算 hidden, GDN, query, attention 和 FFN.
+完整 prompt 命中使用保存的 hidden 值, 配合当前请求的 output head 和 sampler.
+不会再次计算最后一个 prompt token.
+
+分配在预留目标位置前 pin 全部选中源.
+Checkpoint 池, page 池, 私有状态, 导出和写时复制 page 构成一次预留.
+预留失败会释放临时资源.
+写时复制保护共享的部分 page, 直到完成结果通过验证.
+
+## 成功会话尾
+
+[会话注册表](../../../crates/scheduler/src/session.rs)在异步请求准备前记录准入顺序.
+一个 `SessionId` 至多有一条成功尾.
+尾值包含其 `CacheDomain`, 所以新 domain 中的成功尾会替换同一会话的旧尾.
+新准备失败会保留旧成功尾, 不回退准入顺序.
+较早请求即使晚完成, 也不能替换较新准入请求的尾.
+
+Responses 分支继承根会话和缓存 namespace, 各自保持独立的活跃 pin.
+匿名请求使用有容量边界的缓存, 不建立永久会话目录.
+尾元数据和未 pin 的缓存状态都有容量限制.
+
+[服务身份契约](../../serving.zh.md#缓存身份)规定 HTTP 字段.
+
+## 精确收尾
+
+Parser 在请求进入 `Finalizing` 前固定已接受端点 `A`.
+[收尾策略](../../../crates/scheduler/src/policy/qwen/completion.rs)将已计算端点 `F` 与该端点比较.
+
+| 条件 | 收尾工作 |
+|---|---|
+| `F < A` | 只计算尚未执行的已接受后缀 |
+| `F = A` | 导出或复用端点 |
+| `F > A` | 恢复已接受的验证端点和 KV 有效末尾, 或从可用的较早 checkpoint 重放 |
+
+收尾不采样, 不增加输出 token, usage, RNG 推进或 grammar 改动.
+Proposal 状态不能替代已接受状态.
+普通解码也在精确端点保存 output head 的 hidden 值.
+MTP context 保持原有规则, token `p` 配合 target hidden `p-1`.
+
+[输出 workspace](../../../python/oh_my_vllm/operators/output/workspace.py) 将 output head hidden 值与 MTP context hidden 值分开.
+Output head 使用原有 640 线程采样归一化.
+旧的小行数 hidden 导出使用不同的归约, 未经数值证明不能替代 output head 的 hidden 值.
+MTP 存储增加一条独立的宽度 5120 BF16 向量, 即每个 checkpoint bundle 增加 10240 字节.
+
+HTTP 成功, SSE 最终标记和已存响应发布都等待精确收尾及完整回复验证.
+Parser 和存储容量准备先于成功尾替换.
+已提交工作的取消等待计算, 辅助 stream, rollback, 导出, copy 和全部参与 rank 的确认后, 才释放 pin.
+[共享生命周期](../../cache-policy.zh.md)规定退休和 worker 替换.
 
 ## Cache 内存
 
-FA cache 容量使用固定默认值: 普通解码为 `1824` 个 block, MTP4 为 `1608` 个 block.
-这些默认值针对单张 B200 和默认调度设置, 目标是文本推理时总显存占用达到 85% 至 88%.
-Worker 不会根据可用显存计算 block 数量.
+缓存总字节上限保持在旧布局的预算水平.
+Null slot, 私有 slot, scratch checkpoint, hidden 值和 FP32 scale 都计入此上限.
+[Workspace 计划](../../../python/oh_my_vllm/models/qwen38/memory.py)还计入算子 workspace, metadata, 采样和 MTP 备份存储.
+仅有 checkpoint slot 数不能限定 GDN 临时存储.
+CUDA Graph, 分配器和 driver 峰值尚未实测.
+新的可用容量和物理峰值均未验收.
 
-使用 `--num-gpu-blocks` 或 `OH_MY_VLLM_NUM_GPU_BLOCKS` 修改容量.
-如果提供命令参数, 服务会使用该参数.
-否则, 服务会使用已设置的环境变量. 如果环境变量也未设置, 则使用模式默认值.
-将参数放在 `serve`, `run` 或 `bench` 之前.
+`--mamba-blocks` 选择可用 checkpoint 数. `--num-gpu-blocks` 选择可用 page 数.
+选定值必须满足 `P = 64 * C` 和字节预算.
+选项冲突会报错.
 
-启动时, worker 按 88% 的张量预算检查所选容量.
-检查包含已用内存, FA 和 GDN 存储, prefill, 以及保留的 decode 和采样 workspace.
-内存快照已包含加载的权重, 检查不会重复计入权重.
-容量不足时, worker 会拒绝启动, 不会减小指定或默认的 block 数量.
-
-额外媒体存储会单独报告, 不会减小默认文本 cache 容量.
-媒体, CUDA Graph 和 runtime 分配使用剩余显存.
-较大的媒体工作负载可能超出可用显存. 此时应减小 block 数量.
-启动检查不是进程总显存的严格上限.
-
-[Host 缓存](cache.zh.md)在 pinned 内存中保留被中断的请求和可复用前缀.
-请求恢复保留递推状态, 媒体, 待验证 draft 和采样 offset.
-其他已驻留请求可以在缓存传输期间执行.
-
-使用 `--host-cache-bytes` 设置以字节为单位的 host 存储上限.
-默认上限在启动时计算. Worker 在 Ready 前预留可用的 pinned 容量.
-使用零上限关闭 host 卸载以进行比较.
-
-默认逻辑 GDN 容量为 `128` 个槽位.
-请求私有状态和临时 checkpoint 使用额外的物理槽位.
-使用 `--mamba-blocks` 更改逻辑 GDN 容量.
-Worker 在 Ready, 服务日志和执行 trace 的身份记录中报告实际容量和内存计算.
-Rust 在 Ready 后创建逻辑池和调度器.
-替换 worker 必须提供相同容量, 并满足当前内存预算.
-
-
-## 前缀 cache
-
-请求可以使用已缓存的完整块, 以及最后一块不完整的前缀.
-对于最后一块不完整的提示, 调度器可以在最后一个 token 之前记录 checkpoint.
-该 checkpoint 包含同一位置的 FA, GDN, 卷积和 MTP hidden state.
-只有对 worker 输出的检查未发现错误时, 调度器才使 checkpoint 对其他请求可用.
-
-对于媒体请求, 调度器只记录完整块 checkpoint.
-
-具有相同提示的请求可以从该 checkpoint 继续计算, 并重新计算最后一个 token.
-更长的提示可以从同一个已记录位置继续计算.
-Cache 不能从没有 GDN checkpoint 的位置继续计算.
-
-继续计算之前, worker 将共享的 FA 尾部复制到私有块.
-复制内容包括目标层和 MTP 层的 K 与 V.
-GDN 读取 checkpoint, 并写入另一个 slot.
-调度器保留源块, 直到它对 worker 结果的检查未发现错误.
-
-没有足够容量分配这些私有块时, cache 使用完整块.
-
-
-模型临时缓冲区使用 [CUDA 内存池](../../../python/oh_my_vllm/operators/runtime/cuda/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
-Worker 在报告就绪前准备存储.
-存储大小根据 token 预算确定, 且最多使用空闲 GPU 显存的一半.
-内存池保留这些存储供后续计算使用. `gpu_reserved_bytes` 统计值包含这些存储.
-
-## 参考
-
-设计采用 [vLLM 异步传输模式](https://github.com/vllm-project/vllm/blob/390836a3936629475696a2416378cf2f2aee8827/vllm/v1/kv_offload/cpu/gpu_worker.py).
-[SGLang 缓存控制器](https://github.com/sgl-project/sglang/blob/d0a75654368a470d8484e3ea45b06e500fee57af/python/sglang/srt/managers/cache_controller.py)也将传输完成与缓存所有权分离.
-这些项目是参考, 不是运行时依赖.
+Ready 报告可用, null, 私有和 scratch 数量, pool bytes, 布局身份及格式指纹.
+Rust 在 Ready 验证后构造逻辑池.
+[Wire 契约](../../adapters.zh.md#执行协议)规定版本和替换检查.

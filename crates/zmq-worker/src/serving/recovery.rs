@@ -12,29 +12,25 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
 
 pub(super) async fn engine<P: ServiceCache>(
-    mut client: WorkerClient,
+    client: WorkerClient,
     mut scheduler: Scheduler<P>,
     mut incoming: mpsc::Receiver<Submission>,
     context: EngineContext,
     mut shutdown: oneshot::Receiver<()>,
 ) {
-    scheduler.cache_policy().attach_client(&mut client);
     let health = &context.health;
     let configuration = client.configuration();
-    scheduler.enable_host_cache(client.host_cache_bytes);
     let expected_capacities = (
         client.logical_num_blocks,
         client.mamba_blocks,
-        client.host_cache_bytes,
+        client.cache_layout.clone(),
     );
-    let model_policy = client.model_policy();
-    let template = scheduler.empty_like();
     let mut client = Some(client);
     let mut epoch = 1u64;
     let mut restarts = 0u64;
     let mut recovery = Recovery {
         configuration,
-        model_policy,
+        model_policy: client.as_ref().unwrap().model_policy(),
         expected_capacities,
         launches: 0,
     };
@@ -70,15 +66,20 @@ pub(super) async fn engine<P: ServiceCache>(
             break;
         }
         drop(client.take());
-        scheduler = template.empty_like();
+        scheduler = scheduler.empty_like();
         clear_worker_status(health);
         match recovery
             .replace_worker(context.restart_attempts, health, &mut shutdown)
             .await
         {
-            Ok(Some(worker)) => {
+            Ok(Some(mut worker)) => {
+                let next_epoch = worker.configuration().worker_epoch;
+                scheduler
+                    .set_worker_epoch(next_epoch)
+                    .expect("drained replacement epoch");
+                epoch = next_epoch;
+                mark_recovered(health, epoch, &mut restarts, worker.process_id());
                 client = Some(worker);
-                mark_recovered(health, &mut epoch, &mut restarts);
             }
             Err(RecoveryStopped) => return,
             Ok(None) => {
@@ -138,6 +139,7 @@ async fn terminate_failed(
 fn clear_worker_status(health: &Mutex<Value>) {
     let mut status = health.lock().unwrap();
     status["worker"] = Value::Null;
+    status["worker_pid"] = Value::Null;
     status["worker_snapshot_unix_s"] = Value::Null;
     status["active_requests"] = json!(0);
     status["pending_admissions"] = json!(0);
@@ -148,7 +150,7 @@ fn clear_worker_status(health: &Mutex<Value>) {
 struct Recovery {
     configuration: crate::client::WorkerConfig,
     model_policy: crate::models::ModelPolicy,
-    expected_capacities: (u32, u32, u64),
+    expected_capacities: (u32, u32, crate::protocol::CacheLayout),
     launches: u64,
 }
 
@@ -175,6 +177,7 @@ impl Recovery {
                 break;
             }
             self.launches += 1;
+            self.configuration.worker_epoch += 1;
             let mut config = self.configuration.clone();
             let mut socket = config.socket_path.into_os_string();
             socket.push(format!(".recovery-{}", self.launches));
@@ -188,7 +191,7 @@ impl Recovery {
                     if (
                         worker.logical_num_blocks,
                         worker.mamba_blocks,
-                        worker.host_cache_bytes,
+                        worker.cache_layout.clone(),
                     ) != self.expected_capacities
                     {
                         let worker_pid = worker.process_id();
@@ -218,15 +221,15 @@ impl Recovery {
     }
 }
 
-fn mark_recovered(health: &Mutex<Value>, epoch: &mut u64, restarts: &mut u64) {
-    *epoch += 1;
+fn mark_recovered(health: &Mutex<Value>, epoch: u64, restarts: &mut u64, worker_pid: u32) {
     *restarts += 1;
     let mut status = health.lock().unwrap();
     status["status"] = json!("running");
-    status["epoch"] = json!(*epoch);
+    status["epoch"] = json!(epoch);
     status["restarts"] = json!(*restarts);
+    status["worker_pid"] = json!(worker_pid);
     info!(
-        epoch = *epoch,
+        epoch = epoch,
         restarts = *restarts,
         "GPU worker recovery complete"
     );

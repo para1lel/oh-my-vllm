@@ -17,6 +17,8 @@ Python 模型适配器通过 ZMQ DEALER 和 msgpack 调用原生 CUDA 算子.
 | DeepSeek-V4.1-Flash | 四张显卡, text target decode 和 DSpark5 | [适配器](docs/models/deepseek_v41/README.zh.md), [HTTP 流程](docs/models/deepseek_v41/performance.zh.md), [AgentX 流程](docs/models/deepseek_v41/agentx.zh.md) |
 
 只有表中的适配器可以启动模型服务. 未知模型会在启动时失败.
+新的 [Qwen GPU 缓存](docs/models/qwen38/cache.zh.md)尚未完成模型或性能验收.
+链接中的结果表只适用于其记录的实现身份.
 
 ## 开发
 

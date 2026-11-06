@@ -73,9 +73,10 @@ The `agentx` identity entry and `command.json` give the workload configuration.
 Shared HTTP accounting fields do not apply to these results.
 The execution trace identity gives resolved cache capacities and the memory calculation.
 
-FA capacity uses the fixed MTP4 default in the [service memory settings](cache.md#cache-memory).
-Use `--blocks` or `OH_MY_VLLM_NUM_GPU_BLOCKS` to change it. The command option is used if supplied.
-The selected count must fit the startup tensor budget.
+The [cache memory contract](cache.md#cache-memory) specifies the current FP8 page and GDN checkpoint capacities.
+Selected capacities must satisfy `P = 64 * C` and the complete byte budget.
+New-layout AgentX behavior and physical capacity are not verified.
+Successful HTTP requests do not prove that all session trees completed.
 
 The raw records, service log, execution trace, and count report stay external to the repository.
 The approved AgentX CSV and figure are repository artifacts for this measurement.

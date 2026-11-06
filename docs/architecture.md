@@ -4,7 +4,7 @@
 
 The [service](../crates/zmq-worker/src/lib.rs) owns CLI, HTTP APIs, worker lifecycle, and transport.
 The [scheduler](../crates/scheduler/src/lib.rs) owns admission, request queues, token budgets, preemption, and validated state commit.
-The [cache policy](cache-policy.md) supplies model-specific allocation, prefix lookup, state assignments, and restoration.
+The [cache policy](cache-policy.md) supplies model-specific allocation, prefix lookup, state assignments, restoration, and completion.
 The [KV crate](../crates/kv-cache/src/lib.rs) supplies logical storage and ownership mechanisms.
 
 Scheduling follows the priorities in the [runtime contract](requirements.md).

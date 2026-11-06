@@ -30,10 +30,10 @@ def can_chain(batch, active, graph, blocks):
             ]
             if may_repeat(history, 3):
                 return False
-        table = batch.scheduled[index]["fa_block_table"]
+        table = batch.metadata[2][index]
         for position in range(request.state_position, request.state_position + 4):
-            page = position // 784
-            if page < 0 or page >= len(table) or not 0 < table[page] < blocks:
+            page = position // 128
+            if page < 0 or page >= len(table) or not 0 < table[page] <= blocks:
                 return False
     return True
 
@@ -128,8 +128,7 @@ class DraftChain:
                 ).T.copy(),
                 np.asarray(
                     [
-                        batch.scheduled[index]["fa_block_table"][position // 784] * 784
-                        + position % 784
+                        batch.metadata[2][index][position // 128] * 128 + position % 128
                         for index, position in zip(active, positions, strict=True)
                     ],
                     np.int32,

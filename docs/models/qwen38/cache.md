@@ -1,145 +1,133 @@
-# KV offload
+# GPU cache
 
-## Scope
+Rust owns token identities, reservations, pins, and eviction through the [Qwen policy](../../../crates/scheduler/src/policy/qwen.rs).
+Python owns the [physical cache](../../../python/oh_my_vllm/models/qwen38/cache.py).
+KV history and recurrent checkpoints stay on the GPU.
+There is no KV host storage or host eviction path.
+Necessary token, metadata, and draft readback transfers use the [execution rules](../../execution.md).
 
-The host cache keeps interrupted requests and reusable prefixes.
-Rust owns logical identities, references, admission, and eviction.
-Python owns physical storage and CUDA transfers.
-The GPU cache keeps fixed addresses for CUDA Graph execution.
-GPU capacity uses the fixed defaults and startup checks in the [service guide](cache.md#cache-memory).
-
-## Ownership
-
-A cache entry can be GPU resident, storing, host resident, or loading.
-Each transfer identifier is unique for one worker lifetime.
-The scheduler reserves destination capacity before a transfer.
-Source references stay valid until the worker reports completion.
-Cancellation does not release memory that an unfinished transfer can access.
-Worker replacement invalidates all host entries from that worker.
-
-A request becomes eligible only after its load completes.
-Other resident requests stay eligible during transfers.
-The service polls transfers when no request can execute.
-The compute stream does not wait for unrelated loads.
+The new layout has no completed GPU, full-model, HTTP, or AgentX acceptance.
+The [recorded results](results.md) apply to their recorded source and older cache layout.
 
 ## Storage
 
-The host pool reserves its usable pinned capacity before Ready and reuses free storage.
-Its byte limit includes allocated slabs, reservations, and transfers.
-The automatic limit respects available host memory and process memory limits.
-An explicit byte limit can restrict this capacity.
-The reservation waits for idle compute and transfer streams.
-Request processing does not allocate or release pinned cache storage for each copy.
+The layout identity is `qwen_radix_gdn8192_fp8kv128_v1`.
+The [layout calculation](../../../python/oh_my_vllm/models/qwen38/cache_budget.py) separates usable persistent capacity from other storage.
 
-The reservation increases startup time and uses host memory before the first transfer.
-The byte limit and prefix retention policy do not change.
-Worker startup fails if the pinned reservation cannot be allocated.
+| Quantity | Meaning |
+|---|---|
+| `C` | Usable persistent GDN checkpoints |
+| `P = 64 * C` | Usable persistent KV pages |
+| 128 tokens | KV page length |
+| 8192 tokens | Periodic GDN checkpoint interval |
+| One null slot per pool | Separate from usable capacity |
+| `6 * N` | Private checkpoint slots for `N` request slots |
+| `ceil(T / 8192) + N` | Scratch checkpoint slots for token budget `T` |
 
-Capacity pressure first removes unused host prefixes.
-Request snapshots stay protected until restoration or cancellation.
-If host capacity cannot permit progress, the service reports a capacity error instead of resetting request progress.
+Target FA layers share logical page IDs. MTP adds one FA layer with the same format.
+Each layer has fixed-address dense slabs with these shapes:
 
-Dedicated nonblocking streams carry H2D and D2H transfers.
-The native runtime submits independent copies in batches.
-D2H copies wait for their source producer event.
-Events protect source tensors, destination tensors, and host slices.
-Event queries report completion without waiting on the CPU.
-Transfers can overlap computation, but they can still compete for memory bandwidth.
+| Tensor | Type | Shape |
+|---|---|---|
+| Codes | Raw E4M3FN bytes, `uint8` | `[P+1, 2, 128, 4, 256]` |
+| Scales | FP32 | `[P+1, 2, 128, 4]` |
 
-## State
+Each scale applies to one 256-element K or V vector for one token and head.
+Null page zero is not valid history.
+The page-table width is `ceil(max_context / 128)`, or 2048 at 262144 tokens.
+There is no complete BF16 copy of KV history.
+Recurrent checkpoints use FP32. Convolution and saved hidden values use BF16.
 
-A request snapshot includes target and MTP attention blocks, GDN state, convolution state, and boundary hidden values.
-It includes the selected private endpoint, not only logical checkpoint slots.
-Pending stochastic drafts keep their proposal distributions.
-CPU history, constraints, decoder state, positions, drafts, and RNG offsets do not change.
-Offload does not regenerate proposals or reset computed progress.
+The [FA operator](../../../python/oh_my_vllm/operators/fa_fp8) fuses quantization with the K/V producer and decoding with attention reads.
+New rows and reused rows use the same stored codes and scales.
+Q and P use BF16. QK and PV use BF16 operands with FP32 softmax and accumulation.
+The [format reference](../../../development/operators/qwen_fp8_reference.py) specifies rounding and scale calculation.
+Page copies and rollback move codes and scales together without quantization again.
 
-A reusable prefix contains validated attention blocks and a matching recurrent checkpoint.
-The scheduler stores reusable prefixes when GPU capacity pressure makes eviction necessary, not after each completed request.
-Host prefix retention is bounded and does not guarantee a hit for each old prefix.
-Partial endpoints keep their exact token count.
+The [GDN operator](../../../python/oh_my_vllm/operators/gdn_radix) uses explicit export slots independent of KV pages.
+Its 64-row computation splits at explicit exports and sequence ends.
+The [MTP operator](../../../python/oh_my_vllm/operators/mtp_fp8) uses the same FP8 cache for context and drafts.
+The older FA, GDN, and MTP operators stay available at the operator layer.
 
-Host prefixes do not contain another request's sampling state.
-Shared blocks keep their reference and copy-on-write rules.
-The host index publishes a prefix only after all required copies complete.
-A restored partial checkpoint keeps a separate read slot until the first continuation result passes validation.
+## Independent prefix state
 
-## Verification
+One token radix tree compares exact token values in a cache domain.
+Checkpoint attachments and page attachments have separate capacity, versions, eviction, and pins.
+Eviction detaches only the selected attachment. It does not delete the other attachment or descendants.
 
-Ownership checks cover delayed completion, cancellation, capacity pressure, and stale results.
-GPU checks compare restored values and fixed-seed continuation.
-Timeline checks examine transfer overlap and allocation windows separately.
+The [prefix lookup](../../../crates/scheduler/src/policy/qwen/lookup.rs) returns three different positions:
 
-The AgentX measurement uses MTP4 and four session trees.
-Its dataset, seed, and profiling duration do not change.
-The [AgentX guide](agentx.md) gives the current drain limit.
-The [test scope](../../testing.md) controls the other required checks.
+| Position | Meaning |
+|---|---|
+| `D` | Deepest checkpoint hit |
+| `K` | End of the continuous KV prefix |
+| `R` | Available recovery checkpoint at or before `K` |
+
+`min(D, K)` does not create a recovery checkpoint.
+Valid page spans after a missing page stay available for reuse.
+Replay follows the complete layer order from `R`.
+Reused spans skip K/V projection, quantization, and writes while hidden, GDN, query, attention, and FFN computation continue.
+A complete prompt hit uses saved hidden values with the current request's output head and sampler.
+It does not compute the last prompt token again.
+
+Allocation pins all selected sources before it reserves destinations.
+The checkpoint pool, page pool, private states, exports, and copy-on-write pages form one reservation.
+A failed reservation releases its temporary resources.
+Copy-on-write protects shared partial pages until validated completion.
+
+## Successful session tails
+
+The [session registry](../../../crates/scheduler/src/session.rs) orders admission before asynchronous request preparation.
+One `SessionId` has at most one successful tail.
+The tail value contains its `CacheDomain`, so a successful tail in a new domain replaces the previous tail for that session.
+A failed new preparation keeps the previous successful tail and does not reverse admission order.
+An older request that completes late cannot replace the newer admission's tail.
+
+Responses branches inherit their root session and cache namespace, with separate active pins.
+Anonymous requests use the bounded cache without a permanent session directory.
+Tail metadata and unpinned cache state have capacity limits.
+
+The [service identity contract](../../serving.md#cache-identity) defines the HTTP fields.
+
+## Exact completion
+
+The parser fixes accepted endpoint `A` before the request enters `Finalizing`.
+The [completion policy](../../../crates/scheduler/src/policy/qwen/completion.rs) compares computed endpoint `F` with that endpoint.
+
+| Condition | Completion work |
+|---|---|
+| `F < A` | Compute only the accepted suffix that has not executed |
+| `F = A` | Export or reuse the endpoint |
+| `F > A` | Restore the accepted verification endpoint and KV valid ends, or replay from an available earlier checkpoint |
+
+Finalization uses no sampling and adds no output tokens, usage, RNG advance, or grammar changes.
+Proposed state cannot replace accepted state.
+Ordinary decode also saves the output-head hidden values at the exact endpoint.
+MTP context keeps its original rule, token `p` with target hidden `p-1`.
+
+The [output workspace](../../../python/oh_my_vllm/operators/output/workspace.py) separates hidden values for the output head from MTP context hidden values.
+The output head uses the original 640-thread sampling normalization.
+The older small-row hidden export uses a different reduction and cannot replace output-head hidden values without numerical proof.
+MTP storage adds a separate BF16 vector of width 5120, or 10240 bytes per checkpoint bundle.
+
+HTTP success, final SSE markers, and stored-response publication wait for exact completion and full reply validation.
+Parser and storage-capacity preparation precede the successful tail replacement.
+Cancellation of submitted work waits for computation, auxiliary streams, rollback, exports, copies, and all participating rank acknowledgements before pin release.
+The [shared lifecycle](../../cache-policy.md) defines retirement and worker replacement.
 
 ## Cache memory
 
-FA cache capacity has fixed defaults: `1824` blocks for ordinary decode and `1608` blocks for MTP4.
-These defaults target 85% to 88% total GPU memory use during text inference on one B200 with the default scheduler settings.
-The worker does not calculate the block count from available memory.
+The total cache byte ceiling stays at the older layout's budget level.
+Null slots, private slots, scratch checkpoints, hidden values, and FP32 scales count toward that ceiling.
+The [workspace plan](../../../python/oh_my_vllm/models/qwen38/memory.py) also counts operator workspaces, metadata, sampling, and MTP backup storage.
+Checkpoint-slot counts alone do not bound GDN temporary storage.
+CUDA Graph, allocator, and driver peaks are not measured.
+No new usable capacity or physical peak is accepted.
 
-Use `--num-gpu-blocks` or `OH_MY_VLLM_NUM_GPU_BLOCKS` to change this capacity.
-The service uses the command option if supplied.
-Otherwise, it uses the environment variable if set. Otherwise, it uses the mode default.
-Put the option before `serve`, `run`, or `bench`.
+`--mamba-blocks` selects usable checkpoints. `--num-gpu-blocks` selects usable pages.
+The selected values must satisfy `P = 64 * C` and the byte budget.
+Conflicting options cause an error.
 
-At startup, the worker checks the selected capacity against an 88% tensor budget.
-This check includes memory already in use, FA and GDN storage, prefill, and stored decode and sampling workspaces.
-The memory snapshot includes loaded weights. The check does not count them again.
-The worker rejects a capacity that does not fit. It does not reduce the requested or default block count.
-
-Additional media storage is reported separately. It does not reduce the default text cache capacity.
-Media, CUDA Graph, and runtime allocations use the available memory.
-Large media workloads can exceed available memory. Use a lower block count in this case.
-The startup check does not set a strict limit on total process memory.
-
-The [host cache](cache.md) keeps interrupted requests and reusable prefixes in pinned memory.
-Request restoration keeps recurrent state, media, pending drafts, and sampling offsets.
-Other resident requests can execute during cache transfers.
-
-Use `--host-cache-bytes` to set a host storage limit in bytes.
-The default limit is calculated at startup. The worker reserves usable pinned capacity before Ready.
-Use a zero limit to disable host offload for comparisons.
-
-The default logical GDN capacity is `128` slots.
-Private request states and temporary checkpoints use additional physical slots.
-Use `--mamba-blocks` to change the logical GDN capacity.
-The worker reports resolved capacities and memory calculations in Ready, the service log, and the execution trace identity.
-Rust creates its logical pools and scheduler after Ready.
-Replacement workers must supply the same capacities and satisfy the current memory budget.
-
-
-## Prefix cache
-
-Requests can use cached full blocks and prefixes with a final block that is not full.
-For a prompt with a final block that is not full, the scheduler can record a checkpoint before the last token.
-The checkpoint contains FA, GDN, convolution, and MTP hidden state for the same position.
-The scheduler makes a checkpoint available to other requests only if its checks of the worker output find no errors.
-
-For a media request, the scheduler records only full block checkpoints.
-
-A request with the same prompt can continue from this checkpoint and do computation for its last token again.
-A longer prompt can continue from the same recorded position.
-The cache cannot continue from a position that has no GDN checkpoint.
-
-Before computation continues, the worker makes a copy of the shared FA tail in a private block.
-The copy contains K and V from the target and MTP layers.
-GDN reads the checkpoint and writes to a different slot.
-The scheduler keeps the source blocks until its checks of the worker result find no errors.
-
-Without sufficient capacity for these private blocks, the cache uses full blocks.
-
-
-Temporary model buffers use a [CUDA memory pool](../../../python/oh_my_vllm/operators/runtime/cuda/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
-The worker prepares storage before it reports readiness.
-The size uses the token budget and at most half the free GPU memory.
-The pool keeps this storage for later work. The `gpu_reserved_bytes` statistic includes this storage.
-
-## References
-
-The design uses the [vLLM asynchronous transfer pattern](https://github.com/vllm-project/vllm/blob/390836a3936629475696a2416378cf2f2aee8827/vllm/v1/kv_offload/cpu/gpu_worker.py).
-The [SGLang cache controller](https://github.com/sgl-project/sglang/blob/d0a75654368a470d8484e3ea45b06e500fee57af/python/sglang/srt/managers/cache_controller.py) also separates transfer completion from cache ownership.
-These projects are references, not runtime dependencies.
+Ready reports usable, null, private, and scratch counts, pool bytes, layout identity, and format fingerprint.
+Rust constructs its logical pools after Ready validation.
+The [wire contract](../../adapters.md#execution-protocol) defines version and replacement checks.

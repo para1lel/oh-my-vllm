@@ -35,7 +35,7 @@ Index 读取将活跃上下文解码到一个共享 BF16 workspace.
 Candidate filter 为每个 block 保留一个 boolean.
 Query chunking 不限制完整的已解码 key workspace.
 
-## 已接受状态和传输
+## 驻留的已接受状态
 
 Token page 保存 compressed KV, index key 和 Engram history.
 Accepted-state page 在精确端点保存 target window, MTP window 和未完成 compressor group.
@@ -46,19 +46,21 @@ Commit 只发布已接受端点和已调度 checkpoint.
 Restoration 在清空活跃 slot 前检查端点.
 Prefix copy 只包含 token-page 字段.
 
-Host snapshot 保留编码值和 scale 字节.
-DEP4 snapshot 在请求释放后保留 owner rank.
+KV page 和 accepted-state page 保持 GPU 驻留. 没有主机快照或经主机存储的恢复路径.
+DEP4 保持四 rank owner 放置方式和空 rank 确认.
 所有 rank 完成执行后才释放 owner.
-共享[缓存策略](../../cache-policy.zh.md)控制逻辑所有权和传输完成.
+共享[缓存策略](../../cache-policy.zh.md)控制逻辑所有权和安全释放.
+
+Engram CPU 和文件后备权重存储与 KV 缓存分开, 继续可用.
+必要的 token 和 metadata 传输也继续可用.
 
 ## Proposal Graph 所有权
 
 [Proposal Graph 缓存](../../../python/oh_my_vllm/models/deepseek_v41/target_execution.py#L285)<!-- source: graph = self.proposal_graphs.get(slot) -->中每个请求 slot 最多有一个 proposal Graph.
 它先关闭绑定已失效的图, 再创建另一个图.
 
-[完成的主机 store](../../../python/oh_my_vllm/models/deepseek_v41/cache_transfer.py#L145)<!-- source: self._release_request_slot(operation.get("request_id")) --> 通过 worker 回调释放请求 slot.
-Worker 的 [`_free_slot`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L46)<!-- source: def _free_slot(self, request): --> 先关闭 proposal Graph, 再清空和释放 slot.
-[`Worker.close`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L243)<!-- source: def close(self): --> 先关闭 proposal Graph, 再关闭缓存存储和权重.
+Worker 的 [`_free_slot`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L54)<!-- source: def _free_slot(self, request): --> 先关闭 proposal Graph, 再清空和释放 slot.
+[`Worker.close`](../../../python/oh_my_vllm/models/deepseek_v41/inference.py#L250)<!-- source: def close(self): --> 先关闭 proposal Graph, 再关闭缓存存储和权重.
 [图释放流程](../../../python/oh_my_vllm/models/deepseek_v41/proposal_graph.py#L179)<!-- source: def close(self): -->先同步设备并重置图, 再释放其 owner 和 PageLease.
 [执行指南](README.zh.md#mtp-proposal-graph)给出条件和默认设置.
 

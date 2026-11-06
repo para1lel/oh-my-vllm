@@ -59,9 +59,6 @@ impl ArenaPolicy {
 impl CachePolicy for ArenaPolicy {
     type Hit = ();
     type State = Vec<StateBlock>;
-    type Snapshot = ();
-    type Transfer = StorageLease;
-    type TransferPlan = Vec<StateBlock>;
     type Resources = [usize; 3];
 
     fn empty_like(&self) -> Self {
@@ -76,8 +73,8 @@ impl CachePolicy for ArenaPolicy {
         true
     }
 
-    fn accepts(&self, request: &Request, _: &SchedulerConfig, host: bool) -> bool {
-        !host && request.prompt_len <= 3 && request.max_tokens <= 3
+    fn accepts(&self, request: &Request, _: &SchedulerConfig) -> bool {
+        request.prompt_len <= 3 && request.max_tokens <= 3
     }
 
     fn initialize_hashes(&self, _: &mut Request) {}
@@ -157,7 +154,11 @@ impl CachePolicy for ArenaPolicy {
         self.pending[&request_id].blocks().to_vec()
     }
 
-    fn commit_cache(&mut self, request: &Request) {
+    fn commit_cache(
+        &mut self,
+        request: &Request,
+        _: &oh_my_vllm_scheduler::execution::CacheStepResult,
+    ) {
         let transaction = self.pending.remove(&request.id).unwrap();
         let selected = transaction.select_storage(transaction.blocks()).unwrap();
         self.accepted.insert(request.id, selected);
@@ -166,33 +167,6 @@ impl CachePolicy for ArenaPolicy {
     fn free(&mut self, request_id: u64) {
         self.pending.remove(&request_id);
         self.accepted.remove(&request_id);
-    }
-
-    fn store_request(&mut self, _: u64) -> Self::Transfer {
-        unreachable!("host cache is disabled")
-    }
-
-    fn store_prefix(&mut self, _: PrefixHit<Self::Hit>) -> Self::Transfer {
-        unreachable!("host cache is disabled")
-    }
-
-    fn load_snapshot(
-        &mut self,
-        _: &Request,
-        _: &Self::Snapshot,
-        _: bool,
-        _: usize,
-        _: usize,
-    ) -> Option<Self::Transfer> {
-        unreachable!("host cache is disabled")
-    }
-
-    fn transfer_plan(_: Option<&Self::Transfer>) -> Self::TransferPlan {
-        unreachable!("host cache is disabled")
-    }
-
-    fn finish_transfer(&mut self, _: Self::Transfer) -> Self::Snapshot {
-        unreachable!("host cache is disabled")
     }
 }
 
@@ -203,6 +177,7 @@ fn scheduler_uses_model_selected_state_and_validates_before_commit() {
     assert!(scheduler.add_request(Request::new(1, vec![1, 2], 3, vec![])));
     let first = scheduler.schedule();
     assert_eq!(first.scheduled.len(), 1);
+    scheduler.mark_submitted(&first).unwrap();
     let assignment = &first.scheduled[0].state;
     assert_eq!(assignment.len(), 3);
     let mut names = assignment
@@ -214,20 +189,35 @@ fn scheduler_uses_model_selected_state_and_validates_before_commit() {
     assert_eq!(scheduler.cache_resource_counts(), [2; 3]);
     assert!(scheduler.update(WorkerOutput { outputs: vec![] }).is_err());
     assert_eq!(scheduler.cache_resource_counts(), [2; 3]);
-    let output = || WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![3],
-            num_accepted_draft_tokens: 0,
-            new_draft_token_ids: vec![],
-        }],
-    };
-    scheduler.update(output()).unwrap();
+
+    fn output(row: &oh_my_vllm_scheduler::ScheduledRequest<Vec<StateBlock>>) -> WorkerOutput {
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                execution: row.execution,
+                work: row.work,
+                cache_result: oh_my_vllm_scheduler::execution::CacheStepResult {
+                    execution: row.execution,
+                    computed_end: row.work.range().1,
+                    accepted_end: row.accepted_end + 1,
+                    exported_checkpoints: vec![],
+                    page_valid_ends: vec![],
+                    mtp_accepted_end: None,
+                },
+                token_ids: vec![3],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![],
+            }],
+        }
+    }
+
+    scheduler.update(output(&first.scheduled[0])).unwrap();
     assert_eq!(scheduler.cache_resource_counts(), [2; 3]);
     let second = scheduler.schedule();
+    scheduler.mark_submitted(&second).unwrap();
     assert_ne!(&second.scheduled[0].state, assignment);
     assert_eq!(scheduler.cache_resource_counts(), [1; 3]);
-    scheduler.update(output()).unwrap();
+    scheduler.update(output(&second.scheduled[0])).unwrap();
     assert_eq!(scheduler.cache_resource_counts(), [2; 3]);
     let replacement = scheduler.empty_like();
     assert_eq!(replacement.cache_resource_counts(), [3; 3]);

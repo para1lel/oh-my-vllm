@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -18,6 +19,7 @@ from oh_my_vllm.models.deepseek_v41.dispatch import (
     destination_pairs,
 )
 from oh_my_vllm.models.deepseek_v41.rank_plan import (
+    handle_rank,
     local_execute,
     merge_replies,
 )
@@ -353,6 +355,7 @@ class DeepSeekDep4(DeepSeekDep4Fixture, unittest.TestCase):
             type="execute",
             rpc_id=4,
             step_id=3,
+            worker_epoch=7,
             rank_plan=plan,
             scheduled=[dict(request_id=11, token_ids=[2])],
             finished_request_ids=[],
@@ -364,14 +367,31 @@ class DeepSeekDep4(DeepSeekDep4Fixture, unittest.TestCase):
             replies[rank] = dict(
                 type="execute_result",
                 rpc_id=4,
+                step_id=3,
+                worker_epoch=7,
                 outputs=[
                     dict(request_id=row["request_id"]) for row in local["scheduled"]
                 ],
-                rank_completion=dict(rank=rank, step_id=3, schedule=schedule),
+                rank_completion=dict(
+                    rank=rank, step_id=3, worker_epoch=7, schedule=schedule
+                ),
             )
         self.assertEqual(
             merge_replies(message, replies)["outputs"], [dict(request_id=11)]
         )
+        for field in ("worker_epoch", "step_id"):
+            stale = copy.deepcopy(replies)
+            stale[0][field] += 1
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "reply"):
+                merge_replies(message, stale)
+        stale = copy.deepcopy(replies)
+        stale[3]["rank_completion"]["worker_epoch"] += 1
+        with self.assertRaisesRegex(ValueError, "acknowledge"):
+            merge_replies(message, stale)
+        incomplete = dict(replies)
+        incomplete.pop(3)
+        with self.assertRaisesRegex(ValueError, "four rank"):
+            merge_replies(message, incomplete)
         missing = copy.deepcopy(replies)
         missing[0].pop("rank_completion")
         with self.assertRaisesRegex(ValueError, "acknowledge"):
@@ -380,6 +400,81 @@ class DeepSeekDep4(DeepSeekDep4Fixture, unittest.TestCase):
         duplicate["rank_plan"][0]["request_ids"] = [11]
         with self.assertRaisesRegex(ValueError, "exact request partition"):
             local_execute(duplicate, 0)
+
+    def test_wire_all_ranks_ack_epoch_and_finish_releases_only_the_owner(self):
+        from tests.deepseek_speculation_fixtures import (
+            _chain_row,
+            _chain_worker,
+            _wire_message,
+        )
+
+        workers = {}
+        for rank in range(4):
+            worker = _chain_worker()
+            self.addCleanup(worker.cache.close)
+            worker.rank = rank
+            worker.dep4_executor = SimpleNamespace(
+                execute=lambda operation: operation()
+            )
+            if rank != 2:
+                worker.requests.clear()
+            workers[rank] = worker
+        owner = workers[2]
+        message = _wire_message(
+            owner,
+            dict(
+                rpc_id=4,
+                scheduled=[_chain_row(owner, owner.requests[1].history)],
+                finished_request_ids=[],
+                preempted_request_ids=[],
+            ),
+        )
+        message["rank_plan"] = [
+            dict(
+                rank=rank,
+                request_ids=[1] if rank == 2 else [],
+                finished_request_ids=[],
+                preempted_request_ids=[],
+            )
+            for rank in range(4)
+        ]
+        replies = {
+            rank: handle_rank(worker, message, rank) for rank, worker in workers.items()
+        }
+        result = merge_replies(message, replies)
+        self.assertEqual(
+            [len(replies[rank]["outputs"]) for rank in range(4)], [0, 0, 1, 0]
+        )
+        self.assertEqual(
+            [ack["worker_epoch"] for ack in result["rank_completions"]], [7] * 4
+        )
+        self.assertEqual((result["step_id"], result["worker_epoch"]), (1, 7))
+        message = _wire_message(
+            owner,
+            dict(
+                rpc_id=5,
+                scheduled=[],
+                finished_request_ids=[1],
+                preempted_request_ids=[],
+            ),
+        )
+        message["rank_plan"] = [
+            dict(
+                rank=rank,
+                request_ids=[],
+                finished_request_ids=[1] if rank == 2 else [],
+                preempted_request_ids=[],
+            )
+            for rank in range(4)
+        ]
+        replies = {
+            rank: handle_rank(worker, message, rank) for rank, worker in workers.items()
+        }
+        result = merge_replies(message, replies)
+        self.assertEqual(result["outputs"], [])
+        self.assertEqual(len(result["rank_completions"]), 4)
+        self.assertNotIn(1, owner.requests)
+        self.assertEqual(owner.slots, {0, 1})
 
 
 if __name__ == "__main__":

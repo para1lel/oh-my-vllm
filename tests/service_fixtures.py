@@ -56,7 +56,7 @@ class ServiceFixture:
                 "--socket",
                 self.directory.name + "/worker.ipc",
                 "--num-gpu-blocks",
-                "128",
+                "8192",
                 "serve",
                 "--listen",
                 f"127.0.0.1:{self.port}",

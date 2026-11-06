@@ -1,3 +1,4 @@
+import copy
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -14,6 +15,7 @@ from tests.deepseek_speculation_fixtures import (
     _chain_row,
     _chain_state,
     _chain_worker,
+    _wire_message,
     _worker,
 )
 from tests.deepseek_speculation_fixtures import _ChainModel as _ChainModel
@@ -93,9 +95,9 @@ class DeepSeekSpeculation(DeepSeekSpeculationFixture, unittest.TestCase):
                 ):
                     torch.testing.assert_close(left, right, rtol=0, atol=0)
 
-    def test_continuous_state_survives_slot_release_host_transfer_and_restart(self):
+    def test_continuous_state_survives_slot_release_and_restart(self):
         greedy, states, _ = self._run_chain("greedy", acceptance=2)
-        for recovery in ("release", "host", "restart"):
+        for recovery in ("release", "restart"):
             with self.subTest(recovery=recovery):
                 worker = _chain_worker(acceptance=2)
                 request = worker.requests[1]
@@ -110,43 +112,17 @@ class DeepSeekSpeculation(DeepSeekSpeculationFixture, unittest.TestCase):
                 )
                 if recovery == "release":
                     worker._free_slot(request)
-                elif recovery == "host":
-                    used = (request.state_position + 3) // 4
-                    operation = dict(
-                        transfer_id=1,
-                        snapshot_id=7,
-                        kind="store",
-                        request_id=1,
-                        fa_blocks=scheduled["fa_block_table"][:used],
-                        mamba_blocks=scheduled["mamba_block_table"][:used],
-                    )
-                    self.assertEqual(
-                        worker.cache.handle(dict(operations=[operation]))[0]["status"],
-                        "complete",
-                    )
-                    self.assertIsNone(request.cache_slot)
-                    worker.cache.fa_pages.clear()
-                    worker.cache.mamba_pages.clear()
-                    for name in ("fa_block_table", "mamba_block_table"):
-                        scheduled[name] = [block + 32 for block in scheduled[name]]
-                    operation.update(
-                        transfer_id=2,
-                        kind="load",
-                        fa_blocks=scheduled["fa_block_table"][:used],
-                        mamba_blocks=scheduled["mamba_block_table"][:used],
-                    )
-                    self.assertEqual(
-                        worker.cache.handle(dict(operations=[operation]))[0]["status"],
-                        "complete",
-                    )
                 if recovery == "restart":
                     scheduled = _chain_row(worker, request.history, start=0)
                     output = worker.execute(
-                        dict(
-                            rpc_id=1,
-                            scheduled=[scheduled],
-                            preempted_request_ids=[1],
-                            finished_request_ids=[],
+                        _wire_message(
+                            worker,
+                            dict(
+                                rpc_id=1,
+                                scheduled=[scheduled],
+                                preempted_request_ids=[1],
+                                finished_request_ids=[],
+                            ),
                         )
                     )["outputs"][0]
                 else:
@@ -299,7 +275,7 @@ class DeepSeekSpeculation(DeepSeekSpeculationFixture, unittest.TestCase):
                 worker._execute_decode_group = Mock(
                     return_value={row["request_id"]: row for row in rows}
                 )
-                result = worker.execute(
+                result = worker._execute_resident(
                     dict(
                         rpc_id=1,
                         scheduled=rows,
@@ -311,6 +287,171 @@ class DeepSeekSpeculation(DeepSeekSpeculationFixture, unittest.TestCase):
                 self.assertEqual(worker._execute_decode_group.call_count, int(batched))
                 self.assertEqual(worker._execute_row.call_count, 0 if batched else 2)
                 worker._execute_prefill_group.assert_not_called()
+
+    def test_wire_reports_real_prefill_target_and_rejected_verify_endpoints(self):
+        worker = _chain_worker(acceptance=2)
+        self.addCleanup(worker.cache.close)
+        request = worker.requests[1]
+        first = _chain_row(worker, request.history[:2])
+        first["cache_checkpoint"] = (2, 50)
+        drafts = []
+        for tokens, computed, accepted, mode in (
+            (first, 2, 3, "none"),
+            (None, 3, 4, "target"),
+            (None, 6, 7, "verify"),
+        ):
+            if tokens is None:
+                inputs = request.history[request.state_position :]
+                if mode == "verify":
+                    inputs += drafts
+                tokens = _chain_row(worker, inputs)
+            message = _wire_message(
+                worker,
+                dict(
+                    rpc_id=8,
+                    scheduled=[tokens],
+                    finished_request_ids=[],
+                    preempted_request_ids=[],
+                ),
+            )
+            result = worker.execute(message)["outputs"][0]
+            drafts = result["new_draft_token_ids"]
+            self.assertEqual(message["scheduled"][0]["sampling"]["kind"], mode)
+            self.assertEqual(result["computed_end"], computed)
+            self.assertEqual(result["accepted_end"], accepted)
+            self.assertEqual(result["computed_end"], request.state_position)
+            self.assertEqual(result["accepted_end"], len(request.history))
+            self.assertEqual(result["lease_id"], 11)
+            self.assertEqual(
+                (result["purpose"], result["action"]), ("advance", "forward")
+            )
+            self.assertEqual(result["validated_exports"], [])
+            self.assertEqual(result["committed_page_valid_ends"], [])
+            self.assertIsNone(result["mtp_accepted_endpoint"])
+        self.assertEqual(worker.cache.mamba_pages[50].endpoint, 2)
+        self.assertEqual(result["num_accepted_draft_tokens"], 2)
+        self.assertEqual(len(result["token_ids"]), 3)
+
+    def test_wire_rejects_stale_epoch_flat_state_and_foreign_actions_before_work(self):
+        worker = _chain_worker()
+        self.addCleanup(worker.cache.close)
+        message = _wire_message(
+            worker,
+            dict(
+                rpc_id=8,
+                scheduled=[_chain_row(worker, worker.requests[1].history)],
+                finished_request_ids=[],
+                preempted_request_ids=[],
+            ),
+        )
+        for mutation in ("epoch", "flat", "tag", "sampling", "action", "accepted"):
+            bad = copy.deepcopy(message)
+            row = bad["scheduled"][0]
+            if mutation == "epoch":
+                bad["worker_epoch"] += 1
+            elif mutation == "flat":
+                row["fa_block_table"] = row["model_state"]["fa_block_table"]
+            elif mutation == "tag":
+                row["model_state"]["kind"] = "qwen_radix_v1"
+            elif mutation == "sampling":
+                row["sampling"] = {"kind": "none"}
+            elif mutation == "accepted":
+                row["accepted_end"] += 1
+            else:
+                row.update(action="head_only", token_ids=[], forward_end=0, endpoint=0)
+                bad["num_batched_tokens"] = 0
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                worker.execute(bad)
+            self.assertEqual(worker.model.targets, [])
+            self.assertEqual(worker.requests[1].history, [10, 11, 12])
+            self.assertIsNone(worker.requests[1].cache_slot)
+            self.assertEqual(worker.last_step_id, 0)
+        worker.execute(message)
+        with self.assertRaisesRegex(ValueError, "stale"):
+            worker.execute(message)
+
+    def test_wire_refuses_missing_physical_exports_instead_of_echoing_the_schedule(
+        self,
+    ):
+        for corrupt in ("state", "fa", "checkpoint"):
+            worker = _chain_worker()
+            self.addCleanup(worker.cache.close)
+            row = _chain_row(worker, worker.requests[1].history)
+            row["cache_checkpoint"] = (2, 50)
+            message = _wire_message(
+                worker,
+                dict(
+                    rpc_id=8,
+                    scheduled=[row],
+                    finished_request_ids=[],
+                    preempted_request_ids=[],
+                ),
+            )
+            commit = worker.cache.commit
+
+            def damage(
+                *args, commit=commit, cache=worker.cache, corrupt=corrupt, **kwargs
+            ):
+                commit(*args, **kwargs)
+                if corrupt == "fa":
+                    cache.fa_pages[1].valid_tokens = 0
+                else:
+                    cache.mamba_pages[50 if corrupt == "checkpoint" else 1].endpoint = 0
+
+            with (
+                self.subTest(corrupt=corrupt),
+                patch.object(worker.cache, "commit", damage),
+                self.assertRaisesRegex(ValueError, "accepted|checkpoint"),
+            ):
+                worker.execute(message)
+
+    def test_wire_ready_and_init_require_version_and_epoch(self):
+        worker = _chain_worker()
+        self.addCleanup(worker.cache.close)
+        worker.descriptor, worker.weight_info = {}, {}
+        worker.logical_num_blocks, worker.mamba_blocks = 128, 17
+        worker.args.max_batch_size = 2
+        ready = worker.ready()
+        self.assertEqual((ready["protocol_version"], ready["worker_epoch"]), (2, 7))
+        self.assertEqual(
+            ready["cache_layout"],
+            {
+                "kind": "deepseek_resident_v1",
+                "layout_id": "deepseek_v41_paired128_resident_v1",
+            },
+        )
+        self.assertNotIn("host_cache_bytes", ready)
+        for config in (
+            {},
+            {"protocol_version": 1, "worker_epoch": 7},
+            {"protocol_version": 2, "worker_epoch": -1},
+        ):
+            with patch("torch.cuda.set_device") as cuda:
+                with self.assertRaises(ValueError):
+                    type(worker)(config, raw_config="{}")
+                cuda.assert_not_called()
+
+    def test_wire_ready_requires_matching_epoch_and_layout_on_every_rank(self):
+        from oh_my_vllm.models.deepseek_v41.launcher import GroupWorker
+
+        ready = dict(
+            protocol_version=2,
+            worker_epoch=7,
+            descriptor={},
+            logical_num_blocks=128,
+            mamba_blocks=17,
+            cache_layout={
+                "kind": "deepseek_resident_v1",
+                "layout_id": "deepseek_v41_paired128_resident_v1",
+            },
+        )
+        replies = {rank: copy.deepcopy(ready) for rank in range(4)}
+        self.assertEqual(GroupWorker._validate_ready(replies), ready)
+        for field in ("protocol_version", "worker_epoch", "cache_layout"):
+            stale = copy.deepcopy(replies)
+            stale[3][field] = 0 if field != "cache_layout" else {}
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
+                GroupWorker._validate_ready(stale)
 
 
 if __name__ == "__main__":

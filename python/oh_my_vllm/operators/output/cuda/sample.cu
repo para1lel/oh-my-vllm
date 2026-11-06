@@ -308,6 +308,22 @@ void sample_project(TensorView x, TensorView residual, TensorView norm, TensorVi
               Vocabulary, 5120, stream);
 }
 
+void sample_project_hidden(TensorView normalized, TensorView weight, TensorView logits) {
+  TVM_FFI_ICHECK(normalized.ndim() == 2 && normalized.size(0) > 0 && normalized.size(0) <= 20 &&
+                 normalized.size(1) == 5120);
+  int rows = normalized.size(0);
+  tensor_contract(normalized, normalized, kDLBfloat, 16, {rows, 5120});
+  tensor_contract(weight, normalized, kDLBfloat, 16, {Vocabulary, 5120});
+  tensor_contract(logits, normalized, kDLBfloat, 16, {rows, Vocabulary});
+  sample_disjoint(std::initializer_list<TensorView>{normalized, weight, logits});
+  tvm::ffi::CUDADeviceGuard guard(normalized.device().device_id);
+  auto stream =
+      static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, normalized.device().device_id));
+  bf16_linear(static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
+              static_cast<const __nv_bfloat16 *>(weight.data_ptr()), logits.data_ptr(), rows,
+              Vocabulary, 5120, stream);
+}
+
 template <bool Select>
 void sample_impl(TensorView x, TensorView history, TensorView allowed, TensorView parameters,
                  std::optional<TensorView> rng, TensorView keys, TensorView ordered,

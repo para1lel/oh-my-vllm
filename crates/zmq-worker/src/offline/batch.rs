@@ -43,7 +43,6 @@ pub(super) async fn execute_batch<P: ServiceCache>(
     let cleanup_s;
     let mut pending = prompts.iter().peekable();
     loop {
-        cache_step(client, scheduler).await?;
         let idle = scheduler.num_running() + scheduler.num_waiting() == 0;
         if arrival_interval == 0 || idle || progress.steps.is_multiple_of(arrival_interval) {
             progress
@@ -58,16 +57,17 @@ pub(super) async fn execute_batch<P: ServiceCache>(
                 .await?;
         }
         let step = scheduler.schedule();
-        cache_step(client, scheduler).await?;
+        progress.finish_finalized(scheduler)?;
         progress.record_schedule(&step);
-        if step.scheduled.is_empty() && !scheduler.cache_pending() && client.host_cache_bytes == 0 {
+        if step.scheduled.is_empty() {
             ensure!(
                 scheduler.num_running() + scheduler.num_waiting() == 0,
                 "scheduler stalled with unfinished requests"
             );
         }
+        scheduler.mark_submitted(&step)?;
         let result = client
-            .execute_one_step(
+            .execute_one_step::<P>(
                 &step.scheduled,
                 &step.finished_request_ids,
                 &step.preempted_request_ids,
@@ -75,19 +75,13 @@ pub(super) async fn execute_batch<P: ServiceCache>(
             )
             .await?;
         if !step.scheduled.is_empty() {
-            progress.apply_output(scheduler, result)?;
+            progress.apply_output(scheduler, result, max_tokens)?;
         }
-        if step.scheduled.is_empty() && client.host_cache_bytes > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-        }
-        if scheduler.num_running() + scheduler.num_waiting() == 0
-            && pending.peek().is_none()
-            && !scheduler.cache_pending()
-        {
+        if scheduler.num_running() + scheduler.num_waiting() == 0 && pending.peek().is_none() {
             let cleanup = scheduler.schedule();
             let cleanup_started = Instant::now();
             client
-                .execute_one_step(&[], &cleanup.finished_request_ids, &[], 0)
+                .execute_one_step::<P>(&[], &cleanup.finished_request_ids, &[], 0)
                 .await?;
             cleanup_s = cleanup_started.elapsed().as_secs_f64();
             break;
@@ -113,6 +107,7 @@ struct BatchProgress {
     accepted_draft_tokens: usize,
     verified_draft_tokens: usize,
     prompt_lengths: BTreeMap<u64, usize>,
+    finalizing: BTreeSet<u64>,
 }
 
 impl BatchProgress {
@@ -150,6 +145,7 @@ impl BatchProgress {
             accepted_draft_tokens,
             verified_draft_tokens,
             prompt_lengths,
+            finalizing: BTreeSet::new(),
         }
     }
 
@@ -192,7 +188,7 @@ impl BatchProgress {
         Ok(())
     }
 
-    fn record_schedule(&mut self, step: &oh_my_vllm_scheduler::SchedulerOutput) {
+    fn record_schedule<S>(&mut self, step: &oh_my_vllm_scheduler::SchedulerOutput<S>) {
         for request in &step.scheduled {
             let known =
                 self.prompt_lengths[&request.request_id] + self.outputs[&request.request_id].len();
@@ -214,6 +210,7 @@ impl BatchProgress {
         &mut self,
         scheduler: &mut Scheduler<P>,
         result: oh_my_vllm_scheduler::WorkerOutput,
+        max_tokens: usize,
     ) -> Result<()> {
         self.steps += 1;
         for output in &result.outputs {
@@ -237,6 +234,30 @@ impl BatchProgress {
                 .get_mut(&output.request_id)
                 .context("unexpected request ID")?
                 .extend(output.token_ids);
+            if self.outputs[&output.request_id].len() == max_tokens
+                && !self.finalizing.contains(&output.request_id)
+            {
+                scheduler.finalize_request(
+                    output.request_id,
+                    self.prompt_lengths[&output.request_id] + max_tokens,
+                )?;
+                self.finalizing.insert(output.request_id);
+            }
+        }
+        self.finish_finalized(scheduler)?;
+        Ok(())
+    }
+
+    fn finish_finalized<P: ServiceCache>(&mut self, scheduler: &mut Scheduler<P>) -> Result<()> {
+        let ready: Vec<_> = self
+            .finalizing
+            .iter()
+            .copied()
+            .filter(|id| scheduler.is_finalized(*id))
+            .collect();
+        for id in ready {
+            scheduler.finish_success(id)?;
+            self.finalizing.remove(&id);
         }
         Ok(())
     }
@@ -293,15 +314,4 @@ impl BatchProgress {
             verified_draft_tokens: self.verified_draft_tokens,
         })
     }
-}
-
-async fn cache_step<P: ServiceCache>(
-    client: &mut WorkerClient,
-    scheduler: &mut Scheduler<P>,
-) -> Result<()> {
-    client.cache_step(scheduler).await?;
-    if let Some((id, message)) = scheduler.take_cache_failures().into_iter().next() {
-        anyhow::bail!("request {id}: {message}");
-    }
-    Ok(())
 }

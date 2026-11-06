@@ -29,7 +29,7 @@ impl<P: CachePolicy> Scheduler<P> {
     fn in_flight_ids(&self) -> BTreeSet<u64> {
         self.running
             .iter()
-            .filter(|request| request.num_in_flight_tokens > 0)
+            .filter(|request| request.in_flight.is_some())
             .map(|request| request.id)
             .collect()
     }
@@ -44,6 +44,31 @@ impl<P: CachePolicy> Scheduler<P> {
                         .prompt_len
                         .max(request.token_ids.len().saturating_sub(1))
             })
+    }
+
+    pub fn mark_submitted(
+        &mut self,
+        batch: &SchedulerOutput<P::State>,
+    ) -> Result<(), StateUpdateError> {
+        self.validate_schedule(batch)?;
+        for row in &batch.scheduled {
+            let request = self
+                .running
+                .iter_mut()
+                .find(|request| request.id == row.request_id)
+                .unwrap();
+            if request.submitted {
+                return Err(StateUpdateError::Invalid("execution was already submitted"));
+            }
+        }
+        for row in &batch.scheduled {
+            self.running
+                .iter_mut()
+                .find(|request| request.id == row.request_id)
+                .unwrap()
+                .submitted = true;
+        }
+        Ok(())
     }
 
     pub fn validate_schedule(
@@ -61,13 +86,16 @@ impl<P: CachePolicy> Scheduler<P> {
                 return Err(StateUpdateError::Invalid("unknown scheduled request"));
             };
             if !ids.insert(request.id)
-                || scheduled.num_computed_tokens != request.num_computed_tokens
+                || Some(scheduled.execution) != request.in_flight
+                || Some(scheduled.work) != request.work
+                || scheduled.accepted_end != request.accepted_end.unwrap_or(request.token_ids.len())
+                || scheduled.num_computed_tokens != scheduled.work.range().0
                 || scheduled.token_ids.len() != request.num_in_flight_tokens
                 || !scheduled.token_ids.iter().copied().eq(request
                     .token_ids
                     .iter()
                     .chain(&request.draft_token_ids)
-                    .skip(request.num_computed_tokens)
+                    .skip(scheduled.work.range().0)
                     .take(request.num_in_flight_tokens)
                     .copied())
             {
@@ -107,6 +135,13 @@ impl<P: TransactionalCachePolicy> Scheduler<P> {
             .collect::<Vec<_>>();
         let transactions = self.kv.detach_transactions(&ids)?;
         self.validate_transaction_ids(&transactions)?;
+        for row in &batch.scheduled {
+            self.running
+                .iter_mut()
+                .find(|request| request.id == row.request_id)
+                .unwrap()
+                .submitted = true;
+        }
         Ok(transactions)
     }
 

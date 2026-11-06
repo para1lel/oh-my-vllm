@@ -16,7 +16,7 @@ The loader can convert BF16 norm weights, scales, A_log, and dt_bias to FP32 wit
 | GQA | 24 query heads, 4 KV heads, width 256 |
 | GDN | 16 key heads, 48 value heads, width 128 |
 | Convolution | 10240 channels, width 4 |
-| Cache | Block 784, FP32 recurrent state, align mode |
+| Cache | 128-token FP8 KV pages, independent 8192-token FP32 recurrent checkpoints |
 | Context / step | 262144 / 32768 tokens |
 | FP8 | E4M3, 128-by-128 weight scales, dynamic 128-element activation scales |
 | MTP | One FA layer, four proposals |
@@ -50,7 +50,9 @@ Keep the key intermediate types and operator input and output types below.
 Use FP32 live carry for prefill and recurrent verification rows.
 Store persistent recurrent checkpoints in FP32. Keep convolution state in BF16.
 
-Save checkpoints at each 784-token boundary and at the final row.
+Save periodic checkpoints at each 8192-token boundary and the exact successful session tail.
+Use explicit private exports for chunk and verification endpoints.
+The [cache contract](cache.md) specifies their independent ownership and finalization.
 Verification writes private states. Only accepted rows can replace the accepted state.
 Sequence boundaries and read, write, and checkpoint slots identify the convolution state for each request.
 
@@ -116,7 +118,9 @@ Do not convert weights or scales to MXFP8.
 The pinned [vLLM exclusion rule](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/utils/deep_gemm.py#L27) disables DeepGEMM for `qwen3_5_text` on B200 because of accuracy problems.
 
 FA uses BF16 Q/K/P/V operands, with FP32 softmax and accumulation.
-Its persistent K/V state uses BF16.
+Persistent K/V uses E4M3FN codes with per-vector FP32 scales, then decodes to BF16 attention operands.
+The [cache format](cache.md#storage) is a storage change from the older BF16 reference path.
+Its GPU and full-model numerical acceptance are not complete.
 The default B200 backend in the pinned vLLM source is FlashInfer.
 
 FFN calculates SiLU and its product in FP32 from BF16 projection outputs.

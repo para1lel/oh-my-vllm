@@ -62,6 +62,12 @@ def argument_parser():
         action="append",
     )
     parser.add_argument("--output-tokens", type=int, nargs="+", default=OUTPUT_LENGTHS)
+    from .accounting import VERSION
+    from .qwen_fp8_evidence import VERSION as FP8_VERSION
+
+    parser.add_argument(
+        "--reference-version", choices=(VERSION, FP8_VERSION), default=VERSION
+    )
     parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int, default=128)
     arguments = parser.parse_args()

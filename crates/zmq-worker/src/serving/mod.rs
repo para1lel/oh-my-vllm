@@ -2,6 +2,7 @@ mod admission;
 mod engine;
 mod events;
 mod http;
+mod identity;
 mod media;
 mod recovery;
 mod request;
@@ -85,6 +86,7 @@ static IDS: AtomicU64 = AtomicU64::new(1);
 struct Stored {
     response: Value,
     history: Vec<Value>,
+    identity: identity::Identity,
     saved: Instant,
     bytes: usize,
 }
@@ -104,35 +106,25 @@ impl Store {
         self.bytes = self.entries.values().map(|s| s.bytes).sum();
     }
 
-    fn insert(&mut self, id: String, response: Value, history: Vec<Value>) -> bool {
+    fn insert(&mut self, id: String, mut entry: Stored) {
         self.prune();
-        let bytes =
-            response.to_string().len() + serde_json::to_vec(&history).map_or(0, |v| v.len());
-        if bytes > self.max_bytes {
-            return false;
-        }
-        while self.entries.len() >= self.capacity || self.bytes + bytes > self.max_bytes {
+        while self.entries.len() >= self.capacity || self.bytes + entry.bytes > self.max_bytes {
             let Some(oldest) = self
                 .entries
                 .iter()
-                .min_by_key(|(_, v)| v.saved)
-                .map(|(k, _)| k.clone())
+                .min_by_key(|(_, value)| value.saved)
+                .map(|(key, _)| key.clone())
             else {
                 break;
             };
             self.bytes -= self.entries.remove(&oldest).unwrap().bytes;
         }
-        self.bytes += bytes;
-        self.entries.insert(
-            id,
-            Stored {
-                response,
-                history,
-                saved: Instant::now(),
-                bytes,
-            },
-        );
-        true
+        entry.saved = Instant::now();
+        if let Some(previous) = self.entries.remove(&id) {
+            self.bytes -= previous.bytes;
+        }
+        self.bytes += entry.bytes;
+        self.entries.insert(id, entry);
     }
 }
 
@@ -141,6 +133,7 @@ struct App {
     submit: mpsc::Sender<Submission>,
     store: Arc<Mutex<Store>>,
     model: String,
+    scope: String,
     thinking_token_budget: i64,
     sampling_defaults: Value,
     budget: Budget,
@@ -168,6 +161,7 @@ struct Active {
     steps: usize,
     proposed: usize,
     accepted: usize,
+    completion: Option<engine::output::Completion>,
     lease: Lease,
     processing_started: Instant,
     processing_started_unix_s: f64,
@@ -181,6 +175,7 @@ fn send_events(active: &mut Active, events: Vec<Value>) -> Result<()> {
 }
 
 struct PendingAdmission {
+    ticket: oh_my_vllm_scheduler::session::RequestTicket,
     submission: Submission,
     id: u64,
     started: Instant,

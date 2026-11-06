@@ -17,6 +17,7 @@ from oh_my_vllm.models.deepseek_v41.trace import (
     target_call_id,
 )
 
+from tests.deepseek_speculation_fixtures import _wire_message
 from tests.deepseek_trace_routing import DeepSeekTraceRouting as DeepSeekTraceRouting
 from tests.test_deepseek_speculation import _chain_row, _chain_worker, _worker
 
@@ -344,14 +345,17 @@ class DeepSeekTrace(unittest.TestCase):
         worker.rank, worker.strategy = 0, "tp4"
         worker.routing_trace_enabled = True
         worker.execute(
-            dict(
-                rpc_id=1,
-                scheduled=[
-                    _chain_row(worker, request.history, key=key)
-                    for key, request in worker.requests.items()
-                ],
-                finished_request_ids=[],
-                preempted_request_ids=[],
+            _wire_message(
+                worker,
+                dict(
+                    rpc_id=1,
+                    scheduled=[
+                        _chain_row(worker, request.history, key=key)
+                        for key, request in worker.requests.items()
+                    ],
+                    finished_request_ids=[],
+                    preempted_request_ids=[],
+                ),
             )
         )
         worker.trace.record.reset_mock()
@@ -368,16 +372,23 @@ class DeepSeekTrace(unittest.TestCase):
             patch.object(worker, "_execute_row", wraps=worker._execute_row) as execute,
         ):
             output = worker.execute(
-                dict(
-                    rpc_id=2,
-                    scheduled=rows,
-                    finished_request_ids=[],
-                    preempted_request_ids=[],
+                _wire_message(
+                    worker,
+                    dict(
+                        rpc_id=2,
+                        scheduled=rows,
+                        finished_request_ids=[],
+                        preempted_request_ids=[],
+                    ),
                 )
             )
         self.assertEqual([row["request_id"] for row in output["outputs"]], [1, 2])
         self.assertEqual(
-            [call.args for call in execute.call_args_list], [(row,) for row in rows]
+            [
+                ({key: call.args[0][key] for key in row},)
+                for call, row in zip(execute.call_args_list, rows, strict=True)
+            ],
+            [(row,) for row in rows],
         )
         records = [
             call.kwargs

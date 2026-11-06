@@ -169,6 +169,8 @@ def _worker():
     worker.dspark = False
     worker.args = SimpleNamespace(window_size=384)
     worker.rank = 0
+    worker.worker_epoch = 7
+    worker.last_step_id = 0
     worker.prefill_rows = DEFAULT_PREFILL_ROWS
     worker.decode_graph_enabled = False
     worker.decode_graph_limit = 32
@@ -210,10 +212,6 @@ def _chain_worker(*, prompts=((10, 11, 12),), acceptance=5, limit=24, **options)
         worker.model,
         block_tokens=4,
         max_seq_len=64,
-        host_limit=1 << 20,
-        requests=worker.requests,
-        free_slots=worker.slots,
-        release_request_slot=worker._free_slot,
     )
     return worker
 
@@ -293,6 +291,55 @@ def _verification_worker(predictions):
         "fa_block_table": [1, 2, 3, 4, 5, 6, 7],
         "mamba_block_table": [0, 0, 0, 3, 5, 6, 7],
     }
+
+
+def _wire_message(worker, message):
+    result = {
+        "type": "execute",
+        "worker_epoch": worker.worker_epoch,
+        "step_id": worker.last_step_id + 1,
+        "num_batched_tokens": sum(
+            len(row["token_ids"]) for row in message["scheduled"]
+        ),
+        **message,
+    }
+    scheduled = []
+    for row in message["scheduled"]:
+        history = row.get("prefill_token_ids")
+        if history is None:
+            history = worker.requests[row["request_id"]].history
+        start = row["num_computed_tokens"]
+        end = start + len(row["token_ids"])
+        drafts = max(0, end - len(history))
+        sampling = {"kind": "none" if end < len(history) else "target"}
+        if drafts:
+            sampling = {"kind": "verify", "drafts": drafts}
+        state = {
+            "kind": "deepseek_resident_v1",
+            "fa_block_table": row.get("fa_block_table", []),
+            "mamba_block_table": row.get("mamba_block_table", []),
+            "fa_block_copies": row.get("fa_block_copies", []),
+            "prefix_state_slot": row.get("prefix_state_slot"),
+            "cache_checkpoint": row.get("cache_checkpoint"),
+        }
+        converted = {
+            "request_id": row["request_id"],
+            "lease_id": 11,
+            "purpose": "advance",
+            "action": "forward",
+            "sampling": sampling,
+            "token_ids": row["token_ids"],
+            "forward_start": start,
+            "forward_end": end,
+            "accepted_end": len(history),
+            "endpoint": end,
+            "model_state": state,
+        }
+        if row.get("prefill_token_ids") is not None:
+            converted["prefill_token_ids"] = row["prefill_token_ids"]
+        scheduled.append(converted)
+    result["scheduled"] = scheduled
+    return result
 
 
 class DeepSeekSpeculationFixture:

@@ -33,7 +33,6 @@ pub(super) async fn run_scheduler<P: ServiceCache>(
         },
         kv,
     );
-    scheduler.enable_host_cache(client.host_cache_bytes);
     if let Cmd::Serve(args) = cli.cmd {
         return oh_my_vllm_zmq_worker::serving::serve(client, scheduler, args).await;
     }

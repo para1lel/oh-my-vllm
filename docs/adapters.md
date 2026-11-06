@@ -37,8 +37,8 @@ Each family verifies its supported formats and its declared checkpoint identity.
 A selected adapter supplies defaults and validates explicit options.
 A public served-model alias cannot change the selected family.
 
-Init specifies `descriptor_version=1`.
-Ready supplies a validated descriptor before scheduler construction.
+Init specifies `descriptor_version=1` and `protocol_version=2`, with the worker epoch.
+Ready returns the same protocol version and epoch, a validated descriptor, and a model-selected cache layout before scheduler construction.
 The [Rust types](../crates/model-contract/src/lib.rs) and [Python validator](../python/oh_my_vllm/models/descriptor.py) use the same versioned named-map fields.
 They reject unknown fields, unsupported versions, invalid values, duplicate groups, and invalid producer chains.
 Python boolean values cannot substitute for integers.
@@ -51,6 +51,46 @@ Transport also limits bytes before deserialization.
 Speculation keeps predictor stages separate from draft count and verification capacity.
 Verification capacity is the maximum draft count plus one.
 A descriptor does not enable an unimplemented execution mode.
+
+## Execution protocol
+
+The [wire types](../crates/zmq-worker/src/protocol.rs) use version 2 named-map msgpack through ZMQ DEALER.
+Init and Ready must agree on protocol version, worker epoch, descriptor version, and the selected cache layout.
+The [layout validator](../crates/zmq-worker/src/protocol/layout.rs) checks the model-specific layout and capacities.
+Replacement cannot silently change the accepted layout.
+
+| Field | Values and meaning |
+|---|---|
+| `purpose` | `advance` changes generation progress. `finalize` completes accepted state |
+| `action` | `forward` computes an explicit token range. `head_only` uses saved hidden values. `export_only` exports an endpoint |
+| `sampling` | `none`, `target`, or `verify` with an explicit draft count |
+| `forward_start`, `forward_end` | Explicit half-open range, independent of the returned token count |
+| `accepted_end`, `endpoint` | Accepted history and the selected operation endpoint |
+| `model_state` | Tagged model-specific assignment |
+
+Non-forward actions have zero token rows and equal forward bounds.
+Finalization uses `none` sampling. A saved-hidden head operation uses the current request's target sampler.
+A successful `none` result emits zero tokens. A successful `target` result emits one token.
+A successful `verify` result emits the accepted draft count plus one token.
+
+A scheduled row always has exactly one reply, also when it has zero token rows.
+
+`ExecutionKey` contains `worker_epoch`, `step_id`, `request_id`, and `lease_id`.
+The scheduler uses `in_flight: Option<ExecutionKey>` to track execution, independently of token-row count.
+The [reply validator](../crates/zmq-worker/src/client/execution/validation.rs) checks the complete output set and execution identity.
+RPC identity, rank schedules, endpoint exports, and page valid ends also pass validation before state publication.
+Stale, duplicate, unknown, or missing rows cause an error before commit.
+
+The transport tags are `qwen_radix_v1` and `deepseek_resident_v1`.
+The scheduler uses typed policy assignments without interpreting those wire tags.
+Qwen uses the [independent pools and exact endpoints](models/qwen38/cache.md).
+DeepSeek keeps its [resident paired128 layout](models/deepseek_v41/cache.md) and DEP4 owner placement.
+All four DEP4 ranks return acknowledgements, also when a rank has no scheduled requests.
+DeepSeek completion uses its computed resident endpoint without an additional Qwen final-token computation.
+
+The protocol has no KV host storage messages, host capability, or host byte-budget fields.
+Finished-request and preempted-request notifications still release physical state.
+Engram host weights and necessary token, metadata, and draft transfers have separate contracts.
 
 ## State and output
 

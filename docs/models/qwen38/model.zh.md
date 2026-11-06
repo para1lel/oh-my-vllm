@@ -16,7 +16,7 @@
 | GQA | 24 query heads, 4 KV heads, 宽度 256 |
 | GDN | 16 key heads, 48 value heads, 宽度 128 |
 | 卷积 | 10240 channels, 宽度 4 |
-| Cache | Block 784, FP32 循环状态, align 模式 |
+| Cache | 128-token FP8 KV page, 独立的 8192-token FP32 recurrent checkpoint |
 | 上下文 / 步骤 | 262144 / 32768 tokens |
 | FP8 | E4M3, 128-by-128 权重 scale, 动态 128-element 激活 scale |
 | MTP | 一层 FA, 四个 proposals |
@@ -50,7 +50,9 @@ o = S_next @ q / sqrt(128)
 Prefill 和 recurrent 验证行使用 FP32 live carry.
 持久 recurrent checkpoints 使用 FP32 存储. 卷积状态保持 BF16.
 
-在每个 784-token 边界和最终行保存 checkpoint.
+在各个 8192-token 边界保存周期 checkpoint, 并保存精确的成功会话尾.
+Chunk 和 verification 端点使用显式私有导出.
+[缓存契约](cache.zh.md)规定独立所有权和收尾.
 验证写入私有状态. 只有已接受行可以替换已接受状态.
 序列边界与读取, 写入及 checkpoint slots 标识每个请求的卷积状态.
 
@@ -116,7 +118,9 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 锁定版本的 [vLLM 排除规则](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/utils/deep_gemm.py#L27) 因精度问题, 在 B200 上为 `qwen3_5_text` 禁用 DeepGEMM.
 
 FA 使用 BF16 Q/K/P/V 操作数, 以及 FP32 softmax 和累加.
-持久 K/V 状态使用 BF16.
+持久 K/V 使用 E4M3FN 编码和逐向量 FP32 scale, 随后解码为 BF16 attention 操作数.
+[缓存格式](cache.zh.md#存储)相对旧 BF16 参考路径改变了存储.
+其 GPU 和全模型数值验收尚未完成.
 锁定的 vLLM 源码在 B200 上默认使用 FlashInfer 后端.
 
 FFN 从 BF16 投影输出开始, 用 FP32 计算 SiLU 及其乘积.

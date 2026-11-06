@@ -9,6 +9,7 @@ use oh_my_vllm_kv_cache::{
 use crate::{Request, SchedulerConfig};
 
 pub mod qwen;
+pub mod resident;
 
 #[derive(Clone, Default)]
 pub struct PrefixHit<H> {
@@ -19,9 +20,6 @@ pub struct PrefixHit<H> {
 pub trait CachePolicy: Sized {
     type Hit: Default + Clone;
     type State: Debug + Clone;
-    type Snapshot: Clone;
-    type Transfer;
-    type TransferPlan: Debug + Clone;
     type Resources: Debug;
 
     fn empty_like(&self) -> Self;
@@ -30,11 +28,22 @@ pub trait CachePolicy: Sized {
 
     fn reset_prefix_cache(&mut self) -> bool;
 
-    fn accepts(&self, request: &Request, config: &SchedulerConfig, host_enabled: bool) -> bool;
+    fn reset_worker_epoch(&mut self, _: u64) {
+        assert!(
+            self.reset_prefix_cache(),
+            "worker reset requires an empty policy"
+        );
+    }
+
+    fn accepts(&self, request: &Request, config: &SchedulerConfig) -> bool;
 
     fn initialize_hashes(&self, request: &mut Request);
 
     fn extend_hashes(&self, request: &mut Request);
+
+    fn batch_token_limit(&self, config: &SchedulerConfig) -> usize {
+        config.max_num_batched_tokens
+    }
 
     fn prefill_block_size(&self) -> usize {
         1
@@ -81,28 +90,25 @@ pub trait CachePolicy: Sized {
 
     fn assignment(&self, request_id: RequestId) -> Self::State;
 
-    fn commit_cache(&mut self, request: &Request);
+    fn commit_cache(&mut self, request: &Request, step: &crate::execution::CacheStepResult);
+
+    fn completion_plan(&self, request: &Request) -> crate::execution::CompletionPlan {
+        crate::execution::CompletionPlan::Ready {
+            endpoint: request.num_computed_tokens,
+        }
+    }
+
+    fn validate_cache_step(
+        &self,
+        _: &Request,
+        _: &crate::execution::CacheStepResult,
+    ) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn finish_request(&mut self, _: &Request, _: crate::execution::FinishOutcome) {}
 
     fn free(&mut self, request_id: RequestId);
-
-    fn store_request(&mut self, request_id: RequestId) -> Self::Transfer;
-
-    fn store_prefix(&mut self, hit: PrefixHit<Self::Hit>) -> Self::Transfer;
-
-    fn load_snapshot(
-        &mut self,
-        request: &Request,
-        source: &Self::Snapshot,
-        prefix: bool,
-        count: usize,
-        lookahead: usize,
-    ) -> Option<Self::Transfer>;
-
-    // Plans contain wire values, never the ownership needed to keep a transfer alive.
-    fn transfer_plan(transfer: Option<&Self::Transfer>) -> Self::TransferPlan;
-
-    // Call only after validated completion; request ownership is released separately.
-    fn finish_transfer(&mut self, transfer: Self::Transfer) -> Self::Snapshot;
 }
 
 pub trait TransactionalCachePolicy: CachePolicy {

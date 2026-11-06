@@ -39,7 +39,6 @@ SPEC = AdapterSpec(
             "reasoning",
             "structured_outputs",
             "prefix_cache",
-            "host_offload",
         )
     ),
     validate_config=validate_config,

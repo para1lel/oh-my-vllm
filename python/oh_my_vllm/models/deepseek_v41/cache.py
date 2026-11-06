@@ -3,14 +3,13 @@ from math import ceil
 import torch
 
 from .cache_state import CacheState
-from .cache_transfer import CacheTransfers
 from .cache_types import _FaPage, _MambaPage, _table
 from .packed_cache import IndexWorkspace, PageTable
 from .state import StateExports
 
 
-class DeepSeekCache(CacheState, CacheTransfers):
-    """Keep model state in logical pages and support Rust cache transfers.
+class DeepSeekCache(CacheState):
+    """Keep device model state in logical pages.
 
     Active slots reference physical packed history through a block table.
     Accepted state pages retain the windows and incomplete compressor groups.
@@ -22,37 +21,20 @@ class DeepSeekCache(CacheState, CacheTransfers):
         *,
         block_tokens=128,
         max_seq_len=None,
-        host_limit=0,
         fa_capacity=None,
         mamba_capacity=None,
-        requests=None,
-        free_slots=None,
-        release_request_slot=None,
     ):
         if type(block_tokens) is not int or block_tokens < 1:
             raise ValueError("DeepSeek cache block size must be positive")
         if type(max_seq_len) is not int or max_seq_len < 1:
             raise ValueError("DeepSeek cache context is too small")
-        if type(host_limit) is not int or host_limit < 0:
-            raise ValueError("DeepSeek host cache limit must be nonnegative")
         self.model = model
         self.block_tokens = block_tokens
         self.max_seq_len = max_seq_len
-        self.host_limit = host_limit
         self.fa_capacity = fa_capacity
         self.mamba_capacity = mamba_capacity
-        self.requests = requests
-        self.free_slots = free_slots
-        self.release_request_slot = release_request_slot
         self.fa_pages = {}
         self.mamba_pages = {}
-        self.snapshots = {}
-        self.seen = set()
-        self.used_bytes = 0
-        self.store_bytes = 0
-        self.load_bytes = 0
-        self.completed_transfers = 0
-        self.unusable = False
         self._window = []
         self._mtp_window = []
         self._compressed = []
@@ -135,15 +117,37 @@ class DeepSeekCache(CacheState, CacheTransfers):
                 if self.index_workspace is not None
                 else 0
             ),
-            "host_cache_capacity_bytes": self.host_limit,
-            "host_cache_allocated_bytes": self.used_bytes,
-            "host_cache_used_bytes": self.used_bytes,
-            "host_cache_snapshots": len(self.snapshots),
-            "host_cache_pending_transfers": 0,
-            "host_cache_store_bytes": self.store_bytes,
-            "host_cache_load_bytes": self.load_bytes,
-            "host_cache_completed_transfers": self.completed_transfers,
         }
+
+    @staticmethod
+    def _tensor_size(value):
+        return value.numel() * value.element_size()
+
+    @staticmethod
+    def _shape_size(shape, dtype):
+        size = 1
+        for dimension in shape:
+            size *= dimension
+        return size * torch.empty((), dtype=dtype).element_size()
+
+    def _fa_page_bytes(self):
+        return sum(value.page_bytes(self.block_tokens) for value in self.histories)
+
+    def _mamba_page_bytes(self):
+        return (
+            sum(
+                self._tensor_size(value[0])
+                for value in (*self._window, *self._mtp_window)
+            )
+            + sum(
+                self._shape_size((self.block_tokens,), value.dtype)
+                for value in self._engram
+            )
+            + sum(
+                self._tensor_size(kv[0]) + self._tensor_size(score[0])
+                for kv, score in self._tails
+            )
+        )
 
     def _new_fa_page(self, block):
         for value in self.histories:
@@ -256,22 +260,15 @@ class DeepSeekCache(CacheState, CacheTransfers):
         for slot in range(slots):
             self.clear_slot(slot)
         self.exports.clear()
-        self.snapshots.clear()
         self.fa_pages.clear()
         self.mamba_pages.clear()
-        self.seen.clear()
-        self.used_bytes = 0
-        self.unusable = False
 
     def close(self):
         self.page_table.close()
-        self.release_request_slot = None
         for value in self.histories:
             value.close()
         if self.index_workspace is not None:
             self.index_workspace.close()
         self.exports.clear()
-        self.snapshots.clear()
         self.fa_pages.clear()
         self.mamba_pages.clear()
-        self.used_bytes = 0

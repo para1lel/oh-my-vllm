@@ -4,10 +4,12 @@ from typing import NamedTuple
 FUNCTIONS = (
     "sample_workspace",
     "sample_project",
+    "sample_project_hidden",
     "sample_distribution",
     "sample",
     "sample_advance_presence",
     "final_hidden",
+    "final_head_hidden",
 )
 
 

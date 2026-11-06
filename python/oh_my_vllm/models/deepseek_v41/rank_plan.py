@@ -1,5 +1,7 @@
 """Validate and apply Rust schedules without assigning request owners."""
 
+from ...worker.wire import validate_execute, validate_result
+
 
 def local_execute(message, rank):
     plan = message.get("rank_plan")
@@ -41,24 +43,9 @@ def handle_rank(worker, message, rank):
         reply["rank_completion"] = {
             "rank": rank,
             "step_id": message["step_id"],
+            "worker_epoch": message["worker_epoch"],
             "schedule": schedule,
         }
-        return reply
-    if kind == "cache":
-        local = dict(message)
-        operations = message["operations"]
-        if any(
-            type(op.get("owner_rank")) is not int or op["owner_rank"] not in range(4)
-            for op in operations
-        ):
-            raise ValueError("DEP4 cache transfer requires a Rust owner")
-        local["operations"] = [op for op in operations if op["owner_rank"] == rank]
-        reply = worker.handle(local)
-        device = next(worker.model.parameters()).device
-        if device.type == "cuda":
-            import torch
-
-            torch.cuda.synchronize(device)
         return reply
     if kind == "abort":
         worker.handle(message)
@@ -109,12 +96,56 @@ def merge_replies(message, replies):
         reply["stats"] = dict(reply["stats"])
         reply["stats"]["ranks"] = [replies[rank]["stats"] for rank in range(4)]
         return reply
-    if kind == "cache":
-        return _merge_cache(message, replies)
+    return replies[0]
+
+
+def _require_four_replies(replies):
+    if set(replies) != set(range(4)):
+        raise ValueError("DeepSeek execution requires all four rank replies")
+
+
+def merge_replicated_execute(message, replies):
+    _require_four_replies(replies)
+    expected = validate_execute(message, message["worker_epoch"])
+    reference = None
+    fields = (
+        "token_ids",
+        "num_accepted_draft_tokens",
+        "new_draft_token_ids",
+        "text",
+        "finish_reason",
+        "reasoning_tokens",
+        "computed_end",
+        "accepted_end",
+        "validated_exports",
+        "committed_page_valid_ends",
+        "mtp_accepted_endpoint",
+    )
+    for rank in range(4):
+        reply = replies[rank]
+        if reply.get("type") == "error":
+            raise RuntimeError(
+                f"DeepSeek rank {rank} returned an error: {reply.get('message')}"
+            )
+        validate_result(message, reply, expected)
+        outputs = {}
+        for row in reply["outputs"]:
+            if row.get("error") is not None:
+                raise RuntimeError(
+                    f"DeepSeek rank {rank} request {row['request_id']} "
+                    f"failed: {row['error']}"
+                )
+            outputs[row["request_id"]] = tuple(row[field] for field in fields)
+        if reference is not None and outputs != reference:
+            raise ValueError(
+                f"DeepSeek rank {rank} execution data differs from rank zero"
+            )
+        reference = outputs
     return replies[0]
 
 
 def _merge_execute(message, replies):
+    _require_four_replies(replies)
     outputs = {}
     completions = []
     for rank in range(4):
@@ -123,12 +154,15 @@ def _merge_execute(message, replies):
         if (
             reply.get("type") != "execute_result"
             or reply.get("rpc_id") != message["rpc_id"]
+            or reply.get("step_id") != message["step_id"]
+            or reply.get("worker_epoch") != message["worker_epoch"]
         ):
             raise ValueError("DEP4 rank returned the wrong execute reply")
         completion = reply.get("rank_completion")
         if completion != {
             "rank": rank,
             "step_id": message["step_id"],
+            "worker_epoch": message["worker_epoch"],
             "schedule": schedule,
         }:
             raise ValueError("DEP4 rank did not acknowledge its Rust schedule")
@@ -140,33 +174,8 @@ def _merge_execute(message, replies):
     return {
         "type": "execute_result",
         "rpc_id": message["rpc_id"],
+        "step_id": message["step_id"],
+        "worker_epoch": message["worker_epoch"],
         "outputs": [outputs[row["request_id"]] for row in message["scheduled"]],
         "rank_completions": completions,
     }
-
-
-def _merge_cache(message, replies):
-    completed = {}
-    for rank in range(4):
-        reply = replies[rank]
-        expected = [
-            op["transfer_id"]
-            for op in message["operations"]
-            if op["owner_rank"] == rank
-        ]
-        ids = [row["transfer_id"] for row in reply.get("completed", [])]
-        if (
-            reply.get("type") != "cache_result"
-            or reply.get("rpc_id") != message["rpc_id"]
-        ):
-            raise ValueError("DEP4 rank returned the wrong cache reply")
-        if len(set(ids)) != len(ids) or sorted(ids) != sorted(expected):
-            raise ValueError("DEP4 rank returned unowned cache completion")
-        completed.update((row["transfer_id"], row) for row in reply["completed"])
-    return dict(
-        type="cache_result",
-        rpc_id=message["rpc_id"],
-        host_cache_bytes=replies[0]["host_cache_bytes"],
-        completed=[completed[op["transfer_id"]] for op in message["operations"]],
-        cache_rank_completions=list(range(4)),
-    )

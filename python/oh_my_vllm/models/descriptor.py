@@ -20,7 +20,6 @@ CAPABILITIES = frozenset(
         "reasoning",
         "structured_outputs",
         "prefix_cache",
-        "host_offload",
     )
 )
 WEIGHT_FORMATS = frozenset(

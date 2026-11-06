@@ -22,7 +22,7 @@ struct Choices {
 
 impl<P: CachePolicy> Scheduler<P> {
     pub(super) fn batch_quotas(&self) -> FxHashMap<RequestId, usize> {
-        self.plan_quotas(self.config.max_num_batched_tokens, true)
+        self.plan_quotas(self.kv.batch_token_limit(&self.config), true)
     }
 
     pub(super) fn retry_waiting_quotas(

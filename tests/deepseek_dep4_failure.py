@@ -35,6 +35,49 @@ class _FaultExchange(ExpertExchange):
         return value
 
 
+def _failure_message():
+    return dict(
+        type="execute",
+        rpc_id=8,
+        step_id=2,
+        worker_epoch=7,
+        num_batched_tokens=1,
+        scheduled=[
+            dict(
+                request_id=11,
+                lease_id=3,
+                purpose="advance",
+                action="forward",
+                sampling={"kind": "target"},
+                token_ids=[1],
+                forward_start=0,
+                forward_end=1,
+                accepted_end=1,
+                endpoint=1,
+                model_state=dict(
+                    kind="deepseek_resident_v1",
+                    fa_block_table=[1],
+                    mamba_block_table=[1],
+                    fa_block_copies=[],
+                    prefix_state_slot=None,
+                    cache_checkpoint=None,
+                ),
+            )
+        ],
+        finished_request_ids=[],
+        preempted_request_ids=[],
+        rank_plan=[
+            dict(
+                rank=peer,
+                request_ids=[11] if peer == 0 else [],
+                finished_request_ids=[],
+                preempted_request_ids=[],
+            )
+            for peer in range(4)
+        ],
+    )
+
+
 def _round_failure_peer(rank, store, sparse=False):
     from types import SimpleNamespace
 
@@ -54,23 +97,7 @@ def _round_failure_peer(rank, store, sparse=False):
         for layer in (*model.layers, *model.mtp):
             layer.ffn.dep4_exchange = executor.exchange
         commits = []
-        message = dict(
-            type="execute",
-            rpc_id=8,
-            step_id=2,
-            scheduled=[dict(request_id=11, token_ids=[1])],
-            finished_request_ids=[],
-            preempted_request_ids=[],
-            rank_plan=[
-                dict(
-                    rank=peer,
-                    request_ids=[11] if peer == 0 else [],
-                    finished_request_ids=[],
-                    preempted_request_ids=[],
-                )
-                for peer in range(4)
-            ],
-        )
+        message = _failure_message()
 
         def handle(local):
             for row in local["scheduled"]:

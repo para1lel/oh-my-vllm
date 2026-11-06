@@ -7,15 +7,55 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from . import deepseek_accounting as accounting
+from . import deepseek_accounting_floor as accounting_floor
+from . import deepseek_accounting_packed as accounting_packed
+from . import deepseek_accounting_roofline as accounting_roofline
 from .deepseek_benchmark import (
     artifact_identity,
     checkpoint_descriptor_identity,
     native_identity,
     verify_artifact_identity,
 )
+from .deepseek_benchmark_reference import runtime_reference
 
 
 class DeepSeekIdentity(unittest.TestCase):
+    def test_reference_metadata_distinguishes_dep4_models_from_diagnostics(self):
+        calculators = (
+            (accounting_floor.VERSION, "direct_protocol_sent_bytes", False),
+            (accounting_packed.VERSION, "sent_bytes", True),
+            (accounting_roofline.VERSION, "wire_sent_bytes", True),
+        )
+        for strategy in ("dep4", "tp4", "tep4"):
+            trace = accounting.ideal_trace(
+                dict(
+                    mode="dspark5",
+                    strategy=strategy,
+                    batch=3,
+                    input_tokens=20,
+                    output_tokens=2,
+                )
+            )
+            for version, byte_field, modeled in calculators:
+                with self.subTest(version=version, strategy=strategy):
+                    reference, metadata = runtime_reference(
+                        trace,
+                        strategy=strategy,
+                        expected_binding=trace["binding"],
+                        version=version,
+                    )
+                    if strategy == "dep4":
+                        self.assertGreater(
+                            sum(getattr(rank, byte_field) for rank in reference.ranks),
+                            0,
+                        )
+                    self.assertIs(
+                        metadata["dep4_communication_modeled"],
+                        modeled if strategy == "dep4" else False,
+                    )
+                    self.assertIs(metadata["dep4_communication_measured"], False)
+
     def test_numeric_runtime_changes_invalidate_the_measurement_identity(self):
         import torch
 

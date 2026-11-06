@@ -17,7 +17,7 @@ async fn cancellation_case(expired: bool) {
     let mut active = BTreeMap::new();
     let budget = Budget::new(1 << 28);
     let (request, mut response) = submission(&budget);
-    let mut pending = begin_admit(&mut worker.client, 0, 4, request, 1)
+    let mut pending = begin_admit(&mut worker.client, &mut scheduler, 0, 4, request, 1)
         .await
         .unwrap();
     let RustMessage::Prepare {
@@ -96,7 +96,7 @@ async fn accept_after_late_reply(
     request_id: u64,
 ) {
     let (request, mut next_response) = submission(budget);
-    *pending = begin_admit(&mut worker.client, 0, 4, request, 1)
+    *pending = begin_admit(&mut worker.client, scheduler, 0, 4, request, 1)
         .await
         .unwrap();
     let RustMessage::Prepare {
@@ -124,7 +124,8 @@ async fn execute_admitted(
 ) {
     for tail in [false, true] {
         let batch = scheduler.schedule();
-        let mut execute = Box::pin(worker.client.execute_one_step(
+        scheduler.mark_submitted(&batch).unwrap();
+        let mut execute = Box::pin(worker.client.execute_one_step::<HybridCoordinator>(
             &batch.scheduled,
             &batch.finished_request_ids,
             &batch.preempted_request_ids,

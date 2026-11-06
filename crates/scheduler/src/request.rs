@@ -8,11 +8,20 @@ pub enum RequestStatus {
     Waiting,
     Running,
     Preempted,
+    Finalizing,
+    Finalized,
+    Retiring,
 }
 
 #[derive(Debug, Clone)]
 pub struct Request {
     pub id: RequestId,
+    pub ticket: Option<crate::session::RequestTicket>,
+    pub cache_domain: oh_my_vllm_kv_cache::radix::CacheDomain,
+    pub in_flight: Option<crate::execution::ExecutionKey>,
+    pub(crate) submitted: bool,
+    pub work: Option<crate::execution::WorkSpec>,
+    pub accepted_end: Option<usize>,
     pub prompt_len: usize,
     pub token_ids: Vec<u32>,
     pub draft_token_ids: Vec<u32>,
@@ -20,6 +29,7 @@ pub struct Request {
     pub prefill_start: usize,
     pub num_in_flight_tokens: usize,
     pub max_tokens: usize,
+    pub enable_mtp: bool,
     pub block_hashes: Vec<BlockHash>,
     pub cache_salt: Option<BlockHash>,
     pub cache_owner_rank: Option<u32>,
@@ -37,6 +47,12 @@ impl Request {
         let prompt_len = prompt_token_ids.len();
         Self {
             id,
+            ticket: None,
+            cache_domain: Default::default(),
+            in_flight: None,
+            submitted: false,
+            work: None,
+            accepted_end: None,
             prompt_len,
             token_ids: prompt_token_ids,
             draft_token_ids: Vec::new(),
@@ -44,12 +60,37 @@ impl Request {
             prefill_start: 0,
             num_in_flight_tokens: 0,
             max_tokens,
+            enable_mtp: false,
             block_hashes,
             cache_salt: None,
             cache_owner_rank: None,
             record_partial_prefix: true,
             status: RequestStatus::Waiting,
         }
+    }
+
+    pub fn content_salt(&self) -> Option<BlockHash> {
+        let domain = &self.cache_domain;
+        let fields = [
+            &domain.model,
+            &domain.template,
+            &domain.layout,
+            &domain.namespace,
+        ];
+        if fields.iter().all(|field| field.is_empty()) {
+            return self.cache_salt;
+        }
+        let mut encoded = Vec::new();
+        for field in fields {
+            encoded.extend_from_slice(&(field.len() as u64).to_le_bytes());
+            encoded.extend_from_slice(field.as_bytes());
+        }
+        let tokens = encoded.into_iter().map(u32::from).collect::<Vec<_>>();
+        Some(oh_my_vllm_kv_cache::hash::hash_block_tokens(
+            self.cache_salt,
+            &tokens,
+            &[],
+        ))
     }
 
     pub fn num_generated_tokens(&self) -> usize {
@@ -104,7 +145,7 @@ impl CacheRequest for Request {
     }
 
     fn cache_salt(&self) -> Option<BlockHash> {
-        self.cache_salt
+        self.content_salt()
     }
 
     fn record_partial_prefix(&self) -> bool {

@@ -13,6 +13,7 @@ from .agentx import (
     run_harness,
     validate_agentx_python,
 )
+from .agentx_completion import write_tree_completion
 from .agentx_data import export_run
 from .agentx_plot import plot
 from .deepseek_benchmark import (
@@ -128,6 +129,26 @@ def _validate_harness_version(args):
         raise ValueError(f"install agentx-harness=={VERSION}, found {version}")
 
 
+def export_deepseek_run(
+    artifacts, output, max_context=262144, service_log=None, harness_log=None
+):
+    directory = Path(artifacts).parent
+    try:
+        rows, counts = export_run(
+            artifacts, output, max_context, service_log, harness_log
+        )
+    finally:
+        trees = write_tree_completion(
+            artifacts, directory / "session-tree-status.json", harness_log
+        )
+    summary = counts | {
+        "request_accounting_scope": "issued_http_requests",
+        "session_trees": trees,
+    }
+    (directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    return rows, summary
+
+
 def main():
     args = arguments()
     validate_agentx_python(args.agentx_python)
@@ -175,7 +196,12 @@ def main():
         )
         run_harness(command, args.artifacts / "agentx.log")
     finally:
-        service.close()
+        try:
+            service.close()
+        finally:
+            write_tree_completion(
+                args.artifacts / "agentx", args.artifacts / "session-tree-status.json"
+            )
     verify_artifact_identity(
         args,
         tokenizer,
@@ -183,7 +209,7 @@ def main():
         identity,
         workload=workload,
     )
-    _, counts = export_run(
+    _, counts = export_deepseek_run(
         args.artifacts / "agentx",
         args.csv,
         max_context=args.cache_context,

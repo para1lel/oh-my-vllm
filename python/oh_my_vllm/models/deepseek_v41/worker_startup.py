@@ -7,6 +7,7 @@ import torch
 import torch.distributed as dist
 
 from ...worker.trace import Trace
+from ...worker.wire import validate_init
 from .adapter import (
     CONFIG_SHA256,
     INFERENCE_CONFIG_SHA256,
@@ -28,6 +29,9 @@ from .worker_limits import DEFAULT_CACHE_CONTEXT, prefill_row_limit
 
 class WorkerStartup:
     def __init__(self, config, *, raw_config, strategy=None):
+        validate_init(config)
+        self.worker_epoch = config["worker_epoch"]
+        self.last_step_id = 0
         if config["block_size"] != 128 or config["tensor_parallel_size"] != 4:
             raise ValueError("DeepSeek requires four ranks and 128-token blocks")
         if not dist.is_available() or not dist.is_initialized():
@@ -146,12 +150,8 @@ class WorkerStartup:
                 self.model,
                 block_tokens=config["block_size"],
                 max_seq_len=args.max_seq_len,
-                host_limit=int(config.get("host_cache_bytes") or 0),
                 fa_capacity=config.get("num_gpu_blocks") or 2048,
                 mamba_capacity=config.get("mamba_blocks") or 128,
-                requests=self.requests,
-                free_slots=self.slots,
-                release_request_slot=self._free_slot,
             )
         with self.startup_trace.measure("descriptor"):
             self.descriptor = build_descriptor(

@@ -17,8 +17,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tracing::info;
 
-pub(super) async fn begin_admit(
+pub(super) async fn begin_admit<P: ServiceCache>(
     client: &mut WorkerClient,
+    scheduler: &mut Scheduler<P>,
     active_count: usize,
     max_running: usize,
     submission: Submission,
@@ -48,6 +49,7 @@ pub(super) async fn begin_admit(
         return Ok(None);
     }
     let id = IDS.fetch_add(1, Ordering::Relaxed);
+    let ticket = scheduler.reserve_admission(submission.request.identity.cache.clone(), id);
     let started = Instant::now();
     let started_unix_s = unix_seconds();
     let prepare_timeout_ms = std::env::var("OH_MY_VLLM_PREPARE_TIMEOUT_MS")
@@ -67,6 +69,7 @@ pub(super) async fn begin_admit(
     {
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
+            scheduler.release_admission(&ticket);
             let _ = submission.ready.send(Err((
                 StatusCode::SERVICE_UNAVAILABLE,
                 "worker unavailable".to_owned(),
@@ -74,6 +77,7 @@ pub(super) async fn begin_admit(
             return Err(error.into());
         }
         Err(_) => {
+            scheduler.release_admission(&ticket);
             client.cancel_prepare(id).await?;
             let _ = submission.ready.send(Err((
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -83,6 +87,7 @@ pub(super) async fn begin_admit(
         }
     }
     Ok(Some(PendingAdmission {
+        ticket,
         submission,
         id,
         started,
@@ -91,11 +96,13 @@ pub(super) async fn begin_admit(
     }))
 }
 
-pub(super) async fn cancel_admit(
+pub(super) async fn cancel_admit<P: ServiceCache>(
     client: &mut WorkerClient,
+    scheduler: &mut Scheduler<P>,
     pending: PendingAdmission,
 ) -> Result<()> {
     let disconnected = pending.submission.ready.is_closed();
+    scheduler.release_admission(&pending.ticket);
     client.cancel_prepare(pending.id).await?;
     if !disconnected {
         let _ = pending.submission.ready.send(Err((
@@ -125,7 +132,7 @@ pub(super) async fn wait_admit<P: ServiceCache>(
     if let Some(result) = result {
         complete_admit(client, scheduler, active, preparing, result).await
     } else {
-        cancel_admit(client, preparing).await
+        cancel_admit(client, scheduler, preparing).await
     }
 }
 
@@ -137,6 +144,7 @@ pub(super) async fn complete_admit<P: ServiceCache>(
     prepare_result: std::result::Result<Vec<u32>, WorkerError>,
 ) -> Result<()> {
     let PendingAdmission {
+        ticket,
         submission:
             Submission {
                 request,
@@ -152,26 +160,41 @@ pub(super) async fn complete_admit<P: ServiceCache>(
         ..
     } = pending;
     let pending_times = (enqueued, started, started_unix_s);
-    let Some((tokens, ready)) = prepared_tokens(client, id, prepare_result, ready).await? else {
+    let Some((tokens, ready)) = prepared_tokens(client, id, prepare_result, ready)
+        .await
+        .inspect_err(|_| {
+            scheduler.release_admission(&ticket);
+        })?
+    else {
+        scheduler.release_admission(&ticket);
         return Ok(());
     };
     if ready.is_closed() {
+        scheduler.release_admission(&ticket);
         client.cancel_prepare(id).await?;
         return Ok(());
     }
     let max_tokens = request.normalized["max_tokens"].as_u64().unwrap() as usize;
-    let mut running = active_request(
+    let running = active_request(
         client,
         id,
         tokens.len(),
         pending_times,
         (request, events, done, lease),
     );
-    let start_events = running.output.start();
     let mut engine_request = EngineRequest::new(id, tokens, max_tokens, vec![]);
+    engine_request.ticket = Some(ticket.clone());
+    engine_request.cache_domain.namespace = ticket.identity.namespace.clone();
+    engine_request.cache_domain.model = client.model_descriptor().checkpoint_sha256.clone();
+    engine_request.cache_domain.template = client.model_descriptor().tokenizer_sha256.clone();
+    engine_request.cache_domain.layout = match &client.cache_layout {
+        crate::protocol::CacheLayout::QwenRadixV1 { layout_id, .. }
+        | crate::protocol::CacheLayout::DeepseekResidentV1 { layout_id } => layout_id.clone(),
+    };
     isolate_media_prefix(&mut engine_request, &running.output.request, id);
     client.bind_request_cache(&mut engine_request);
     if !scheduler.add_request(engine_request) {
+        scheduler.release_admission(&ticket);
         client.cancel_prepare(id).await?;
         let _ = ready.send(Err((
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -179,6 +202,18 @@ pub(super) async fn complete_admit<P: ServiceCache>(
         )));
         return Ok(());
     }
+    activate_request(client, scheduler, active, id, running, ready).await
+}
+
+async fn activate_request<P: ServiceCache>(
+    client: &mut WorkerClient,
+    scheduler: &mut Scheduler<P>,
+    active: &mut BTreeMap<u64, Active>,
+    id: u64,
+    mut running: Active,
+    ready: ReadySender,
+) -> Result<()> {
+    let start_events = running.output.start();
     if ready.send(Ok(())).is_err() {
         scheduler.abort(id);
         client.cancel_scheduled_request(id).await?;
@@ -197,9 +232,14 @@ pub(super) async fn complete_admit<P: ServiceCache>(
     info!(
         request_id = id,
         input_tokens = running.output.input_tokens,
-        max_tokens,
-        queue_ms = started.duration_since(enqueued).as_millis(),
-        prepare_ms = started.elapsed().as_millis(),
+        max_tokens = running.output.request.normalized["max_tokens"]
+            .as_u64()
+            .unwrap(),
+        queue_ms = running
+            .processing_started
+            .duration_since(running.started)
+            .as_millis(),
+        prepare_ms = running.processing_started.elapsed().as_millis(),
         "request admitted"
     );
     active.insert(id, running);
@@ -279,6 +319,7 @@ fn active_request(
         steps: 0,
         proposed: 0,
         accepted: 0,
+        completion: None,
         lease,
         processing_started: started,
         processing_started_unix_s: started_unix_s,

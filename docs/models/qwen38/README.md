@@ -9,14 +9,16 @@ The [Rust policy](../../../crates/zmq-worker/src/models/qwen38/policy.rs) owns d
 Its checkpoint declares `Qwen3_5ForConditionalGeneration` and `qwen3_5`.
 Keep those original identifiers.
 
-Use block size 784, 16 FA layers, 48 GDN layers, and `mamba_cache_mode="align"`.
+The cache uses 128-token FP8 KV pages and independent 8192-token GDN checkpoints across 16 FA layers and 48 GDN layers.
+The new layout's GPU behavior, numerical quality, capacity, HTTP performance, and AgentX behavior are not verified.
+The [cache guide](cache.md) specifies the current contract and completion rules.
 The default scheduler has four request slots and a 32768-token step budget.
 The default public model name is `qwen3.8-27b-fp8`.
 
 ## Guides
 
 - [Model mathematics and precision](model.md)
-- [Cache capacity, prefixes, and host offload](cache.md)
+- [GPU cache capacity, independent prefixes, and exact session tails](cache.md)
 - [Full-model numerical acceptance](evaluation.md)
 - [Operator cases](operators.md), [numerical limits](precision.md), and [performance accounting](operator-performance.md)
 - [HTTP procedure](performance.md), [AgentX procedure](agentx.md), and [latest HTTP results](results.md)

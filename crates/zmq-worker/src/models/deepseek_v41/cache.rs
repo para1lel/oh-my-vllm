@@ -90,9 +90,6 @@ impl Dep4Cache {
 impl CachePolicy for Dep4Cache {
     type Hit = Owned<PoolHit>;
     type State = <Pool as CachePolicy>::State;
-    type Snapshot = Owned<<Pool as CachePolicy>::Snapshot>;
-    type Transfer = Owned<<Pool as CachePolicy>::Transfer>;
-    type TransferPlan = <Pool as CachePolicy>::TransferPlan;
     type Resources = <Pool as CachePolicy>::Resources;
 
     fn empty_like(&self) -> Self {
@@ -126,8 +123,8 @@ impl CachePolicy for Dep4Cache {
             .fold(true, |a, b| a & b)
     }
 
-    fn accepts(&self, request: &Request, config: &SchedulerConfig, host: bool) -> bool {
-        self.pool(request).accepts(request, config, host)
+    fn accepts(&self, request: &Request, config: &SchedulerConfig) -> bool {
+        self.pool(request).accepts(request, config)
     }
 
     fn initialize_hashes(&self, request: &mut Request) {
@@ -229,10 +226,22 @@ impl CachePolicy for Dep4Cache {
         self.pools[self.rank(id)].assignment(id)
     }
 
-    fn commit_cache(&mut self, request: &Request) {
+    fn commit_cache(
+        &mut self,
+        request: &Request,
+        step: &oh_my_vllm_scheduler::execution::CacheStepResult,
+    ) {
         let rank = self.request_rank(request);
-        self.pools[rank].commit_cache(request);
+        <Pool as CachePolicy>::commit_cache(&mut self.pools[rank], request, step);
         self.refresh();
+    }
+
+    fn validate_cache_step(
+        &self,
+        request: &Request,
+        step: &oh_my_vllm_scheduler::execution::CacheStepResult,
+    ) -> Result<(), &'static str> {
+        self.pool(request).validate_cache_step(request, step)
     }
 
     fn free(&mut self, id: RequestId) {
@@ -240,59 +249,6 @@ impl CachePolicy for Dep4Cache {
         self.pools[rank].free(id);
         self.residents[rank].remove(&id);
         self.refresh();
-    }
-
-    fn store_request(&mut self, id: RequestId) -> Self::Transfer {
-        let rank = self.rank(id);
-        Owned {
-            rank,
-            value: self.pools[rank].store_request(id),
-        }
-    }
-
-    fn store_prefix(&mut self, hit: PrefixHit<Self::Hit>) -> Self::Transfer {
-        let rank = hit.blocks.rank;
-        Owned {
-            rank,
-            value: self.pools[rank].store_prefix(Self::hit(hit)),
-        }
-    }
-
-    fn load_snapshot(
-        &mut self,
-        request: &Request,
-        source: &Self::Snapshot,
-        prefix: bool,
-        count: usize,
-        lookahead: usize,
-    ) -> Option<Self::Transfer> {
-        let rank = self.request_rank(request);
-        if rank != source.rank || !self.can_reside(rank, request.id) {
-            return None;
-        }
-        let result = self.pools[rank]
-            .load_snapshot(request, &source.value, prefix, count, lookahead)
-            .map(|value| Owned { rank, value });
-        if result.is_some() {
-            self.residents[rank].insert(request.id);
-        }
-        self.refresh();
-        result
-    }
-
-    fn transfer_plan(transfer: Option<&Self::Transfer>) -> Self::TransferPlan {
-        let mut plan = Pool::transfer_plan(transfer.map(|transfer| &transfer.value));
-        plan.owner_rank = transfer.map(|transfer| transfer.rank as u32);
-        plan
-    }
-
-    fn finish_transfer(&mut self, transfer: Self::Transfer) -> Self::Snapshot {
-        let result = Owned {
-            rank: transfer.rank,
-            value: self.pools[transfer.rank].finish_transfer(transfer.value),
-        };
-        self.refresh();
-        result
     }
 }
 
@@ -330,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn resident_quota_keeps_prepared_requests_queued_and_bounds_snapshot_loads() {
+    fn resident_quota_keeps_prepared_requests_queued() {
         let owners = Arc::new(Mutex::new(RequestOwners::default()));
         let mut cache = Dep4Cache::new(
             Pool::new(256, 128, true, 0).with_mamba_capacity(128),
@@ -343,85 +299,28 @@ mod tests {
             enable_mtp: false,
             mtp_draft_len: 0,
         };
-        let mut requests = (1..=68)
-            .map(|id| {
-                let mut request = Request::new(id, vec![id as u32; 256], 4, vec![]);
-                owners.lock().unwrap().bind_cache(&mut request);
-                cache.initialize_hashes(&mut request);
-                assert!(cache.accepts(&request, &config, true));
-                request
-            })
-            .collect::<Vec<_>>();
+        let mut requests = Vec::new();
+        for id in 1..=68 {
+            let mut request = Request::new(id, vec![id as u32; 256], 4, vec![]);
+            owners.lock().unwrap().bind_cache(&mut request);
+            cache.initialize_hashes(&mut request);
+            assert!(cache.accepts(&request, &config));
+            requests.push(request);
+        }
         for request in &requests[..64] {
             let hit = cache.find_prefix(request);
             assert!(cache.allocate(request, hit, 256, 0, false));
         }
         assert!(cache.residents.iter().all(|rows| rows.len() == 16));
-        assert_eq!(cache.empty_like().resident_limit, 16);
         let queued = &requests[64];
-        assert_eq!(cache.request_rank(queued), 0);
         let before = cache.resource_counts();
         let hit = cache.find_prefix(queued);
         assert!(!cache.allocate(queued, hit, 256, 0, true));
         assert_eq!(cache.resource_counts(), before);
-        requests[0].num_computed_tokens = 256;
-        cache.commit_cache(&requests[0]);
-        let transfer = cache.store_request(1);
-        let snapshot = cache.finish_transfer(transfer);
         cache.free(1);
-        let queued = &requests[64];
         let hit = cache.find_prefix(queued);
         assert!(cache.allocate(queued, hit, 256, 0, true));
-        assert!(
-            cache
-                .load_snapshot(&requests[0], &snapshot, false, 256, 0)
-                .is_none()
-        );
-        cache.free(queued.id);
-        assert!(
-            cache
-                .load_snapshot(&requests[0], &snapshot, false, 256, 0)
-                .is_some()
-        );
-        assert!(cache.residents.iter().all(|rows| rows.len() == 16));
         assert_eq!(cache.rank(1), 0);
-    }
-
-    #[test]
-    fn prefix_candidate_keeps_cache_rank_after_request_owner_release() {
-        let owners = Arc::new(Mutex::new(RequestOwners::default()));
-        let mut cache = Dep4Cache::new(
-            Pool::new(8, 128, true, 0).with_mamba_capacity(8),
-            owners.clone(),
-            4,
-        );
-        let mut request = Request::new(1, vec![7; 384], 1, vec![]);
-        owners.lock().unwrap().bind_cache(&mut request);
-        cache.initialize_hashes(&mut request);
-        let hit = cache.find_prefix(&request);
-        assert!(cache.allocate(&request, hit, 384, 0, false));
-        request.num_computed_tokens = 384;
-        request.append_token(9);
-        cache.commit_cache(&request);
-        cache.free(1);
-        let plan = owners.lock().unwrap().schedule(1, &[], &[1], &[]).unwrap();
-        let replies = plan
-            .iter()
-            .map(|schedule| crate::protocol::RankCompletion {
-                rank: schedule.rank,
-                step_id: 1,
-                schedule: schedule.clone(),
-            })
-            .collect::<Vec<_>>();
-        owners.lock().unwrap().complete(1, &replies).unwrap();
-        let hit = cache.find_prefix(&request);
-        assert!(hit.length > 0);
-        let transfer = cache.store_prefix(hit);
-        assert_eq!(
-            Dep4Cache::transfer_plan(Some(&transfer)).owner_rank,
-            Some(0)
-        );
-        cache.finish_transfer(transfer);
     }
 
     #[test]
@@ -447,6 +346,7 @@ mod tests {
             assert!(scheduler.add_request(request));
         }
         let step = scheduler.schedule();
+        scheduler.mark_submitted(&step).unwrap();
         assert_eq!(step.scheduled.len(), 4);
         assert_eq!(scheduler.num_waiting(), 1);
         assert_eq!(scheduler.num_running(), 4);
@@ -454,6 +354,7 @@ mod tests {
         scheduler.abort(1);
         assert_eq!(owners.lock().unwrap().rank(1), rank);
         let next = scheduler.schedule();
-        assert!(next.scheduled.iter().any(|row| row.request_id == 5));
+        assert!(next.scheduled.is_empty());
+        assert_eq!(scheduler.num_waiting(), 1);
     }
 }

@@ -131,18 +131,21 @@ def runtime_reference(trace, *, strategy, expected_binding, version=accounting.V
         accounting_floor.VERSION: (
             accounting_floor,
             "conditional-partial-resource-floor",
+            False,
         ),
         accounting_packed.VERSION: (
             accounting_packed,
             "fixed-protocol-project-estimate",
+            True,
         ),
         accounting_roofline.VERSION: (
             accounting_roofline,
             "fixed-algorithm-resource-roofline",
+            True,
         ),
     }
     if version in calculators:
-        calculator, communication_model = calculators[version]
+        calculator, communication_model, models_dep4 = calculators[version]
         reference = calculator.reference_trace(
             trace, strategy=strategy, expected_binding=expected_binding
         )
@@ -150,7 +153,7 @@ def runtime_reference(trace, *, strategy, expected_binding, version=accounting.V
             communication_model=communication_model,
             profile_digest=None,
             communication_rule_version=None,
-            dep4_communication_modeled=False,
+            dep4_communication_modeled=strategy == "dep4" and models_dep4,
             dep4_communication_measured=False,
             reference_resources=asdict(reference),
         )

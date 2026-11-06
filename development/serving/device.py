@@ -49,7 +49,11 @@ def selected_uuids():
     return identities
 
 
-def device_identity(uuid):
+def device_identity(uuid, *, include_properties=False):
+    if include_properties:
+        from oh_my_vllm.worker.device_identity import device_identity as loaded_device
+
+        return loaded_device(uuid)
     keys = ("uuid", "name", "driver_version", "clocks.mem", "power.limit")
     values = (
         subprocess.check_output(

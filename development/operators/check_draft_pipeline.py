@@ -16,10 +16,48 @@ from oh_my_vllm.operators.runtime.device import Device
 
 from .cases import load_cases
 from .fixtures import load_fixture
+from .qwen_fp8_reference import quantize_bf16_vectors
 from .weights import CaseWeights
 
 
-def _pipeline_requests(self, device, fixture, thinking, ending, mixed, stops, tables):
+def pipeline_inputs(fixture):
+    from oh_my_vllm.models.qwen38.cache_budget import (
+        PAGE_TOKENS,
+        PAGES_PER_CHECKPOINT,
+        CacheLayout,
+    )
+
+    original = fixture.state["kv"]
+    source_tables = fixture.inputs["stage0.tables"]
+    counts = [int(np.count_nonzero(table)) for table in source_tables]
+    pages = [
+        (count * original.shape[2] + PAGE_TOKENS - 1) // PAGE_TOKENS for count in counts
+    ]
+    checkpoints = (sum(pages) + PAGES_PER_CHECKPOINT - 1) // PAGES_PER_CHECKPOINT
+    layout = CacheLayout(checkpoints, len(counts), len(counts), 17)
+    codes = np.zeros(layout.codes_shape, np.uint8)
+    scales = np.ones(layout.scales_shape, np.float32)
+    tables = np.zeros((len(counts), layout.table_width), np.int32)
+    next_page = 1
+    for row, (source, count, capacity) in enumerate(
+        zip(source_tables, counts, pages, strict=True)
+    ):
+        if not count or np.any(source[:count] == 0) or np.any(source[count:]):
+            raise ValueError("pipeline fixture needs a contiguous non-null page prefix")
+        positions = np.arange(count * original.shape[2])
+        values = original[
+            source[positions // original.shape[2]], :, positions % original.shape[2]
+        ]
+        payload, scale = quantize_bf16_vectors(values)
+        tables[row, :capacity] = np.arange(next_page, next_page + capacity)
+        target = tables[row, positions // PAGE_TOKENS]
+        codes[target, :, positions % PAGE_TOKENS] = payload
+        scales[target, :, positions % PAGE_TOKENS] = scale
+        next_page += capacity
+    return layout, (codes, scales), tables
+
+
+def _pipeline_requests(self, device, fixture, thinking, ending, mixed, stops):
     requests, scheduled, endpoints = [], [], {}
     for row in range(2):
         options = dict(
@@ -53,7 +91,7 @@ def _pipeline_requests(self, device, fixture, thinking, ending, mixed, stops, ta
             for stage in range(4)
         )
         requests.append(request)
-        scheduled.append(dict(request_id=row + 1, fa_block_table=tables[row].tolist()))
+        scheduled.append(dict(request_id=row + 1))
         endpoints[row] = (device.view(self.hidden, (1, 5120), row * 5120),)
     return requests, scheduled, endpoints
 
@@ -64,7 +102,10 @@ def _pipeline_result(requests, device, kv, records):
         offsets=[request.proposal_offset for request in requests],
         presence=[request.presence.copy() for request in requests],
         counts=[request.counts.copy() for request in requests],
-        kv=device.download(kv, np.uint16).numpy().copy(),
+        kv=tuple(
+            device.download(value, dtype).numpy().copy()
+            for value, dtype in zip(kv, (np.uint8, np.float32), strict=True)
+        ),
         records=records.copy(),
         distributions=[
             device.download(
@@ -89,6 +130,7 @@ class DraftLookahead(unittest.TestCase):
             case for case in load_cases() if case.id == "mtp.chain.numerics.batch-2"
         )
         cls.fixture = load_fixture(cls.case)
+        cls.cache_layout, cls.cache_inputs, cls.tables = pipeline_inputs(cls.fixture)
         model = Path(os.environ["MODEL_ROOT"])
         cls.weights = CaseWeights(cls.device, model, cls.case)
         cls.weights.verify(cls.fixture.manifest["checkpoint"])
@@ -112,11 +154,13 @@ class DraftLookahead(unittest.TestCase):
         thinking=False,
     ):
         device, fixture = self.device, self.fixture
-        kv = device.upload(fixture.state["kv"], "bfloat16")
-        cache = SimpleNamespace(blocks=kv.shape[0], fa=((kv,),))
-        tables = fixture.inputs["stage0.tables"].copy()
+        kv = tuple(device.upload(value) for value in self.cache_inputs)
+        cache = SimpleNamespace(
+            blocks=self.cache_layout.pages, fa=(kv,), layout=self.cache_layout
+        )
+        tables = self.tables.copy()
         requests, scheduled, endpoints = _pipeline_requests(
-            self, device, fixture, thinking, ending, mixed, stops, tables
+            self, device, fixture, thinking, ending, mixed, stops
         )
         batch = SimpleNamespace(
             requests=requests, scheduled=scheduled, metadata=(None, None, tables)
@@ -148,7 +192,8 @@ class DraftLookahead(unittest.TestCase):
             else:
                 # The second call checks replay after the Eager preparation call.
                 for iteration in range(2):
-                    device.copy(kv, device.upload(fixture.state["kv"], "bfloat16"))
+                    for destination, source in zip(kv, self.cache_inputs, strict=True):
+                        device.copy(destination, device.upload(source))
                     if iteration:
                         tables[:] = tables[::-1].copy()
                     for row, request in enumerate(requests):
@@ -157,7 +202,6 @@ class DraftLookahead(unittest.TestCase):
                         request.state_position = (
                             int(fixture.inputs["stage0.positions"][0, row]) - iteration
                         )
-                        scheduled[row]["fa_block_table"] = tables[row].tolist()
                     records.clear()
                     if fault and iteration:
                         self.inject_failure(resources, operation, fault)
@@ -208,7 +252,12 @@ class DraftLookahead(unittest.TestCase):
         for key in ("presence", "counts", "distributions"):
             for before, after in zip(expected[key], actual[key], strict=True):
                 np.testing.assert_array_equal(before, after, err_msg=key)
-        np.testing.assert_array_equal(expected["kv"], actual["kv"])
+        for before, after in zip(expected["kv"], actual["kv"], strict=True):
+            np.testing.assert_array_equal(before, after)
+
+    def assert_initial_cache(self, actual):
+        for before, after in zip(self.cache_inputs, actual["kv"], strict=True):
+            np.testing.assert_array_equal(before, after)
 
     def test_grammar_tokens_rng_penalties_and_cache_match(self):
         expected = self.run_path(False)
@@ -247,13 +296,13 @@ class DraftLookahead(unittest.TestCase):
                 result = self.run_path(True, fault=fault)
                 self.assertEqual(result["tokens"], [[], []])
                 self.assertEqual(result["offsets"], [17, 18])
-                np.testing.assert_array_equal(result["kv"], self.fixture.state["kv"])
+                self.assert_initial_cache(result)
 
     def test_rejected_grammar_restores_unused_kv(self):
         result = self.run_path(True, reject=True)
         self.assertTrue(all(len(tokens) == 1 for tokens in result["tokens"]))
         self.assertEqual(result["offsets"], [18, 19])
-        np.testing.assert_array_equal(result["kv"], self.fixture.state["kv"])
+        self.assert_initial_cache(result)
 
 
 if __name__ == "__main__":

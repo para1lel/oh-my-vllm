@@ -35,7 +35,7 @@ Advertise a function only after its model-specific acceptance is complete.
 | Tools | Auto/none/required/named choice, parallel-call control, history, streamed arguments |
 | Structured output | JSON object/schema, token masks, independent speculative grammar state |
 | Media | Ordered text/images/video, limits, frame timestamps, history, prefix isolation |
-| Cache | Full and partial prefixes, copy-on-write, preemption, host offload, restoration, eviction |
+| Cache | Full and partial GPU prefixes, copy-on-write, preemption, accepted-state restoration, bounded eviction |
 | Lifecycle | Deadlines, disconnect cancellation, backpressure, worker failure/replacement, graceful shutdown |
 
 There is one completion per request.

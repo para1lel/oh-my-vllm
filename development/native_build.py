@@ -10,12 +10,15 @@ from pathlib import Path
 
 from oh_my_vllm.operators.activation.api import FUNCTIONS as ACTIVATION_FUNCTIONS
 from oh_my_vllm.operators.fa.api import FUNCTIONS as FA_FUNCTIONS
+from oh_my_vllm.operators.fa_fp8.api import FUNCTIONS as FA_FP8_FUNCTIONS
 from oh_my_vllm.operators.ffn.api import FUNCTIONS as FFN_FUNCTIONS
 from oh_my_vllm.operators.gdn.api import FUNCTIONS as GDN_FUNCTIONS
+from oh_my_vllm.operators.gdn_radix.api import FUNCTIONS as GDN_RADIX_FUNCTIONS
 from oh_my_vllm.operators.hyperconnection.api import (
     FUNCTIONS as HYPERCONNECTION_FUNCTIONS,
 )
 from oh_my_vllm.operators.mtp.api import FUNCTIONS as MTP_FUNCTIONS
+from oh_my_vllm.operators.mtp_fp8.api import FUNCTIONS as MTP_FP8_FUNCTIONS
 from oh_my_vllm.operators.output.api import FUNCTIONS as SAMPLE_FUNCTIONS
 from oh_my_vllm.operators.projection.api import FUNCTIONS as PROJECTION_FUNCTIONS
 from oh_my_vllm.operators.routing.api import FUNCTIONS as ROUTING_FUNCTIONS
@@ -47,9 +50,12 @@ MODULES = {
     "device": DEVICE_FUNCTIONS,
     "ffn": FFN_FUNCTIONS,
     "fa": FA_FUNCTIONS,
+    "fa_fp8": FA_FP8_FUNCTIONS,
     "gdn": GDN_FUNCTIONS,
+    "gdn_radix": GDN_RADIX_FUNCTIONS,
     "hyperconnection": HYPERCONNECTION_FUNCTIONS,
     "mtp": MTP_FUNCTIONS,
+    "mtp_fp8": MTP_FP8_FUNCTIONS,
     "projection": PROJECTION_FUNCTIONS,
     "routing": ROUTING_FUNCTIONS,
     "sample": SAMPLE_FUNCTIONS,

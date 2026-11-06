@@ -14,6 +14,12 @@
 [Roofline 计算器](../../../development/serving/deepseek_accounting_roofline.py)使用经过审查的[部分算术](../../../development/serving/deepseek_accounting_floor.py).
 [资源函数](../../../development/serving/deepseek_accounting_math.py)规定维度, 格式和峰值.
 
+V4 报告 `dep4_communication_modeled=False`, 因为它的 DEP4 协议字节仅为诊断值.
+V5 和 v6 对 DEP4 报告 `dep4_communication_modeled=True`.
+对 TP4 和 TEP4, 这些计算器报告 `dep4_communication_modeled=False`.
+此标记表示所选计算器在所选策略下的能力, 与 trace 的通信量无关.
+V4, v5 和 v6 报告 `dep4_communication_measured=False`, 因为它们的通信估计是数学估计.
+
 ## Roofline 范围
 
 V6 是固定 target 算法, 数值规则和四个 rank 放置方式下的有条件资源下界.
@@ -37,6 +43,9 @@ Proposal, 被拒行, padding, 拷贝, scheduler 成本和 MTP 工作均为零计
 | FP32 vector | 75 TFLOPS |
 | NVLink 5 | 每方向 900 GB/s |
 | PCIe 5.0 x16 | 每方向 63.02 GB/s |
+
+[NVIDIA Blackwell 数据表](https://dam-cdn.nvd.orangelogic.com/AssetLink/y441155802qub41q118b2852i557jem5.pdf#page=8) 第 8 页的 HGX B200 列给出每个 GPU 的 HBM, FP32 和 tensor 峰值.
+脚注 2 规定 dense tensor 峰值为表列 sparse 数值的一半.
 
 FP4 专家存储使用 FP8 dot product.
 FP8 和 BF16 共享 tensor 资源.
@@ -136,8 +145,11 @@ received_r = H*(2*in_r  + 4*out_r)
 | TP4/TEP4 | Head projection, FP32 vocabulary gather, sampling |
 
 不同行可以重叠这些阶段.
-V6 不给全局串行阶段诊断增加额外下界秒数.
+V6 计算资源下界, 未计入依赖延迟下界.
+`dependency_seconds=0` 字段表示依赖延迟未计入.
+Target 算法仍有依赖.
 总资源约束在最大重叠下仍为必要条件.
+V6 不计算完整的最小物理延迟.
 
 对四个 rank, ring all-reduce 的 `N` 字节输入使各 rank 分别发送和接收 `1.5*N` 字节.
 Ring all-gather 的 `N` 字节完整输出使各 rank 分别发送和接收 `0.75*N` 字节.

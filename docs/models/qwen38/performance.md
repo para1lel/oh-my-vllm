@@ -15,6 +15,10 @@ The input and output lengths apply to each request.
 | MTP4 | 1, 2, 4 | 32768, 65536, 131072 | 64, 8192 |
 
 These are 24 configurations.
+The new cache layout must complete the full matrix and the approved AgentX workload.
+Each of the 12 configurations with 8192-token outputs must have efficiency at least 40%.
+No new-layout HTTP or AgentX acceptance is complete.
+
 The 64-token output makes the measurement sensitive to prefill time.
 Keep the 8192-token output for long decode measurement.
 Use a token budget of 32768 and a maximum of 4 running requests.
@@ -56,9 +60,9 @@ It completes short initialization requests before timing.
 It also checks a complete tool call in each mode before timing.
 It checks prompt lengths, output lengths, and uncached prefixes in HTTP usage.
 
-The worker uses fixed FA defaults and the startup checks in the [service memory budget](cache.md#cache-memory).
-The default GDN capacity is 128 slots.
-Use `--blocks` for a smaller explicit FA capacity and `--mamba-blocks` to change the GDN capacity.
+The worker resolves capacity through the [cache byte budget](cache.md#cache-memory).
+Usable page and checkpoint counts must satisfy `P = 64 * C`.
+The current plan does not prove measured GPU capacity.
 The trace identity records the resolved capacities and memory budget.
 
 Use `--case ordinary:1:32768` to select its two output lengths.
@@ -96,8 +100,14 @@ This is a conservative resource estimate, not a minimum physical latency proof.
 
 ## Lower-bound calculation
 
-The [reference calculation](../../../development/serving/kernels.py) uses version `http-reference-v5`.
-It uses the current kernel boundaries and precision rules. It has no measured calibration input.
+The [reference calculation](../../../development/serving/kernels.py) uses version `http-reference-v5` for the [recorded matrix](results.md).
+The following calculation, memory, arithmetic, and omission sections specify that version's older BF16 layout and 784-token checkpoints.
+They do not define accounting for the new FP8 layout.
+The calculation has no measured calibration input.
+
+The partial [component calculation](../../../development/serving/qwen_fp8_roofline.py), `qwen-fp8-components-v1`, is not a complete HTTP acceptance calculator.
+A reviewed complete calculator with its own identity must supply new-format efficiency.
+A component estimate or the old v5 result cannot prove the new 40% target.
 
 The [trace validator](../../../development/serving/trace.py) first checks full prefill, continuous accepted positions, proposal dependencies, and output counts.
 The single trace identity must match the service mode.

@@ -2,30 +2,38 @@ import copy
 
 import torch
 
+from ...worker.wire import EXECUTION_PROTOCOL_VERSION
 from .model import context_token_bucket
 from .request import Request
 from .row_execution import RowExecution
 from .target_batch import BatchExecution
 from .target_execution import TargetExecution
+from .wire_execution import ResidentWire
 from .worker_limits import prefill_row_limit as prefill_row_limit
 from .worker_limits import prefill_subbatch_limit as prefill_subbatch_limit
 from .worker_startup import WorkerStartup
 
 
-class Worker(WorkerStartup, TargetExecution, BatchExecution, RowExecution):
+class Worker(
+    ResidentWire, WorkerStartup, TargetExecution, BatchExecution, RowExecution
+):
     def ready(self):
         return {
             "type": "ready",
+            "protocol_version": EXECUTION_PROTOCOL_VERSION,
+            "worker_epoch": self.worker_epoch,
+            "cache_layout": {
+                "kind": "deepseek_resident_v1",
+                "layout_id": "deepseek_v41_paired128_resident_v1",
+            },
             "descriptor": copy.deepcopy(self.descriptor),
             "logical_num_blocks": self.logical_num_blocks,
             "mamba_blocks": self.mamba_blocks,
-            "host_cache_bytes": self.cache.host_limit,
             "cache_memory": {
                 "weight_info": self.weight_info,
                 "rank": self.rank,
                 "physical_cache": {
                     "block_tokens": self.cache.block_tokens,
-                    "host_cache_bytes": self.cache.host_limit,
                     "fa_capacity": self.cache.fa_capacity,
                     "accepted_state_capacity": self.cache.mamba_capacity,
                     "request_slots": self.args.max_batch_size,
@@ -94,7 +102,14 @@ class Worker(WorkerStartup, TargetExecution, BatchExecution, RowExecution):
                     )
 
     def execute(self, message):
-        self._validate_execute_message(message)
+        local, expected = self._decode_execute(message)
+        self._validate_execute_message(local)
+        self._validate_resident_sampling(local)
+        self.last_step_id = message["step_id"]
+        result = self._execute_resident(local)
+        return self._encode_execute(message, result, expected)
+
+    def _execute_resident(self, message):
         for request_id in message["finished_request_ids"]:
             self._release(request_id)
         for request_id in message["preempted_request_ids"]:
@@ -207,14 +222,6 @@ class Worker(WorkerStartup, TargetExecution, BatchExecution, RowExecution):
                 self.requests[message["request_id"]] = request
             case "execute":
                 return self.execute(message)
-            case "cache":
-                completed = self.cache.handle(message)
-                return {
-                    "type": "cache_result",
-                    "rpc_id": message["rpc_id"],
-                    "completed": completed,
-                    "host_cache_bytes": self.cache.host_limit,
-                }
             case "abort":
                 self._release(message["request_id"])
             case "stats":

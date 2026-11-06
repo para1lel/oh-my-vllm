@@ -8,6 +8,10 @@ This is one completed HTTP matrix, with one measurement per configuration.
 The [AgentX section](#agentx-mtp4-concurrency-4) gives the accepted AgentX measurement.
 These measurements use one GPU and do not show million-token capacity.
 
+They apply only to the source and binary identities in this report, with the older BF16 cache and `http-reference-v5`.
+They do not prove acceptance of the new FP8 cache, independent GDN checkpoints, or exact session-tail lifecycle.
+The memory figures and recorded commands are historical evidence, not current capacity defaults or acceptance instructions.
+
 Each row uses one B200 and concurrent HTTP requests.
 Input and output lengths are for each request.
 The Requests column gives the measured request count.

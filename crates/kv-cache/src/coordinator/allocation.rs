@@ -89,20 +89,12 @@ impl HybridCoordinator {
         let fa_partial =
             self.full_attn
                 .partial_source(rid, &new_computed_blocks.0, plan.computed, &self.pool);
-        // Host restores have no committed cache hash until their first validated result.
-        let restored_partial = self.restores.get(&rid).copied().filter(|source| {
-            !plan.computed.is_multiple_of(self.block_size)
-                && self.mamba.blocks(rid).get(plan.computed / self.block_size) == Some(source)
-        });
-        let mb_partial = self
-            .mamba
-            .partial_source(
-                rid,
-                &new_computed_blocks.1,
-                plan.computed,
-                self.mamba_pool.as_ref().unwrap_or(&self.pool),
-            )
-            .or(restored_partial);
+        let mb_partial = self.mamba.partial_source(
+            rid,
+            &new_computed_blocks.1,
+            plan.computed,
+            self.mamba_pool.as_ref().unwrap_or(&self.pool),
+        );
         let fa_count = match fa_needed {
             BlocksNeeded::DeferToNextStep => return None,
             BlocksNeeded::Blocks(n) => n + usize::from(fa_partial.is_some()),
