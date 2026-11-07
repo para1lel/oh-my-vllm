@@ -52,8 +52,11 @@ Target 和 proposal 采样使用与 serving 相同的语法及惩罚规则.
 运行完整比较:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT" --reference-version qwen-fp8-http-reference-v1
 ```
+
+[CLI 默认值](../../../development/serving/benchmark_options.py#L69)<!-- source: choices=(VERSION, FP8_VERSION), default=VERSION -->仍为 `http-reference-v5`.
+[用例分派器](../../../development/serving/benchmark_case.py#L81)<!-- source: def case_bound(service, tokenizer, events, manifest, responses, rust_previous): -->在新布局使用该版本时返回 `blocked`.
 
 命令为每个模式启动并停止服务.
 计时前完成短初始化请求.
@@ -68,7 +71,8 @@ Trace 身份记录实际容量和显存预算.
 使用 `--case ordinary:1:32768` 选择两个输出长度.
 使用 `--case ordinary:1:32768:64` 选择一种配置.
 使用 `--output-tokens 64` 进行对 prefill 时间敏感的测量.
-使用 `--output-tokens 32` 进行短测试.
+使用 `--output-tokens 32` 进行短诊断运行.
+新参考对 64 或 8192 之外的长度返回 `blocked`.
 
 命令接受配置子集和其他输出长度, 但拒绝重复配置.
 请求失败或产物无效时以错误退出.
@@ -84,29 +88,60 @@ Benchmark 为服务进程设置此变量.
 标量吞吐为 FP32 75 TFLOP/s 和 FP64 37 TFLOP/s.
 不使用 sparse 数值, GB200 数值或实测校准值替代.
 
-```text
-group_seconds = max(
-    group_bytes / HBM_rate,
-    group_FP8 / FP8_rate + group_BF16 / BF16_rate + group_TF32 / TF32_rate,
-    group_FP32 / FP32_rate,
-    group_FP64 / FP64_rate,
-)
-reference_seconds = sum(group_seconds for each serial group)
-efficiency = reference_seconds / HTTP_seconds
+效率为参考秒数除以完整 HTTP 秒数.
+这是保守资源估算, 不是最小物理延迟证明.
+
+## 新布局 HTTP 计费
+
+完整冷 HTTP 计算器 [`lower_bound`](../../../development/serving/qwen_fp8_roofline.py#L292)<!-- source: def lower_bound(events, manifest, artifacts, responses, *, tokenizer=None): --> 覆盖上述 24 种配置.
+其[计费身份](../../../development/serving/qwen_fp8_evidence.py#L11)<!-- source: VERSION = "qwen-fp8-http-reference-v1" -->为 `qwen-fp8-http-reference-v1`.
+
+[证据验证器](../../../development/serving/qwen_fp8_trace.py#L492)<!-- source: def validate(events, manifest, artifacts, responses, tokenizer=None): -->绑定已加载身份, Rust 已验证执行, 解析器结果, 采样, 响应 token 和 HTTP usage.
+证据缺失或不一致时返回 `blocked`, 不提供效率.
+此计算器不接受前缀复用或 AgentX 会话树计费.
+
+[规范调度](../../../development/serving/qwen_fp8_schedule.py#L122)<!-- source: def canonical_passes(states, mode): -->和[资源计算](../../../development/serving/qwen_fp8_math.py#L225)<!-- source: def resource_reference(passes, component_function, device): -->定义新布局的计分工作.
+只有必要的已接受工作获得计分.
+资源计算对设备上的驻留数据采用保守额度.
+逻辑 KV 流量本身不获得 HBM 额度.
+省略操作的成本仍计入完整 HTTP 时间.
+
+局部的 [`resource_floor`](../../../development/serving/qwen_fp8_roofline.py#L211)<!-- source: def resource_floor(workload): --> 保持 `qwen-fp8-components-v1`.
+它不是完整 HTTP 计算器.
+组件估算或旧 v5 结果不能证明新的 40% 目标.
+
+## 离线 HTTP 验收
+
+停止服务.
+将 `TOKENIZER_ROOT` 设为记录中的 tokenizer 资产目录.
+将 `ACCEPTANCE_REPORT` 设为外部文件.
+运行[离线检查](../../../development/serving/qwen_fp8_acceptance.py#L437)<!-- source: def main(argv=None): -->:
+
+```bash
+scripts/with-env.sh python -m development.serving.qwen_fp8_acceptance "$ARTIFACT_ROOT" --tokenizer "$TOKENIZER_ROOT" --output "$ACCEPTANCE_REPORT"
 ```
 
-这是保守资源估算, 不是最小物理延迟证明.
+一个 run 必须包含各出现一次的全部 24 个配置键.
+12 个长输出行必须各自达到至少 40% 效率.
+效率恰为 40% 时通过.
+检查比较 raw 区间, manifest, HTTP 响应及完整参考结果.
+
+Rust complete 记录包含已准备的响应, 不证明客户端已收到响应.
+检查器将已准备的响应与成功 HTTP 调用所归档的响应比较.
+请求必须使用非流式 HTTP.
+
+只有 `status=passed`, `target_passed=true` 且 scope 为 `qwen-fp8-http-24-long-12` 时才达到此 HTTP 目标.
+退出码为 `passed` 时 0, `failed` 时 1, `invalid` 时 2.
+新 run 的 `identity.json` 字段 `accounting.calculator` 必须有匹配的[计算器绑定](../../../development/serving/qwen_fp8_identity.py#L36)<!-- source: def calculator_identity(): -->.
+检查器不会给旧 run 补充绑定.
+此检查不证明 AgentX 验收, DeepSeek 验收, 数值精度或 GPU 容量.
 
 ## 下界计算
 
-[参考计算](../../../development/serving/kernels.py)为[已记录矩阵](results.zh.md)使用版本 `http-reference-v5`.
+历史[参考计算](../../../development/serving/kernels.py)为[已记录矩阵](results.zh.md)使用版本 `http-reference-v5`.
 后续计算, 内存, 算术和省略项章节规定该版本的旧 BF16 布局和 784-token checkpoint.
 这些章节不定义新 FP8 布局的计量.
 计算不使用实测校准输入.
-
-局部[组件计算](../../../development/serving/qwen_fp8_roofline.py) `qwen-fp8-components-v1` 不是完整 HTTP 验收计算器.
-新格式效率需要经过审查的完整计算器, 并使用独立身份.
-组件估算或旧 v5 结果不能证明新的 40% 目标.
 
 [Trace 验证器](../../../development/serving/trace.py)先检查完整 prefill, 连续接受位置, proposal 依赖和输出数量.
 唯一 trace identity 必须匹配服务模式.

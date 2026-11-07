@@ -5,7 +5,8 @@ from oh_my_vllm.operators.mtp import api as mtp
 from oh_my_vllm.operators.mtp.plan import accept_plan, context_plan
 from oh_my_vllm.operators.mtp.workspace import prepare_accept, prepare_context
 
-from .fa import cache, views
+from .fa import views
+from .mtp_cache import FixtureCache
 from .sampling import observe_cdf
 
 
@@ -51,21 +52,19 @@ def context(prepared):
 def draft(prepared):
     case, inputs = prepared.case, prepared.inputs
     first = case.options["variant"] == "query_only"
+    cache = prepared.own(FixtureCache(prepared, ("",)))
     operation = prepared.own(
         Draft(
             prepared.device,
             prepared.weights,
             case.shape["batch"],
             first,
-            table_width=inputs["tables"].shape[1],
+            table_width=cache.initial.tables.shape[1],
         )
     )
     operation.hidden = inputs["hidden"]
-    operation.cache = cache(prepared)
-    operation.metadata = tuple(
-        inputs[name]
-        for name in ("positions", "slots", "tables", "sequence_rows", "lengths")
-    )
+    operation.cache = cache.cache
+    operation.metadata = cache.metadata[""]
     operation.tokens = inputs["tokens"]
     bind_sampling(operation, prepared)
     outputs = operation.sampling.operation.outputs
@@ -102,6 +101,7 @@ def bind_sampling(stage, prepared):
 
 def chain(prepared):
     case, inputs, device = prepared.case, prepared.inputs, prepared.device
+    cache = prepared.own(FixtureCache(prepared, tuple(f"stage{i}." for i in range(4))))
     stages = []
     for index in range(4):
         stage = prepared.own(
@@ -110,17 +110,14 @@ def chain(prepared):
                 prepared.weights,
                 case.shape["batch"],
                 index == 0,
-                table_width=inputs[f"stage{index}.tables"].shape[1],
+                table_width=cache.initial.tables.shape[1],
             )
         )
         stages.append(stage)
     operation = prepared.own(DraftChain(device, stages, case.shape["batch"], True))
     for index, stage in enumerate(stages):
-        stage.metadata = tuple(
-            inputs[f"stage{index}." + name]
-            for name in ("positions", "slots", "tables", "sequence_rows", "lengths")
-        )
-        stage.cache = cache(prepared)
+        stage.metadata = cache.metadata[f"stage{index}."]
+        stage.cache = cache.cache
         bind_sampling(stage, prepared)
     stages[0].hidden = inputs["hidden"]
     stages[0].tokens = inputs["tokens"]

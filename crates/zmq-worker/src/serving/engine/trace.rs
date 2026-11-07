@@ -124,7 +124,10 @@ impl ExecutionTrace {
         self.accepted.retain(|id, _| ids.contains(id));
     }
 
-    pub(super) fn complete(&mut self, id: u64) {
+    pub(super) fn complete(&mut self, id: u64, response: &Value) {
+        if self.output.is_none() {
+            return;
+        }
         let Some((execution, tokens)) = self.histories.remove(&id) else {
             return;
         };
@@ -139,7 +142,7 @@ impl ExecutionTrace {
         };
         self.record(json!({"operation": "complete", "requests": [{"id": id,
             "status": "completed", "accepted_end": end, "execution": execution,
-            "token_sha256": format!("{:x}", Sha256::digest(encoded))}]}));
+            "token_sha256": format!("{:x}", Sha256::digest(encoded)), "response": response}]}));
     }
 }
 
@@ -174,8 +177,12 @@ mod tests {
     #[test]
     fn complete_requires_parser_acceptance_and_hashes_the_retained_tokens() {
         let (mut trace, path) = recording("accepted");
+        let response = json!({"id": "chatcmpl_trace_7", "choices": [{"message": {
+            "role": "assistant", "content": "已准备", "tool_calls": [{"function": {
+                "name": "lookup_reference", "arguments": "{\"topic\":\"trace\"}"}}]}}],
+            "usage": {"completion_tokens": 1}});
         trace.accepted(7, 3);
-        trace.complete(7);
+        trace.complete(7, &response);
         drop(trace);
         let bytes = std::fs::read_to_string(&path).unwrap();
         std::fs::remove_file(path).unwrap();
@@ -188,6 +195,7 @@ mod tests {
         let row = &events[1]["requests"][0];
         assert_eq!(row["accepted_end"], 3);
         assert_eq!(row["execution"]["lease_id"], 2);
+        assert_eq!(row["response"], response);
         assert_eq!(
             row["token_sha256"],
             format!("{:x}", Sha256::digest(b"[10,11,12]"))
@@ -197,7 +205,7 @@ mod tests {
     #[test]
     fn missing_acceptance_emits_no_success() {
         let (mut trace, path) = recording("missing");
-        trace.complete(7);
+        trace.complete(7, &Value::Null);
         drop(trace);
         let bytes = std::fs::read(&path).unwrap();
         std::fs::remove_file(path).unwrap();
@@ -209,7 +217,7 @@ mod tests {
         let (mut trace, path) = recording("cancelled");
         trace.accepted(7, 3);
         trace.retain(std::iter::empty());
-        trace.complete(7);
+        trace.complete(7, &Value::Null);
         assert!(trace.histories.is_empty());
         assert!(trace.accepted.is_empty());
         drop(trace);

@@ -52,8 +52,11 @@ Build the native modules and release executable with the [service setup](../../s
 Run the full comparison:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT" --reference-version qwen-fp8-http-reference-v1
 ```
+
+The [CLI default](../../../development/serving/benchmark_options.py#L69)<!-- source: choices=(VERSION, FP8_VERSION), default=VERSION --> is still `http-reference-v5`.
+The [case dispatcher](../../../development/serving/benchmark_case.py#L81)<!-- source: def case_bound(service, tokenizer, events, manifest, responses, rust_previous): --> returns `blocked` for the new layout with that version.
 
 The command starts and stops the service for each mode.
 It completes short initialization requests before timing.
@@ -68,7 +71,8 @@ The trace identity records the resolved capacities and memory budget.
 Use `--case ordinary:1:32768` to select its two output lengths.
 Use `--case ordinary:1:32768:64` to select one configuration.
 Use `--output-tokens 64` for measurements sensitive to prefill time.
-Use `--output-tokens 32` for a short run.
+Use `--output-tokens 32` for a short diagnostic run.
+The new reference returns `blocked` for lengths other than 64 or 8192.
 
 The command accepts configuration subsets and other output lengths.
 It rejects duplicate configurations.
@@ -85,29 +89,60 @@ The rates are HBM 7.7 TB/s, FP8 4.5 PFLOP/s, BF16 2.25 PFLOP/s, and TF32 1.1 PFL
 Scalar rates are FP32 75 TFLOP/s and FP64 37 TFLOP/s.
 Do not substitute sparse rates, GB200 rates, or measured calibration.
 
-```text
-group_seconds = max(
-    group_bytes / HBM_rate,
-    group_FP8 / FP8_rate + group_BF16 / BF16_rate + group_TF32 / TF32_rate,
-    group_FP32 / FP32_rate,
-    group_FP64 / FP64_rate,
-)
-reference_seconds = sum(group_seconds for each serial group)
-efficiency = reference_seconds / HTTP_seconds
+Efficiency is reference seconds divided by full HTTP seconds.
+This is a conservative resource estimate, not a minimum physical latency proof.
+
+## New-layout HTTP accounting
+
+The full cold-HTTP calculator, [`lower_bound`](../../../development/serving/qwen_fp8_roofline.py#L292)<!-- source: def lower_bound(events, manifest, artifacts, responses, *, tokenizer=None): -->, covers all 24 configurations.
+Its [accounting identity](../../../development/serving/qwen_fp8_evidence.py#L11)<!-- source: VERSION = "qwen-fp8-http-reference-v1" --> is `qwen-fp8-http-reference-v1`.
+
+The [evidence validator](../../../development/serving/qwen_fp8_trace.py#L492)<!-- source: def validate(events, manifest, artifacts, responses, tokenizer=None): --> binds loaded identities, Rust-validated execution, parser results, sampling, response tokens, and HTTP usage.
+Missing or inconsistent evidence returns `blocked` without efficiency.
+This calculator rejects prefix reuse and AgentX tree accounting.
+
+The [canonical schedule](../../../development/serving/qwen_fp8_schedule.py#L122)<!-- source: def canonical_passes(states, mode): --> and [resource calculation](../../../development/serving/qwen_fp8_math.py#L225)<!-- source: def resource_reference(passes, component_function, device): --> define the new layout's credited work.
+Only necessary accepted work receives credit.
+Resident device data has a conservative resource allowance.
+Logical KV traffic alone earns no HBM credit.
+Excluded operations still contribute to full HTTP time.
+
+The partial [`resource_floor`](../../../development/serving/qwen_fp8_roofline.py#L211)<!-- source: def resource_floor(workload): --> keeps `qwen-fp8-components-v1`.
+It is not the full HTTP calculator.
+Component estimates and old v5 results cannot prove the new 40% target.
+
+## Offline HTTP acceptance
+
+Stop the services.
+Set `TOKENIZER_ROOT` to recorded tokenizer assets.
+Set `ACCEPTANCE_REPORT` to an external file.
+Run the [offline check](../../../development/serving/qwen_fp8_acceptance.py#L437)<!-- source: def main(argv=None): -->:
+
+```bash
+scripts/with-env.sh python -m development.serving.qwen_fp8_acceptance "$ARTIFACT_ROOT" --tokenizer "$TOKENIZER_ROOT" --output "$ACCEPTANCE_REPORT"
 ```
 
-This is a conservative resource estimate, not a minimum physical latency proof.
+All 24 configuration keys occur one time per run.
+All 12 long-output rows must reach at least 40% efficiency.
+Exactly 40% passes.
+The check compares raw ranges, manifests, HTTP responses, and full reference results.
+
+Rust complete records contain prepared responses and do not prove client receipt.
+The checker compares prepared responses with archived responses from successful HTTP calls.
+Requests must use nonstreamed HTTP.
+
+Only `status=passed` with `target_passed=true` and scope `qwen-fp8-http-24-long-12` meets this HTTP target.
+Exit codes are 0 for `passed`, 1 for `failed`, and 2 for `invalid`.
+New runs must match the [calculator binding](../../../development/serving/qwen_fp8_identity.py#L36)<!-- source: def calculator_identity(): --> at `identity.json` field `accounting.calculator`.
+The checker adds no bindings to old runs.
+This check does not prove AgentX acceptance, DeepSeek acceptance, numerical precision, or GPU capacity.
 
 ## Lower-bound calculation
 
-The [reference calculation](../../../development/serving/kernels.py) uses version `http-reference-v5` for the [recorded matrix](results.md).
+The historical [reference calculation](../../../development/serving/kernels.py) uses version `http-reference-v5` for the [recorded matrix](results.md).
 The following calculation, memory, arithmetic, and omission sections specify that version's older BF16 layout and 784-token checkpoints.
 They do not define accounting for the new FP8 layout.
 The calculation has no measured calibration input.
-
-The partial [component calculation](../../../development/serving/qwen_fp8_roofline.py), `qwen-fp8-components-v1`, is not a complete HTTP acceptance calculator.
-A reviewed complete calculator with its own identity must supply new-format efficiency.
-A component estimate or the old v5 result cannot prove the new 40% target.
 
 The [trace validator](../../../development/serving/trace.py) first checks full prefill, continuous accepted positions, proposal dependencies, and output counts.
 The single trace identity must match the service mode.

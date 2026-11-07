@@ -8,9 +8,9 @@ template <int BQ>
 __device__ inline void load_kv(const uint8_t *codes, const float *scales, const int32_t *tables,
                                int seq, int width, int pages, int base, int last, int head,
                                __nv_bfloat16 *keys, __nv_bfloat16 *values) {
-  for (int i = threadIdx.x; i < 64 * 256; i += blockDim.x) {
-    int row = i / 256, dim = i % 256, pos = base + row;
-    __nv_bfloat16 key = __float2bfloat16_rn(0.f), value = key;
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    int row = i / 16, dim = i % 16 * 16, pos = base + row;
+    alignas(16) __nv_bfloat16 key[16], value[16];
     if (pos < last) {
       int logical = pos / PageRows;
       if (logical < 0 || logical >= width) {
@@ -23,12 +23,30 @@ __device__ inline void load_kv(const uint8_t *codes, const float *scales, const 
         return;
       }
       int64_t index = scale_index(page, 0, pos % PageRows, head);
-      key = decode(codes[index * Width + dim], scales[index]);
-      index += PageRows * Heads;
-      value = decode(codes[index * Width + dim], scales[index]);
+      uint4 key_codes = *reinterpret_cast<const uint4 *>(codes + index * Width + dim);
+      uint4 value_codes =
+          *reinterpret_cast<const uint4 *>(codes + (index + PageRows * Heads) * Width + dim);
+      const auto *key_words = reinterpret_cast<const uint32_t *>(&key_codes);
+      const auto *value_words = reinterpret_cast<const uint32_t *>(&value_codes);
+      float key_scale = scales[index], value_scale = scales[index + PageRows * Heads];
+#pragma unroll
+      for (int j = 0; j < 16; ++j) {
+        key[j] = decode(uint8_t(key_words[j / 4] >> (j % 4 * 8)), key_scale);
+        value[j] = decode(uint8_t(value_words[j / 4] >> (j % 4 * 8)), value_scale);
+      }
+    } else {
+#pragma unroll
+      for (int j = 0; j < 16; ++j)
+        key[j] = value[j] = __float2bfloat16_rn(0.f);
     }
-    keys[fa_kv_index<true, 64>(row, dim)] = key;
-    values[fa_kv_index<true, 64>(row, dim)] = value;
+#pragma unroll
+    for (int group = 0; group < 2; ++group) {
+      int offset = group * 8;
+      *reinterpret_cast<uint4 *>(keys + fa_kv_index<true, 64>(row, dim + offset)) =
+          *reinterpret_cast<const uint4 *>(key + offset);
+      *reinterpret_cast<uint4 *>(values + fa_kv_index<true, 64>(row, dim + offset)) =
+          *reinterpret_cast<const uint4 *>(value + offset);
+    }
   }
   __syncthreads();
 }

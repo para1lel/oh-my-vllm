@@ -3,6 +3,7 @@
 
 #include "../../runtime/cuda/contracts.cuh"
 #include "fp4_k32.cuh"
+#include "fp4_four_row_chunks.cuh"
 #include "half_k32.cuh"
 #include "tcgen_k32.cuh"
 
@@ -87,6 +88,18 @@ void launch_grouped_fp4_projection(TensorView encoded, TensorView scales, Tensor
                                    int32_t *status = nullptr) {
   int padded = round128(width);
   auto layout = ScaleConfig::tile_atom_to_shape_SFB(make_shape(1, outputs, padded, 1));
+  if (four_row_chunks::matches_shape(groups, rows, outputs, width)) {
+    four_row_chunks::launch(static_cast<const uint8_t *>(encoded.data_ptr()),
+                            static_cast<const uint8_t *>(scales.data_ptr()),
+                            static_cast<const int64_t *>(weight_ptrs.data_ptr()),
+                            static_cast<const int64_t *>(weight_scale_ptrs.data_ptr()),
+                            static_cast<const int32_t *>(counts.data_ptr()),
+                            static_cast<uint8_t *>(scratch.data_ptr()),
+                            static_cast<Output *>(output.data_ptr()), groups, rows, outputs, width,
+                            max_rows, layout, stream, status);
+    check_cuda(cudaGetLastError());
+    return;
+  }
   launch_grouped_fp4_k32(static_cast<const uint8_t *>(encoded.data_ptr()),
                          static_cast<const uint8_t *>(scales.data_ptr()),
                          static_cast<const int64_t *>(weight_ptrs.data_ptr()),

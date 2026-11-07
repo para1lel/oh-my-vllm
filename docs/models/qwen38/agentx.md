@@ -81,6 +81,23 @@ Successful HTTP requests do not prove that all session trees completed.
 The raw records, service log, execution trace, and count report stay external to the repository.
 The approved AgentX CSV and figure are repository artifacts for this measurement.
 
+## Completion reports
+
+The runner tries to write `session-tree-status.json` after service cleanup.
+This report uses only saved harness records.
+The runner also tries to write the report when the harness or request export fails.
+A report error does not replace an earlier run error.
+
+On success, `summary.json` and the final stdout JSON contain the same `session_trees` object.
+They set `request_accounting_scope` to `issued_http_requests`.
+The separate `request-counts.json` contains only request accounting data.
+
+Tree status is `incomplete` when saved evidence shows cancellation, errors, or unfinished tree work.
+Otherwise, tree status is `unknown` because the records do not give a full tree inventory.
+The reporter does not return `complete`.
+Its `strict_target_passed` field is `false`.
+The command can exit with code zero for a valid request measurement with either tree status.
+
 ## Request data
 
 One CSV row and one point represent one successful profiling request.

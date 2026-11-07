@@ -80,6 +80,23 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.agentx \
 原始记录, 服务日志, 执行 trace 和计数报告保留在仓库外.
 获准保存的 AgentX CSV 和图片是此次测量的仓库产物.
 
+## 完成报告
+
+启动器在服务清理后尝试写入 `session-tree-status.json`.
+此报告只使用已保存的测试工具记录.
+测试工具或请求导出失败时也会尝试写入此报告.
+报告错误不会替代此前的运行错误.
+
+成功时, `summary.json` 和最后一行 stdout JSON 包含相同的 `session_trees` 对象.
+两者都将 `request_accounting_scope` 设为 `issued_http_requests`.
+独立的 `request-counts.json` 只包含请求对账数据.
+
+当已保存的证据表明存在取消, 错误或未完成的会话树任务时, 会话树状态为 `incomplete`.
+否则, 会话树状态为 `unknown`, 因为记录没有给出完整的会话树清单.
+报告器不返回 `complete`.
+其 `strict_target_passed` 字段为 `false`.
+对于有效的请求测量, 命令在任一会话树状态下都可以退出零.
+
 ## 请求数据
 
 每行 CSV 和每个点表示一个成功的正式采样请求.

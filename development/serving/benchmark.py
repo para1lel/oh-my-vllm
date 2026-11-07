@@ -30,6 +30,7 @@ from .benchmark_options import argument_parser as argument_parser
 from .benchmark_options import select_configurations as select_configurations
 from .benchmark_trace import read_trace, rust_source_identity
 from .device import device_identity, selected_uuid
+from .qwen_fp8_identity import calculator_identity
 from .workload import PROFILE, SAMPLING_FIELDS, TOOLS, request_body, validate_tools
 
 SHUTDOWN_GRACE_SECONDS = 35
@@ -128,7 +129,11 @@ def artifact_identity(arguments):
         "device": device_identity(arguments.gpu_uuid, include_properties=True)
         if formal_reference(arguments)
         else device_identity(arguments.gpu_uuid),
-        "accounting": dict(version=arguments.reference_version, rates=RATES)
+        "accounting": dict(
+            version=arguments.reference_version,
+            rates=RATES,
+            calculator=calculator_identity(),
+        )
         if formal_reference(arguments)
         else dict(version=VERSION, rates=RATES),
         **(

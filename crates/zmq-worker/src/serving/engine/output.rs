@@ -96,7 +96,8 @@ impl<P: ServiceCache> EngineLoop<'_, P> {
                 self.active.remove(&id).unwrap().fail(&error.to_string());
                 continue;
             }
-            self.trace.complete(id);
+            self.trace
+                .complete(id, &request.completion.as_ref().unwrap().response);
             finish_request(self.active.remove(&id).unwrap(), id, &self.context.store);
         }
     }

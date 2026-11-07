@@ -5,8 +5,10 @@ import math
 import os
 import signal
 import subprocess
+import sys
 from pathlib import Path
 
+from .agentx_completion import write_tree_completion
 from .agentx_data import export_run
 from .benchmark import (
     ROOT,
@@ -197,6 +199,18 @@ def arguments():
     return result
 
 
+def write_tree_report(directory):
+    original_failure = sys.exception()
+    try:
+        return write_tree_completion(
+            directory / "agentx", directory / "session-tree-status.json"
+        )
+    except Exception as error:
+        if original_failure is None:
+            raise
+        print(f"Cannot collect AgentX tree evidence: {error}", file=sys.stderr)
+
+
 def main():
     args = arguments()
     validate_agentx_python(args.agentx_python)
@@ -218,32 +232,40 @@ def main():
     (args.artifacts / "identity.json").write_text(json.dumps(identity, indent=2))
     service = Service(args, "mtp4")
     try:
-        service.ready()
+        try:
+            service.ready()
+            service.verify_identity(identity["checkpoint"], identity["tokenizer"])
+            command = profile_command(
+                args.agentx_python,
+                args.model,
+                args.artifacts / "agentx",
+                service.port,
+                args.duration,
+                args.seed,
+                args.grace_period,
+            )
+            (args.artifacts / "command.json").write_text(json.dumps(command, indent=2))
+            print(
+                json.dumps(dict(event="agentx_start", artifacts=str(args.artifacts))),
+                flush=True,
+            )
+            run_harness(command, args.artifacts / "agentx.log")
+        finally:
+            service.close()
+        verify_artifact_identity(args, identity)
         service.verify_identity(identity["checkpoint"], identity["tokenizer"])
-        command = profile_command(
-            args.agentx_python,
-            args.model,
+        _, counts = export_run(
             args.artifacts / "agentx",
-            service.port,
-            args.duration,
-            args.seed,
-            args.grace_period,
+            args.csv,
+            harness_log=args.artifacts / "agentx/logs/aiperf.log",
         )
-        (args.artifacts / "command.json").write_text(json.dumps(command, indent=2))
-        print(
-            json.dumps(dict(event="agentx_start", artifacts=str(args.artifacts))),
-            flush=True,
-        )
-        run_harness(command, args.artifacts / "agentx.log")
     finally:
-        service.close()
-    verify_artifact_identity(args, identity)
-    service.verify_identity(identity["checkpoint"], identity["tokenizer"])
-    _, counts = export_run(
-        args.artifacts / "agentx",
-        args.csv,
-        harness_log=args.artifacts / "agentx/logs/aiperf.log",
-    )
+        trees = write_tree_report(args.artifacts)
+    summary = counts | {
+        "request_accounting_scope": "issued_http_requests",
+        "session_trees": trees,
+    }
+    (args.artifacts / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     subprocess.run(
         [
             str(args.agentx_python),
@@ -256,7 +278,7 @@ def main():
         ],
         check=True,
     )
-    print(json.dumps(counts), flush=True)
+    print(json.dumps(summary), flush=True)
 
 
 if __name__ == "__main__":
